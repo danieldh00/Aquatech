@@ -342,6 +342,13 @@
           <div class="row"><button class="btn primary" type="submit">Opslaan</button></div>
           <div class="err" role="alert"></div>
         </form>
+        <form id="s-purchase-proposals" class="card-form settings">
+          <h3>Automatische bestelvoorstellen</h3>
+          <p class="muted small">Zakt een artikel onder de minimumvoorraad, dan zet AquaTech elk uur per voorkeursleverancier een concept-inkooporder klaar onder Inkooporders. Wat al onderweg is en wat op backorder staat telt mee. Er wordt nooit iets besteld zonder dat je het voorstel goedkeurt.</p>
+          <label class="chk"><input type="checkbox" name="purchaseProposalsEnabled"> <span>Automatische bestelvoorstellen in deze omgeving</span></label>
+          <p class="muted small">Uitzetten maakt geen nieuwe voorstellen meer; bestaande concepten blijven staan.</p>
+          <div class="err" role="alert"></div>
+        </form>
         <form id="s-labels" class="card-form settings" novalidate>
           <h3>Etiketten</h3>
           <p class="muted small">Sjablonen voor etiketten met streepjescode (Artikelen → artikel → Etiketten). Elk etiket wordt een pagina van een PDF op precies dit formaat; druk hem af via het afdrukvenster op een labelprinter (bijvoorbeeld Zebra) met het etiketformaat en schaal 100%. Streepjescode <em>Automatisch</em> = de EAN van het artikel, zonder EAN de artikelcode (Code 128).</p>

@@ -29,6 +29,7 @@
       { id: 'outsourcing', label: 'Uitbesteden', pane: 'settings', form: 's-outsourcing', words: 'werkorders organisaties werkgebied ontvangen' },
       { id: 'season', label: 'Seizoensherinneringen', pane: 'settings', form: 's-season', words: 'mail herinnering winterklaar onderhoud klantportaal' },
       { id: 'labels', label: 'Artikelen: etiketten', pane: 'settings', form: 's-labels', words: 'etiket sticker streepjescode barcode ean code 128 zebra labelprinter afdrukken' },
+      { id: 'bestelvoorstellen', label: 'Artikelen: bestelvoorstellen', pane: 'settings', form: 's-purchase-proposals', words: 'bestelvoorstel inkoop inkooporder minimumvoorraad automatisch concept leverancier bijbestellen' },
     ] },
     { title: 'Koppelingen', sections: [
       { id: 'mail', label: 'E-mail', pane: 'settings', form: 's-mail', words: 'smtp exchange office 365 connector afzender wan ip offertes versturen' },
@@ -54,7 +55,7 @@
   const ALIASES = { settings: 'modules' };
 
   /** Alle formulieren van het tabblad Instellingen: er is er telkens één zichtbaar. */
-  const SETTINGS_FORMS = ['s-modules', 's-outsourcing', 's-season', 's-labels', 's-mail', 's-ai', 's-ai-connector', 's-access', 's-security', 's-backup', 's-backup-drive', 's-restore', 's-debug'];
+  const SETTINGS_FORMS = ['s-modules', 's-outsourcing', 's-season', 's-labels', 's-purchase-proposals', 's-mail', 's-ai', 's-ai-connector', 's-access', 's-security', 's-backup', 's-backup-drive', 's-restore', 's-debug'];
 
   const OPEN_KEY = 'aquatech_beheer_groups';
 

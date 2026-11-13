@@ -1348,6 +1348,20 @@ const MIGRATIONS = [
   ALTER TABLE plan_recognitions ADD COLUMN corpus_height INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE plan_recognitions ADD COLUMN corpus_final TEXT NOT NULL DEFAULT '';
   `,
+  // 71: automatische bestelvoorstellen (artikelen/purchase-orders.js, autoPropose): origin = 'handmatig' of 'voorstel' (een concept dat
+  // de achtergrondtaak per voorkeursleverancier bijhoudt; bewerken maakt hem handmatig). purchase_proposal_dismissals = artikelen die de
+  // beheerder uit het voorstel heeft gehaald; ze komen pas terug na herstellen of als het artikel weer boven het minimum is geweest.
+  // De unieke index houdt hoogstens één voorstel-concept per leverancier aan, ook als de taak twee keer tegelijk draait.
+  `
+  ALTER TABLE purchase_orders ADD COLUMN origin TEXT NOT NULL DEFAULT 'handmatig';
+  CREATE UNIQUE INDEX purchase_orders_proposal ON purchase_orders (tenant_id, supplier_id) WHERE status = 'concept' AND origin = 'voorstel';
+  CREATE TABLE purchase_proposal_dismissals (
+    tenant_id    TEXT NOT NULL REFERENCES tenants(id),
+    item_id      TEXT NOT NULL REFERENCES stock_items(id),
+    dismissed_at TEXT NOT NULL,
+    PRIMARY KEY (tenant_id, item_id)
+  );
+  `,
 ];
 
 /**

@@ -106,3 +106,33 @@ body.has-nav .tab[data-purchasing] { display: none; }
 .pf-rule { display: grid; grid-template-columns: minmax(0, 1fr) 90px auto; gap: 8px; align-items: center; margin-bottom: 6px; }
 .pf-rule select, .pf-rule input { width: 100%; box-sizing: border-box; min-width: 0; }
 .pricing-row .margin-hint { align-self: end; padding-bottom: 8px; }
+
+/* Automatische bestelvoorstellen (tabblad Bestelvoorstel): per leverancier een kaart in .card-grid (shared/layout.css). */
+.pp-block { margin-bottom: 22px; }
+.pp-block.busy { opacity: 0.7; }
+.pp-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; }
+.pp-head > div:first-child { flex: 1 1 320px; min-width: 0; }
+.pp-head h2, .pp-subtitle { margin: 0 0 4px; font-size: 17px; }
+.pp-head p { margin: 0; }
+.pp-head .form-actions { margin-top: 0; }
+.pp-subtitle { margin-bottom: 10px; }
+.pp-hint { margin: 0 0 10px; padding: 8px 12px; border-left: 4px solid var(--at-teal); border-radius: var(--radius); background: var(--panel); font-size: 14px; }
+.pp-pending { margin: 0 0 12px; padding: 8px 12px; border-left: 4px solid var(--at-green); border-radius: var(--radius); background: var(--at-green-soft); font-size: 14px; }
+.pp-empty { margin: 0; }
+#pp-cards > .pp-empty { grid-column: 1 / -1; }
+.pp-card h3 { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; justify-content: space-between; }
+.pp-lines { list-style: none; margin: 0; padding: 0; }
+.pp-line, .pp-dismissed li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.pp-line .pp-name, .pp-dismissed .pp-name { min-width: 0; overflow-wrap: anywhere; }
+.pp-name .sub { display: block; font-size: 12px; color: var(--muted); }
+.pp-amount { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pp-qty { color: var(--muted); font-variant-numeric: tabular-nums; }
+.pp-qty b { color: var(--text); }
+.pp-drop { justify-self: end; font-size: 13px; white-space: nowrap; }
+.pp-total { display: flex; gap: 12px; justify-content: space-between; align-items: baseline; padding-top: 10px; font-size: 15px; }
+.pp-total .sub { display: block; font-size: 12px; color: var(--muted); }
+.pp-card .form-actions .btn { text-decoration: none; }
+.pp-dismissed { margin-top: 4px; }
+.pp-dismissed summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
+.pp-dismissed li { align-items: center; }
+.pill.voorstel { background: var(--at-green-soft); color: var(--at-green-dark); }

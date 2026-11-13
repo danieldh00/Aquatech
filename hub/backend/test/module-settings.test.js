@@ -59,8 +59,8 @@ test('hulpfuncties: secties, instellingen en adressen van uitgezette modules', (
   assert.deepStrictEqual([...Tools.lockedSettings({})], []);
   assert.deepStrictEqual(Tools.lockedRoutes({}), []);
   const off = { voorraad: false, uitbesteden: false };
-  assert.deepStrictEqual([...Tools.hiddenSections(off)].sort(), ['labels', 'outsourcing']);
-  assert.deepStrictEqual([...Tools.lockedSettings(off)].sort(), ['labelTemplates', 'outsourcing', 'priceFactors']);
+  assert.deepStrictEqual([...Tools.hiddenSections(off)].sort(), ['bestelvoorstellen', 'labels', 'outsourcing']);
+  assert.deepStrictEqual([...Tools.lockedSettings(off)].sort(), ['labelTemplates', 'outsourcing', 'priceFactors', 'purchaseProposals']);
   assert.ok(Tools.lockedRoutes(off).includes('/api/stock/labels'));
   assert.ok(!Tools.lockedRoutes(off).includes('/api/sprinkler-library'), 'planner staat nog aan');
   // Alleen een onderdeel uit (kan niet via Beheer, wel via de data) laat de hoofdmodule met rust.

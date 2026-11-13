@@ -16,6 +16,13 @@
   const $ = (selector, scope = document) => scope.querySelector(selector);
 
   /**
+   * Geeft aan of een order een automatisch bestelvoorstel is (concept, gemaakt door de achtergrondtaak).
+   * @param {object} order De order.
+   * @returns {boolean} true als het een voorstel is.
+   */
+  const isProposal = (order) => Boolean(window.ProposalsCore && window.ProposalsCore.isProposal(order));
+
+  /**
    * Laadt de orders met het gekozen statusfilter en tekent de lijst.
    * @returns {Promise<void>}
    */
@@ -31,7 +38,7 @@
     const { esc, nl, eur } = context;
     $('#po-table').innerHTML = state.orders.length ? `<thead><tr><th>Nummer</th><th>Leverancier</th><th>Status</th><th>Verwacht</th><th class="num">Regels</th><th class="num">Nog open</th><th class="num">Totaal</th><th></th></tr></thead>
       <tbody>${state.orders.map((order) => `<tr class="${order.status === 'geannuleerd' ? 'arch' : ''}">
-        <td>${esc(order.number)}</td><td class="wrap">${esc(order.supplierName)}</td><td><span class="pill">${esc(STATUS_LABELS[order.status] || order.status)}</span></td>
+        <td>${esc(order.number)}</td><td class="wrap">${esc(order.supplierName)}</td><td><span class="pill">${esc(STATUS_LABELS[order.status] || order.status)}</span>${isProposal(order) ? ' <span class="pill voorstel" title="Automatisch bestelvoorstel: bewerken en bewaren maakt er een gewone order van">Voorstel</span>' : ''}</td>
         <td>${esc(order.expectedDate)}</td><td class="num">${order.lineCount}</td><td class="num">${nl(order.openQty)}</td><td class="num">${order.total == null ? '' : eur(order.total)}</td>
         <td class="num"><button class="btn small" type="button" data-open="${esc(order.id)}">Openen</button></td></tr>`).join('')}</tbody>`
       : '<tbody><tr><td class="muted">Geen inkooporders.</td></tr></tbody>';
@@ -62,7 +69,7 @@
     state.imported = false;
     form.reset();
     form.supplierReference.value = order ? order.supplierReference || '' : '';
-    $('h3', form).textContent = order ? `Inkooporder ${order.number} (${STATUS_LABELS[order.status] || order.status})` : 'Nieuwe inkooporder';
+    $('h3', form).textContent = order ? `Inkooporder ${order.number} (${STATUS_LABELS[order.status] || order.status}${isProposal(order) ? ', automatisch voorstel: na bewaren een gewone order' : ''})` : 'Nieuwe inkooporder';
     const choices = state.suppliers.filter((supplier) => !supplier.archived || (order && supplier.id === order.supplierId));
     form.supplierId.innerHTML = `<option value="">Kies een leverancier…</option>${choices.map((supplier) => `<option value="${context.esc(supplier.id)}">${context.esc(supplier.name)}</option>`).join('')}`;
     form.supplierId.value = order ? order.supplierId : '';
@@ -445,6 +452,16 @@
     });
   }
 
+  /**
+   * Haalt een order op en opent hem in het formulier (bijv. vanuit een bestelvoorstel met Aanpassen).
+   * @param {string} orderId Het id van de order.
+   * @returns {Promise<void>}
+   */
+  async function openOrder(orderId) {
+    const order = await context.api(`purchase-orders/${encodeURIComponent(orderId)}`);
+    await openForm(order);
+  }
+
   /** Sluit het formulier zonder iets te bewaren. */
   function hideForm() { $('#order-form').hidden = true; }
 
@@ -483,7 +500,7 @@
     $('#po-table').onclick = (event) => {
       const button = event.target.closest('[data-open]');
       if (!button) return;
-      context.api(`purchase-orders/${encodeURIComponent(button.dataset.open)}`).then((order) => openForm(order)).catch((error) => context.toast(error.message, true));
+      openOrder(button.dataset.open).catch((error) => context.toast(error.message, true));
     };
     /**
      * Haalt een regel weg (pas bewaard met Bewaren).
@@ -523,5 +540,5 @@
     };
   }
 
-  window.ArtikelenOrders = { setup, load };
+  window.ArtikelenOrders = { setup, load, openOrder };
 })();

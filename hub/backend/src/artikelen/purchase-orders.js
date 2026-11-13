@@ -11,8 +11,14 @@
 // - "Onderweg" (incomingByItem): het aantal dat nog niet is ontvangen van orders in concept, besteld of
 //   deels ontvangen. Het bestelvoorstel telt dat mee, zodat niets dubbel wordt besteld; het is ook de
 //   bron voor het verwachte aantal bij backorders (later).
+// - Automatische bestelvoorstellen (autoPropose, migratie 71): een achtergrondtaak houdt per voorkeursleverancier één
+//   concept-order met origin 'voorstel' bij, met precies de regels van het verse bestelvoorstel. Er wordt nooit zonder
+//   goedkeuring besteld: goedkeuren = place. Afwijzen haalt regels uit het voorstel en onthoudt dat per artikel
+//   (purchase_proposal_dismissals) tot het artikel weer boven het minimum zit of wordt hersteld. Een voorstel dat iemand
+//   bewerkt wordt handmatig (origin 'handmatig') en is daarna gewoon een order die als onderweg meetelt.
 const crypto = require('crypto');
 const { transaction } = require('../database/db');
+const { createRateLimiter } = require('../beveiliging/rate-limit');
 
 const STATUSES = ['concept', 'besteld', 'deels_ontvangen', 'ontvangen', 'geannuleerd'];
 const OPEN_STATUSES = ['concept', 'besteld', 'deels_ontvangen'];
@@ -21,6 +27,12 @@ const MAX_QTY = 1000000;
 const MAX_COST_PRICE = 1000000;
 const MAX_LIST = 500;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const ORIGIN_MANUAL = 'handmatig';
+const ORIGIN_PROPOSAL = 'voorstel';
+const PROPOSAL_NOTE = 'Automatisch voorstel';
+const MAX_APPROVE = 100;
+const WITHOUT_SUPPLIER_TTL_MS = 30 * 1000;
+const AUTOMATIC_USER = { id: '', name: 'Automatisch' };
 
 /**
  * Het huidige moment.
@@ -63,6 +75,33 @@ const round2 = (value) => Math.round(value * 100) / 100;
  * @returns {string} De plaatshouders.
  */
 const placeholders = (count) => new Array(count).fill('?').join(', ');
+
+/**
+ * Controleert een lijst id's uit de invoer: tekst, zonder dubbele, niet leeg en niet te lang.
+ * @param {*} raw De invoer.
+ * @param {number} max Het hoogste aantal.
+ * @returns {string[]|null} De schone id's, of null als de lijst niet geldig is.
+ */
+function cleanIds(raw, max) {
+  if (!Array.isArray(raw) || !raw.length || raw.length > max) return null;
+  const ids = [...new Set(raw.map((value) => cleanText(value, 60)))];
+  return ids.every(Boolean) ? ids : null;
+}
+
+/**
+ * Vergelijkt de regels van een order met de regels die er zouden moeten staan.
+ * @param {object[]} current De huidige regels (lineOf).
+ * @param {object[]} wanted De gewenste regels (prepareLines).
+ * @returns {boolean} true als artikel, aantal, prijs en momentopname gelijk zijn, in dezelfde volgorde.
+ */
+function sameLines(current, wanted) {
+  if (current.length !== wanted.length) return false;
+  return current.every((line, index) => {
+    const other = wanted[index];
+    return line.itemId === other.itemId && line.qty === round3(other.qty) && (line.unitCost == null ? null : round4(line.unitCost)) === (other.unitCost == null ? null : round4(other.unitCost))
+      && line.code === other.code && line.name === other.name && line.unit === other.unit && line.supplierSku === other.supplierSku;
+  });
+}
 
 /**
  * Controleert en schoont de invoer van een inkooporder.
@@ -139,7 +178,8 @@ class ReceiveFailed extends Error {
  * Maakt de opslag voor inkooporders.
  * @param {object} db De database.
  * @param {{ stock: object, suppliers: object }} parts De voorraadopslag (book, reorderProposal) en de leveranciersopslag (preferredByItem).
- * @returns {object} list, get, create, createReceived, update, place, receive, close, cancel, remove, incomingByItem, fromProposal.
+ * @returns {object} list, get, create, createReceived, update, place, receive, close, cancel, remove, incomingByItem, fromProposal,
+ *   autoPropose, proposals, approve, dismiss, restore.
  */
 function createPurchaseOrderStore(db, { stock, suppliers }) {
   /**
@@ -148,7 +188,7 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
    * @returns {object} De voorbereide query.
    */
   const prepare = (sql) => db.prepare(sql);
-  const ORDER_COLS = 'o.id, o.number, o.supplier_id, o.status, o.expected_date, o.notes, o.supplier_reference, o.created_by, o.created_at, o.updated_at, o.ordered_at, o.closed_at, s.name AS supplier_name';
+  const ORDER_COLS = 'o.id, o.number, o.supplier_id, o.status, o.expected_date, o.notes, o.supplier_reference, o.origin, o.created_by, o.created_at, o.updated_at, o.ordered_at, o.closed_at, s.name AS supplier_name';
   const LINE_COLS = 'id, item_id, code, name, unit, supplier_sku, qty, unit_cost, received_qty';
 
   /**
@@ -158,7 +198,7 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
    */
   const orderOf = (row) => ({
     id: row.id, number: row.number, supplierId: row.supplier_id, supplierName: row.supplier_name, status: row.status,
-    expectedDate: row.expected_date, notes: row.notes, supplierReference: row.supplier_reference, createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at,
+    expectedDate: row.expected_date, notes: row.notes, supplierReference: row.supplier_reference, origin: row.origin, createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at,
     orderedAt: row.ordered_at || null, closedAt: row.closed_at || null,
   });
 
@@ -312,16 +352,18 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
    * @param {string} tenantId Id van de omgeving.
    * @param {object} user Wie hem maakt.
    * @param {object} value De schone invoer (sanitizeOrder).
+   * @param {{ origin?: string, prepared?: object }} [options] origin = 'handmatig' (standaard) of 'voorstel'; prepared = al gecontroleerde regels (prepareLines).
    * @returns {{ order?: object, error?: string, field?: string, status?: number }} De order, of een fout.
    */
-  function insertOrder(tenantId, user, value) {
-    const prepared = prepareLines(tenantId, value);
+  function insertOrder(tenantId, user, value, { origin = ORIGIN_MANUAL, prepared: ready = null } = {}) {
+    const prepared = ready || prepareLines(tenantId, value);
     if (prepared.error) return prepared;
     const id = crypto.randomUUID();
     const now = currentTimestamp();
-    prepare(`INSERT INTO purchase_orders (id, tenant_id, number, supplier_id, status, expected_date, notes, supplier_reference, created_by, created_at, updated_at)
-      VALUES (?, ?, ?, ?, 'concept', ?, ?, ?, ?, ?, ?)`)
-      .run(id, tenantId, nextNumber(tenantId), prepared.supplier.id, value.expectedDate, value.notes, value.supplierReference, cleanText(user && (user.display_name || user.displayName), 120), now, now);
+    prepare(`INSERT INTO purchase_orders (id, tenant_id, number, supplier_id, status, expected_date, notes, supplier_reference, origin, created_by, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 'concept', ?, ?, ?, ?, ?, ?, ?)`)
+      .run(id, tenantId, nextNumber(tenantId), prepared.supplier.id, value.expectedDate, value.notes, value.supplierReference, origin === ORIGIN_PROPOSAL ? ORIGIN_PROPOSAL : ORIGIN_MANUAL,
+        cleanText(user && (user.display_name || user.displayName || user.name), 120), now, now);
     writeLines(tenantId, id, prepared.rows);
     if (value.rememberSkus) rememberSkus(tenantId, prepared.supplier.id, prepared.rows);
     return { order: fullOrder(findRow(tenantId, id), tenantId) };
@@ -341,7 +383,8 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
   }
 
   /**
-   * Wijzigt een inkooporder in concept (leverancier, datum, notitie en regels).
+   * Wijzigt een inkooporder in concept (leverancier, datum, notitie en regels). Een automatisch voorstel wordt
+   * daarmee handmatig: de achtergrondtaak laat hem daarna met rust.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van de order.
    * @param {object} raw De invoer (zelfde velden als bij maken).
@@ -356,8 +399,8 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
       if (row.status !== 'concept') return { error: 'Alleen een concept is te wijzigen.', status: 409 };
       const prepared = prepareLines(tenantId, checked.value, { allowArchivedSupplierId: row.supplier_id });
       if (prepared.error) return prepared;
-      prepare('UPDATE purchase_orders SET supplier_id = ?, expected_date = ?, notes = ?, supplier_reference = ?, updated_at = ? WHERE tenant_id = ? AND id = ?')
-        .run(prepared.supplier.id, checked.value.expectedDate, checked.value.notes, checked.value.supplierReference, currentTimestamp(), tenantId, row.id);
+      prepare('UPDATE purchase_orders SET supplier_id = ?, expected_date = ?, notes = ?, supplier_reference = ?, origin = ?, updated_at = ? WHERE tenant_id = ? AND id = ?')
+        .run(prepared.supplier.id, checked.value.expectedDate, checked.value.notes, checked.value.supplierReference, ORIGIN_MANUAL, currentTimestamp(), tenantId, row.id);
       writeLines(tenantId, row.id, prepared.rows);
       if (checked.value.rememberSkus) rememberSkus(tenantId, prepared.supplier.id, prepared.rows);
       return { order: fullOrder(findRow(tenantId, row.id), tenantId) };
@@ -527,12 +570,15 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
   /**
    * Het aantal dat nog onderweg is per artikel (orders in concept, besteld of deels ontvangen).
    * @param {string} tenantId Id van de omgeving.
+   * @param {{ excludeProposals?: boolean }} [options] excludeProposals: automatische voorstellen in concept tellen niet mee.
    * @returns {Map<string, number>} Artikel-id naar het nog niet ontvangen aantal.
    */
-  function incomingByItem(tenantId) {
+  function incomingByItem(tenantId, { excludeProposals = false } = {}) {
+    const withoutProposals = excludeProposals ? " AND NOT (o.status = 'concept' AND o.origin = ?)" : '';
+    const params = excludeProposals ? [tenantId, ...OPEN_STATUSES, ORIGIN_PROPOSAL] : [tenantId, ...OPEN_STATUSES];
     const rows = prepare(`SELECT l.item_id, SUM(l.qty - l.received_qty) AS open_qty
       FROM purchase_order_lines l JOIN purchase_orders o ON o.tenant_id = l.tenant_id AND o.id = l.order_id
-      WHERE l.tenant_id = ? AND o.status IN (${placeholders(OPEN_STATUSES.length)}) GROUP BY l.item_id`).all(tenantId, ...OPEN_STATUSES);
+      WHERE l.tenant_id = ? AND o.status IN (${placeholders(OPEN_STATUSES.length)})${withoutProposals} GROUP BY l.item_id`).all(...params);
     const out = new Map();
     for (const row of rows) {
       const openQty = round3(Number(row.open_qty));
@@ -568,17 +614,229 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
     });
   }
 
-  return { list, get, create, createReceived, update, place, receive, close, cancel, remove, incomingByItem, fromProposal };
+  /**
+   * Het verse bestelvoorstel zonder de automatische voorstellen als onderweg (die worden juist opnieuw opgebouwd).
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {object} Het voorstel van stock.reorderProposal.
+   */
+  // Het aantal artikelen zonder voorkeursleverancier kost een volledig bestelvoorstel: 30 s onthouden per omgeving.
+  const withoutSupplierCache = new Map();
+  /**
+   * Het verse bestelvoorstel van de hele omgeving, zonder de voorstel-orders zelf als onderweg te tellen.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {{ items: object[], total: number|null, suppliers: object[] }} Het bestelvoorstel (stock.reorderProposal).
+   */
+  const freshProposal = (tenantId) => stock.reorderProposal(tenantId, { preferred: suppliers.preferredByItem(tenantId), incoming: incomingByItem(tenantId, { excludeProposals: true }) });
+
+  /**
+   * De automatische voorstellen (concept, origin voorstel) van een omgeving, oudste eerst.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {object[]} De orderrijen (ORDER_COLS).
+   */
+  const proposalRows = (tenantId) => prepare(`SELECT ${ORDER_COLS} FROM purchase_orders o JOIN suppliers s ON s.tenant_id = o.tenant_id AND s.id = o.supplier_id
+    WHERE o.tenant_id = ? AND o.status = 'concept' AND o.origin = ? ORDER BY o.created_at, o.number`).all(tenantId, ORIGIN_PROPOSAL);
+
+  /**
+   * De regels van een aantal orders in één query.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string[]} orderIds De orders.
+   * @returns {Map<string, object[]>} Order-id naar zijn regels (lineOf), in volgorde.
+   */
+  function linesByOrder(tenantId, orderIds) {
+    const out = new Map(orderIds.map((id) => [id, []]));
+    if (!orderIds.length) return out;
+    const rows = prepare(`SELECT order_id, ${LINE_COLS} FROM purchase_order_lines WHERE tenant_id = ? AND order_id IN (${placeholders(orderIds.length)}) ORDER BY position, id`)
+      .all(tenantId, ...orderIds);
+    for (const row of rows) out.get(row.order_id).push(lineOf(row));
+    return out;
+  }
+
+  /**
+   * Gooit een order met zijn regels weg (binnen de transactie van de aanroeper).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} orderId Id van de order.
+   * @returns {void}
+   */
+  function deleteOrder(tenantId, orderId) {
+    prepare('DELETE FROM purchase_order_lines WHERE tenant_id = ? AND order_id = ?').run(tenantId, orderId);
+    prepare('DELETE FROM purchase_orders WHERE tenant_id = ? AND id = ?').run(tenantId, orderId);
+  }
+
+  /**
+   * Werkt de automatische bestelvoorstellen bij: per voorkeursleverancier één concept met origin voorstel en precies
+   * de regels van het verse bestelvoorstel. Artikelen zonder voorkeursleverancier en afgewezen artikelen komen er niet
+   * op; een afwijzing vervalt zodra het artikel niet meer in het bestelvoorstel staat (weer genoeg voorraad, of
+   * gearchiveerd of weg). Een voorstel dat al klopt blijft onaangeroerd; een leeg voorstel verdwijnt. Eén transactie,
+   * en alles wordt eerst gecontroleerd voordat er iets wordt geschreven.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} [user] Wie het doet (standaard de achtergrondtaak).
+   * @returns {{ created: number, updated: number, removed: number, skipped: number, dismissedSkipped: number }} Nieuwe, bijgewerkte en verwijderde voorstellen, regels zonder voorkeursleverancier en afgewezen regels.
+   */
+  function autoPropose(tenantId, user = AUTOMATIC_USER) {
+    return transaction(db, () => {
+      const proposal = freshProposal(tenantId);
+      const inProposal = new Set(proposal.items.map((item) => item.id));
+      const dismissed = new Set(prepare('SELECT item_id FROM purchase_proposal_dismissals WHERE tenant_id = ?').all(tenantId).map((row) => row.item_id));
+      const outcome = { created: 0, updated: 0, removed: 0, skipped: 0, dismissedSkipped: 0 };
+      const bySupplier = new Map();
+      for (const item of proposal.items) {
+        if (dismissed.has(item.id)) { outcome.dismissedSkipped += 1; continue; }
+        if (!item.supplierId) { outcome.skipped += 1; continue; }
+        if (!(item.orderQty > 0)) continue;
+        if (!bySupplier.has(item.supplierId)) bySupplier.set(item.supplierId, []);
+        bySupplier.get(item.supplierId).push({ itemId: item.id, qty: round3(item.orderQty), unitCost: item.costPrice == null ? null : round4(item.costPrice), supplierSku: '' });
+      }
+      // Eerst alles controleren, dan pas schrijven. Een leverancier waarvan de regels niet kloppen (kan alleen bij een
+      // gelijktijdige wijziging) slaat deze ronde over; zijn regels tellen als overgeslagen.
+      const plans = [];
+      for (const [supplierId, lines] of bySupplier) {
+        const value = { supplierId, expectedDate: '', notes: PROPOSAL_NOTE, supplierReference: '', rememberSkus: false, lines };
+        const prepared = prepareLines(tenantId, value);
+        if (prepared.error) { outcome.skipped += lines.length; continue; }
+        plans.push({ supplierId, value, prepared });
+      }
+      const existing = proposalRows(tenantId);
+      const currentLines = linesByOrder(tenantId, existing.map((row) => row.id));
+      const existingBySupplier = new Map();
+      for (const row of existing) {
+        if (!existingBySupplier.has(row.supplier_id)) existingBySupplier.set(row.supplier_id, row);
+        else { deleteOrder(tenantId, row.id); outcome.removed += 1; }
+      }
+      const planned = new Set(plans.map((plan) => plan.supplierId));
+      for (const [supplierId, row] of existingBySupplier) {
+        if (planned.has(supplierId)) continue;
+        deleteOrder(tenantId, row.id);
+        outcome.removed += 1;
+      }
+      for (const plan of plans) {
+        const row = existingBySupplier.get(plan.supplierId);
+        if (!row) {
+          insertOrder(tenantId, user, plan.value, { origin: ORIGIN_PROPOSAL, prepared: plan.prepared });
+          outcome.created += 1;
+          continue;
+        }
+        if (sameLines(currentLines.get(row.id), plan.prepared.rows)) continue;
+        writeLines(tenantId, row.id, plan.prepared.rows);
+        prepare('UPDATE purchase_orders SET updated_at = ? WHERE tenant_id = ? AND id = ?').run(currentTimestamp(), tenantId, row.id);
+        outcome.updated += 1;
+      }
+      // Een afwijzing vervalt pas als de werkelijke voorraad (stand min reserveringen) weer op of boven het minimum zit,
+      // niet al als wat besteld of onderweg is het artikel tijdelijk uit het voorstel haalt.
+      const stale = prepare(`SELECT d.item_id FROM purchase_proposal_dismissals d
+        JOIN stock_items i ON i.tenant_id = d.tenant_id AND i.id = d.item_id
+        WHERE d.tenant_id = ? AND (i.archived = 1 OR i.has_variants = 1
+          OR i.on_hand - (SELECT COALESCE(SUM(r.qty), 0) FROM stock_reservations r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id) >= i.min_qty)`)
+        .all(tenantId).map((row) => row.item_id);
+      for (let start = 0; start < stale.length; start += 500) {
+        const chunk = stale.slice(start, start + 500);
+        prepare(`DELETE FROM purchase_proposal_dismissals WHERE tenant_id = ? AND item_id IN (${placeholders(chunk.length)})`).run(tenantId, ...chunk);
+      }
+      withoutSupplierCache.delete(tenantId);
+      return outcome;
+    });
+  }
+
+  /**
+   * Het overzicht van de automatische voorstellen: de voorstel-orders met regels, de afgewezen artikelen en hoeveel
+   * artikelen onder het minimum geen voorkeursleverancier hebben (die komen nooit in een voorstel).
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {{ orders: object[], dismissed: object[], withoutSupplier: number }} Het overzicht.
+   */
+  function proposals(tenantId) {
+    const rows = proposalRows(tenantId);
+    const lines = linesByOrder(tenantId, rows.map((row) => row.id));
+    const orders = rows.map((row) => {
+      const orderLines = lines.get(row.id);
+      return { ...orderOf(row), lines: orderLines, total: totalOf(orderLines), openQty: round3(orderLines.reduce((sum, line) => sum + line.openQty, 0)) };
+    });
+    const dismissed = prepare(`SELECT d.item_id, d.dismissed_at, i.code, i.name FROM purchase_proposal_dismissals d
+      JOIN stock_items i ON i.tenant_id = d.tenant_id AND i.id = d.item_id WHERE d.tenant_id = ? ORDER BY i.code`).all(tenantId)
+      .map((row) => ({ itemId: row.item_id, code: row.code, name: row.name, dismissedAt: row.dismissed_at }));
+    let cached = withoutSupplierCache.get(tenantId);
+    if (!cached || Date.now() - cached.at > WITHOUT_SUPPLIER_TTL_MS) {
+      cached = { at: Date.now(), count: freshProposal(tenantId).items.filter((item) => !item.supplierId).length };
+      withoutSupplierCache.set(tenantId, cached);
+    }
+    return { orders, dismissed, withoutSupplier: cached.count };
+  }
+
+  /**
+   * Keurt concept-orders goed: elke order wordt besteld (place), elk in een eigen transactie.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {*} rawIds De id's van de orders (hoogstens 100).
+   * @returns {{ placed?: object[], failed?: object[], error?: string, field?: string }} Bestelde orders (id, nummer) en mislukte (id, melding), of een fout in de invoer.
+   */
+  function approve(tenantId, rawIds) {
+    const ids = cleanIds(rawIds, MAX_APPROVE);
+    if (!ids) return { error: `Geef 1 tot ${MAX_APPROVE} orders.`, field: 'ids' };
+    const placed = [];
+    const failed = [];
+    for (const id of ids) {
+      const out = place(tenantId, id);
+      if (out.error) failed.push({ id, message: out.error === 'not_found' ? 'Inkooporder niet gevonden.' : out.error });
+      else placed.push({ id: out.order.id, number: out.order.number });
+    }
+    return { placed, failed };
+  }
+
+  /**
+   * Haalt regels (of zonder itemIds de hele order) uit een automatisch voorstel en onthoudt de afwijzing per artikel,
+   * zodat de taak ze niet terugzet. Een voorstel zonder regels verdwijnt.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} orderId Id van de voorstel-order.
+   * @param {*} [rawItemIds] De artikelen om af te wijzen (leeg = alle regels).
+   * @returns {{ order?: object|null, number?: string, removed?: boolean, dismissed?: number, error?: string, field?: string, status?: number }} De order (null als hij weg is), of een fout.
+   */
+  function dismiss(tenantId, orderId, rawItemIds) {
+    const whole = rawItemIds === undefined || rawItemIds === null;
+    const itemIds = whole ? null : cleanIds(rawItemIds, MAX_LINES);
+    if (!whole && !itemIds) return { error: 'Geef de artikelen als lijst.', field: 'itemIds' };
+    return transaction(db, () => {
+      const row = findRow(tenantId, orderId);
+      if (!row) return { error: 'not_found', status: 404 };
+      if (row.status !== 'concept' || row.origin !== ORIGIN_PROPOSAL) return { error: 'Alleen een automatisch voorstel in concept is af te wijzen.', status: 409 };
+      const lines = linesOf(tenantId, row.id);
+      const onOrder = new Set(lines.map((line) => line.itemId));
+      if (itemIds && itemIds.some((itemId) => !onOrder.has(itemId))) return { error: 'Een artikel staat niet op dit voorstel.', field: 'itemIds', status: 404 };
+      const targets = itemIds || [...onOrder];
+      const now = currentTimestamp();
+      const upsert = prepare(`INSERT INTO purchase_proposal_dismissals (tenant_id, item_id, dismissed_at) VALUES (?, ?, ?)
+        ON CONFLICT (tenant_id, item_id) DO UPDATE SET dismissed_at = excluded.dismissed_at`);
+      for (const itemId of targets) upsert.run(tenantId, itemId, now);
+      if (targets.length >= onOrder.size) {
+        deleteOrder(tenantId, row.id);
+        return { order: null, number: row.number, removed: true, dismissed: targets.length };
+      }
+      prepare(`DELETE FROM purchase_order_lines WHERE tenant_id = ? AND order_id = ? AND item_id IN (${placeholders(targets.length)})`).run(tenantId, row.id, ...targets);
+      prepare('UPDATE purchase_orders SET updated_at = ? WHERE tenant_id = ? AND id = ?').run(now, tenantId, row.id);
+      return { order: fullOrder(findRow(tenantId, row.id), tenantId), number: row.number, removed: false, dismissed: targets.length };
+    });
+  }
+
+  /**
+   * Haalt afwijzingen weg: de artikelen komen bij de volgende ronde van de taak (of vernieuwen) weer in het voorstel.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {*} rawItemIds De artikelen.
+   * @returns {{ restored?: number, error?: string, field?: string }} Het aantal weggehaalde afwijzingen, of een fout.
+   */
+  function restore(tenantId, rawItemIds) {
+    const itemIds = cleanIds(rawItemIds, MAX_LINES);
+    if (!itemIds) return { error: 'Geef de artikelen als lijst.', field: 'itemIds' };
+    const out = prepare(`DELETE FROM purchase_proposal_dismissals WHERE tenant_id = ? AND item_id IN (${placeholders(itemIds.length)})`).run(tenantId, ...itemIds);
+    return { restored: Number(out.changes) || 0 };
+  }
+
+  return { list, get, create, createReceived, update, place, receive, close, cancel, remove, incomingByItem, fromProposal, autoPropose, proposals, approve, dismiss, restore };
 }
 
 /**
  * Hangt de routes voor inkooporders aan de app (recht voorraad).
  * @param {object} app De Express-app.
- * @param {{ purchaseOrders: object, requireRight: Function, requireJson: Function, audit: Function, afterReceive?: Function }} ctx De opslag en hulpfuncties van de server; afterReceive(tenantId, itemIds) draait na een ontvangst (backorders die nu leverbaar zijn).
+ * @param {{ purchaseOrders: object, requireRight: Function, requireJson: Function, audit: Function, afterReceive?: Function, proposalsEnabled?: Function }} ctx De opslag en hulpfuncties van de server; afterReceive(tenantId, itemIds) draait na een ontvangst (backorders die nu leverbaar zijn); proposalsEnabled(tenantId) zegt of de automatische voorstellen aan staan (instelling purchaseProposals).
  * @returns {void}
  */
 function registerPurchaseOrderRoutes(app, ctx) {
-  const { purchaseOrders, requireRight, requireJson, audit, afterReceive = () => {} } = ctx;
+  const { purchaseOrders, requireRight, requireJson, audit, afterReceive = () => {}, proposalsEnabled = () => true } = ctx;
   const requireStock = requireRight('voorraad');
   /**
    * De actieve omgeving van het verzoek.
@@ -613,6 +871,46 @@ function registerPurchaseOrderRoutes(app, ctx) {
     const out = purchaseOrders.fromProposal(tenantOf(req), req.user);
     audit(req, 'inkooporders_uit_bestelvoorstel', { count: out.orders.length });
     res.status(201).json(out);
+  });
+
+  // Automatische bestelvoorstellen: bekijken, nu vernieuwen, goedkeuren (= bestellen), afwijzen en afwijzingen herstellen.
+  app.get('/api/purchase-orders/proposals', requireStock, (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const tenantId = tenantOf(req);
+    res.json({ ...purchaseOrders.proposals(tenantId), enabled: Boolean(proposalsEnabled(tenantId)) });
+  });
+
+  const refreshLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 20, keyFn: (req) => `proposals-refresh:${tenantOf(req)}:${req.user && req.user.id}` });
+  app.post('/api/purchase-orders/proposals/refresh', requireStock, refreshLimiter, (req, res) => {
+    if (!proposalsEnabled(tenantOf(req))) return res.status(409).json({ error: 'proposals_off', message: 'Automatische bestelvoorstellen staan uit (Beheer > Instellingen).' });
+    const out = purchaseOrders.autoPropose(tenantOf(req), req.user);
+    audit(req, 'inkoopvoorstel_vernieuwd', { created: out.created, updated: out.updated, removed: out.removed });
+    res.json(out);
+  });
+
+  app.post('/api/purchase-orders/proposals/approve', requireJson, requireStock, (req, res) => {
+    const out = purchaseOrders.approve(tenantOf(req), req.body && req.body.ids);
+    respond(res, out, () => {
+      if (out.placed.length) audit(req, 'inkoopvoorstel_goedgekeurd', { numbers: out.placed.map((order) => order.number) });
+      res.json(out);
+    });
+  });
+
+  app.post('/api/purchase-orders/proposals/dismiss', requireJson, requireStock, (req, res) => {
+    const body = req.body || {};
+    const out = purchaseOrders.dismiss(tenantOf(req), body.orderId, body.itemIds);
+    respond(res, out, () => {
+      audit(req, 'inkoopvoorstel_afgewezen', { number: out.number, count: out.dismissed, removed: out.removed });
+      res.json({ order: out.order, removed: out.removed, dismissed: out.dismissed });
+    });
+  });
+
+  app.post('/api/purchase-orders/proposals/restore', requireJson, requireStock, (req, res) => {
+    const out = purchaseOrders.restore(tenantOf(req), req.body && req.body.itemIds);
+    respond(res, out, () => {
+      audit(req, 'inkoopvoorstel_hersteld', { count: out.restored });
+      res.json(out);
+    });
   });
 
   app.get('/api/purchase-orders/:id', requireStock, (req, res) => {

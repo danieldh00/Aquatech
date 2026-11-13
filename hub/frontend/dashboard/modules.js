@@ -141,7 +141,8 @@
       icon: 'box',
       status: 'actief',
       right: 'voorraad',
-      configuration: { sections: ['labels'], settings: ['labelTemplates', 'priceFactors'], routes: ['/api/stock/label-templates', '/api/stock/labels', '/api/stock/price-factors'] },
+      // Bestelvoorstellen: alleen de voorstel-routes vergrendeld, niet /api/purchase-orders zelf (die volgt het recht voorraad).
+      configuration: { sections: ['labels', 'bestelvoorstellen'], settings: ['labelTemplates', 'priceFactors', 'purchaseProposals'], routes: ['/api/stock/label-templates', '/api/stock/labels', '/api/stock/price-factors', '/api/purchase-orders/proposals'] },
     },
     {
       id: 'bestelvoorstel',

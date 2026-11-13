@@ -362,7 +362,11 @@
    * @returns {Promise<void>}
    */
   async function loadReorder() {
-    const proposal = await api('stock/reorder');
+    // De automatische voorstellen staan boven de tabel; beide tegelijk ophalen. Een fout in de voorstellen laat de tabel staan.
+    const [proposal] = await Promise.all([
+      api('stock/reorder'),
+      window.ArtikelenProposals.load().catch((error) => toast(error.message, true)),
+    ]);
     $('#rv-table').innerHTML = proposal.items.length
       ? `<thead><tr><th>Leverancier</th><th>Code</th><th>Omschrijving</th><th class="num">Beschikbaar</th><th class="num">Onderweg</th><th class="num">Minimum</th><th class="num">Te bestellen</th><th class="num">Bedrag</th></tr></thead><tbody>${proposal.items.map((item) => `<tr>
         <td>${esc(item.supplierName || 'Zonder leverancier')}</td><td>${esc(item.code)}</td><td class="wrap">${esc(item.name)}</td>
@@ -380,6 +384,7 @@
     document.querySelectorAll('.tab').forEach((button) => button.classList.toggle('active', button.dataset.tab === name));
     for (const tabName of TABS) $(`#tab-${tabName}`).hidden = tabName !== name;
     if (name === 'moves' && !state.moves) loadMoves();
+    window.ArtikelenProposals.setTab(name);
     if (name === 'reorder') loadReorder().catch((error) => toast(error.message, true));
     if (name === 'suppliers') window.ArtikelenSuppliers.load().catch((error) => toast(error.message, true));
     if (name === 'orders') window.ArtikelenOrders.load().catch((error) => toast(error.message, true));
@@ -387,6 +392,16 @@
     if (name === 'media') loadMedia().catch((error) => toast(error.message, true));
     try { history.replaceState(null, '', `./#${name}`); } catch { /* file:// */ }
     if (window.AquatechNav) window.AquatechNav.refresh();
+  }
+
+  /**
+   * Opent een inkooporder in het tabblad Inkooporders (Aanpassen bij een bestelvoorstel, of ?order= in het adres).
+   * @param {string} orderId Het id van de order.
+   * @returns {Promise<void>}
+   */
+  async function openPurchaseOrder(orderId) {
+    showTab('orders');
+    try { await window.ArtikelenOrders.openOrder(orderId); } catch (error) { toast(error.status === 404 ? 'Inkooporder niet gevonden.' : error.message, true); }
   }
 
   /**
@@ -1519,6 +1534,11 @@
     }
     window.ArtikelenPriceFactor.setup({ api, toast, esc, nl, eur, workbook, save, stamp });
     window.ArtikelenOrders.setup({ api, toast, esc, nl, eur, getItems: () => state.items, workbook, save, stamp, afterProposal: () => loadReorder().catch((error) => toast(error.message, true)) });
+    window.ArtikelenProposals.setup({
+      api, toast, esc, nl, eur, openOrder: openPurchaseOrder,
+      /** Toont het tabblad Bestelvoorstel (vanuit de melding boven de tabbladen). */
+      showReorder: () => { showTab('reorder'); },
+    });
     loadUnits().catch((error) => toast(error.message, true));
     setupShop();
     setupMedia();
@@ -1534,9 +1554,13 @@
       load().catch(() => {});
     } else {
       $('#v-list').hidden = false;
-      try { await load(); } catch (error) { toast(error.message, true); }
       const hash = location.hash.slice(1);
-      if (TABS.includes(hash)) showTab(hash);
+      const orderId = params.get('order');
+      // De teller van de voorstellen tegelijk met het overzicht; op het tabblad Bestelvoorstel haalt dat ze zelf op.
+      if (hash !== 'reorder') window.ArtikelenProposals.loadCount();
+      try { await load(); } catch (error) { toast(error.message, true); }
+      if (orderId) await openPurchaseOrder(orderId);
+      else if (TABS.includes(hash)) showTab(hash);
       // Vanuit een werkorder: "Op voorraad nemen" met de ontbrekende codes.
       const codes = (params.get('codes') || '').split(',').map((code) => code.trim()).filter((code) => Catalog.articles[code.toUpperCase()]);
       if (codes.length) openImport(codes);
