@@ -1,5 +1,6 @@
-# Aquatech Beregeningsplanner — werkgeheugen
+# AquaTech Hub — werkgeheugen
 
+**Productnaam AquaTech Hub** (map `hub/`; GHCR-image blijft `ghcr.io/danieldh00/aquatech`; webshopklanten zien "AquaTech Shop"; bedrijfsnaam in documenten blijft AquaTech Service). De planner is de module *Beregeningsplanner* (`frontend/beregening/`, opslagsleutel `aquatech-beregeningsplanner-v1` blijft, anders raakt lokaal werk kwijt). PWA-schilcache heet `aquatech-hub-shell-<versie>` (oude `aquatech-shell-*` wordt opgeruimd; IndexedDB-wachtrij en datacache zijn niet hernoemd, zodat niets onverzonden verloren gaat).
 Webapp om tuinberegening te ontwerpen (in de lijn van de DVS Beregnungsplaner).
 Groeit uit tot een modulair ERP-achtig pakket: startpagina = **dashboard**
 (`frontend/index.html`, moduleregister `frontend/dashboard/modules.js`), de
@@ -42,7 +43,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   git checkout -B claude/<naam> origin/master
   ```
 - Werkwijze per taak: wijzigen → `npm test` → releasenotes-bestand `changes/<naam>.md` (als
-  `beregeningsplanner/` is gewijzigd; **geen** versie-bump, geen CHANGELOG/releases.js) → README.md bijwerken (bij features/setup) → `git push -u origin <branch>` → PR naar
+  `hub/` is gewijzigd; **geen** versie-bump, geen CHANGELOG/releases.js) → README.md bijwerken (bij features/setup) → `git push -u origin <branch>` → PR naar
   `master` → CI groen (`ci.yml` + `version.yml`) → **Claude-review**
   (`claude-review.yml`: jobs *Claude code review* en *Claude security review*, de
   verplichte controles; opmerkingen oplossen of met reden beantwoorden). **CodeRabbit is uitgeschakeld** (besluit Daniël 2026-11-11: config, triggers, inhaalreview en bevindingenissues zijn verwijderd). **Vóór go-live** laat Daniël de code één keer handmatig een deep scan geven met CodeRabbit; bevindingen daarvan lossen we dan op. De Claude-reviews draaien op het Claude-abonnement van Daniël (secret `CLAUDE_CODE_OAUTH_TOKEN`, aan te maken met `claude setup-token`), niet op API-tegoed; de securityreview draait via dezelfde `claude-code-action`. **Kosten van de Claude-review** zijn begrensd: de workflow slaat docs/tests-only wijzigingen over, draait de securityreview alleen bij beveiligingsrelevante code en beoordeelt een volgende push alleen op wat nieuw is; het model komt uit de repository-variabelen `CLAUDE_REVIEW_MODEL` (eerste volledige review) en `CLAUDE_REVIEW_MODEL_PUSH` (lichtere review per push). Na het mergen de branch verwijderen. Een volgende taak begint opnieuw vanaf
@@ -51,8 +52,8 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `git merge origin/master` in je branch, conflicten oplossen, en de versie
   zo nodig opnieuw verhogen (moet hoger zijn dan die op `master`).
 - **Versie en releasenotes zijn automatisch** : een PR verandert `version` in
-  `beregeningsplanner/backend/package.json`, `CHANGELOG.md` en `frontend/nieuws/releases.js` **niet**. Elke PR die
-  `beregeningsplanner/` wijzigt voegt één bestand `changes/<korte-naam>.md` toe (formaat en voorbeeld: `changes/README.md`:
+  `hub/backend/package.json`, `CHANGELOG.md` en `frontend/nieuws/releases.js` **niet**. Elke PR die
+  `hub/` wijzigt voegt één bestand `changes/<korte-naam>.md` toe (formaat en voorbeeld: `changes/README.md`:
   `titel:`, `## Nieuws` met punten en optioneel `[rechten]`, `## Changelog`). Na de merge geeft `release.yml` (job *prepare*,
   `backend/tools/release-notes.js`) elk bestand het volgende versienummer (patch + 1, na x.y.9 de volgende minor, `bump: minor`
   in de kop kan; major alleen op Daniëls woord), werkt de drie bestanden bij, verwijdert het fragment en commit naar master
@@ -60,7 +61,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   of een ontbrekend fragment; alleen docs/CI zonder effect: label `geen-releasenotes`. Het versienummer in een PR staat dus
   altijd op het oude; tests die de versie nodig hebben lezen `package.json`. Voor de push naar de beschermde master is
   het secret `RELEASE_PUSH_TOKEN` nodig (beheerder-PAT) met Repository admin als bypass in de ruleset.
-  Wijzigingen buiten `beregeningsplanner/` (zoals deze `CLAUDE.md`) hebben
+  Wijzigingen buiten `hub/` (zoals deze `CLAUDE.md`) hebben
   geen bump nodig.
 
 ## Server, inloggen en opslag
@@ -679,7 +680,7 @@ de PR-beschrijving kort hoe eraan voldaan is.
 
 **Documentatie**: `README.md` (root) bijwerken als de PR features, modules, instellingen, installatie of het
 reviewproces wijzigt; een fragment `changes/<naam>.md` (notes voor CHANGELOG en Nieuws) bij elke wijziging in
-`beregeningsplanner/`.
+`hub/`.
 
 **Queries** (productie = Supabase over het netwerk, elke query is een rondgang):
 - Geen `SELECT *`/`t.*`: alleen de kolommen die nodig zijn; grote kolommen
@@ -802,7 +803,7 @@ bewaakt de eerste twee regels voor elk eigen `.js`-bestand (backend `src/`,
 ## Lokaal draaien en testen
 
 ```sh
-cd beregeningsplanner/backend && npm install
+cd hub/backend && npm install
 DATA_DIR=/tmp/bp PORT=3300 node src/server.js   # http://localhost:3300 -> eerste beheerder aanmaken
 npm test                          # node --test
 ```

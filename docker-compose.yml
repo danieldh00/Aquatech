@@ -6,7 +6,7 @@
 # startwaarden (optioneel, via een .env-bestand; zie .env.example).
 services:
   aquatech:
-    build: ./beregeningsplanner
+    build: ./hub
     image: aquatech:latest
     restart: unless-stopped
     ports:

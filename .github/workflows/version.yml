@@ -23,4 +23,4 @@ jobs:
       - name: Releasenotes en versie controleren
         env:
           PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
-        run: node beregeningsplanner/backend/tools/release-notes.js --pull-request "origin/${{ github.base_ref }}"
+        run: node hub/backend/tools/release-notes.js --pull-request "origin/${{ github.base_ref }}"

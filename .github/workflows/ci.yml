@@ -11,14 +11,14 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: beregeningsplanner/backend
+        working-directory: hub/backend
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: beregeningsplanner/backend/package-lock.json
+          cache-dependency-path: hub/backend/package-lock.json
       - run: npm ci
       - run: npm test
       - run: npm audit --omit=dev --audit-level=high
@@ -39,7 +39,7 @@ jobs:
           --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     defaults:
       run:
-        working-directory: beregeningsplanner/backend
+        working-directory: hub/backend
     env:
       TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
     steps:
@@ -48,7 +48,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: beregeningsplanner/backend/package-lock.json
+          cache-dependency-path: hub/backend/package-lock.json
       - run: npm ci
       - run: npm test
 
@@ -66,16 +66,16 @@ jobs:
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - name: Image bouwen (${{ matrix.platform }})
-        run: docker buildx build --platform ${{ matrix.platform }} --load -t beregeningsplanner:test beregeningsplanner
+        run: docker buildx build --platform ${{ matrix.platform }} --load -t hub:test hub
       - name: Smoketest
         run: |
-          docker run -d --name hl --platform ${{ matrix.platform }} -p 3300:3300 -e ACCESS_CODE=ci beregeningsplanner:test
+          docker run -d --name hl --platform ${{ matrix.platform }} -p 3300:3300 -e ACCESS_CODE=ci hub:test
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3300/api/health && exit 0; sleep 2; done
           docker logs hl
           exit 1
       - name: Smoketest eerste start (instelscherm voor de eerste beheerder)
         run: |
-          docker run -d --name solo --platform ${{ matrix.platform }} -p 3301:3300 beregeningsplanner:test
+          docker run -d --name solo --platform ${{ matrix.platform }} -p 3301:3300 hub:test
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3301/api/health && break; sleep 2; done
           docker logs solo
           docker logs solo 2>&1 | grep -q 'eerste beheerdersaccount'

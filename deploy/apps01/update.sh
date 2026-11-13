@@ -4,7 +4,7 @@
 #     zelf als "automatisch bijwerken" aan staat (Beheer > Systeem > Updates; standaard aan);
 #   - de path-unit aquatech-update.path, meteen zodra de app een aanvraag neerzet (knop "Nu updaten").
 #
-# Koppeling met de app (zie beregeningsplanner/backend/src/platform/system-update.js):
+# Koppeling met de app (zie hub/backend/src/platform/system-update.js):
 #   update/status/   alleen dit script schrijft hier (root); in de container alleen-lezen.
 #     status.json       draaiende en beschikbare versie, laatst gecontroleerd
 #     run.json          stand van de laatste uitrol (bezig/geslaagd/mislukt/geweigerd, stap, melding)

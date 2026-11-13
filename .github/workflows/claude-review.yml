@@ -72,11 +72,11 @@ jobs:
           # Review nodig = er is code gewijzigd, behalve als dat alleen het veld "version" in package.json/package-lock.json is
           # (een versie-bump). Een ontbrekende diff of een andere regel in die bestanden telt als code. De job slaagt dan
           # zonder review, zodat de verplichte check niet ontbreekt.
-          needs_review=$(echo "$objects" | jq -s --arg re '^(beregeningsplanner/(backend/(src|tools|package)|frontend/)|deploy/|scripts/|docker-compose\.yml|beregeningsplanner/Dockerfile)' '
+          needs_review=$(echo "$objects" | jq -s --arg re '^(hub/(backend/(src|tools|package)|frontend/)|deploy/|scripts/|docker-compose\.yml|hub/Dockerfile)' '
             [ .[] | select(.filename | test($re)) ] as $code
             | ($code | length) > 0
               and ($code | all(
-                  (.filename | test("^beregeningsplanner/backend/package(-lock)?\\.json$"))
+                  (.filename | test("^hub/backend/package(-lock)?\\.json$"))
                   and ((.patch // "") | length > 0)
                   and ((.patch // "") | split("\n") | map(select(test("^[+-]") and (test("^(\\+\\+\\+|---)") | not))) | all(test("^[+-]\\s*\"version\": \""))))
                 | not)')
@@ -109,7 +109,7 @@ jobs:
             - queries: geen SELECT *, geen N+1, indexen met tenant_id vooraan, geen zware queries op een warme pad;
             - frontend: relatieve URL's, geen CDN's, --at-*-kleurvariabelen, getJson voor api/me en api/config;
             - tests: nieuwe routes hebben een test voor andere tenant (404) en ontbrekend recht (403);
-            - een bestand changes/<naam>.md met de releasenotes als beregeningsplanner/ is gewijzigd (versienummer, CHANGELOG.md en
+            - een bestand changes/<naam>.md met de releasenotes als hub/ is gewijzigd (versienummer, CHANGELOG.md en
               releases.js worden na het mergen automatisch bijgewerkt en horen niet in de PR);
             - codestijl: duidelijke namen en een commentaarblok per functie in het Nederlands.
             De software is nog in ontwikkeling: meld geen problemen met gegevens van vóór een migratie.
@@ -169,7 +169,7 @@ jobs:
             model="$MODEL_FULL"
           fi
           echo "$files"
-          relevant=$(echo "$files" | grep -Ev '^beregeningsplanner/frontend/(vendor/|.*\.(png|jpe?g|webp|svg|woff2?)$)' | grep -E '^(beregeningsplanner/(backend/src/|frontend/)|deploy/|docker-compose\.yml|beregeningsplanner/Dockerfile)' || true)
+          relevant=$(echo "$files" | grep -Ev '^hub/frontend/(vendor/|.*\.(png|jpe?g|webp|svg|woff2?)$)' | grep -E '^(hub/(backend/src/|frontend/)|deploy/|docker-compose\.yml|hub/Dockerfile)' || true)
           if [ -n "$relevant" ]; then
             echo "review=true" >> "$GITHUB_OUTPUT"
           else
@@ -199,7 +199,7 @@ jobs:
             uitgaande verbindingen (netguard.publicAddress), SQL die tekst plakt in plaats van ?-parameters,
             geheimen in logs, audit-detail of frontend, uploads zonder inhoudscontrole, openbare tokens in URL's
             en endpoints zonder rate limit. De CSP staat inline scripts alleen toe op hash in login/setup.html.
-            Slaat de frontend vendor-map, afbeeldingen en beregeningsplanner/backend/test/fixtures over.
+            Slaat de frontend vendor-map, afbeeldingen en hub/backend/test/fixtures over.
 
             Is EVENT `synchronize`, dan is dit een volgende push: lees met `gh pr view --comments` je eerdere
             opmerkingen, beoordeel alleen de commits sinds die review en herhaal niets wat al is gemeld.

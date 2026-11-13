@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>{{title}} – AquaTech Hub</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px;
+      font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: #f4f6f8; color: #1f2a33; }
+    .card { width: 100%; max-width: 440px; background: #fff; border-radius: 12px; padding: 28px 24px; box-shadow: 0 4px 20px rgba(0,0,0,.08); }
+    .logo { background: var(--at-navy, #172f5e); border-radius: 8px; padding: 14px 16px; margin: 0 0 18px; }
+    .logo img { display: block; height: 30px; width: auto; }
+    h1 { font-size: 19px; margin: 0 0 8px; }
+    p { margin: 0 0 14px; }
+    .muted { color: #6b7a86; font-size: 14px; }
+    dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0 0 16px; font-size: 14px; }
+    dt { color: #6b7a86; }
+    dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+    ul { margin: 0 0 16px; padding-left: 20px; font-size: 14px; }
+    li { margin: 0 0 4px; }
+    .warn { border-left: 3px solid var(--at-warn, #ef6c00); background: #fff7ed; padding: 8px 12px; border-radius: 6px; font-size: 14px; margin: 0 0 16px; }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    button { width: 100%; padding: 11px; font: inherit; font-weight: 600; border-radius: 999px; cursor: pointer; border: 1px solid #c8d1d9; background: #fff; color: #1f2a33; }
+    button.primary { color: #fff; background: var(--at-green, #19924f); border-color: var(--at-green, #19924f); }
+    .error { color: #c62828; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="logo">{{logo}}</div>
+    {{body}}
+  </main>
+</body>
+</html>

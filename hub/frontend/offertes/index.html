@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#172f5e">
+  <meta name="robots" content="noindex">
+  <title>Offertes – AquaTech Hub</title>
+  <link rel="stylesheet" href="../shared/brand.css">
+  <link rel="stylesheet" href="../shared/theme.css">
+  <link rel="stylesheet" href="../shared/sidebar.css">
+  <link rel="stylesheet" href="../shared/layout.css">
+  <link rel="stylesheet" href="../dashboard/dashboard.css">
+  <link rel="stylesheet" href="../beheer/beheer.css">
+  <link rel="stylesheet" href="../plannen/plannen.css">
+  <link rel="stylesheet" href="../shared/article-picker.css">
+  <link rel="stylesheet" href="quote-view.css">
+  <link rel="stylesheet" href="offertes.css">
+  <script src="../shared/common.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand home" href="../" title="Terug naar het overzicht">
+      <img class="brand-logo" src="../shared/logo-white.png" alt="AquaTech Service">
+      <span class="brand-sep" aria-hidden="true"></span>
+      <span class="brand-name">Offertes</span>
+    </a>
+    <span id="account" class="account"></span>
+  </header>
+
+  <!-- Overzicht -->
+  <main id="list-view" class="dash wide screen">
+    <section class="intro">
+      <h1 id="l-heading">Offertes</h1>
+      <p id="l-intro" class="muted">Bouw een offerte op uit een beregeningsplan: de stuklijst en de arbeid worden overgenomen, daarna pas je prijzen, teksten en klantgegevens aan.</p>
+    </section>
+    <div id="l-stats" class="stats" hidden></div>
+    <div class="filters">
+      <input id="l-search" type="search" placeholder="Zoek op nummer, klant of omschrijving">
+      <select id="l-status"><option value="">Alle statussen</option></select>
+      <label class="chk" id="l-all-wrap" hidden><input type="checkbox" id="l-all"> Van alle gebruikers</label>
+      <button id="l-new-plan" class="btn primary">Nieuwe offerte uit plan</button>
+      <button id="l-new-empty" class="btn">Lege offerte</button>
+      <button id="l-profile" class="btn" hidden>Bedrijfsgegevens</button>
+      <button id="l-export" class="btn">Exporteer naar Excel</button>
+    </div>
+    <div class="tablewrap"><table class="grid sortable" id="l-table"></table></div>
+    <p id="l-count" class="muted small"></p>
+  </main>
+
+  <!-- Offerte bewerken -->
+  <main id="edit-view" class="dash wide screen" hidden>
+    <div class="edit-bar">
+      <button id="e-back" class="btn">← Overzicht</button>
+      <h1 id="e-heading">Offerte</h1>
+      <span id="e-saved" class="muted small"></span>
+      <span class="spacer"></span>
+      <label class="inline">Status <select id="e-status"></select></label>
+      <button id="e-pdf" class="btn primary">PDF / afdrukken</button>
+      <button id="e-xlsx" class="btn">Excel</button>
+      <button id="e-wo" class="btn" hidden title="Werkorder met uitvoeringsplan en materialen (module Werkorders)">Werkorder maken</button>
+      <button id="e-convert" class="btn" hidden title="Maakt een bestelling van deze offerte (module Webshopbestellingen); de offerte staat daarna op Omgezet">Omzetten naar bestelling</button>
+      <button id="e-more" class="btn" aria-haspopup="true">⋯</button>
+      <div id="e-menu" class="menu" hidden>
+        <button data-act="replan">Regels opnieuw uit het plan</button>
+        <button data-act="openplan">Plan openen in de planner</button>
+        <button data-act="duplicate">Kopie maken</button>
+        <button data-act="delete" class="danger">Verwijderen</button>
+        <button data-act="purge" class="danger" hidden>Definitief wissen</button>
+      </div>
+    </div>
+    <div id="e-warnings" class="notice warn" hidden></div>
+    <div id="e-locked" class="notice ok" hidden></div>
+
+    <section id="e-share" class="card-form share">
+      <h3>Digitale offerte</h3>
+      <div id="sh-body"></div>
+    </section>
+
+    <div class="cols">
+      <section class="card-form">
+        <h3>Klant</h3>
+        <div class="cust-pick">
+          <label>Klant uit de klantenlijst
+            <input id="e-cust-search" type="search" autocomplete="off" maxlength="100" placeholder="Zoek op naam, bedrijf, e-mail, telefoon of adres" role="combobox" aria-expanded="false" aria-controls="e-cust-list">
+          </label>
+          <ul id="e-cust-list" class="cust-list" role="listbox" hidden></ul>
+          <div id="e-cust-chosen" class="cust-chosen" hidden><span id="e-cust-name"></span><button type="button" id="e-cust-clear" class="btn small">Ontkoppelen</button></div>
+          <p class="muted small">Kies een klant: naam, adres, e-mail en telefoon worden ingevuld en de klant ziet de offerte in de app zodra de status <b>Verzonden</b> is. Zonder klant werkt de link onder <b>Digitale offerte</b>.</p>
+          <button type="button" id="e-cust-new" class="btn small" hidden>+ Nieuwe klant</button>
+          <form id="e-newcust" class="newcust" autocomplete="off" hidden>
+            <h4>Nieuwe klant</h4>
+            <div class="form-grid">
+              <label class="field">Soort klant
+                <select name="customerGroup"><option value="">Particulier</option><option value="zakelijk">Zakelijk</option></select>
+              </label>
+              <label class="field span-2">Naam
+                <input name="displayName" required maxlength="80" placeholder="Jan de Vries">
+              </label>
+              <label class="field span-2">E-mailadres
+                <input name="email" type="email" maxlength="200">
+              </label>
+              <label class="field">Telefoon
+                <input name="phone" type="tel" maxlength="25">
+              </label>
+              <label class="field full" data-business>Bedrijfsnaam
+                <input name="companyName" maxlength="80">
+              </label>
+              <label class="field" data-business>KvK-nummer
+                <input name="kvkNumber" inputmode="numeric" maxlength="12" placeholder="8 cijfers">
+              </label>
+              <label class="field span-2" data-business>Btw-nummer
+                <input name="vatNumber" maxlength="20" placeholder="NL123456789B01">
+              </label>
+              <label class="field full addr-result">Adres
+                <span class="addr-text" data-addr-text></span>
+                <textarea name="address" data-address-lookup hidden maxlength="400"></textarea>
+              </label>
+            </div>
+            <div id="e-newcust-err" class="err" role="alert"></div>
+            <div class="form-actions">
+              <button class="btn primary small" type="submit">Klant opslaan en kiezen</button>
+              <button id="e-newcust-cancel" class="btn small" type="button">Annuleren</button>
+            </div>
+          </form>
+        </div>
+        <label>Naam / bedrijf<input data-f="customer.name" maxlength="200"></label>
+        <label>T.a.v.<input data-f="customer.contact" maxlength="200"></label>
+        <label>Adres<textarea data-address-lookup data-f="customer.address" rows="3" maxlength="400"></textarea></label>
+        <label class="chk"><input type="checkbox" id="e-del-same" checked> Afleveradres gelijk aan adres</label>
+        <label id="e-del-box" hidden>Afleveradres<textarea data-address-lookup data-f="delivery.address" rows="3" maxlength="400"></textarea></label>
+        <div class="row2">
+          <label>E-mail<input data-f="customer.email" type="email" maxlength="200"></label>
+          <label>Telefoon<input data-f="customer.phone" maxlength="40"></label>
+        </div>
+        <div class="vat-shift">
+          <label class="chk"><input type="checkbox" id="e-vs-on"> Btw verlegd (zakelijke klant in een ander EU-land)</label>
+          <div id="e-vs-box" hidden>
+            <label>Btw-nummer van de klant<input id="e-vs-number" data-f="vatShift.number" maxlength="40" placeholder="DE123456789" autocomplete="off"></label>
+            <p id="e-vs-status" class="muted small" role="status"></p>
+          </div>
+        </div>
+      </section>
+      <section class="card-form">
+        <h3>Offerte</h3>
+        <label>Omschrijving<input data-f="title" maxlength="200" placeholder="Bijv. Aanleg automatische beregening"></label>
+        <div class="row3">
+          <label>Offertenummer<input id="e-number" readonly></label>
+          <label>Uw referentie<input data-f="reference" maxlength="120"></label>
+          <label>Documenttaal<select data-f="language"><option value="nl">Nederlands</option><option value="en">English</option></select></label>
+        </div>
+        <div class="row3">
+          <label>Datum<input data-f="date" type="date"></label>
+          <label>Geldig tot<input data-f="validUntil" type="date"></label>
+          <label>Betaaltermijn (dagen)<input data-f="paymentDays" type="number" min="0" max="365" step="1" inputmode="numeric" placeholder="Standaard"></label>
+        </div>
+        <p id="e-plan" class="muted small"></p>
+      </section>
+    </div>
+
+    <section class="card-form">
+      <h3>Inleiding</h3>
+      <textarea data-f="intro" rows="3" maxlength="4000"></textarea>
+    </section>
+
+    <section class="card-form">
+      <div class="lines-head">
+        <h3>Regels</h3>
+        <label class="inline">Op de offerte
+          <select data-f="layout">
+            <option value="specificatie">alle regels met prijzen</option>
+            <option value="totaal">per onderdeel een totaalbedrag</option>
+          </select>
+        </label>
+      </div>
+      <div id="e-lines"></div>
+      <div class="totals-wrap">
+        <div class="form-grid discount-box">
+          <label class="field">Korting
+            <select data-f="discountType">
+              <option value="pct">percentage (%)</option>
+              <option value="amount">vast bedrag (excl. btw)</option>
+            </select>
+          </label>
+          <label class="field" id="e-discount-pct">Percentage<input data-f="discountPct" type="number" min="0" max="100" step="0.5"></label>
+          <label class="field" id="e-discount-amount" hidden>Bedrag (€)<input data-f="discountAmount" type="number" min="0" step="0.01"></label>
+          <label class="field full">Bijschrift bij de korting<input data-f="discountNote" maxlength="120" placeholder="bijv. seizoensactie"><span class="muted small">Staat op de offerte, naast het kortingsbedrag.</span></label>
+        </div>
+        <table id="e-totals" class="totals"></table>
+      </div>
+    </section>
+
+    <section class="card-form">
+      <h3>Voorwaarden</h3>
+      <textarea data-f="terms" rows="4" maxlength="6000"></textarea>
+    </section>
+
+    <section class="card-form">
+      <h3>Interne notitie</h3>
+      <textarea data-f="internalNote" rows="3" maxlength="2000" placeholder="Bijvoorbeeld afspraken, bijzonderheden of aandachtspunten voor jezelf en collega's."></textarea>
+      <p class="muted small">Alleen voor medewerkers: de klant ziet dit nooit, ook niet in de mail, de pdf of het portaal. Bij een werkorder uit deze offerte wordt de notitie overgenomen.</p>
+    </section>
+  </main>
+
+  <!-- Plan kiezen -->
+  <div id="plan-picker" class="modal screen" hidden>
+    <div class="modal-card">
+      <button class="btn ghost close" data-close title="Sluiten">✕</button>
+      <h2>Offerte uit een plan</h2>
+      <p class="muted small">Kies het beregeningsplan. De stuklijst (materialen) en een schatting van de arbeid worden als regels overgenomen; alles is daarna aan te passen.</p>
+      <input id="pp-search" type="search" placeholder="Zoek op projectnaam of klant" class="full">
+      <div id="pp-list" class="pick-list"></div>
+    </div>
+  </div>
+
+  <!-- Bedrijfsgegevens (beheerder) -->
+  <div id="profile" class="modal screen" hidden>
+    <div class="modal-card">
+      <button class="btn ghost close" data-close title="Sluiten">✕</button>
+      <h2>Bedrijfsgegevens en standaarden</h2>
+      <p class="muted small">Staan op elke offerte. Wijzigingen gelden voor nieuwe offertes; bestaande offertes houden hun eigen teksten en prijzen.</p>
+      <form id="pf" class="card-form plain">
+        <label>Bedrijfsnaam<input name="companyName" maxlength="120"></label>
+        <label>Adres<textarea data-address-lookup name="address" rows="3" maxlength="400"></textarea></label>
+        <div class="row2">
+          <label>E-mail<input name="email" maxlength="160"></label>
+          <label>Telefoon<input name="phone" maxlength="40"></label>
+        </div>
+        <div class="row2">
+          <label>Website<input name="website" maxlength="160"></label>
+          <label>KvK-nummer<input name="kvk" maxlength="20"></label>
+        </div>
+        <div class="row2">
+          <label>Btw-nummer<input name="vatNumber" maxlength="30"></label>
+          <label>IBAN<input name="iban" maxlength="40"></label>
+        </div>
+        <h3>Standaarden voor nieuwe offertes</h3>
+        <div class="row3">
+          <label>Uurtarief (€, excl. btw)<input name="hourlyRate" type="number" min="0" step="0.5"></label>
+          <label>Opslag materiaal (%)<input name="markupPct" type="number" min="-100" max="1000" step="0.5"></label>
+          <label>Voorrijkosten (€)<input name="callOutFee" type="number" min="0" step="0.5"></label>
+        </div>
+        <div class="row2">
+          <label>Kostprijs per uur (€, voor de nacalculatie)<input name="hourlyCost" type="number" min="0" step="0.01"></label>
+        </div>
+        <div class="row3">
+          <label>Btw-tarief<select name="vatRate"><option value="21">21%</option><option value="9">9%</option><option value="0">0%</option></select></label>
+          <label>Geldig (dagen)<input name="validDays" type="number" min="1" max="365"></label>
+          <label>Voorvoegsel nummer<input name="numberPrefix" maxlength="12"></label>
+        </div>
+        <label>Standaard inleiding<textarea name="intro" rows="3" maxlength="4000"></textarea></label>
+        <label>Standaard voorwaarden<textarea name="terms" rows="4" maxlength="6000"></textarea></label>
+        <p class="muted small">De materiaalprijzen komen uit de artikellijst van de beregeningsplanner; met de opslag reken je ze om naar verkoopprijzen.</p>
+        <div class="actions"><button class="btn primary" type="submit">Opslaan</button></div>
+      </form>
+      <p id="mf-note" class="muted small">E-mail versturen (SMTP of Exchange-connector) stel je in bij <a href="../beheer/#mail">Beheer → Integraties → E-mail</a>.</p>
+    </div>
+  </div>
+
+  <!-- Offerte bekijken (klant) -->
+  <main id="view-view" class="dash wide screen" hidden>
+    <div class="edit-bar">
+      <button id="v-back" class="btn">← Mijn offertes</button>
+      <h1 id="v-heading">Offerte</h1>
+      <span id="v-status" class="pill"></span>
+      <span class="spacer"></span>
+      <button id="v-pdf" class="btn">PDF / afdrukken</button>
+    </div>
+    <div id="v-notice" class="notice" hidden></div>
+  </main>
+
+  <!-- Afdrukversie (PDF); voor een klant ook op het scherm -->
+  <article id="print" class="print-doc" aria-hidden="true"></article>
+  <section id="v-sign" class="screen" hidden></section>
+
+  <!-- Versturen per e-mail -->
+  <div id="send" class="modal screen" hidden>
+    <div class="modal-card">
+      <button class="btn ghost close" data-close title="Sluiten">✕</button>
+      <h2>Offerte versturen</h2>
+      <p class="muted small">De klant krijgt een e-mail met een knop naar de digitale offerte. Daar bekijkt hij de offerte, kiest hij eventuele opties en geeft hij akkoord met zijn naam en handtekening.</p>
+      <form id="sf" class="card-form plain">
+        <label>Aan<input name="to" maxlength="400" placeholder="klant@voorbeeld.nl" required></label>
+        <label>Onderwerp<input name="subject" maxlength="300"></label>
+        <label>Bericht<textarea name="message" rows="7" maxlength="5000"></textarea></label>
+        <p class="muted small">Onder het bericht komt de knop <b>Offerte bekijken en accorderen</b>.</p>
+        <p id="sf-link" class="muted small sf-link" hidden></p>
+        <div class="actions"><button class="btn primary" type="submit">Versturen</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast screen"></div>
+
+  <script src="../shared/env.js"></script>
+  <script src="../dashboard/modules.js"></script>
+  <script src="../shared/sidebar.js"></script>
+  <script src="../shared/address-lookup.js"></script>
+  <script src="../beregening/js/geometry.js"></script>
+  <script src="../beregening/js/sprinklerlib.js"></script>
+  <script src="../beregening/js/catalog.js"></script>
+  <script src="../beregening/js/shopcatalog.js"></script>
+  <script src="../beregening/js/hydraulics.js"></script>
+  <script src="../beregening/js/bom.js"></script>
+  <script src="../dashboard/account.js"></script>
+  <script src="../shared/article-picker.js"></script>
+  <script src="../shared/doc-text.js"></script>
+  <script src="quote-core.js"></script>
+  <script src="quote-view.js"></script>
+  <script src="offertes.js"></script>
+</body>
+</html>

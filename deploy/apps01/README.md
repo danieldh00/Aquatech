@@ -16,7 +16,7 @@ Productie draait op de VM `apps01` (Debian 13, Docker) in `/opt/apps/aquatech`:
 
 ## CI/CD
 
-1. Merge naar `master` met een versie-bump in `beregeningsplanner/`.
+1. Merge naar `master` met een versie-bump in `hub/`.
 2. `.github/workflows/release.yml`: tests → image bouwen → smoketest →
    push naar `ghcr.io/danieldh00/aquatech:<versie>` en `:latest`.
 3. Op de VM draait `aquatech-update.timer` elke 15 minuten `update.sh`:
@@ -72,7 +72,7 @@ wachtwoord (verborgen) en draait terug naar SQLite als iets misgaat:
 ssh -t root@apps01 'curl -fsSL https://raw.githubusercontent.com/danieldh00/Aquatech/master/deploy/apps01/switch-to-supabase.sh -o /tmp/aquatech-supabase.sh && bash /tmp/aquatech-supabase.sh'
 ```
 
-Handmatig: zie `beregeningsplanner/DOCS.md` > *Database: Supabase
+Handmatig: zie `hub/DOCS.md` > *Database: Supabase
 (PostgreSQL)*. Een mislukte update zet alleen de vorige image terug; de
 database blijft in Supabase. Back-ups: dagelijks en vóór elke update
 versleuteld in `data/backups`, plus de back-ups van Supabase zelf.
