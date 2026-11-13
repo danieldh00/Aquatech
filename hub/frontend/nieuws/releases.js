@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.15.4',
+      date: '2026-11-13',
+      title: 'Verzonnen tuinplannen om de herkenning te meten',
+      items: [],
+    },
+    {
       version: '1.15.3',
       date: '2026-11-13',
       title: 'Tekeningen bewaren om de herkenning te verbeteren',
