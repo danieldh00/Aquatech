@@ -116,6 +116,10 @@ test('status en nummer gaan nooit per veld terug (de vergrendeling is niet te om
       const out = restore.applyRestore({ backup, current, context, kind: 'quote', items: [{ id: 'q1', fields: ['status', 'number'] }] });
       assert.strictEqual(out.results[0].status, 'overgeslagen');
       assert.deepStrictEqual({ ...scene.db.prepare("SELECT status, number FROM quotes WHERE id = 'q1'").get() }, { status: 'verzonden', number: 'O2026-0099' });
+      // Een klantkoppeling terugzetten zou de offerte zichtbaar maken in het portaal van een andere klant.
+      scene.db.prepare("UPDATE quotes SET customer_id = ? WHERE id = 'q1'").run(scene.piet.id);
+      assert.ok(!restore.preview({ backup, current, context, kind: 'quote', id: 'q1' }).fields.includes('customer_id'));
+      assert.strictEqual(restore.applyRestore({ backup, current, context, kind: 'quote', items: [{ id: 'q1', fields: ['customer_id'] }] }).results[0].status, 'overgeslagen');
     });
   } finally { scene.cleanup(); }
 });

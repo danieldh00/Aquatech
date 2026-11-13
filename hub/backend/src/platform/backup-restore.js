@@ -30,21 +30,21 @@ const ENTITIES = {
     label: 'Offerte', table: 'quotes', numberColumn: 'number', searchColumns: ['number', 'title', 'customer'], jsonColumns: ['data', 'acceptance'],
     summary: (row) => `${row.number || ''} ${row.title || ''} ${row.customer ? `· ${row.customer}` : ''}`.trim(), overwrite: 'columns',
     // Status, nummer en koppelingen volgen uit wat er met het document gebeurde; ze gaan nooit per veld terug (anders omzeil je de vergrendeling).
-    neverColumns: ['status', 'number', 'acceptance', 'sent_at', 'sent_to', 'responded_at', 'viewed_at', 'last_viewed_at', 'view_count', 'shared_at', 'share_url', 'order_id'],
+    neverColumns: ['status', 'number', 'acceptance', 'sent_at', 'sent_to', 'responded_at', 'viewed_at', 'last_viewed_at', 'view_count', 'shared_at', 'share_url', 'order_id', 'customer_id', 'plan_id'],
     lockedWhen: (current) => (current.acceptance ? 'Deze offerte is geaccordeerd en vergrendeld.' : ''),
   },
   work_order: {
     label: 'Werkorder', table: 'work_orders', numberColumn: 'number', searchColumns: ['number', 'title', 'customer'], jsonColumns: ['data', 'appointment'],
     summary: (row) => `${row.number || ''} ${row.title || ''} ${row.customer ? `· ${row.customer}` : ''}`.trim(), overwrite: 'columns',
     // Status, nummer en koppelingen volgen uit wat er met het document gebeurde; ze gaan nooit per veld terug (anders omzeil je de vergrendeling).
-    neverColumns: ['status', 'number', 'appointment', 'sent_at', 'sent_to', 'viewed_at', 'shared_at', 'share_url'],
+    neverColumns: ['status', 'number', 'appointment', 'sent_at', 'sent_to', 'viewed_at', 'shared_at', 'share_url', 'quote_id', 'plan_id', 'customer_id'],
     children: [{ table: 'work_order_hours', column: 'work_order_id' }, { table: 'work_order_materials', column: 'work_order_id' }, { table: 'work_order_photos', column: 'work_order_id' }],
   },
   invoice: {
     label: 'Factuur', table: 'invoices', numberColumn: 'number', searchColumns: ['number', 'customer_name'], jsonColumns: ['data'],
     summary: (row) => `${row.number || '(concept)'} · ${row.customer_name || ''} · € ${Number(row.total || 0).toFixed(2)}`, overwrite: 'columns',
     // Status, nummer en koppelingen volgen uit wat er met het document gebeurde; ze gaan nooit per veld terug (anders omzeil je de vergrendeling).
-    neverColumns: ['status', 'number', 'kind', 'credit_of', 'finalized_at', 'paid_at', 'credited_at', 'exported_at', 'stock_booked', 'debtor_id', 'shop_order_id', 'work_order_id', 'quote_id', 'sent_at', 'sent_to', 'send_error', 'visma_invoice_id', 'visma_number', 'visma_synced_at', 'visma_error'],
+    neverColumns: ['status', 'number', 'kind', 'credit_of', 'finalized_at', 'paid_at', 'credited_at', 'exported_at', 'stock_booked', 'debtor_id', 'shop_order_id', 'work_order_id', 'quote_id', 'customer_id', 'sent_at', 'sent_to', 'send_error', 'visma_invoice_id', 'visma_number', 'visma_synced_at', 'visma_error'],
     lockedWhen: (current) => (current.status !== 'concept' ? 'Een definitieve factuur wordt nooit overschreven (maak een creditnota).' : ''),
   },
   web_order: {
