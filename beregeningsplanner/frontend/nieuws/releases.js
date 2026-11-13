@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.14.4',
+      date: '2026-11-13',
+      title: 'Orderpick-scherm voor het magazijn',
+      items: [
+        { text: 'Nieuw scherm *Orderpick* voor het magazijn: kies een bestelling, loop de regels af op volgorde van locatie en scan elk artikel met een scanner of de camera. Groen is goed, rood met trillen is fout. Het aantal staat al ingevuld; bevestig met OK of meld *Niet aanwezig*.', for: ['orderpick'] },
+        { text: 'Met *Order gepickt* gaat de bestelling weg met wat er echt gepickt is (de rest blijft op backorder), en maak je meteen de pakbon en, zodra de DPD-koppeling er is, het verzendlabel.', for: ['orderpick'] },
+      ],
+    },
+    {
       version: '1.14.3',
       date: '2026-11-13',
       title: 'Updates installeren vanuit Beheer',

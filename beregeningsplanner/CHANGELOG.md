@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.14.4
+
+Orderpick deel 2: het scherm (geen migratie).
+
+- `frontend/orderpick/`: lijst, scannen (toetsenbordscanner of camera met `BarcodeDetector`), aantal met OK en +/−, *Niet aanwezig*, afmelden met pakbon en label, voortgang en *Net gepickt* op het toestel.
+- Rekenkern `orderpick-core.js` met unittests (`test/orderpick-core.test.js`).
+- Module Orderpick in de groep Magazijn van de zijbalk en het dashboard (recht `orderpick`).
+
 ## 1.14.3
 
 - **Updaten vanuit de app** (Beheer > Systeem > Updates, `beheer/updates.js`): `platform/system-update.js` en `system-update-routes.js` (`GET|POST /api/admin/system-update`, `DELETE .../request`, `PUT .../auto`). Alleen een eigen account in de live hoofdtenant met recht `beheer` (bij multitenancy alleen een hoofdbeheerder), wachtwoord opnieuw invullen, 5 pogingen per kwartier, auditlog `update_aangevraagd|ingetrokken|automatisch|wachtwoord_fout|geslaagd|mislukt|geweigerd`. `/api/me` geeft `systemUpdate`.
