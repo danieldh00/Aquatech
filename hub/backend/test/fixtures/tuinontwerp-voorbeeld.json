@@ -1,0 +1,6 @@
+{
+  "note": "Grove handmatige referentie: het gazon ligt ongeveer tussen x 200-400 en y 235-405 (zie localrecog.test.js)",
+  "areas": [
+    { "type": "lawn", "name": "Gazon", "points": [{ "x": 200, "y": 235 }, { "x": 400, "y": 235 }, { "x": 400, "y": 405 }, { "x": 200, "y": 405 }] }
+  ]
+}
