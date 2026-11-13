@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.15.3',
+      date: '2026-11-13',
+      title: 'Tekeningen bewaren om de herkenning te verbeteren',
+      items: [
+        { text: 'Nieuwe instelling *Tekeningen bewaren om de herkenning te verbeteren* (Beheer → Koppelingen → AI-herkenning, standaard uit). Bij een goedgekeurd plan bewaart de app dan de tekening (versleuteld) en het eindplan, zodat de planner zonder AI steeds beter plannen kan lezen.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.15.2',
       date: '2026-11-13',
       title: 'Meetlat voor de planherkenning zonder AI',
