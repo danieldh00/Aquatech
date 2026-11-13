@@ -222,9 +222,10 @@ function buildPlan(seed, options = {}) {
     hardscape.splice(2); // oprit vervalt; woning en terras schuiven naar het midden van de tuin tot ze binnen de omtrek liggen
     const middle = centerOf(garden);
     for (let step = 0; step < 40 && !hardscape.every(({ points }) => points.every(insideGarden)); step++) {
-      for (const { points } of hardscape) {
-        for (const point of points) { point.x += (middle.x - point.x) * 0.03; point.y += (middle.y - point.y) * 0.03; }
-      }
+      const all = hardscape.flatMap(({ points }) => points);
+      const shiftX = (middle.x - all.reduce((sum, point) => sum + point.x, 0) / all.length) * 0.05;
+      const shiftY = (middle.y - all.reduce((sum, point) => sum + point.y, 0) / all.length) * 0.05;
+      for (const point of all) { point.x += shiftX; point.y += shiftY; } // alles even ver: de afmetingen blijven gelijk
     }
     if (!hardscape.every(({ points }) => points.every(insideGarden))) hardscape.splice(0);
   }
