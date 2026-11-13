@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.14.7',
+      date: '2026-11-13',
+      title: 'Database naar een eigen PostgreSQL naast de app',
+      items: [],
+    },
+    {
       version: '1.14.6',
       date: '2026-11-13',
       title: 'De app heet nu AquaTech Hub',
