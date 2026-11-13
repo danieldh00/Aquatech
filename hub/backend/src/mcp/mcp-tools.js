@@ -9,6 +9,7 @@
 // - status_opvragen: de status van een offerte, werkorder, factuur of webshopbestelling op nummer.
 // - openstaande_debiteuren: wie nog moet betalen (definitieve, onbetaalde facturen), grootste bedrag eerst.
 // - maak_concept_werkorder: een werkorder zonder offerte als NIEUW (open, niet ingepland, geen uitvoerder) aanmaken, met stappen en materiaal.
+// - boek_uren en boek_materiaal: uren en materiaalverbruik op een werkorder boeken, altijd op naam van de gebruiker zelf (zoals in de app).
 // Onduidelijk? De tools raden niet: zoeken met meerdere treffers geeft keuzeNodig, en maak_concept_offerte maakt niets aan zolang er
 //   open punten zijn (status 'terugvragen'); de AI-app vraagt dat aan de gebruiker. Alleen met ookMetOpenPunten=true gaat hij door.
 // Elke tool vraagt een recht uit de toestemming (scope) én het recht van de rol van de gebruiker op dit moment.
@@ -22,6 +23,12 @@ const CUSTOMER_RESULTS = 10;
 const MAX_LINES = 100;
 /** Hoeveel stappen en materiaalregels een werkorder via de AI hoogstens krijgt. */
 const MAX_ORDER_ITEMS = 50;
+/** Werkorders met deze status liggen vast voor wie geen recht planning heeft (zoals in de app). */
+const LOCKED_STATUSES = ['gereed', 'geannuleerd'];
+/** Binnen hoeveel minuten een gelijke boeking als mogelijk dubbel telt. */
+const DUPLICATE_WINDOW_MS = 10 * 60 * 1000;
+/** De soorten uren die de AI kan boeken (zoals Core.KINDS). */
+const HOUR_KINDS = ['werk', 'reistijd', 'meerwerk'];
 /** Hoeveel artikelen prijs_voor_klant in één keer prijst. */
 const MAX_PRICE_CODES = 25;
 /** Het recht dat de app vraagt om een soort document te zien (zelfde als de modules). */
@@ -151,7 +158,7 @@ function findArticle(articles, code) {
  * Maakt de tools van de MCP-server.
  * @param {object} ctx { can(user, recht), searchCustomers(req, zoektekst), getCustomer(req, id), createCustomer(req, invoer),
  *   lookupAddress(invoer), verifyAddress(tekst), articleChoices(tenantId), quoteProfile(req), createDraft(req, data, customerId), quoteUrl(req, id),
- *   appUrl(req, pad), createWorkOrder(req, data), customerOverview(req, klantId, gevraagd), defaultPaymentDays(req), customerBalance(req, klantId), priceCart(req, regels, klant),
+ *   appUrl(req, pad), createWorkOrder(req, data), findWorkOrder(req, nummer), workLogOf(req, werkorderId), bookHours(req, werkorderId, invoer), bookMaterial(req, werkorderId, invoer), today(), customerOverview(req, klantId, gevraagd), defaultPaymentDays(req), customerBalance(req, klantId), priceCart(req, regels, klant),
  *   documentStatus(req, soort, nummer, opties), openInvoices(req, opties), audit(req, actie, detail) }.
  * @returns {{ list: Function, has: Function, call: Function }} De tools.
  */
@@ -161,6 +168,7 @@ function createMcpTools(ctx) {
   const quotesPerDay = createRateLimiter({ windowMs: 24 * 60 * 60 * 1000, max: 150, keyFn: (req) => `mcp-offerte-dag:${req.tenantId}|${req.user.id}` });
   const workOrdersPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, keyFn: (req) => `mcp-werkorder:${req.tenantId}|${req.user.id}` });
   const workOrdersPerDay = createRateLimiter({ windowMs: 24 * 60 * 60 * 1000, max: 100, keyFn: (req) => `mcp-werkorder-dag:${req.tenantId}|${req.user.id}` });
+  const bookingsPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: (req) => `mcp-boeken:${req.tenantId}|${req.user.id}` });
   const customersPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, keyFn: (req) => `mcp-klant:${req.tenantId}|${req.user.id}` });
   // Leesfuncties samen: genoeg voor een drukke werkdag, maar geen onbeperkt aflopen van nummers of klant-id's.
   const readsPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, keyFn: (req) => `mcp-lezen:${req.tenantId}|${req.user.id}` });
@@ -191,6 +199,23 @@ function createMcpTools(ctx) {
     limiter(req, { setHeader: () => {}, status: () => ({ json: () => {} }) }, () => { allowed = true; });
     return allowed;
   };
+
+  /**
+   * De werkorder voor een boeking: bestaat in deze omgeving en is (voor wie niet mag beheren) niet afgerond.
+   * @param {object} args De invoer met werkorderNummer.
+   * @param {object} req Het verzoek.
+   * @returns {{ order?: object, out?: object }} De werkorder, of de uitkomst die de AI moet krijgen.
+   */
+  function openOrderFor(args, req) {
+    if (!withinLimit(readsPerHour, req)) return { out: errorOf(READS_LIMITED) };
+    const number = cleanText(args.werkorderNummer, 40);
+    const order = number ? ctx.findWorkOrder(req, number) : null;
+    if (!order) return { out: errorOf('Geen werkorder met dit nummer gevonden in deze omgeving. Controleer het nummer (bijv. WO-2026-0003).') };
+    if (LOCKED_STATUSES.includes(order.status) && !ctx.can(req.user, 'planning')) {
+      return { out: errorOf(`Werkorder ${order.number} is afgerond; vraag de planner of beheerder om de registratie aan te passen.`) };
+    }
+    return { order };
+  }
 
   const TOOLS = {
     zoek_klant: {
@@ -465,6 +490,128 @@ function createMcpTools(ctx) {
         const limit = Math.min(50, Math.max(1, Number.parseInt(args.maxResultaten, 10) || 20));
         const out = ctx.openInvoices(req, { onlyLate: args.alleenTeLaat === true, limit });
         return resultOf({ ...out, link: ctx.appUrl(req, 'facturen/') });
+      },
+    },
+    boek_uren: {
+      scope: 'werkregistratie.boeken', rights: ['werkorders'],
+      definition: {
+        title: 'Uren boeken',
+        description: 'Boekt uren op een werkorder (nummer, bijv. WO-2026-0003), altijd op naam van de gebruiker zelf; collega\'s kan de AI niet boeken. '
+          + 'Geef het aantal uren, of een begin- en eindtijd. Zonder datum geldt vandaag. De regel staat direct in AquaTech bij de werkorder en de gebruiker kan hem daar wijzigen of verwijderen. '
+          + 'Is iets onduidelijk (werkorder niet gevonden, afgeronde werkorder, lijkt dubbel), dan boekt de tool niets en geeft status "terugvragen": vraag het aan de gebruiker.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            werkorderNummer: { type: 'string', minLength: 1, maxLength: 40, description: 'Bijv. WO-2026-0003 (zie status_opvragen).' },
+            uren: { type: 'number', exclusiveMinimum: 0, maximum: 24, description: 'Aantal uren, bijv. 2.5. Niet nodig als begintijd en eindtijd zijn gegeven.' },
+            begintijd: { type: 'string', pattern: '^([01]\\d|2[0-3]):[0-5]\\d$', description: 'HH:MM.' },
+            eindtijd: { type: 'string', pattern: '^([01]\\d|2[0-3]):[0-5]\\d$', description: 'HH:MM.' },
+            pauzeMinuten: { type: 'integer', minimum: 0, maximum: 600, description: 'Alleen met begin- en eindtijd.' },
+            datum: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'JJJJ-MM-DD; standaard vandaag. Niet verder dan morgen.' },
+            soort: { type: 'string', enum: HOUR_KINDS, description: 'werk (standaard), reistijd of meerwerk.' },
+            notitie: { type: 'string', maxLength: 500 },
+            ookAlsHetDubbelLijkt: { type: 'boolean', description: 'Alleen true nadat de gebruiker bevestigde dat dezelfde boeking echt nog een keer moet.' },
+          },
+          required: ['werkorderNummer'], additionalProperties: false,
+        },
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      },
+      /**
+       * Boekt de uren.
+       * @param {object} args De invoer.
+       * @param {object} req Het verzoek.
+       * @returns {object} De uitkomst.
+       */
+      run: (args, req) => {
+        const order = openOrderFor(args, req);
+        if (order.out) return order.out;
+        const hasTimes = Boolean(args.begintijd && args.eindtijd);
+        if (!hasTimes && !(Number(args.uren) > 0)) return errorOf('Geef het aantal uren, of een begintijd en eindtijd.');
+        if ((args.begintijd || args.eindtijd) && !hasTimes) return errorOf('Geef zowel een begintijd als een eindtijd.');
+        const input = {
+          workDate: cleanText(args.datum, 10) || ctx.today(), startTime: hasTimes ? cleanText(args.begintijd, 5) : '', endTime: hasTimes ? cleanText(args.eindtijd, 5) : '',
+          breakMinutes: hasTimes ? args.pauzeMinuten : 0, hours: hasTimes ? undefined : Number(args.uren), kind: HOUR_KINDS.includes(args.soort) ? args.soort : 'werk', note: cleanText(args.notitie, 500),
+        };
+        const log = ctx.workLogOf(req, order.order.id);
+        const similar = log.hours.find((entry) => entry.user.id === req.user.id && entry.workDate === input.workDate && entry.kind === input.kind
+          && Date.now() - Date.parse(entry.createdAt) < DUPLICATE_WINDOW_MS && (hasTimes ? entry.startTime === input.startTime && entry.endTime === input.endTime : entry.minutes === Math.round(input.hours * 60)));
+        if (similar && args.ookAlsHetDubbelLijkt !== true) {
+          return resultOf({ status: 'terugvragen', geboekt: false, vragen: [{ onderwerp: 'dubbel', vraag: `Er is zojuist al een gelijke boeking gemaakt op ${order.order.number} (${(similar.minutes / 60).toFixed(2)} uur op ${similar.workDate}). Wil de gebruiker dit echt nog een keer boeken? Zo ja, zet ookAlsHetDubbelLijkt=true.` }],
+            melding: 'Er is niets geboekt.' });
+        }
+        if (!withinLimit(bookingsPerHour, req)) return errorOf('Te veel boekingen dit uur via de AI-koppeling. Probeer het later opnieuw of boek in AquaTech.');
+        const out = ctx.bookHours(req, order.order.id, input);
+        if (out.error) return errorOf(out.message);
+        ctx.audit(req, 'uren_geboekt', { workOrderId: order.order.id, number: order.order.number, entryId: out.entry.id, minutes: out.entry.minutes, forUserId: req.user.id, via: 'ai-koppeling' });
+        const totalMinutes = log.hours.reduce((sum, entry) => sum + entry.minutes, 0) + out.entry.minutes;
+        return resultOf({
+          geboekt: true, werkorder: order.order.number, datum: out.entry.workDate, uren: round2(out.entry.minutes / 60), soort: out.entry.kind, boekingId: out.entry.id,
+          totaalUrenOpWerkorder: round2(totalMinutes / 60), link: ctx.appUrl(req, `werkorders/?id=${encodeURIComponent(order.order.id)}`),
+          melding: 'De uren staan op jouw naam bij de werkorder. Je kunt ze daar in AquaTech zelf wijzigen of verwijderen.',
+        });
+      },
+    },
+    boek_materiaal: {
+      scope: 'werkregistratie.boeken', rights: ['werkorders'],
+      definition: {
+        title: 'Materiaal boeken',
+        description: 'Boekt verbruikt materiaal op een werkorder (nummer, bijv. WO-2026-0003), altijd op naam van de gebruiker zelf. De voorraad gaat daarbij omlaag, zoals in de app. '
+          + 'Gebruik de artikelcode uit zoek_artikelen (bij een artikel met varianten de code van de variant). Zonder datum geldt vandaag. De regel kan in AquaTech worden gewijzigd of verwijderd. '
+          + 'Is iets onduidelijk (werkorder of artikel niet gevonden, afgeronde werkorder, lijkt dubbel), dan boekt de tool niets en geeft status "terugvragen".',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            werkorderNummer: { type: 'string', minLength: 1, maxLength: 40, description: 'Bijv. WO-2026-0003.' },
+            artikelcode: { type: 'string', minLength: 1, maxLength: 40, description: 'Code uit zoek_artikelen.' },
+            aantal: { type: 'number', exclusiveMinimum: 0, maximum: 100000, description: 'Verbruikt aantal in de eenheid van het artikel. Een retour boek je in AquaTech.' },
+            datum: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'JJJJ-MM-DD; standaard vandaag. Niet verder dan morgen.' },
+            notitie: { type: 'string', maxLength: 500 },
+            ookAlsHetDubbelLijkt: { type: 'boolean', description: 'Alleen true nadat de gebruiker bevestigde dat dezelfde boeking echt nog een keer moet.' },
+          },
+          required: ['werkorderNummer', 'artikelcode', 'aantal'], additionalProperties: false,
+        },
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      },
+      /**
+       * Boekt het materiaal.
+       * @param {object} args De invoer.
+       * @param {object} req Het verzoek.
+       * @returns {object} De uitkomst.
+       */
+      run: (args, req) => {
+        const order = openOrderFor(args, req);
+        if (order.out) return order.out;
+        const qty = Number(args.aantal);
+        if (!Number.isFinite(qty) || qty <= 0 || qty > 100000) return errorOf('Geef een aantal groter dan nul.');
+        const code = cleanText(args.artikelcode, 40);
+        const match = code ? findArticle(articlesOf(req.tenantId), code) : null;
+        if (!match) {
+          return resultOf({ status: 'terugvragen', geboekt: false, vragen: [{ onderwerp: 'artikel', vraag: `Artikelcode ${code || '(leeg)'} bestaat niet. Zoek het juiste artikel met zoek_artikelen en vraag de gebruiker welk artikel bedoeld is.` }], melding: 'Er is niets geboekt.' });
+        }
+        const article = match.article;
+        if (Array.isArray(article.variants) && article.variants.length) {
+          return resultOf({ status: 'terugvragen', geboekt: false, vragen: [{ onderwerp: 'variant', vraag: `${article.code} heeft varianten: welke maat/kleur is gebruikt? Gebruik de code van de variant.` }], melding: 'Er is niets geboekt.' });
+        }
+        const input = {
+          usedOn: cleanText(args.datum, 10) || ctx.today(), code: article.code, qty, unit: article.unit || 'st', note: cleanText(args.notitie, 500),
+          description: article.name || (match.parent ? `${match.parent.name} ${Object.values(article.values || {}).join(' ')}`.trim() : article.code),
+        };
+        const log = ctx.workLogOf(req, order.order.id);
+        const similar = log.materials.find((entry) => entry.user.id === req.user.id && entry.code === input.code && entry.usedOn === input.usedOn && entry.qty === round2(qty)
+          && Date.now() - Date.parse(entry.createdAt) < DUPLICATE_WINDOW_MS);
+        if (similar && args.ookAlsHetDubbelLijkt !== true) {
+          return resultOf({ status: 'terugvragen', geboekt: false, vragen: [{ onderwerp: 'dubbel', vraag: `Er is zojuist al ${similar.qty} ${similar.unit} ${similar.code} geboekt op ${order.order.number}. Wil de gebruiker dit echt nog een keer boeken? Zo ja, zet ookAlsHetDubbelLijkt=true.` }],
+            melding: 'Er is niets geboekt.' });
+        }
+        if (!withinLimit(bookingsPerHour, req)) return errorOf('Te veel boekingen dit uur via de AI-koppeling. Probeer het later opnieuw of boek in AquaTech.');
+        const out = ctx.bookMaterial(req, order.order.id, input);
+        if (out.error) return errorOf(out.message);
+        ctx.audit(req, 'materiaal_geboekt', { workOrderId: order.order.id, number: order.order.number, entryId: out.entry.id, code: out.entry.code, qty: out.entry.qty, via: 'ai-koppeling' });
+        return resultOf({
+          geboekt: true, werkorder: order.order.number, artikelcode: out.entry.code, omschrijving: out.entry.description, aantal: out.entry.qty, eenheid: out.entry.unit, datum: out.entry.usedOn,
+          boekingId: out.entry.id, link: ctx.appUrl(req, `werkorders/?id=${encodeURIComponent(order.order.id)}`),
+          melding: 'Het materiaal staat op jouw naam bij de werkorder en is van de voorraad afgeboekt. Je kunt de regel in AquaTech wijzigen of verwijderen.',
+        });
       },
     },
     maak_concept_werkorder: {

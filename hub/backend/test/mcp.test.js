@@ -206,13 +206,13 @@ test('de hele weg: toestaan, tools gebruiken en een concept-offerte met notities
   assert.match(page.headers.get('x-frame-options'), /DENY/);
 
   const connection = await connect(base, admin);
-  assert.strictEqual(connection.scope, 'klanten.lezen klanten.aanmaken artikelen.lezen offertes.concept werkorders.concept status.lezen facturen.lezen');
+  assert.strictEqual(connection.scope, 'klanten.lezen klanten.aanmaken artikelen.lezen offertes.concept werkorders.concept werkregistratie.boeken status.lezen facturen.lezen');
   const init = await mcp(base, connection.accessToken, { method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } } });
   assert.strictEqual(init.body.result.protocolVersion, '2025-06-18');
   assert.ok(init.body.result.capabilities.tools);
   assert.strictEqual((await mcp(base, connection.accessToken, { method: 'notifications/initialized', id: undefined })).status, 202);
   const tools = (await mcp(base, connection.accessToken, { method: 'tools/list' })).body.result.tools.map((tool) => tool.name);
-  assert.deepStrictEqual(tools, ['zoek_klant', 'maak_klant', 'zoek_artikelen', 'klant_details', 'prijs_voor_klant', 'status_opvragen', 'openstaande_debiteuren', 'maak_concept_werkorder', 'maak_concept_offerte']);
+  assert.deepStrictEqual(tools, ['zoek_klant', 'maak_klant', 'zoek_artikelen', 'klant_details', 'prijs_voor_klant', 'status_opvragen', 'openstaande_debiteuren', 'boek_uren', 'boek_materiaal', 'maak_concept_werkorder', 'maak_concept_offerte']);
   assert.strictEqual((await mcp(base, connection.accessToken, { method: 'bestaat/niet' })).body.error.code, -32601);
 
   const articles = await callTool(base, connection.accessToken, 'zoek_artikelen', { zoekterm: 'sproeier pop-up' });
@@ -598,11 +598,11 @@ test('rechten volgen de rol op dit moment: een andere rol beperkt de AI direct t
    */
   const toolNames = async () => (await mcp(base, connection.accessToken, { method: 'tools/list' })).body.result.tools.map((tool) => tool.name);
   // Installateur: geen facturen, dus geen openstaande debiteuren.
-  assert.deepStrictEqual(await toolNames(), ['zoek_klant', 'maak_klant', 'zoek_artikelen', 'klant_details', 'prijs_voor_klant', 'status_opvragen', 'maak_concept_werkorder', 'maak_concept_offerte']);
+  assert.deepStrictEqual(await toolNames(), ['zoek_klant', 'maak_klant', 'zoek_artikelen', 'klant_details', 'prijs_voor_klant', 'status_opvragen', 'boek_uren', 'boek_materiaal', 'maak_concept_werkorder', 'maak_concept_offerte']);
   const userId = (await installer.get('/app/api/me')).body.user.id;
   // Planner: geen offertes en geen klanten in de app, dus ook niet via de AI (hetzelfde token).
   assert.strictEqual((await admin.patch(`/app/api/admin/users/${userId}`, { role: 'planner' })).status, 200);
-  assert.deepStrictEqual(await toolNames(), ['zoek_artikelen', 'status_opvragen', 'maak_concept_werkorder']);
+  assert.deepStrictEqual(await toolNames(), ['zoek_artikelen', 'status_opvragen', 'boek_uren', 'boek_materiaal', 'maak_concept_werkorder']);
   for (const [name, args] of [['zoek_klant', { zoekterm: 'Klant' }], ['maak_klant', { naam: 'Nieuw' }], ['maak_concept_offerte', { regels: [{ omschrijving: 'x', aantal: 1 }] }]]) {
     assert.strictEqual((await callTool(base, connection.accessToken, name, args)).isError, true, name);
   }
@@ -717,7 +717,7 @@ test('hulpfuncties: terugkeeradressen, scopes, PKCE, tokens en het zoeken van ar
   assert.strictEqual(daysLate('', '2026-01-11'), 0);
   assert.deepStrictEqual(numberCandidates(' of-2026-0001 '), ['of-2026-0001', 'OF-2026-0001']);
   assert.deepStrictEqual(numberCandidates('\u0000'), []);
-  assert.deepStrictEqual(parseScope(''), ['klanten.lezen', 'klanten.aanmaken', 'artikelen.lezen', 'offertes.concept', 'werkorders.concept', 'status.lezen', 'facturen.lezen']);
+  assert.deepStrictEqual(parseScope(''), ['klanten.lezen', 'klanten.aanmaken', 'artikelen.lezen', 'offertes.concept', 'werkorders.concept', 'werkregistratie.boeken', 'status.lezen', 'facturen.lezen']);
   assert.strictEqual(parseScope('offertes.concept admin'), null);
   const verifier = 'a'.repeat(43);
   assert.ok(pkceMatches(verifier, crypto.createHash('sha256').update(verifier).digest('base64url')));
@@ -803,4 +803,59 @@ test('maak_concept_werkorder: nieuwe werkorder zonder offerte, vraagt terug bij 
   const denied = await callTool(base, narrow.accessToken, 'maak_concept_werkorder', { klantId: customer.id, titel: 'x' });
   assert.strictEqual(denied.isError, true);
   assert.match(denied.structuredContent.fout, /toestemming/);
+});
+
+test('boek_uren en boek_materiaal: alleen op eigen naam, vraagt terug, voorraad en afgeronde werkorders volgen de app', async () => {
+  const { base, admin, installer } = await setup();
+  const boss = await connect(base, admin);
+  const worker = await connect(base, installer);
+  const customer = (await callTool(base, boss.accessToken, 'maak_klant', { naam: 'Piet Boeker', postcode: '8071 AB', huisnummer: '1' })).structuredContent;
+  const order = (await callTool(base, boss.accessToken, 'maak_concept_werkorder', { klantId: customer.id, titel: 'Boeken testen' })).structuredContent;
+  /**
+   * De voorraad van een artikel volgens de app.
+   * @param {string} code De artikelcode.
+   * @returns {Promise<number>} De voorraad.
+   */
+  const stockOf = async (code) => (await admin.get('/app/api/stock')).body.items.find((item) => item.code === code).onHand;
+  const before = await stockOf('PE-25');
+  const hours = await callTool(base, worker.accessToken, 'boek_uren', { werkorderNummer: order.nummer.toLowerCase(), uren: 2.5, notitie: 'Sleuf graven' });
+  assert.strictEqual(hours.isError, false, JSON.stringify(hours));
+  assert.strictEqual(hours.structuredContent.geboekt, true);
+  assert.strictEqual(hours.structuredContent.uren, 2.5);
+  assert.strictEqual(hours.structuredContent.totaalUrenOpWerkorder, 2.5);
+  const timed = await callTool(base, worker.accessToken, 'boek_uren', { werkorderNummer: order.nummer, begintijd: '08:00', eindtijd: '10:30', pauzeMinuten: 30, soort: 'reistijd' });
+  assert.strictEqual(timed.structuredContent.uren, 2);
+  assert.strictEqual(timed.structuredContent.totaalUrenOpWerkorder, 4.5);
+  assert.strictEqual((await callTool(base, worker.accessToken, 'boek_uren', { werkorderNummer: order.nummer })).isError, true);
+  assert.strictEqual((await callTool(base, worker.accessToken, 'boek_uren', { werkorderNummer: order.nummer, begintijd: '08:00', uren: 1 })).isError, true);
+  assert.strictEqual((await callTool(base, worker.accessToken, 'boek_uren', { werkorderNummer: 'WO-1999-0001', uren: 1 })).isError, true);
+  assert.strictEqual((await callTool(base, worker.accessToken, 'boek_uren', { werkorderNummer: order.nummer, uren: 1, datum: '2999-01-01' })).isError, true);
+  const dubbel = await callTool(base, worker.accessToken, 'boek_uren', { werkorderNummer: order.nummer, uren: 2.5, notitie: 'Sleuf graven' });
+  assert.strictEqual(dubbel.structuredContent.status, 'terugvragen');
+  assert.strictEqual(dubbel.structuredContent.geboekt, false);
+  assert.strictEqual((await callTool(base, worker.accessToken, 'boek_uren', { werkorderNummer: order.nummer, uren: 2.5, ookAlsHetDubbelLijkt: true })).structuredContent.geboekt, true);
+  const log = (await installer.get(`/app/api/workorders/${order.werkorderId}/worklog`)).body;
+  assert.strictEqual(log.hours.length, 3);
+  assert.ok(log.hours.every((entry) => entry.user.displayName === 'Monteur'));
+  const material = await callTool(base, worker.accessToken, 'boek_materiaal', { werkorderNummer: order.nummer, artikelcode: 'pe-25', aantal: 12 });
+  assert.strictEqual(material.isError, false, JSON.stringify(material));
+  assert.strictEqual(material.structuredContent.geboekt, true);
+  assert.strictEqual(material.structuredContent.eenheid, 'm');
+  assert.strictEqual(await stockOf('PE-25'), before - 12);
+  assert.strictEqual((await callTool(base, worker.accessToken, 'boek_materiaal', { werkorderNummer: order.nummer, artikelcode: 'VERZONNEN', aantal: 1 })).structuredContent.status, 'terugvragen');
+  assert.strictEqual((await callTool(base, worker.accessToken, 'boek_materiaal', { werkorderNummer: order.nummer, artikelcode: 'PE-25', aantal: 12 })).structuredContent.status, 'terugvragen');
+  assert.strictEqual(await stockOf('PE-25'), before - 12);
+  assert.strictEqual((await callTool(base, worker.accessToken, 'boek_materiaal', { werkorderNummer: order.nummer, artikelcode: 'PE-25', aantal: -3 })).isError, true);
+  // Zonder de scope is de tool er niet (een andere organisatie komt niet bij deze nummers: findWorkOrder filtert op de omgeving).
+  const narrow = await connect(base, admin, { scope: 'klanten.lezen' });
+  assert.match((await callTool(base, narrow.accessToken, 'boek_uren', { werkorderNummer: order.nummer, uren: 1 })).structuredContent.fout, /toestemming/);
+  // Afgeronde werkorder: een rol zonder recht planning niet, de beheerder wel.
+  assert.strictEqual((await admin.put(`/app/api/workorders/${order.werkorderId}`, { status: 'gereed' })).status, 200);
+  assert.strictEqual((await admin.post('/app/api/admin/roles', { label: 'Alleen uitvoeren', rights: ['werkorders'] })).status, 201);
+  const workerId = (await installer.get('/app/api/me')).body.user.id;
+  assert.strictEqual((await admin.patch(`/app/api/admin/users/${workerId}`, { role: 'alleen-uitvoeren' })).status, 200);
+  const locked = await callTool(base, worker.accessToken, 'boek_uren', { werkorderNummer: order.nummer, uren: 1 });
+  assert.strictEqual(locked.isError, true);
+  assert.match(locked.structuredContent.fout, /afgerond/);
+  assert.strictEqual((await callTool(base, boss.accessToken, 'boek_uren', { werkorderNummer: order.nummer, uren: 1 })).structuredContent.geboekt, true);
 });

@@ -2504,6 +2504,25 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
         const group = customer.customerGroup === 'zakelijk' ? 'zakelijk' : '';
         return webOrders.priceCart(req.tenantId, wanted, { group, wholesale: group && customer.wholesale ? { discountPct: customer.wholesaleDiscount } : null });
       },
+      findWorkOrder: (req, number) => mcpLookups.workOrderByNumber(req.tenantId, number),
+      workLogOf: (req, workOrderId) => workLogStore.list(req.tenantId, workOrderId),
+      /**
+       * Boekt uren voor de gebruiker zelf (zoals POST /api/workorders/:id/hours).
+       * @param {object} req Het verzoek.
+       * @param {string} workOrderId Id van de werkorder.
+       * @param {object} input De urenregel.
+       * @returns {object} { entry } of { error, message }.
+       */
+      bookHours: (req, workOrderId, input) => workLogStore.addHours(req.tenantId, workOrderId, input, { actor: req.user, forUser: { id: req.user.id, displayName: req.user.display_name } }),
+      /**
+       * Boekt materiaalverbruik voor de gebruiker zelf (zoals POST /api/workorders/:id/materials); de voorraad volgt via de hook.
+       * @param {object} req Het verzoek.
+       * @param {string} workOrderId Id van de werkorder.
+       * @param {object} input De materiaalregel.
+       * @returns {object} { entry } of { error, message }.
+       */
+      bookMaterial: (req, workOrderId, input) => workLogStore.addMaterial(req.tenantId, workOrderId, input, { actor: req.user, forUser: { id: req.user.id, displayName: req.user.display_name } }),
+      today: () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Amsterdam' }),
       documentStatus: (req, kind, number, options) => mcpLookups.documentStatus(req.tenantId, kind, number, options),
       openInvoices: (req, options) => mcpLookups.openInvoices(req.tenantId, options),
       audit,

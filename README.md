@@ -35,7 +35,7 @@ webserver in Docker (poort 3300) met PostgreSQL (een eigen container naast de ap
   details nooit; wachtwoorden en sleutels worden er altijd uit gehaald.
 - **AI-koppeling** (Beheer → Instellingen → AI-koppeling, per omgeving, standaard uit): voeg het adres
   `https://<server>/app/mcp` toe als connector in Claude of ChatGPT. Na inloggen en toestemming kan de AI klanten
-  en artikelen zoeken, een particuliere klant aanmaken en een **concept**-offerte of een nieuwe werkorder (status Nieuw, niet ingepland, zonder offerte) klaarzetten; versturen en inplannen doet de
+  en artikelen zoeken, een particuliere klant aanmaken en een **concept**-offerte of een nieuwe werkorder (status Nieuw, niet ingepland, zonder offerte) klaarzetten; uren en materiaal boeken op een werkorder (altijd op je eigen naam, met een vraag terug bij twijfel of een dubbele boeking); versturen en inplannen doet de
   medewerker zelf. Ook vragen kan: de klantkaart (betaaltermijn, openstaand bedrag), de prijs voor een klant, de status
   van een offerte, werkorder, factuur of bestelling op nummer en wie nog moet betalen, telkens alleen wat de rol mag zien. Alleen voor medewerkers (klanten kunnen niet koppelen); elke medewerker koppelt zijn eigen account met de
   rechten van zijn rol. Een stap-voor-stap handleiding voor Claude en ChatGPT staat bij de instelling en in Mijn profiel,
