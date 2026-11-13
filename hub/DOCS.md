@@ -195,7 +195,7 @@ lijntekeningen, schetsen en luchtfoto's.
 Hiervoor is een API-sleutel van Anthropic nodig:
 
 - Maak een sleutel aan op https://console.anthropic.com en vul hem in onder
-  **Beheer → Integraties → AI-herkenning** (met **Sleutel testen** controleer je hem
+  **Beheer → Koppelingen → AI-herkenning** (met **Sleutel testen** controleer je hem
   zonder kosten). Hij werkt meteen, zonder herstart.
 - Elke analyse kost een paar dubbeltjes aan API-tegoed. Het maximum per dag
   (standaard 30, hele app) en per uur per IP-adres (standaard 10) stel je in
@@ -959,6 +959,22 @@ blijft ongewijzigd staan (zonder wat er daarna in PostgreSQL is veranderd).
 *Beveiliging en privacy*) en kopieer hem met
 `node src/migrate-to-postgres.js --from /data/terug.db --schema <nieuw_schema>`
 naar een leeg schema; zet daarna `DATABASE_SCHEMA` op dat schema.
+
+## Meetcorpus planherkenning
+
+Doel: de planner moet uiteindelijk zonder AI een plan uit een tekening maken. Om de lokale herkenning te meten en te
+verbeteren is een verzameling tekeningen met het eindplan nodig. Zet daarvoor in Beheer → Koppelingen → AI-herkenning
+*Tekeningen bewaren om de herkenning te verbeteren* aan (standaard uit, per organisatie). Daarna bewaart de app bij elk
+door een medewerker goedgekeurd plan de tekening (PNG, zonder metadata, versleuteld met de bestandssleutel) en het eindplan
+(vlakken, elementen, schaal in pixels van die tekening) bij de regel van dat plan in `plan_recognitions`. Het verdwijnt
+met het definitief wissen van het plan (AVG). Er gaat niets naar een externe dienst.
+
+Meten (op de server, `docker compose exec aquatech …`; de map met tekeningen bevat klantgegevens, bewaar hem niet in de repository):
+
+```sh
+node tools/corpus-export.js /tmp/corpus [organisatiecode]   # schrijft naam.png + naam.json
+node tools/recog-bench.js /tmp/corpus                       # afwijking van de lokale herkenning per tekening
+```
 
 ## AI-koppeling (Claude en ChatGPT)
 

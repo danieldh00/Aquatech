@@ -65,7 +65,7 @@ De planner zelf is volledig client-side (HTML/JS, geen build-stap). Er zijn twee
 
 | Stap | Functie |
 |---|---|
-| 1. Project & ondergrond | **Beregeningsmethode** per soort vlak (druppelslang, druppelaars, sproeiers of geen); **Plan laden en concept maken**: plan (JPG/PNG/PDF) wordt gelezen (schaal + vlakken), lokaal zonder AI (kleur + tekstherkenning) of met AI en er wordt direct een volledig concept gemaakt; of alleen als ondergrond laden en de schaal zelf kalibreren |
+| 1. Project & ondergrond | **Beregeningsmethode** per soort vlak (druppelslang, druppelaars, sproeiers of geen); **Plan laden en concept maken**: plan (JPG/PNG/PDF) wordt gelezen (schaal + vlakken), lokaal zonder AI (kleur + tekstherkenning) of met AI en er wordt direct een volledig concept gemaakt (optioneel bewaart de organisatie goedgekeurde tekeningen versleuteld als meetcorpus, Beheer → Koppelingen → AI-herkenning, om de herkenning zonder AI te meten en te verbeteren: `npm run recog-bench`, `tools/corpus-export.js`); of alleen als ondergrond laden en de schaal zelf kalibreren |
 | 2. Gebieden tekenen | Gazon, beplanting/border, haag, plantenbak, *mag nat worden*, *moet droog blijven*; **toverstaf** (vlak op kleur uittrekken), vrije vorm of rechthoek, hoekpunten verslepen/toevoegen |
 | 3. Systeemelementen | Wateraansluiting (dynamische druk + debiet, emmertest-tip), besturing, ventielkast, waterpunten |
 | 4. Sproeiers | Automatisch kop-tot-kop plaatsen of handmatig (sproeihoek wordt op rand/hoek automatisch bepaald); neerslagsimulatie met gelijkmatigheid (DU), droge plekken en water op vlakken die droog moeten blijven |

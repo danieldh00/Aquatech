@@ -53,6 +53,8 @@ const FIELDS = {
   aiEnabled: { type: 'bool', default: true },
   aiDailyLimit: { type: 'int', env: 'AI_DAILY_LIMIT', default: 30, min: 0, max: 500 },
   aiHourlyPerIp: { type: 'int', default: 10, min: 1, max: 100 },
+  // Meetcorpus planherkenning: bewaart bij een goedgekeurd plan de tekening (versleuteld) en het eindplan, zodat de lokale herkenning ermee gemeten en verbeterd kan worden (zie recognitions.js).
+  planCorpus: { type: 'bool', default: false },
   // Model voor AI-verzoeken (prijzen in shared/ai-models.js) en de koers
   // waarmee Beheer > AI-kosten de dollarprijzen in euro's omrekent
   // (eurocent per dollar).

@@ -566,6 +566,7 @@
     state.settings = view;
     const ai = $('#s-ai');
     ai.aiEnabled.checked = view.aiEnabled.value;
+    ai.planCorpus.checked = view.planCorpus.value;
     ai.aiDailyLimit.value = view.aiDailyLimit.value;
     ai.aiHourlyPerIp.value = view.aiHourlyPerIp.value;
     ai.aiEurCentsPerUsd.value = view.aiEurCentsPerUsd.value;
@@ -1025,7 +1026,7 @@
      */
     aiForm.onsubmit = (event) => {
       event.preventDefault();
-      const patch = { aiEnabled: aiForm.aiEnabled.checked, aiDailyLimit: Number(aiForm.aiDailyLimit.value), aiHourlyPerIp: Number(aiForm.aiHourlyPerIp.value),
+      const patch = { aiEnabled: aiForm.aiEnabled.checked, planCorpus: aiForm.planCorpus.checked, aiDailyLimit: Number(aiForm.aiDailyLimit.value), aiHourlyPerIp: Number(aiForm.aiHourlyPerIp.value),
         aiModel: aiForm.aiModel.value, aiEurCentsPerUsd: Number(aiForm.aiEurCentsPerUsd.value) };
       if (aiForm.anthropicApiKey.value.trim()) patch.anthropicApiKey = aiForm.anthropicApiKey.value.trim();
       saveSettings(aiForm, patch, 'Instellingen opgeslagen');

@@ -59,6 +59,19 @@
   }
 
   /**
+   * Stuurt een goedgekeurd plan met de tekening naar het meetcorpus van de organisatie (alleen als dat aanstaat).
+   * @param {{planId: string, image: string, final: object}} body het plan, de tekening als PNG-data-URL en het eindplan in pixels van die tekening
+   * @returns {Promise<void>} klaar na versturen; een fout wordt genegeerd
+   */
+  async function saveCorpus(body) {
+    try {
+      await fetch('api/plan/corpus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    } catch (error) {
+      /* het meetcorpus is een bijzaak */
+    }
+  }
+
+  /**
    * Vraagt of automatisch herkennen beschikbaar is.
    * @returns {Promise<{available: boolean}>} de stand van de herkenning
    */
@@ -221,5 +234,5 @@
     };
   }
 
-  window.Concept = { analyze, learned, teach, status, build, defaultElements, straighten, FALLBACK_WIDTH_M, FALLBACK_GARDEN_M };
+  window.Concept = { analyze, learned, teach, saveCorpus, status, build, defaultElements, straighten, FALLBACK_WIDTH_M, FALLBACK_GARDEN_M };
 })();

@@ -46,10 +46,50 @@ function sanitizeSamples(raw) {
   return binCount ? { v: FEATURE_VERSION, bins } : null;
 }
 
+const AREA_TYPES = ['lawn', 'bed', 'hedge', 'planter', 'wet', 'dry'];
+const ELEMENT_KINDS = ['source', 'controller', 'valvebox', 'outlet'];
+const MAX_FINAL_AREAS = 100;
+const MAX_FINAL_POINTS = 400;
+const MAX_FINAL_ELEMENTS = 20;
+
+/**
+ * Controleert het eindplan dat de browser bij een goedgekeurd plan meestuurt (coördinaten in pixels van de bewaarde tekening).
+ * @param {object} raw { areas: [{ type, points: [{x, y}] }], elements: [{ kind, x, y }], metersPerPixel }.
+ * @param {number} width Breedte van de tekening in pixels.
+ * @param {number} height Hoogte van de tekening in pixels.
+ * @returns {{ areas: object[], elements: object[], metersPerPixel: number|null }|null} Het opgeschoonde eindplan, of null bij ongeldige invoer.
+ */
+function sanitizeFinalPlan(raw, width, height) {
+  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.areas) || raw.areas.length > MAX_FINAL_AREAS) return null;
+  const margin = Math.max(width, height);
+  /**
+   * Controleert een coördinaat: een eindig getal, hooguit één beeldbreedte buiten de tekening, op twee decimalen.
+   * @param {*} value De waarde.
+   * @param {number} limit De maat van de tekening in die richting.
+   * @returns {number|null} De coördinaat, of null.
+   */
+  const coordinate = (value, limit) => (typeof value === 'number' && Number.isFinite(value) && value >= -margin && value <= limit + margin ? Math.round(value * 100) / 100 : null);
+  const areas = [];
+  for (const area of raw.areas) {
+    if (!area || !AREA_TYPES.includes(area.type) || !Array.isArray(area.points) || area.points.length < 3 || area.points.length > MAX_FINAL_POINTS) return null;
+    const points = area.points.map((point) => ({ x: coordinate(point && point.x, width), y: coordinate(point && point.y, height) }));
+    if (points.some((point) => point.x === null || point.y === null)) return null;
+    areas.push({ type: area.type, points });
+  }
+  const rawElements = Array.isArray(raw.elements) ? raw.elements.slice(0, MAX_FINAL_ELEMENTS) : [];
+  const elements = [];
+  for (const element of rawElements) {
+    const x = coordinate(element && element.x, width), y = coordinate(element && element.y, height);
+    if (element && ELEMENT_KINDS.includes(element.kind) && x !== null && y !== null) elements.push({ kind: element.kind, x, y });
+  }
+  const scale = Number(raw.metersPerPixel);
+  return { areas, elements, metersPerPixel: scale > 0 && scale < 100 ? scale : null };
+}
+
 /**
  * Maakt de opslag voor AI-herkenningen en geleerde kleuren.
  * @param {object} db De database.
- * @returns {object} findAi, saveAi, addSamples, savePlanSamples, learned en removePlan.
+ * @returns {object} findAi, saveAi, addSamples, savePlanSamples, saveCorpus, corpusRows, learned en removePlan.
  */
 function createRecognitionStore(db) {
   /**
@@ -169,7 +209,42 @@ function createRecognitionStore(db) {
     return removed;
   }
 
-  return { findAi, saveAi, addSamples, savePlanSamples, learned, removePlan };
+  /**
+   * Bewaart bij een goedgekeurd plan de tekening (al versleuteld) en het eindplan voor het meetcorpus. Eén regel per plan; een nieuwe goedkeuring vervangt de vorige.
+   * @param {object} entry tenantId, userId, planId, sealedImage (versleutelde tekst), width, height en finalPlan (uit sanitizeFinalPlan).
+   */
+  function saveCorpus({ tenantId, userId = null, planId, sealedImage, width, height, finalPlan }) {
+    const timestamp = currentTimestamp();
+    const row = prepare(`SELECT id FROM plan_recognitions WHERE tenant_id = ? AND plan_id = ? AND source = 'plan'`).get(tenantId, String(planId));
+    if (row) {
+      prepare(`UPDATE plan_recognitions SET corpus_image = ?, corpus_width = ?, corpus_height = ?, corpus_final = ?, user_id = ?, updated_at = ? WHERE tenant_id = ? AND id = ?`)
+        .run(sealedImage, width, height, JSON.stringify(finalPlan), userId || null, timestamp, tenantId, row.id);
+      return;
+    }
+    prepare(`INSERT INTO plan_recognitions (id, tenant_id, user_id, source, image_hash, plan_id, model, version, result, samples, corpus_image, corpus_width, corpus_height, corpus_final, created_at, updated_at)
+      VALUES (?, ?, ?, 'plan', '', ?, '', '', '', '', ?, ?, ?, ?, ?, ?)`)
+      .run(crypto.randomUUID(), tenantId, userId || null, String(planId), sealedImage, width, height, JSON.stringify(finalPlan), timestamp, timestamp);
+  }
+
+  /**
+   * Een deel van het meetcorpus van een omgeving (oudste eerst), voor de export.
+   * @param {string} tenantId Id van de tenant.
+   * @param {{ afterId?: string, limit?: number }} [options] Doorlopen vanaf een id; hooguit `limit` regels (standaard 20).
+   * @returns {Array<{ id: string, planId: string, width: number, height: number, sealedImage: string, finalPlan: object }>} De regels met een tekening en eindplan.
+   */
+  function corpusRows(tenantId, { afterId = '', limit = 20 } = {}) {
+    const rows = prepare(`SELECT id, plan_id, corpus_width, corpus_height, corpus_image, corpus_final FROM plan_recognitions
+      WHERE tenant_id = ? AND corpus_image <> '' AND id > ? ORDER BY id LIMIT ?`).all(tenantId, String(afterId), Math.max(1, Math.min(100, Number(limit) || 20)));
+    const result = [];
+    for (const row of rows) {
+      let finalPlan;
+      try { finalPlan = JSON.parse(row.corpus_final); } catch { continue; }
+      result.push({ id: row.id, planId: row.plan_id, width: row.corpus_width, height: row.corpus_height, sealedImage: row.corpus_image, finalPlan });
+    }
+    return result;
+  }
+
+  return { findAi, saveAi, addSamples, savePlanSamples, saveCorpus, corpusRows, learned, removePlan };
 }
 
-module.exports = { createRecognitionStore, sanitizeSamples, imageHash, FEATURE_VERSION };
+module.exports = { createRecognitionStore, sanitizeSamples, sanitizeFinalPlan, imageHash, FEATURE_VERSION };
