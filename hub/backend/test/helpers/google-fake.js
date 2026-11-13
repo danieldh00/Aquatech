@@ -11,7 +11,7 @@ async function createGoogleFake() {
   const sessions = new Map();
   const calls = [];
   const revoked = [];
-  const fake = { files, calls, revoked, failUploads: null, tokenRevoked: false, nextRefreshToken: 'refresh-1' };
+  const fake = { files, calls, revoked, failUploads: null, holdUploads: null, tokenRevoked: false, nextRefreshToken: 'refresh-1' };
   let counter = 0;
   let accessCounter = 0;
 
@@ -62,6 +62,7 @@ async function createGoogleFake() {
     if (session && req.method === 'PUT') {
       const meta = sessions.get(session[1]);
       if (!meta) return send(res, 404, {});
+      if (fake.holdUploads) await fake.holdUploads;
       counter += 1;
       const file = { id: `id${counter}`, name: meta.name, parents: meta.parents, size: String(body.length), body, createdTime: new Date(Date.UTC(2026, 10, 13, 0, 0, counter)).toISOString(), seq: counter };
       files.set(file.id, file);

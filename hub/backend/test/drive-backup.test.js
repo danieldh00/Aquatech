@@ -230,15 +230,23 @@ test('verbreken wacht op een lopende upload en laat geen stand van het oude acco
   const world = await start();
   try {
     await connect(world);
+    await until(async () => !(await world.baas.get(`${BASE}/drive`)).body.running);
     addBackup(world.dir, '20261130-030000', Buffer.alloc(1000, 1));
+    // De upload blijft hangen tot wij hem loslaten: zo loopt het verbreken zeker tijdens de ronde.
+    let release;
+    world.google.holdUploads = new Promise((resolve) => { release = resolve; });
     const syncing = world.baas.post(`${BASE}/drive/sync`);
-    await until(async () => (await world.baas.get(`${BASE}/drive`)).body.running);
-    const gone = (await world.baas.post(`${BASE}/drive/disconnect`)).body;
+    await until(() => world.google.calls.some((call) => call.method === 'PUT'));
+    const disconnecting = world.baas.post(`${BASE}/drive/disconnect`);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    release();
+    const gone = (await disconnecting).body;
     await syncing;
     assert.strictEqual(gone.connected, false);
     assert.deepStrictEqual(gone.items.filter((item) => item.onDrive), []);
     const status = (await world.baas.get(`${BASE}/drive`)).body;
     assert.strictEqual(status.folderId, '');
+    assert.deepStrictEqual(status.items.filter((item) => item.onDrive), []);
     assert.strictEqual(status.needsReconnect, false);
   } finally { await world.cleanup(); }
 });
