@@ -1048,10 +1048,11 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van de bestelling.
    * @param {string} trackingCode De volgcode van DPD.
+   * @param {{ onlyIfEmpty?: boolean }} [options] onlyIfEmpty: een bestaande volgcode blijft staan (gecontroleerd binnen de transactie).
    * @returns {{ order?: object, error?: string, status?: number }} De bijgewerkte bestelling of een foutmelding.
    */
-  function setTracking(tenantId, id, trackingCode) {
-    const out = changeTracking(tenantId, id, trackingCode);
+  function setTracking(tenantId, id, trackingCode, options = {}) {
+    const out = changeTracking(tenantId, id, trackingCode, options);
     if (out.order && out.changed && out.order.shipping && out.order.shipping.tracking) {
       for (const hook of trackingHooks) {
         try { Promise.resolve(hook(tenantId, out.order)).catch((error) => console.warn(`Na volgcode: ${error.message}`)); } catch (error) { console.warn(`Na volgcode: ${error.message}`); }
@@ -1065,9 +1066,10 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van de bestelling.
    * @param {string} trackingCode De volgcode van DPD (leeg wist hem).
+   * @param {{ onlyIfEmpty?: boolean }} [options] onlyIfEmpty: een bestaande volgcode blijft staan.
    * @returns {{ order?: object, changed?: boolean, error?: string, status?: number }} De bijgewerkte bestelling en of de volgcode veranderde, of een foutmelding.
    */
-  function changeTracking(tenantId, id, trackingCode) {
+  function changeTracking(tenantId, id, trackingCode, { onlyIfEmpty = false } = {}) {
     const wanted = String(trackingCode || '').trim();
     const tracking = wanted ? Shipping.trackingOf(wanted) : null;
     if (wanted && !tracking) return { error: 'Ongeldige volgcode (6 tot 40 letters, cijfers of streepjes).', status: 400 };
@@ -1077,6 +1079,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
       const data = JSON.parse(row.data);
       if (!data.shipping || data.shipping.method !== 'dpd') return { error: 'Alleen bij bezorging door DPD hoort een volgcode.', status: 409 };
       if (!['verzonden', 'afgerond'].includes(row.status)) return { error: 'Een volgcode kan pas als de bestelling is verzonden.', status: 409 };
+      if (onlyIfEmpty && data.shipping.tracking) return { order: get(tenantId, row.id), changed: false };
       const changed = (data.shipping.tracking ? data.shipping.tracking.code : '') !== (tracking ? tracking.code : '');
       data.shipping.tracking = tracking;
       prepare('UPDATE web_orders SET data = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(JSON.stringify(data), currentTimestamp(), tenantId, row.id);

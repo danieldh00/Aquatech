@@ -260,3 +260,30 @@ test('dropshipping zonder pakbon van de klant staat niet in de lijst en is niet 
   assert.strictEqual(pick.status, 409);
   assert.strictEqual(world.db.prepare("SELECT on_hand FROM stock_items WHERE code = 'BUS'").get().on_hand, 50);
 });
+
+test('label: gelijktijdige aanvragen voor een zending (label_busy) en twee zendingen tegelijk houden de eerste volgcode', async () => {
+  let counter = 0;
+  const provider = {
+    configured: () => true,
+    create: async () => { counter += 1; await new Promise((resolve) => setTimeout(resolve, 300)); return { pdf: Buffer.from('%PDF-label'), trackingCode: `DPD00000${counter}` }; },
+  };
+  const world = await pickWorld({ appOptions: { shippingLabelProviders: { dpd: provider } } });
+  const { picker, admin, db } = world;
+  const id = await placeOrder(world, [['BUS', '4']], { shippingMethod: 'dpd' });
+  // Twee zendingen: eerst 2, dan de rest.
+  const first = await picker.post(`/app/api/orderpick/orders/${id}/pick`, { lines: [{ index: 0, qty: 2 }], shipmentCount: 0 });
+  const second = await picker.post(`/app/api/orderpick/orders/${id}/pick`, { lines: [{ index: 0, qty: 2 }], shipmentCount: 1 });
+  assert.deepStrictEqual([first.status, second.status, second.body.complete], [200, 200, true]);
+  const urlOf = (shipment) => `/app/api/orderpick/orders/${id}/shipments/${shipment.body.shipment.id}/label`;
+  // Dezelfde zending twee keer tegelijk: één label, de ander wacht.
+  const [one, two] = await Promise.all([picker.post(urlOf(first), {}), picker.post(urlOf(first), {})]);
+  assert.deepStrictEqual([one.status, two.status].sort(), [200, 409]);
+  assert.ok([one, two].some((response) => response.body && response.body.error === 'label_busy'));
+  assert.strictEqual(counter, 1, 'de vervoerder is één keer gebeld');
+  // Een tweede zending krijgt ook een label, maar de volgcode van de bestelling verandert niet meer (onlyIfEmpty in de transactie).
+  const second2 = await picker.post(urlOf(second), {});
+  assert.strictEqual(second2.status, 200);
+  const order = (await admin.get(`/app/api/admin/web-orders/${id}`)).body.order;
+  assert.strictEqual(order.shipping.tracking.code, 'DPD000001', 'de eerste volgcode blijft staan');
+  assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM web_orders').get().n, 1);
+});

@@ -187,7 +187,7 @@ function createOrderpick(db, { orders, slips, labels }) {
     // Meteen vastleggen, zodat een tweede tik of scherm nooit een tweede label maakt.
     orders.recordShipmentLabel(tenantId, id, shipment.id, made.trackingCode);
     // Een volgcode gaat alleen bij de bestelling als die er nog geen heeft (de klant krijgt dan de mail met track & trace); een ongeldige code stopt het label niet.
-    if (made.trackingCode && !(order.shipping && order.shipping.tracking)) orders.setTracking(tenantId, id, made.trackingCode);
+    if (made.trackingCode) orders.setTracking(tenantId, id, made.trackingCode, { onlyIfEmpty: true });
     return { pdf: made.pdf, fileName: `Label ${order.number}.pdf`.replace(/[^\w .()-]/g, ''), order };
   }
 
