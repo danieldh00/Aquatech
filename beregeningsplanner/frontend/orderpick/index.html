@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="../shared/sidebar.css">
   <link rel="stylesheet" href="../dashboard/dashboard.css">
   <link rel="stylesheet" href="../beheer/beheer.css">
+  <link rel="stylesheet" href="../shared/offline.css">
   <link rel="stylesheet" href="orderpick.css">
   <script src="../shared/common.js"></script>
 </head>
@@ -35,6 +36,7 @@
       <p id="op-list-note" class="muted"></p>
       <div id="op-orders" class="op-orders"></div>
       <p id="op-empty" class="muted" hidden>Er zijn nu geen bestellingen om te picken.</p>
+      <p id="op-queued" class="note" hidden></p>
       <div id="op-recent-block" hidden>
         <h2>Net gepickt</h2>
         <div id="op-recent" class="op-orders"></div>
@@ -71,6 +73,8 @@
   <script src="../dashboard/modules.js"></script>
   <script src="../shared/sidebar.js"></script>
   <script src="../dashboard/account.js"></script>
+  <script src="../shared/offline-core.js"></script>
+  <script src="../shared/offline.js"></script>
   <script src="orderpick-core.js"></script>
   <script src="orderpick.js"></script>
 </body>

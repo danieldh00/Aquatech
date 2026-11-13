@@ -47,8 +47,10 @@
    * @param {{ method?: string, body?: object, blob?: boolean }} [options] Methode, JSON-inhoud en of er een PDF terugkomt.
    * @returns {Promise<object|Blob>} Het antwoord (een fout is een Error met `status` en `code`).
    */
-  async function api(path, { method = 'GET', body, blob = false } = {}) {
+  async function api(path, { method = 'GET', body, blob = false, offlineLabel } = {}) {
     const headers = body === undefined ? {} : { 'Content-Type': 'application/json' };
+    // Zonder verbinding gaat een pick in de wachtrij van de service worker (antwoord 202 { queued }); nooit met een samenvoegsleutel, elke pick staat op zichzelf.
+    if (offlineLabel && window.AquatechOffline) Object.assign(headers, window.AquatechOffline.headers({ label: offlineLabel }));
     // Een sleutel per pick-aanroep: wordt die na een netwerkfout opnieuw verstuurd, dan wordt er niet dubbel gepickt.
     if (path.endsWith('/pick') && window.crypto && crypto.randomUUID) headers['Idempotency-Key'] = crypto.randomUUID();
     const response = await fetch(`../api/orderpick/${path}`, { method, cache: 'no-store', headers, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -155,8 +157,22 @@
    */
   async function loadList() {
     const out = await api('orders');
+    let waiting = readStored('queued') || [];
+    if (waiting.length && window.AquatechOffline) {
+      // Een pick die niet meer wacht (verstuurd, weggegooid of door de server afgewezen) hoort niet langer verborgen te zijn: de bestelling staat dan weer in de lijst met wat de server nu zegt.
+      const startedAt = Date.now();
+      const pending = new Set((await window.AquatechOffline.list()).filter((item) => item.state === 'pending').map((item) => item.id));
+      // Opnieuw lezen na het wachten: intussen kan er een pick bij gekomen zijn (ook in een ander tabblad).
+      waiting = readStored('queued') || [];
+      const kept = waiting.filter((entry) => pending.has(entry.queueId) || entry.at >= startedAt);
+      if (kept.length !== waiting.length) { waiting = kept; writeStored('queued', kept.length ? kept : null); }
+    }
+    // Een bestelling die offline is afgemeld maar nog niet verstuurd is, hoort niet nog eens in de lijst.
+    out.items = out.items.filter((order) => !waiting.some((entry) => entry.orderId === order.id));
     state.orders = out.items;
     renderList(out);
+    // Alvast ophalen, zodat de regels ook zonder verbinding openen.
+    if (window.AquatechOffline) window.AquatechOffline.prefetch(out.items.slice(0, 30).map((order) => `api/orderpick/orders/${encodeURIComponent(order.id)}`), '../');
   }
 
   /**
@@ -183,6 +199,9 @@
   /** Tekent "Net gepickt" met knoppen voor de pakbon en het label. */
   function renderRecent() {
     const recent = readStored('recent') || [];
+    const queued = readStored('queued') || [];
+    $('#op-queued').hidden = queued.length === 0;
+    $('#op-queued').textContent = queued.length ? `Wacht op verbinding om te versturen: ${queued.map((entry) => entry.number).join(', ')}. Pakbon en label volgen daarna onder Net gepickt.` : '';
     $('#op-recent-block').hidden = recent.length === 0;
     $('#op-recent').innerHTML = recent.map((entry) => `
       <div class="op-recent-row" data-shipment="${esc(entry.shipmentId)}" data-order="${esc(entry.orderId)}">
@@ -432,8 +451,14 @@
     state.busy = true;
     renderFinish();
     try {
-      const result = await api(`orders/${encodeURIComponent(order.id)}/pick`, { method: 'POST', body: Core.pickBody(order, state.states) });
+      const result = await api(`orders/${encodeURIComponent(order.id)}/pick`, { method: 'POST', body: Core.pickBody(order, state.states), offlineLabel: `Orderpick ${order.number} gepickt` });
       writeStored('progress', null);
+      if (result.queued) {
+        const pieces = Core.pickBody(order, state.states).lines.reduce((sum, entry) => sum + (Number(entry.qty) || 0), 0);
+        writeStored('queued', [...(readStored('queued') || []), { orderId: order.id, number: order.number, queueId: result.id, pieces, at: Date.now() }]);
+        showQueued(order, pieces);
+        return;
+      }
       const pieces = result.shipment.lines.reduce((sum, entry) => sum + (Number(entry.qty) || 0), 0);
       rememberDone({ orderId: order.id, number: result.number, shipmentId: result.shipment.id, complete: result.complete, pieces, at: result.shipment.at, label: result.label });
       showDone(order, result, pieces);
@@ -449,6 +474,46 @@
       state.busy = false;
       if (state.order) renderFinish();
     }
+  }
+
+  /**
+   * Toont het eindscherm van een bestelling die zonder verbinding is afgemeld: ze wordt verstuurd zodra er weer verbinding is.
+   * @param {object} order De bestelling zoals die gepickt is.
+   * @param {number} pieces Het aantal gepickte stuks.
+   */
+  function showQueued(order, pieces) {
+    state.order = null;
+    $('#op-order').hidden = true;
+    $('#op-list').hidden = true;
+    const done = $('#op-done');
+    done.hidden = false;
+    done.className = 'op-done';
+    done.innerHTML = `
+      <h1>✓ ${esc(order.number)} opgeslagen</h1>
+      <p>Er is geen verbinding. ${esc(pieces)} stuks worden verstuurd zodra je weer online bent; pakbon en label maak je daarna onder <b>Net gepickt</b>.</p>
+      <div class="actions"><button type="button" class="btn big primary" id="op-next">Volgende order</button></div>`;
+    history.replaceState(null, '', location.pathname);
+  }
+
+  /**
+   * Verwerkt een bericht van de offline wachtrij: een verstuurde pick komt onder "Net gepickt", een weggegooide pick (of een afgewezen: dan toont het paneel de fout) komt weer in de lijst.
+   * @param {{ discarded: boolean, id: string, item: { url: string }, status: number, body: object }} message Het bericht van de service worker.
+   */
+  function onQueueEvent(message) {
+    const waiting = readStored('queued') || [];
+    if (!waiting.length) return;
+    if (message.discarded) {
+      writeStored('queued', waiting.filter((entry) => entry.queueId !== message.id));
+    } else if (message.item && /\/pick$/.test(message.item.url || '') && message.body && message.body.shipment) {
+      const entry = waiting.find((candidate) => candidate.queueId === message.item.id);
+      if (!entry) return;
+      writeStored('queued', waiting.filter((candidate) => candidate !== entry));
+      const result = message.body;
+      rememberDone({ orderId: entry.orderId, number: result.number || entry.number, shipmentId: result.shipment.id, complete: result.complete, pieces: entry.pieces, at: result.shipment.at, label: result.label });
+    } else {
+      return;
+    }
+    if (!state.order && !$('#op-list').hidden) showList();
   }
 
   /**
@@ -614,6 +679,7 @@
       if (button) makeDocument(button, $('#op-done').dataset.order, $('#op-done').dataset.shipment, button.dataset.doc);
       else if (event.target.id === 'op-next') showList();
     });
+    if (window.AquatechOffline) window.AquatechOffline.on('synced', onQueueEvent);
     if ('BarcodeDetector' in window && navigator.mediaDevices) $('#op-camera').hidden = false;
     document.addEventListener('visibilitychange', () => { if (document.hidden) stopCamera(); });
   }
