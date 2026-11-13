@@ -181,8 +181,11 @@ function createOrderpick(db, { orders, slips, labels }) {
     if (!order) return { error: 'Bestelling niet gevonden.', status: 404 };
     const shipment = order.shipments.find((entry) => entry.id === String(shipmentId || ''));
     if (!shipment) return { error: 'Zending niet gevonden.', status: 404 };
+    if (shipment.label) return { error: `Voor deze zending is al een label gemaakt${shipment.label.trackingCode ? ` (volgcode ${shipment.label.trackingCode})` : ''}. Een tweede label zou een tweede pakket betekenen.`, code: 'label_exists', status: 409 };
     const made = await labels.create(tenantId, order, shipment);
     if (made.error) return made;
+    // Meteen vastleggen, zodat een tweede tik of scherm nooit een tweede label maakt.
+    orders.recordShipmentLabel(tenantId, id, shipment.id, made.trackingCode);
     // Een volgcode gaat alleen bij de bestelling als die er nog geen heeft (de klant krijgt dan de mail met track & trace); een ongeldige code stopt het label niet.
     if (made.trackingCode && !(order.shipping && order.shipping.tracking)) orders.setTracking(tenantId, id, made.trackingCode);
     return { pdf: made.pdf, fileName: `Label ${order.number}.pdf`.replace(/[^\w .()-]/g, ''), order };

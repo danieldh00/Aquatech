@@ -853,6 +853,29 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
   }
 
   /**
+   * Legt vast dat voor een zending een verzendlabel is gemaakt (`shipment.label` {at, trackingCode}), zodat er nooit een tweede label
+   * voor dezelfde zending wordt gemaakt. Een tweede aanroep voor dezelfde zending verandert niets.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} id Id van de bestelling.
+   * @param {string} shipmentId Id van de zending.
+   * @param {string} trackingCode De volgcode van het label (mag leeg).
+   * @returns {{ recorded?: boolean, existing?: { at: string, trackingCode: string }, error?: string, status?: number }} `recorded` bij het eerste label, `existing` als er al een was.
+   */
+  function recordShipmentLabel(tenantId, id, shipmentId, trackingCode) {
+    return transaction(db, () => {
+      const row = readForUpdate(tenantId, id, 'status, data');
+      if (!row) return { error: 'Bestelling niet gevonden.', status: 404 };
+      const data = JSON.parse(row.data);
+      const shipment = (data.shipments || []).find((entry) => entry.id === shipmentId);
+      if (!shipment) return { error: 'Zending niet gevonden.', status: 404 };
+      if (shipment.label) return { existing: shipment.label };
+      shipment.label = { at: currentTimestamp(), trackingCode: String(trackingCode || '') };
+      prepare('UPDATE web_orders SET data = ? WHERE tenant_id = ? AND id = ?').run(JSON.stringify(data), tenantId, id);
+      return { recorded: true };
+    });
+  }
+
+  /**
    * Zet Deellevering toestaan aan of uit voor een open bestelling.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van de bestelling.
@@ -1170,7 +1193,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
     return { released };
   }
 
-  return { priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, releaseExpired, listToPick, getMany, pickable, markPackingSlipsPrinted, setDropshippingSlip, onShipped, onCancelled, onTracking, withFulfilment, getDetailed, ship, setAllowPartial, listBackorders, markBackorderReady, onPartialShipped };
+  return { priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, releaseExpired, listToPick, getMany, pickable, markPackingSlipsPrinted, setDropshippingSlip, onShipped, onCancelled, onTracking, withFulfilment, getDetailed, ship, recordShipmentLabel, setAllowPartial, listBackorders, markBackorderReady, onPartialShipped };
 }
 
 /**

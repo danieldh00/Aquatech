@@ -229,6 +229,11 @@ test('verzendlabel: zonder DPD-koppeling een nette melding, met koppeling het la
   assert.strictEqual(label.status, 200);
   assert.strictEqual(label.raw.toString('latin1'), '%PDF-label');
   assert.strictEqual(calls.length, 1);
+  const second = await picker.post(`/app/api/orderpick/orders/${id}/shipments/${done.body.shipment.id}/label`, {});
+  assert.strictEqual(second.status, 409);
+  assert.strictEqual(second.body.error, 'label_exists');
+  assert.match(second.body.message, /DPD123456/);
+  assert.strictEqual(calls.length, 1, 'de vervoerder is maar één keer gebeld');
   assert.strictEqual((await admin.get(`/app/api/admin/web-orders/${id}`)).body.order.packingSlip, null, 'een zendingspakbon telt niet als afgedrukt in Te picken');
   const order = (await admin.get(`/app/api/admin/web-orders/${id}`)).body.order;
   assert.strictEqual(order.shipping.tracking.code, 'DPD123456');
