@@ -264,7 +264,15 @@ test('dropshipping zonder pakbon van de klant staat niet in de lijst en is niet 
 test('label: gelijktijdige aanvragen voor een zending (label_busy) en twee zendingen tegelijk houden de eerste volgcode', async () => {
   let counter = 0;
   const provider = {
+    /**
+     * Nagebootste koppeling: altijd ingesteld.
+     * @returns {boolean} Waar.
+     */
     configured: () => true,
+    /**
+     * Maakt na een korte pauze een label met een oplopende volgcode.
+     * @returns {Promise<{ pdf: Buffer, trackingCode: string }>} Het label.
+     */
     create: async () => { counter += 1; await new Promise((resolve) => setTimeout(resolve, 300)); return { pdf: Buffer.from('%PDF-label'), trackingCode: `DPD00000${counter}` }; },
   };
   const world = await pickWorld({ appOptions: { shippingLabelProviders: { dpd: provider } } });
@@ -274,6 +282,11 @@ test('label: gelijktijdige aanvragen voor een zending (label_busy) en twee zendi
   const first = await picker.post(`/app/api/orderpick/orders/${id}/pick`, { lines: [{ index: 0, qty: 2 }], shipmentCount: 0 });
   const second = await picker.post(`/app/api/orderpick/orders/${id}/pick`, { lines: [{ index: 0, qty: 2 }], shipmentCount: 1 });
   assert.deepStrictEqual([first.status, second.status, second.body.complete], [200, 200, true]);
+  /**
+   * Het labeladres van een zending uit een pick-antwoord.
+   * @param {{ body: { shipment: { id: string } } }} shipment Het antwoord van de pick-aanroep.
+   * @returns {string} Het adres.
+   */
   const urlOf = (shipment) => `/app/api/orderpick/orders/${id}/shipments/${shipment.body.shipment.id}/label`;
   // Dezelfde zending twee keer tegelijk: één label, de ander wacht.
   const [one, two] = await Promise.all([picker.post(urlOf(first), {}), picker.post(urlOf(first), {})]);
@@ -299,11 +312,18 @@ test('label: lukt het vastleggen niet, dan geeft een nieuwe tik hetzelfde label 
   // Het vastleggen van het label faalt (bijvoorbeeld een time-out): alle UPDATE's op de bestelling gooien.
   const realPrepare = db.prepare.bind(db);
   let failing = true;
+  /**
+   * Gooit bij het vastleggen van een bestelling (zolang `failing` aan staat), anders de echte functie.
+   * @param {string} sql De query.
+   * @param {...any} rest De overige argumenten.
+   * @returns {object} De query.
+   */
   db.prepare = (sql, ...rest) => {
     if (failing && /^\s*UPDATE web_orders SET data/i.test(sql)) throw new Error('time-out');
     return realPrepare(sql, ...rest);
   };
-  const warn = console.warn;
+  const realWarn = console.warn;
+  /** Houdt de verwachte waarschuwingen uit de testuitvoer. */
   console.warn = () => {};
   try {
     const first = await picker.post(url, {});
@@ -318,7 +338,7 @@ test('label: lukt het vastleggen niet, dan geeft een nieuwe tik hetzelfde label 
     assert.strictEqual((await picker.post(url, {})).body.error, 'label_exists');
     assert.strictEqual(calls, 1);
   } finally {
-    console.warn = warn;
+    console.warn = realWarn;
     db.prepare = realPrepare;
   }
 });
