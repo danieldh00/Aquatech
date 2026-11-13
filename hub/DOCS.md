@@ -1052,12 +1052,34 @@ docker compose start aquatech
 Een wis-opdracht (definitief wissen) staat nog in de back-ups tot die na de
 bewaartermijn verdwijnen; vermeld dat in de privacyverklaring.
 
+**Back-ups naar Google Drive** (Beheer > Systeem > *Back-ups naar Google Drive*, alleen hoofdbeheerders). De app kopieert elke
+nieuwe back-up, zoals hij op de server staat (dus versleuteld), naar een map in je eigen Google Drive. Alles staat in de app,
+dus het werkt ook na een verhuizing naar een andere server; er is geen script op de host nodig.
+
+1. Google Cloud Console: maak een project en zet de *Google Drive API* aan.
+2. *OAuth-toestemmingsscherm*: maak een app aan en zet de status op **In productie**. In de testmodus laat Google de koppeling na 7 dagen
+   verlopen (de app meldt dat als "verbind opnieuw").
+3. *Inloggegevens* > OAuth-client-ID, type *Webtoepassing*, met als omgeleid adres het adres dat Beheer toont
+   (`https://<webadres>/app/api/admin/backups/drive/callback`).
+4. Vul in Beheer client-ID en clientgeheim in, sla op en klik op *Verbinden met Google Drive*. Google waarschuwt voor een niet-
+   geverifieerde app: kies *Geavanceerd* en ga door. De app vraagt alleen de toestemming `drive.file` (bestanden die de app zelf
+   aanmaakt), dus de rest van je Drive blijft onzichtbaar.
+5. Zet *Nieuwe back-ups automatisch kopiëren* aan. Instelbaar: mapnaam en het aantal back-ups dat op Drive blijft (standaard 30; de
+   oudste op Drive worden opgeruimd).
+
+Het overzicht toont de koppeling, de bestanden op Drive, het logboek en een waarschuwing als er meer dan 36 uur niets is gekopieerd of
+Google de toegang heeft ingetrokken. Na een fout probeert de app het automatisch na een kwartier opnieuw; *Nu uploaden* probeert het
+meteen. Het clientgeheim en het refresh token staan versleuteld in de database (nooit in de browser). De back-ups op Drive zijn alleen
+te lezen met de hoofdsleutel van de server: bewaar die apart. De koppeling is per installatie en hoort niet bij een testomgeving.
+Terugzetten: download het bestand uit Drive en volg *Back-ups terugzetten*.
+
 **Nog te regelen bij de serverinrichting**
 
 - Schijfversleuteling op de host (LUKS/BitLocker) of een VPS-aanbieder met
   versleutelde opslag in de EU.
 - De versleutelde back-ups uit `/data/backups` (of `BACKUP_DIR` op een
-  andere schijf) dagelijks naar een andere locatie kopiëren, periodiek een
+  andere schijf) naar een andere locatie kopiëren: dat kan in de app zelf
+  naar Google Drive (zie *Back-ups naar Google Drive*); periodiek een
   terugzettest; de hoofdsleutel apart bewaren.
 - HTTPS via de Cloudflare-tunnel of een reverse proxy; poort 3300 niet
   rechtstreeks open zetten naar internet (alleen de tunnel).

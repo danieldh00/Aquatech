@@ -15,6 +15,7 @@ const testdata = require('./platform/test-data');
 const { createSettings, SettingsError, FIELDS, LIVE_ONLY_KEYS, valueForTest } = require('./platform/settings');
 const { createVault, loadOrCreateMasterKey } = require('./beveiliging/vault');
 const backups = require('./backup');
+const { createDriveBackup, sanitizeDriveBackup, DriveError, CALLBACK_PATH: DRIVE_CALLBACK_PATH } = require('./platform/drive-backup');
 const { createQuoteStore, registerQuoteRoutes, validShareBase, mailBody, Core: QuoteCore } = require('./verkoop/quotes');
 const { createCustomerStore, registerCustomerRoutes } = require('./verkoop/customers');
 const { createMailer } = require('./platform/mailer');
@@ -317,10 +318,10 @@ function staticHeaders(version) {
 
 /**
  * Bouwt de Express-app met alle routes en opslag.
- * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, mailerFor, shopFetch, vismaFetch, mollieFetch, addressFetch, viesFetch, shippingLabelProviders (koppelingen voor verzendlabels per vervoerder) en wanIp (tests vervangen hiermee de buitenwereld).
+ * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, mailerFor, shopFetch, vismaFetch, mollieFetch, addressFetch, viesFetch, googleFetch (Google Drive), shippingLabelProviders (koppelingen voor verzendlabels per vervoerder) en wanIp (tests vervangen hiermee de buitenwereld).
  * @returns {object} De app; app.locals bevat settings, onderhoud en synchronisatie.
  */
-function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, createOrderReader = createDefaultOrderReader, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, shippingLabelProviders = {}, wanIp = createWanIp(), loginDelayMs = 1000 }) {
+function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, createOrderReader = createDefaultOrderReader, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, googleFetch, shippingLabelProviders = {}, wanIp = createWanIp(), loginDelayMs = 1000 }) {
   const version = readVersion();
   const database = db || openDb();
   const store = createStore(database);
@@ -1689,6 +1690,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (user.platform_admin || (user.kind === 'systeem' && req.tenantId === tenant.id)) return next();
     res.status(403).json({ error: 'forbidden', message: 'Alleen voor hoofdbeheerders.' });
   });
+  // Kopie van de back-ups naar Google Drive (platform/drive-backup.js): instelbaar en met overzicht in Beheer > Back-ups.
+  const driveBackup = createDriveBackup({ settings, backupDir, listBackups: backups.listBackups, ...(googleFetch ? { fetchImpl: googleFetch } : {}) });
+  app.locals.driveBackup = driveBackup;
   let backupRunning = null;
   /**
    * Maakt een versleutelde back-up (één tegelijk) en ruimt oude op.
@@ -1704,6 +1708,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
         backups.pruneBackups(backupDir, Math.max(1, settings.get('backupKeepDays')));
         if (req) audit(req, 'backup_gemaakt', { name: backup.name, size: backup.size }, undefined, tenant.id);
         else store.audit({ tenantId: tenant.id, action: 'backup_gemaakt', detail: { name: backup.name, size: backup.size, automatisch: true } });
+        // Naar Google Drive op de achtergrond (een fout daar blokkeert de back-up nooit; de uitkomst staat in het overzicht).
+        driveBackup.sync({ source: req ? 'handmatig' : 'automatisch' }).catch((error) => console.warn(`Google Drive: ${error.message}`));
         return backup;
       } finally {
         backupRunning = null;
@@ -1719,6 +1725,100 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.post('/api/admin/backups', wrap(async (req, res) => {
     if (!backupDir) return res.status(501).json({ error: 'not_supported', message: 'Back-ups zijn niet ingesteld.' });
     res.status(201).json(await runBackup(req));
+  }));
+
+  // ----- Back-ups naar Google Drive (alleen hoofdbeheerders, zie de controle hierboven; vóór /:name) -----
+  /**
+   * Antwoordt op een fout van de Drive-koppeling met een leesbare melding; een andere fout gaat door naar de foutafhandeling.
+   * @param {object} res Het antwoord.
+   * @param {Error} error De fout.
+   * @param {Function} next De volgende afhandeling.
+   * @returns {object} Het antwoord.
+   */
+  const driveFail = (res, error, next) => {
+    if (!(error instanceof DriveError)) return next(error);
+    return res.status(error.status).json({ error: error.code, message: error.message });
+  };
+  /**
+   * Een route met async afhandeling en Drive-fouten.
+   * @param {Function} handler De afhandeling.
+   * @returns {Function} De route.
+   */
+  const driveRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch((error) => driveFail(res, error, next));
+  /**
+   * Het voorgestelde redirect-adres voor de Google-app (alleen een suggestie voor het formulier; wat telt is wat is opgeslagen).
+   * @returns {string} Het adres.
+   */
+  const driveSuggestedRedirect = () => `${settings.get('shopPayment').publicUrl || 'https://aquatech.den-hollander.com/'}app${DRIVE_CALLBACK_PATH}`;
+  app.get('/api/admin/backups/drive', driveRoute(async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const out = { ...driveBackup.status(), suggestedRedirect: driveSuggestedRedirect() };
+    if (req.query.remote === '1' && out.connected) {
+      try { out.remote = await driveBackup.remote(); } catch (error) { if (!(error instanceof DriveError)) throw error; out.remoteError = error.message; }
+    }
+    res.json(out);
+  }));
+  app.put('/api/admin/backups/drive', requireJson, driveRoute(async (req, res) => {
+    const body = req.body || {};
+    const current = settings.get('backupDrive');
+    const next = sanitizeDriveBackup({ ...current, ...body, redirectUri: body.redirectUri === undefined ? current.redirectUri : body.redirectUri });
+    if (body.redirectUri !== undefined && String(body.redirectUri).trim() && !next.redirectUri) {
+      return res.status(400).json({ error: 'invalid_setting', field: 'redirectUri', message: `Het redirect-adres moet met https:// beginnen en eindigen op ${DRIVE_CALLBACK_PATH}.` });
+    }
+    // De app-gegevens horen bij het refresh token: een andere Google-app pas na verbreken.
+    const changesApp = next.clientId !== current.clientId || next.redirectUri !== current.redirectUri || (typeof body.clientSecret === 'string' && body.clientSecret.trim() !== '') || body.clearSecret === true;
+    if (changesApp && driveBackup.connected()) return res.status(409).json({ error: 'disconnect_first', message: 'Verbreek eerst de verbinding met Google Drive voordat je de Google-gegevens wijzigt; verbind daarna opnieuw.' });
+    if (next.enabled && !driveBackup.connected() && body.enabled === true) return res.status(409).json({ error: 'not_connected', message: 'Verbind eerst met Google Drive voordat je de kopie aanzet.' });
+    const patch = { backupDrive: next };
+    if (typeof body.clientSecret === 'string' && body.clientSecret.trim()) patch.backupDriveClientSecret = body.clientSecret.trim();
+    if (body.clearSecret === true) patch.backupDriveClientSecret = '';
+    try {
+      settings.update(patch, req.user.id);
+    } catch (error) {
+      if (!(error instanceof SettingsError)) throw error;
+      return res.status(400).json({ error: 'invalid_setting', field: error.field, message: error.message });
+    }
+    audit(req, 'instellingen_gewijzigd', { fields: Object.keys(patch) }, undefined, tenant.id);
+    if (next.enabled && driveBackup.connected()) driveBackup.sync({ source: 'handmatig' }).catch((error) => console.warn(`Google Drive: ${error.message}`));
+    res.json({ ...driveBackup.status(), suggestedRedirect: driveSuggestedRedirect() });
+  }));
+  app.post('/api/admin/backups/drive/connect', requireJson, driveRoute(async (req, res) => {
+    res.json({ url: driveBackup.authorizeUrl(req.user.id) });
+  }));
+  app.get('/api/admin/backups/drive/callback', driveRoute(async (req, res) => {
+    // Terug naar Beheer (relatief, werkt ook onder een padprefix): .../app/api/admin/backups/drive/ -> .../app/beheer/
+    /**
+     * Stuurt de browser terug naar Beheer met de uitkomst in de adresregel.
+     * @param {string} query De querystring, bijv. 'drive=verbonden'.
+     * @returns {void}
+     */
+    const back = (query) => res.redirect(303, `../../../../beheer/?${query}#backup-drive`);
+    if (req.query.error) return back('drive=geweigerd');
+    try {
+      await driveBackup.finishConnect(String(req.query.state || ''), String(req.query.code || ''), { userId: req.user.id });
+    } catch (error) {
+      if (!(error instanceof DriveError)) throw error;
+      console.warn(`Google Drive verbinden mislukt: ${error.code}`);
+      return back(`drive=fout&reden=${encodeURIComponent(error.code)}`);
+    }
+    audit(req, 'backup_drive_verbonden', {}, undefined, tenant.id);
+    driveBackup.sync({ source: 'handmatig' }).catch((error) => console.warn(`Google Drive: ${error.message}`));
+    return back('drive=verbonden');
+  }));
+  app.post('/api/admin/backups/drive/disconnect', requireJson, driveRoute(async (req, res) => {
+    const { revoked } = await driveBackup.disconnect();
+    audit(req, 'backup_drive_verbroken', { revoked }, undefined, tenant.id);
+    res.json({ ...driveBackup.status(), revoked, suggestedRedirect: driveSuggestedRedirect() });
+  }));
+  app.post('/api/admin/backups/drive/sync', requireJson, driveRoute(async (req, res) => {
+    if (!driveBackup.connected()) return res.status(409).json({ error: 'not_connected', message: 'Er is geen verbinding met Google Drive.' });
+    const out = await driveBackup.sync({ source: 'handmatig' });
+    audit(req, 'backup_drive_upload', { uploaded: out.uploaded.length, removed: out.removed.length, error: Boolean(out.error) }, undefined, tenant.id);
+    res.json({ ...out, status: driveBackup.status() });
+  }));
+  app.post('/api/admin/backups/drive/test', requireJson, driveRoute(async (req, res) => {
+    if (!driveBackup.connected()) return res.status(409).json({ error: 'not_connected', message: 'Er is geen verbinding met Google Drive.' });
+    res.json({ ...(await driveBackup.test()), status: driveBackup.status() });
   }));
 
   app.get('/api/admin/backups/:name', (req, res) => {
@@ -3055,6 +3155,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (newest && Date.now() - Date.parse(newest.createdAt) < 23 * 3600 * 1000) return null;
     return runBackup();
   };
+  /**
+   * Zet back-ups die nog niet op Google Drive staan alsnog daarheen (elk uur, ook na een eerdere fout).
+   * @returns {Promise<object>} Zie driveBackup.sync.
+   */
+  app.locals.driveBackupSync = () => driveBackup.sync({ source: 'automatisch' });
   return app;
 }
 
@@ -3104,7 +3209,10 @@ if (require.main === module) {
       .catch((error) => console.error('Seizoensherinneringen mislukt:', error.message));
     app.locals.backupIfDue()
       .then((backup) => { if (backup) console.log(`Versleutelde back-up gemaakt: ${backup.name} (${backup.size} bytes) in ${backupDir}`); })
-      .catch((err) => console.error('Back-up mislukt:', err.message));
+      .catch((err) => console.error('Back-up mislukt:', err.message))
+      .then(() => app.locals.driveBackupSync())
+      .then((out) => { if (out && out.uploaded.length) console.log(`Back-ups naar Google Drive: ${out.uploaded.join(', ')}`); })
+      .catch((err) => console.error('Back-up naar Google Drive mislukt:', err.message));
   };
   runMaintenance();
   setInterval(runMaintenance, 60 * 60 * 1000).unref();

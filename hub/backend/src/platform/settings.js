@@ -9,6 +9,7 @@ const { sanitizeOutsourcing } = require('../uitvoering/outsourcing');
 const { sanitizeInvoicing } = require('../verkoop/invoices');
 const { sanitizeSeasonReminders } = require('../uitvoering/season-reminders');
 const { sanitizeVisma, sanitizeVismaApp } = require('../verkoop/visma');
+const { sanitizeDriveBackup, sanitizeDriveState } = require('./drive-backup');
 const { sanitizeLabelTemplates } = require('../artikelen/labels');
 const { sanitizeCategoryDiscounts } = require('../webshop/category-discounts');
 const { sanitizePriceFactors } = require('../artikelen/price-factor');
@@ -75,6 +76,12 @@ const FIELDS = {
   // Versleutelde back-ups van de database: dagelijks, zoveel dagen bewaren
   // (0 = geen automatische back-ups).
   backupKeepDays: { type: 'int', env: 'BACKUP_KEEP_DAYS', default: 14, min: 0, max: 365 },
+  // Back-ups naar Google Drive (drive-backup.js), alleen in de hoofdtenant en alleen via /api/admin/backups/drive:
+  // de instelling, de app-gegevens van Google (secret en refresh token versleuteld) en de stand (map, uploads, gebeurtenissen).
+  backupDrive: { type: 'object', default: {}, sanitize: sanitizeDriveBackup, internal: true, liveOnly: true },
+  backupDriveClientSecret: { type: 'secret', default: '', min: 8, internal: true, liveOnly: true },
+  backupDriveRefreshToken: { type: 'secret', default: '', min: 1, max: 4000, internal: true, liveOnly: true },
+  backupDriveState: { type: 'object', default: {}, sanitize: sanitizeDriveState, internal: true, liveOnly: true },
   // Bedrijfsgegevens, uurtarief en standaardteksten voor offertes (quotes.js).
   quoteProfile: { type: 'object', default: {}, sanitize: sanitizeProfile },
   // Eigen SMTP-server voor offertes en bevestigingen (mailer.js); het
