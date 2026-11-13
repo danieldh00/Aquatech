@@ -112,3 +112,13 @@ test('plangenerator is deterministisch en levert een waarheid met een gazon', ()
   assert.ok(first.truth.areas.some((area) => area.type === 'lawn'));
   for (const area of first.truth.areas) assert.ok(area.points.length >= 3);
 });
+
+test('plangenerator houdt woning, terras en oprit binnen de tuinomtrek', () => {
+  const { buildPlan } = require('../tools/plan-generator');
+  for (let seed = 1; seed <= 60; seed++) {
+    const garden = buildPlan(seed).truth.areas.find((area) => area.layer === 0);
+    for (const area of buildPlan(seed).truth.areas.filter((item) => item.type === 'dry')) {
+      for (const point of area.points) assert.ok(Metrics.insidePolygon(point.x, point.y, garden.points), `seed ${seed}: ${area.name} buiten de tuin`);
+    }
+  }
+});
