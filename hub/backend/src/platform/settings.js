@@ -18,6 +18,17 @@ const { FRONTEND_DIR } = require('../paths');
 const Theme = require(path.join(FRONTEND_DIR, 'shared', 'theme.js'));
 const AiModels = require(path.join(FRONTEND_DIR, 'shared', 'ai-models.js'));
 
+/**
+ * Maakt de instelling voor automatische bestelvoorstellen schoon: alleen `enabled` (ja/nee), al het andere valt weg.
+ * Ontbreekt de waarde of is hij geen ja/nee, dan geldt de standaard (aan).
+ * @param {*} raw De ingevoerde of opgeslagen waarde.
+ * @returns {{ enabled: boolean }} De schone instelling.
+ */
+function sanitizePurchaseProposals(raw) {
+  const enabled = raw && typeof raw === 'object' && typeof raw.enabled === 'boolean' ? raw.enabled : true;
+  return { enabled };
+}
+
 // App-instellingen, te beheren door beheerders via Beheer > Instellingen. Ze
 // staan per tenant in de database (tabel settings) en werken zonder herstart.
 //
@@ -110,6 +121,11 @@ const FIELDS = {
   labelTemplates: { type: 'object', default: {}, sanitize: sanitizeLabelTemplates },
   // Kortingen per productcategorie voor zakelijke klanten (webshop/category-discounts.js); alleen via Beheer > Webshop > Zakelijke kortingen.
   categoryDiscounts: { type: 'object', default: {}, sanitize: sanitizeCategoryDiscounts, internal: true },
+  // Automatische bestelvoorstellen (artikelen/purchase-orders.js, autoPropose): zakt een artikel onder de minimumvoorraad,
+  // dan houdt een uurlijkse taak per voorkeursleverancier een concept-inkooporder bij die de beheerder goedkeurt. Per
+  // omgeving, standaard aan (Beheer > Modules > Artikelen: bestelvoorstellen). Bewust geen liveOnly: de taak maakt alleen
+  // concepten in de eigen omgeving en stuurt niets naar een leverancier of ander extern systeem.
+  purchaseProposals: { type: 'object', default: { enabled: true }, sanitize: sanitizePurchaseProposals },
   // Prijsfactor op de inkoopprijs (Artikelen > Prijsfactor; alleen via /api/stock/price-factors).
   priceFactors: { type: 'object', default: {}, sanitize: sanitizePriceFactors, internal: true },
   // Kleurthema (shared/theme.js): per organisatie te kiezen in Beheer > Kleuren (eigen
@@ -388,4 +404,4 @@ function createSettings({ db, tenantId, env = {}, vault = createVault() }) {
   return { get, rejectedStart, update, view, FIELDS };
 }
 
-module.exports = { createSettings, SettingsError, FIELDS, LIVE_ONLY_KEYS, valueForTest };
+module.exports = { createSettings, SettingsError, FIELDS, LIVE_ONLY_KEYS, valueForTest, sanitizePurchaseProposals };

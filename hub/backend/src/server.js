@@ -10,7 +10,7 @@ const { createPlanAnalyzer, AnalyzeError, PROMPT_VERSION } = require('./beregeni
 const { createRecognitionStore, sanitizeSamples, sanitizeFinalPlan, imageHash } = require('./beregening/recognitions');
 const { openDb, openDatabase, isPg } = require('./database/db');
 const { createStore, withRequestCache, hashPassword, passwordProblem, preferencesOf, fingerprintOf } = require('./platform/store');
-const { withScope, limitTo, bindStream } = require('./database/tenant-scope');
+const { withScope, limitTo, bindStream, asSystem } = require('./database/tenant-scope');
 const testdata = require('./platform/test-data');
 const { createSettings, SettingsError, FIELDS, LIVE_ONLY_KEYS, valueForTest } = require('./platform/settings');
 const { createVault, loadOrCreateMasterKey } = require('./beveiliging/vault');
@@ -2169,7 +2169,22 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const itemImageStore = createItemImageStore(database, { vault, fetchImpl: imageFetch });
   const supplierStore = createSupplierStore(database);
   const packagingStore = createPackagingStore(database);
-  const purchaseOrderStore = createPurchaseOrderStore(database, { stock: stockStore, suppliers: supplierStore });
+  /**
+   * Of de automatische bestelvoorstellen in een omgeving aan staan: de instelling `purchaseProposals.enabled` en de
+   * module Artikelen (voorraad) moeten allebei aan staan. Of de organisatie zelf actief is, controleert de uurlijkse
+   * taak (`purchaseProposalsAll`); een uitgeschakelde organisatie kan niet inloggen.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {boolean} true als er voorstellen gemaakt mogen worden.
+   */
+  const proposalsEnabled = (tenantId) => {
+    try {
+      return settingsFor(tenantId).get('purchaseProposals').enabled !== false && ModuleTools.isOn(moduleFlagsOf(tenantId), 'voorraad');
+    } catch (error) {
+      console.warn(`Instelling bestelvoorstellen niet te lezen: ${error.message}`);
+      return false;
+    }
+  };
+  const purchaseOrderStore = createPurchaseOrderStore(database, { stock: stockStore, suppliers: supplierStore, proposalsEnabled });
   // Prijs en voorraad in twee richtingen met de webshop (shop-sync.js); na een
   // wijziging gaan de gewijzigde artikelen enkele seconden later mee.
   const shopSync = createShopSync({ db: database, shop: shopStore, stock: stockStore, settingsFor: (id) => settingsFor(id), fetchImpl: shopFetch });
@@ -2476,7 +2491,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Verpakkingseenheden per artikel (zie packagings.js).
   registerPackagingRoutes(app, { packagings: packagingStore, requireRight, requireJson, audit });
   registerPurchaseOrderRoutes(app, {
-    purchaseOrders: purchaseOrderStore, requireRight, requireJson, audit,
+    purchaseOrders: purchaseOrderStore, requireRight, requireJson, audit, proposalsEnabled,
     // Een ontvangst kan een backorder leverbaar maken: zulke bestellingen krijgen een markering en staan weer in Te picken.
     afterReceive: (tenantId, itemIds) => { try { webOrders.markBackorderReady(tenantId, itemIds); } catch (error) { console.warn(`Backorders na ontvangst: ${error.message}`); } },
   });
@@ -3174,6 +3189,35 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       .map((environment) => environment.id);
     return seasonReminders.runAll(activeIds, today);
   };
+  // Inkooporders, ook voor de uurlijkse bestelvoorstellen hieronder (tests kunnen autoPropose hier vervangen).
+  app.locals.purchaseOrders = purchaseOrderStore;
+  /**
+   * Automatische bestelvoorstellen (elk uur vanuit main en kort na het opstarten): per actieve omgeving waar de instelling
+   * en de module Artikelen aan staan, werkt `purchaseOrders.autoPropose` de concept-inkooporders met herkomst 'voorstel'
+   * bij. Er wordt nooit besteld: de beheerder keurt een voorstel zelf goed. Een fout in één omgeving stopt de rest niet.
+   * @returns {Promise<object>} Per omgeving met een wijziging (of een fout) de samenvatting van autoPropose.
+   */
+  app.locals.purchaseProposalsAll = () => asSystem(async () => {
+    const purchaseOrders = app.locals.purchaseOrders;
+    if (!purchaseOrders || typeof purchaseOrders.autoPropose !== 'function') return {};
+    // Zelfde lijst als de seizoensherinneringen: een uitgeschakelde organisatie slaat ook haar testomgevingen over.
+    const activeIds = inScopeOnly(store.listTenants()).filter((live) => !live.disabled)
+      .flatMap((live) => [live, ...live.environments.filter((environment) => !environment.disabled)])
+      .map((environment) => environment.id);
+    const summary = {};
+    for (const tenantId of activeIds) {
+      if (!proposalsEnabled(tenantId)) continue;
+      try {
+        const result = (await purchaseOrders.autoPropose(tenantId)) || {};
+        const changes = ['created', 'updated', 'removed'].reduce((sum, key) => sum + (Array.isArray(result[key]) ? result[key].length : Number(result[key]) || 0), 0);
+        if (changes) summary[tenantId] = result;
+      } catch (error) {
+        console.error(`Bestelvoorstellen voor omgeving ${tenantId} mislukt:`, error.message);
+        summary[tenantId] = { error: error.message };
+      }
+    }
+    return summary;
+  });
   /**
    * Automatische back-up als de nieuwste ouder is dan een dag.
    * @returns {Promise<object|null>} De back-up, of null als het niet nodig was.
@@ -3211,6 +3255,14 @@ if (require.main === module) {
     if (!settings.get('accessCode')) console.log(`Installatiecode voor het eerste beheerdersaccount: ${app.locals.setupCode}`);
   }
   /**
+   * Werkt de automatische bestelvoorstellen bij en logt alleen als er iets veranderde (of misging). Niet tijdens een
+   * systeemupdate.
+   * @returns {Promise<void>}
+   */
+  const runPurchaseProposals = () => (app.locals.systemUpdate.maintenance().active ? Promise.resolve() : app.locals.purchaseProposalsAll())
+    .then((changed) => { if (changed && Object.keys(changed).length) console.log(`Bestelvoorstellen bijgewerkt: ${JSON.stringify(changed)}`); })
+    .catch((error) => console.error('Bestelvoorstellen bijwerken mislukt:', error.message));
+  /**
    * Bewaartermijnen toepassen en zo nodig een back-up maken (elk uur).
    * @returns {void}
    */
@@ -3236,6 +3288,8 @@ if (require.main === module) {
     app.locals.seasonRemindersAll()
       .then((sent) => { if (Object.keys(sent).length) console.log(`Seizoensherinneringen: ${JSON.stringify(sent)}`); })
       .catch((error) => console.error('Seizoensherinneringen mislukt:', error.message));
+    // Een halve minuut later, zodat de server bij het opstarten eerst luistert (niet blokkerend).
+    setTimeout(runPurchaseProposals, 30 * 1000).unref();
     app.locals.backupIfDue()
       .then((backup) => { if (backup) console.log(`Versleutelde back-up gemaakt: ${backup.name} (${backup.size} bytes) in ${backupDir}`); })
       .catch((err) => console.error('Back-up mislukt:', err.message))

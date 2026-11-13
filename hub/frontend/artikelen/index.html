@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="../dashboard/dashboard.css">
   <link rel="stylesheet" href="../beheer/beheer.css">
   <link rel="stylesheet" href="../plannen/plannen.css">
+  <link rel="stylesheet" href="../shared/layout.css">
   <link rel="stylesheet" href="artikelen.css">
   <script src="../shared/common.js"></script>
 </head>
@@ -35,11 +36,12 @@
         <p class="muted">Wat er op voorraad ligt, met dezelfde artikelcodes als de stuklijst, de offerte en de werkorder. Een werkorder reserveert zijn materialen zolang hij open staat; bij Gereed (of bij het geregistreerde verbruik) worden ze afgeboekt. Ontvangsten, tellingen en correcties boek je hier.</p>
       </section>
       <div id="v-stats" class="stats"></div>
+      <p id="pp-pending" class="pp-pending" hidden><span id="pp-pending-text"></span> <button class="linkbtn" id="pp-pending-open" type="button">Bekijken</button></p>
       <nav class="tabs" role="tablist">
         <button class="tab active" data-tab="stock" role="tab">Voorraad</button>
         <button class="tab" data-tab="reserved" role="tab">Gereserveerd <span id="t-reserved" class="count"></span></button>
         <button class="tab" data-tab="moves" data-purchasing role="tab">Mutaties</button>
-        <button class="tab" data-tab="reorder" data-purchasing role="tab">Bestelvoorstel</button>
+        <button class="tab" data-tab="reorder" data-purchasing role="tab">Bestelvoorstel <span id="t-reorder" class="count"></span></button>
         <button class="tab" data-tab="suppliers" data-purchasing role="tab">Leveranciers</button>
         <button class="tab" data-tab="orders" data-purchasing role="tab">Inkooporders</button>
         <button class="tab" data-tab="pricefactor" data-purchasing role="tab">Prijsfactor</button>
@@ -319,6 +321,28 @@
       </section>
 
       <section id="tab-reorder" class="tabpane" hidden>
+        <section id="pp-block" class="pp-block" aria-labelledby="pp-title">
+          <div class="pp-head">
+            <div>
+              <h2 id="pp-title">Automatische voorstellen</h2>
+              <p class="muted small">Per voorkeursleverancier een inkooporder met wat onder de minimumvoorraad zit. Goedkeuren bestelt de order; met Aanpassen open je hem in Inkooporders (daarna is het een gewone order). <span id="pp-summary"></span></p>
+            </div>
+            <div class="form-actions">
+              <button class="btn" id="pp-refresh" type="button" title="Bouwt de voorstellen nu opnieuw op uit de voorraad">Nu vernieuwen</button>
+              <button class="btn primary" id="pp-approve-all" type="button" hidden>Alles goedkeuren</button>
+            </div>
+          </div>
+          <p id="pp-off" class="pp-hint" hidden>Automatisch voorstellen staat uit (Beheer &gt; Instellingen). Met Nu vernieuwen maak je de voorstellen toch.</p>
+          <p id="pp-without" class="pp-hint" hidden><span id="pp-without-text"></span> Kies er een bij het artikel (blok Leveranciers).</p>
+          <div id="pp-cards" class="card-grid"></div>
+          <details id="pp-dismissed" class="pp-dismissed" hidden>
+            <summary>Niet bestellen (<span id="pp-dismissed-count"></span>)</summary>
+            <p class="muted small">Deze artikelen komen pas weer in een voorstel als ze tussendoor op of boven het minimum zijn geweest, of na Herstel.</p>
+            <ul id="pp-dismissed-list" class="pp-lines"></ul>
+            <div class="form-actions"><button class="btn small" id="pp-restore-all" type="button">Alles herstellen</button></div>
+          </details>
+        </section>
+        <h2 class="pp-subtitle">Onder de minimumvoorraad</h2>
         <div class="filters">
           <p class="muted" id="rv-note">Artikelen onder de minimumvoorraad, per voorkeursleverancier, aangevuld tot Bestellen tot. Wat al onderweg is (concept, besteld of deels ontvangen) telt mee.</p>
           <span class="spacer"></span>
@@ -517,6 +541,8 @@
   <script src="suppliers.js"></script>
   <script src="packagings.js"></script>
   <script src="orders.js"></script>
+  <script src="proposals-core.js"></script>
+  <script src="proposals.js"></script>
   <script src="price-factor.js"></script>
   <script src="artikelen.js"></script>
 </body>

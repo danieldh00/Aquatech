@@ -1111,6 +1111,17 @@ const PG_MIGRATIONS = [
   ALTER TABLE plan_recognitions ADD COLUMN corpus_height BIGINT NOT NULL DEFAULT 0;
   ALTER TABLE plan_recognitions ADD COLUMN corpus_final TEXT NOT NULL DEFAULT '';
   `,
+  // 71: automatische bestelvoorstellen (zie db.js).
+  `
+  ALTER TABLE purchase_orders ADD COLUMN origin ${TEXT_TYPE} NOT NULL DEFAULT 'handmatig';
+  CREATE UNIQUE INDEX purchase_orders_proposal ON purchase_orders (tenant_id, supplier_id) WHERE status = 'concept' AND origin = 'voorstel';
+  CREATE TABLE purchase_proposal_dismissals (
+    tenant_id    ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    item_id      ${TEXT_TYPE} NOT NULL ${references('stock_items(id)')},
+    dismissed_at ${TEXT_TYPE} NOT NULL,
+    PRIMARY KEY (tenant_id, item_id)
+  );
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

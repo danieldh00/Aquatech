@@ -593,6 +593,7 @@
     accessForm.drawingRequests.checked = view.drawingRequests.value;
     $('#s-debug').debugMode.checked = Boolean(view.debugMode?.value);
     $('#s-ai-connector').aiConnector.checked = Boolean(view.aiConnector?.value);
+    $('#s-purchase-proposals').purchaseProposalsEnabled.checked = view.purchaseProposals?.value?.enabled !== false;
     $('#s-ai-connector-url').textContent = new URL('../mcp', location.href).href;
     showConnectorUrl();
     const shopForm = $('#s-shop');
@@ -1069,6 +1070,13 @@
       saveSettings(debugForm, { debugMode: debugForm.debugMode.checked }, debugForm.debugMode.checked ? 'Debugmodus staat aan' : 'Debugmodus staat uit');
     };
     debugForm.addEventListener('submit', (event) => event.preventDefault());
+    const proposalsForm = $('#s-purchase-proposals');
+    /** Zet de automatische bestelvoorstellen (concept-inkooporders bij te weinig voorraad) aan of uit. */
+    proposalsForm.purchaseProposalsEnabled.onchange = () => {
+      const enabled = proposalsForm.purchaseProposalsEnabled.checked;
+      saveSettings(proposalsForm, { purchaseProposals: { enabled } }, enabled ? 'Automatische bestelvoorstellen staan aan' : 'Automatische bestelvoorstellen staan uit');
+    };
+    proposalsForm.addEventListener('submit', (event) => event.preventDefault());
     const connectorForm = $('#s-ai-connector');
     /** Zet de AI-koppeling (Claude en ChatGPT, concept-offertes) aan of uit. */
     connectorForm.aiConnector.onchange = () => {
