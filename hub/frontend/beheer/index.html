@@ -142,6 +142,10 @@
             <label>Maximaal per dag (hele app) <span class="src" data-origin="aiDailyLimit"></span><input name="aiDailyLimit" type="number" min="0" max="500" step="1" required></label>
             <label>Maximaal per uur per IP-adres <span class="src" data-origin="aiHourlyPerIp"></span><input name="aiHourlyPerIp" type="number" min="1" max="100" step="1" required></label>
           </div>
+          <div class="row">
+            <label class="chk"><input type="checkbox" name="planCorpus"> Tekeningen bewaren om de herkenning te verbeteren <span class="src" data-origin="planCorpus"></span></label>
+          </div>
+          <p class="muted small">Alleen bij een door een medewerker goedgekeurd plan bewaart de app de tekening (versleuteld) en het eindplan. Dat wordt gebruikt om de herkenning zonder AI te meten en te verbeteren. Het verdwijnt als het plan definitief wordt gewist; staat standaard uit.</p>
           <div class="row"><button class="btn primary" type="submit">Opslaan</button></div>
           <div class="err" role="alert"></div>
         </form>

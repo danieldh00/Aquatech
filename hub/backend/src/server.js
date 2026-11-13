@@ -7,7 +7,7 @@ const { createAccountTokens } = require('./platform/account-tokens');
 const { createRateLimiter } = require('./beveiliging/rate-limit');
 const { loadOrCreateSecret } = require('./beveiliging/session-secret');
 const { createPlanAnalyzer, AnalyzeError, PROMPT_VERSION } = require('./beregening/plan-analyzer');
-const { createRecognitionStore, sanitizeSamples, imageHash } = require('./beregening/recognitions');
+const { createRecognitionStore, sanitizeSamples, sanitizeFinalPlan, imageHash } = require('./beregening/recognitions');
 const { openDb, openDatabase, isPg } = require('./database/db');
 const { createStore, withRequestCache, hashPassword, passwordProblem, preferencesOf, fingerprintOf } = require('./platform/store');
 const { withScope, limitTo, bindStream } = require('./database/tenant-scope');
@@ -22,7 +22,7 @@ const { createMailer } = require('./platform/mailer');
 const { createWanIp } = require('./platform/wan-ip');
 const { createAddressLookup, createAddressGuard, registerAddressRoute } = require('./platform/address-lookup');
 const { createWorkOrderStore, registerWorkOrderRoutes } = require('./uitvoering/workorders');
-const { createPhotoStore, createDossierStore, registerPhotoRoutes } = require('./uitvoering/photos');
+const { createPhotoStore, createDossierStore, registerPhotoRoutes, inspectImage, fromBase64 } = require('./uitvoering/photos');
 const { createWorkLogStore, registerWorkLogRoutes } = require('./uitvoering/worklog');
 const { registerCostingRoutes } = require('./uitvoering/costing');
 const { createShopAccounts } = require('./webshop/shop-accounts');
@@ -601,6 +601,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use('/api/plan/analyze', express.json({ limit: '12mb' }));
   // Kleurtellingen van een herkend plan (zie recognitions.js).
   app.use('/api/plan/learn', express.json({ limit: '256kb' }));
+  // Tekening + eindplan voor het meetcorpus (alleen als de organisatie dat aanzet, zie /api/plan/corpus).
+  app.use('/api/plan/corpus', express.json({ limit: '12mb' }));
   // Een plan bevat de achtergrondafbeelding (base64).
   app.use('/api/plans', express.json({ limit: '12mb' }));
   // Een offerte met veel regels en lange teksten past niet in 16 kB.
@@ -2130,6 +2132,28 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.status(400).json({ error: 'invalid_samples', message: 'Ongeldige gegevens.' });
   });
 
+  // Meetcorpus (instelling planCorpus, standaard uit): bij een goedgekeurd plan bewaart de organisatie de tekening (versleuteld)
+  // en het eindplan, zodat de lokale herkenning ermee gemeten en verbeterd kan worden (tools/recog-bench.js, tools/corpus-export.js).
+  const corpusLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, keyFn: (req) => `${req.tenantId || tenant.id}|${clientKey(req)}` });
+  app.post('/api/plan/corpus', requireAppAccess, corpusLimiter, (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const tid = req.tenantId || tenant.id;
+    if (!settingsFor(tid).get('planCorpus')) return res.status(409).json({ error: 'disabled', message: 'Het meetcorpus staat uit (Beheer → Integraties → AI-herkenning).' });
+    const user = identify(req);
+    if (!user) return res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
+    if (!Roles.can(user, 'plannen.goedkeuren')) return res.status(403).json({ error: 'forbidden', message: 'Geen toegang.' });
+    const planId = String((req.body && req.body.planId) || '');
+    if (!planId || store.planReviewStatus(tid, planId) !== 'goedgekeurd') return res.status(404).json({ error: 'not_found', message: 'Geen goedgekeurd plan gevonden.' });
+    const bytes = fromBase64(req.body.image);
+    const image = bytes && bytes.length <= 8 * 1024 * 1024 ? inspectImage(bytes) : null;
+    if (!image || image.width > 8000 || image.height > 8000) return res.status(400).json({ error: 'invalid_image', message: 'Ongeldige afbeelding.' });
+    const finalPlan = sanitizeFinalPlan(req.body.final, image.width, image.height);
+    if (!finalPlan || !finalPlan.areas.length) return res.status(400).json({ error: 'invalid_plan', message: 'Ongeldig plan.' });
+    recognitions.saveCorpus({ tenantId: tid, userId: user.id, planId, sealedImage: vault.sealBytes(image.body, `${tid}:plan-corpus:${planId}`), width: image.width, height: image.height, finalPlan });
+    audit(req, 'plan_corpus_bewaard', { plan: planId }, user.id);
+    res.json({ ok: true });
+  });
+
   // Opslag van offertes, werkorders en webshop (ook gebruikt door de testdata).
   const quoteStore = createQuoteStore(database, { vault });
   const workOrderStore = createWorkOrderStore(database, { vault, staffRoles: (tid) => store.roles.keysWith(tid, 'uitvoerder') });
@@ -2634,7 +2658,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const shopOn = req.tenantId === tenant.id && Boolean(shopSettings.get('storefront'));
     // Uitbesteden werkt tussen organisaties: zonder multitenancy staat de module uit.
     const modules = moduleFlagsOf(req.tenantId);
-    res.json({ modules, ai: Boolean(aiAvailable(req.tenantId)), shop: shopOn ? { ordering: shopSettings.get('shopOrdering') === true } : null });
+    res.json({ modules, ai: Boolean(aiAvailable(req.tenantId)), planCorpus: settingsFor(req.tenantId).get('planCorpus') === true, shop: shopOn ? { ordering: shopSettings.get('shopOrdering') === true } : null });
   });
 
   // ---------- Hoofdbeheer: alle tenants en hun testomgevingen ----------

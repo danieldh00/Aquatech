@@ -134,12 +134,13 @@
   /**
    * Maakt een analyse-afbeelding van een reeds geladen ondergrond.
    * @param {string} dataUrl de ondergrond als data-URL
+   * @param {{png: boolean}} options met `png` een verliesloze PNG in plaats van JPEG (voor het meetcorpus)
    * @returns {Promise<{dataUrl: string, width: number, height: number, factor: number}>} de verkleinde afbeelding en de verkleiningsfactor
    */
-  async function analyzeImageFrom(dataUrl) {
+  async function analyzeImageFrom(dataUrl, { png = false } = {}) {
     const image = await loadImage(dataUrl);
     const analysis = scaled(image, image.naturalWidth, image.naturalHeight, ANALYZE_MAX);
-    return { dataUrl: analysis.toDataURL('image/jpeg', 0.9), width: analysis.width, height: analysis.height, factor: analysis.width / image.naturalWidth };
+    return { dataUrl: png ? analysis.toDataURL('image/png') : analysis.toDataURL('image/jpeg', 0.9), width: analysis.width, height: analysis.height, factor: analysis.width / image.naturalWidth };
   }
 
   window.PlanImport = { load, analyzeImageFrom, loadImage, parseRatio };

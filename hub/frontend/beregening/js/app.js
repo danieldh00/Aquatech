@@ -825,7 +825,7 @@
 
     /**
      * Een goedgekeurd plan is door een mens gecontroleerd: de lokale herkenning leert van de vlakken op de
-     * ondergrond. Alleen kleurtellingen gaan naar de server; zonder ondergrond of vlakken gebeurt niets.
+     * ondergrond. Alleen kleurtellingen gaan naar de server (en, als de organisatie het meetcorpus aanzet, de tekening en het eindplan); zonder ondergrond of vlakken gebeurt niets.
      * @returns {Promise<void>} klaar na leren
      */
     async _learnFromPlan() {
@@ -843,6 +843,14 @@
         const areas = planState.areas.filter((area) => area.pts && area.pts.length >= 3).map((area) => ({ type: area.type, points: area.pts.map(toPixels) }));
         const samples = await window.LocalRecognizer.learn(analyzeImage, { areas });
         if (samples) await window.Concept.teach({ planId: planState.serverId, samples });
+        const config = await window.AquatechCommon.getJson('api/config');
+        if (config && config.planCorpus) {
+          // meetcorpus (alleen als de organisatie dat aanzet): de tekening als PNG en het eindplan in pixels van die tekening
+          const corpusImage = await window.PlanImport.analyzeImageFrom(background.dataUrl, { png: true });
+          const elements = planState.elements.map((element) => ({ kind: element.kind, ...toPixels(element) }));
+          await window.Concept.saveCorpus({ planId: planState.serverId, image: corpusImage.dataUrl,
+            final: { areas, elements, metersPerPixel: background.scale / analyzeImage.factor } });
+        }
       } catch (error) {
         /* leren is een bijzaak */
       }

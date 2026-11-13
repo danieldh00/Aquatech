@@ -34,9 +34,10 @@ const submission = (extra = {}) => ({
 
 /**
  * Hoofdtenant met beheerder, installateur en klant, organisatie Groen met een installateur, plus een testserver.
+ * @param {object} [vault] Eigen kluis voor de app (standaard een nieuwe).
  * @returns {Promise<object>} db, store, main, groen, server en base.
  */
-async function setup() {
+async function setup(vault) {
   const db = openDb();
   const store = createStore(db);
   const main = store.ensureTenant();
@@ -47,7 +48,7 @@ async function setup() {
   await store.createAccount(groen.id, { username: 'gerrit', displayName: 'Gerrit', role: 'installateur', password: PW });
   // Tekening indienen staat standaard uit (T-03); hier aan voor beide organisaties.
   for (const tenantId of [main.id, groen.id]) createSettings({ db, tenantId }).update({ drawingRequests: true });
-  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db, ...(vault ? { vault } : {}) }));
   return { db, store, main, groen, server, base };
 }
 
@@ -227,6 +228,92 @@ test('leren van een goedgekeurd plan: recht plannen.goedkeuren, eigen tenant, al
     const learned = (await kees.get('/app/api/plan/learned')).body;
     assert.deepStrictEqual([learned.examples, learned.bins['10'][1]], [1, 200]);
     assert.strictEqual((await gerrit.get('/app/api/plan/learned')).body.examples, 0, 'andere organisatie leert niet mee');
+  } finally {
+    server.close();
+  }
+});
+
+/**
+ * Een kleine geldige PNG (4 × 4 pixels, wit).
+ * @returns {string} De PNG als data-URL.
+ */
+function tinyPng() {
+  const zlib = require('zlib');
+  /**
+   * Eén PNG-blok met lengte en controlegetal.
+   * @param {string} type De bloknaam.
+   * @param {Buffer} body De inhoud.
+   * @returns {Buffer} Het blok.
+   */
+  const chunk = (type, body) => {
+    const head = Buffer.alloc(4); head.writeUInt32BE(body.length);
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(zlib.crc32(Buffer.concat([Buffer.from(type), body])) >>> 0);
+    return Buffer.concat([head, Buffer.from(type), body, crc]);
+  };
+  const header = Buffer.alloc(13); header.writeUInt32BE(4, 0); header.writeUInt32BE(4, 4); header[8] = 8; header[9] = 2;
+  const rows = Buffer.concat(Array.from({ length: 4 }, () => Buffer.concat([Buffer.from([0]), Buffer.alloc(12, 255)])));
+  const png = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', header), chunk('IDAT', zlib.deflateSync(rows)), chunk('IEND', Buffer.alloc(0))]);
+  return `data:image/png;base64,${png.toString('base64')}`;
+}
+
+test('meetcorpus: standaard uit, alleen goedgekeurd plan door wie mag goedkeuren, eigen omgeving, versleuteld en weg met het plan', async () => {
+  const { createVault } = require('../src/beveiliging/vault');
+  const vault = createVault(Buffer.alloc(32, 3));
+  const { server, base, db, main, groen } = await setup(vault);
+  try {
+    const { sanitizeFinalPlan } = require('../src/beregening/recognitions');
+    const image = tinyPng();
+    const final = { areas: [{ type: 'lawn', points: [{ x: 0, y: 0 }, { x: 4, y: 0 }, { x: 4, y: 4 }] }], elements: [{ kind: 'source', x: 1, y: 1 }], metersPerPixel: 0.05 };
+    const klaas = createClient(base);
+    await klaas.login('klaas', PW);
+    const kees = createClient(base);
+    await kees.login('kees', PW);
+    const baas = createClient(base);
+    await baas.login('baas', PW);
+    const id = (await klaas.post('/app/api/plans', { data: plan('Tuin Klaas') })).body.id;
+    await kees.post(`/app/api/plans/${id}/review`, { action: 'approve' });
+    // staat standaard uit, ook voor de config van de planner
+    assert.strictEqual((await kees.get('/app/api/config')).body.planCorpus, false);
+    assert.strictEqual((await kees.post('/app/api/plan/corpus', { planId: id, image, final })).status, 409);
+    assert.strictEqual((await baas.put('/app/api/admin/settings', { planCorpus: true })).status, 200);
+    assert.strictEqual((await kees.get('/app/api/config')).body.planCorpus, true);
+    // rechten, plan en invoer
+    assert.strictEqual((await klaas.post('/app/api/plan/corpus', { planId: id, image, final })).status, 403, 'klant mag niet');
+    assert.strictEqual((await kees.post('/app/api/plan/corpus', { planId: 'onbekend', image, final })).status, 404);
+    const gerrit = createClient(base);
+    await gerrit.login('gerrit', PW, 'groen');
+    assert.strictEqual((await gerrit.post('/app/api/plan/corpus', { planId: id, image, final })).status, 409, 'andere organisatie heeft het corpus uit');
+    assert.strictEqual((await kees.post('/app/api/plan/corpus', { planId: id, image: 'data:image/png;base64,AAAA', final })).status, 400, 'geen echte afbeelding');
+    assert.strictEqual((await kees.post('/app/api/plan/corpus', { planId: id, image, final: { areas: [{ type: 'lawn', points: [{ x: 'a', y: 0 }, { x: 1, y: 1 }, { x: 2, y: 2 }] }] } })).status, 400);
+    assert.strictEqual((await kees.post('/app/api/plan/corpus', { planId: id, image, final: { areas: [] } })).status, 400);
+    assert.strictEqual(db.prepare(`SELECT COUNT(*) AS n FROM plan_recognitions WHERE tenant_id = ? AND corpus_image <> ''`).get(main.id).n, 0);
+    // bewaren, opnieuw bewaren vervangt
+    assert.strictEqual((await kees.post('/app/api/plan/corpus', { planId: id, image, final })).status, 200);
+    assert.strictEqual((await kees.post('/app/api/plan/corpus', { planId: id, image, final })).status, 200);
+    const row = db.prepare(`SELECT corpus_image, corpus_width, corpus_height, corpus_final FROM plan_recognitions WHERE tenant_id = ? AND plan_id = ?`).all(main.id, id);
+    assert.strictEqual(row.length, 1);
+    assert.ok(row[0].corpus_image.startsWith('f1:'), 'versleuteld opgeslagen');
+    assert.deepStrictEqual([row[0].corpus_width, row[0].corpus_height], [4, 4]);
+    assert.strictEqual(JSON.parse(row[0].corpus_final).metersPerPixel, 0.05);
+    assert.strictEqual(db.prepare(`SELECT COUNT(*) AS n FROM plan_recognitions WHERE tenant_id = ? AND corpus_image <> ''`).get(groen.id).n, 0);
+    // export: ontsleutelt met de hoofdsleutel van de omgeving en schrijft png + json voor de testbank
+    const fs = require('fs'), os = require('os'), path = require('path');
+    const { exportCorpus } = require('../tools/corpus-export');
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'corpus-'));
+    // een andere sleutel kan niets openen
+    assert.deepStrictEqual(exportCorpus({ db, vault: createVault(Buffer.alloc(32, 7)), directory }), { written: 0, skipped: 1 });
+    assert.deepStrictEqual(exportCorpus({ db, vault, directory }), { written: 1, skipped: 0 });
+    const files = fs.readdirSync(directory).sort();
+    assert.deepStrictEqual(files.map((file) => path.extname(file)), ['.json', '.png']);
+    assert.strictEqual(JSON.parse(fs.readFileSync(path.join(directory, files[0]), 'utf8')).areas[0].type, 'lawn');
+    assert.strictEqual(fs.readFileSync(path.join(directory, files[1])).subarray(1, 4).toString(), 'PNG');
+    fs.rmSync(directory, { recursive: true, force: true });
+    // het corpus verdwijnt als het plan definitief wordt gewist (AVG)
+    assert.strictEqual((await baas.del(`/app/api/admin/plans/${id}`)).status, 200);
+    assert.strictEqual(db.prepare(`SELECT COUNT(*) AS n FROM plan_recognitions WHERE tenant_id = ? AND plan_id = ?`).get(main.id, id).n, 0);
+    // opschonen van het eindplan
+    assert.strictEqual(sanitizeFinalPlan({ areas: [{ type: 'lawn', points: [{ x: 1e9, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 2 }] }] }, 100, 100), null);
+    assert.deepStrictEqual(sanitizeFinalPlan({ areas: final.areas, elements: [{ kind: 'boom', x: 1, y: 1 }, { kind: 'valvebox', x: 1.234, y: 2 }] }, 100, 100).elements, [{ kind: 'valvebox', x: 1.23, y: 2 }]);
   } finally {
     server.close();
   }

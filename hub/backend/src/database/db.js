@@ -1340,6 +1340,14 @@ const MIGRATIONS = [
     PRIMARY KEY (tenant_id, order_id)
   );
   `,
+  // 70: meetcorpus voor de planherkenning (beregening/recognitions.js): alleen als de organisatie dat aanzet (instelling planCorpus)
+  // bewaart de regel van een goedgekeurd plan de tekening (versleuteld, vault.sealBytes) en het eindplan, om de lokale herkenning mee te meten.
+  `
+  ALTER TABLE plan_recognitions ADD COLUMN corpus_image TEXT NOT NULL DEFAULT '';
+  ALTER TABLE plan_recognitions ADD COLUMN corpus_width INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE plan_recognitions ADD COLUMN corpus_height INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE plan_recognitions ADD COLUMN corpus_final TEXT NOT NULL DEFAULT '';
+  `,
 ];
 
 /**
