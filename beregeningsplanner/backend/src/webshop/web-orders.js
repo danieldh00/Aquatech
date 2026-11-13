@@ -804,10 +804,10 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
    * @param {string} id Id van de bestelling.
    * @param {{ index: number, qty: number }[]|null} parts De regels en aantallen (in de eenheid van de orderregel); null = alles wat nu leverbaar is. Een minder gepickt aantal laat het verschil op backorder staan.
    * @param {object|null} user Wie verzendt.
-   * @param {{ trackingCode?: string, ignoreStock?: boolean }} [options] De volgcode van DPD (leeg mag) en of meer dan de nu leverbare hoeveelheid mag.
+   * @param {{ trackingCode?: string, ignoreStock?: boolean, expectedShipments?: number }} [options] De volgcode van DPD (leeg mag), of meer dan de nu leverbare hoeveelheid mag en het aantal zendingen dat de aanroeper kent (orderpick: is er intussen verzonden, dan 409 `changed` en gebeurt er niets).
    * @returns {{ order?: object, shipment?: object, complete?: boolean, error?: string, code?: string, status?: number }} De bijgewerkte bestelling, de zending en of alles geleverd is, of een foutmelding.
    */
-  function ship(tenantId, id, parts, user, { trackingCode = '', ignoreStock = false } = {}) {
+  function ship(tenantId, id, parts, user, { trackingCode = '', ignoreStock = false, expectedShipments = null } = {}) {
     const tracking = String(trackingCode || '').trim() ? Shipping.trackingOf(trackingCode) : null;
     if (String(trackingCode || '').trim() && !tracking) return { error: 'Ongeldige volgcode (6 tot 40 letters, cijfers of streepjes).', status: 400 };
     const out = transaction(db, () => {
@@ -816,6 +816,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
       if (row.status !== 'nieuw') return { error: `Een bestelling met status ${STATUSES[row.status]} kan niet meer verzonden worden.`, status: 409 };
       const data = JSON.parse(row.data);
       if (data.payment === 'online' && !(data.pay && data.pay.status === 'betaald')) return { error: 'Deze bestelling is nog niet betaald: verzenden kan pas na de betaling.', status: 409 };
+      if (expectedShipments !== null && (Array.isArray(data.shipments) ? data.shipments.length : 0) !== expectedShipments) return { error: 'Deze bestelling is intussen al (deels) verzonden of aangepast. Ververs de bestelling.', code: 'changed', status: 409 };
       // Rijsloten op id: tot het einde van de transactie kan niemand deze voorraad reserveren of afboeken.
       lockItemIds(tenantId, data.lines);
       const order = shapeFull(row);
@@ -836,6 +837,11 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
       const shipment = { id: crypto.randomUUID(), at: timestamp, by, lines: checked.wanted, ...(tracking && data.shipping && data.shipping.method === 'dpd' ? { tracking: tracking.code } : {}) };
       data.shipments = [...(Array.isArray(data.shipments) ? data.shipments : []), shipment];
       if (tracking && data.shipping && data.shipping.method === 'dpd') data.shipping.tracking = tracking;
+      if (complete && !tracking && data.shipping && data.shipping.method === 'dpd' && !data.shipping.tracking) {
+        // De laatste zending sluit de bestelling af: een volgcode van een eerder gemaakt label (orderpick) gaat dan bij de bestelling, voor de verzendmail.
+        const labelled = data.shipments.map((entry) => (entry.label ? Shipping.trackingOf(entry.label.trackingCode) : null)).find(Boolean);
+        if (labelled) data.shipping.tracking = labelled;
+      }
       delete data.backorderReadyAt;
       if (complete) delete data.backorderSince; else data.backorderSince = data.backorderSince || timestamp;
       data.history.push({ at: timestamp, status: complete ? 'verzonden' : 'nieuw', by, ...(complete ? {} : { note: 'Deellevering verzonden; de rest staat op backorder' }) });
@@ -849,6 +855,29 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
       try { Promise.resolve(out.complete ? hook(tenantId, order, user) : hook(tenantId, order, out.shipment, user)).catch((error) => console.warn(`Na verzenden: ${error.message}`)); } catch (error) { console.warn(`Na verzenden: ${error.message}`); }
     }
     return { order, shipment: out.shipment, complete: out.complete };
+  }
+
+  /**
+   * Legt vast dat voor een zending een verzendlabel is gemaakt (`shipment.label` {at, trackingCode}), zodat er nooit een tweede label
+   * voor dezelfde zending wordt gemaakt. Een tweede aanroep voor dezelfde zending verandert niets.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} id Id van de bestelling.
+   * @param {string} shipmentId Id van de zending.
+   * @param {string} trackingCode De volgcode van het label (mag leeg).
+   * @returns {{ recorded?: boolean, existing?: { at: string, trackingCode: string }, error?: string, status?: number }} `recorded` bij het eerste label, `existing` als er al een was.
+   */
+  function recordShipmentLabel(tenantId, id, shipmentId, trackingCode) {
+    return transaction(db, () => {
+      const row = readForUpdate(tenantId, id, 'status, data');
+      if (!row) return { error: 'Bestelling niet gevonden.', status: 404 };
+      const data = JSON.parse(row.data);
+      const shipment = (data.shipments || []).find((entry) => entry.id === shipmentId);
+      if (!shipment) return { error: 'Zending niet gevonden.', status: 404 };
+      if (shipment.label) return { existing: shipment.label };
+      shipment.label = { at: currentTimestamp(), trackingCode: String(trackingCode || '') };
+      prepare('UPDATE web_orders SET data = ? WHERE tenant_id = ? AND id = ?').run(JSON.stringify(data), tenantId, id);
+      return { recorded: true };
+    });
   }
 
   /**
@@ -1024,10 +1053,11 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van de bestelling.
    * @param {string} trackingCode De volgcode van DPD.
+   * @param {{ onlyIfEmpty?: boolean }} [options] onlyIfEmpty: een bestaande volgcode blijft staan (gecontroleerd binnen de transactie).
    * @returns {{ order?: object, error?: string, status?: number }} De bijgewerkte bestelling of een foutmelding.
    */
-  function setTracking(tenantId, id, trackingCode) {
-    const out = changeTracking(tenantId, id, trackingCode);
+  function setTracking(tenantId, id, trackingCode, options = {}) {
+    const out = changeTracking(tenantId, id, trackingCode, options);
     if (out.order && out.changed && out.order.shipping && out.order.shipping.tracking) {
       for (const hook of trackingHooks) {
         try { Promise.resolve(hook(tenantId, out.order)).catch((error) => console.warn(`Na volgcode: ${error.message}`)); } catch (error) { console.warn(`Na volgcode: ${error.message}`); }
@@ -1041,9 +1071,10 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van de bestelling.
    * @param {string} trackingCode De volgcode van DPD (leeg wist hem).
+   * @param {{ onlyIfEmpty?: boolean }} [options] onlyIfEmpty: een bestaande volgcode blijft staan.
    * @returns {{ order?: object, changed?: boolean, error?: string, status?: number }} De bijgewerkte bestelling en of de volgcode veranderde, of een foutmelding.
    */
-  function changeTracking(tenantId, id, trackingCode) {
+  function changeTracking(tenantId, id, trackingCode, { onlyIfEmpty = false } = {}) {
     const wanted = String(trackingCode || '').trim();
     const tracking = wanted ? Shipping.trackingOf(wanted) : null;
     if (wanted && !tracking) return { error: 'Ongeldige volgcode (6 tot 40 letters, cijfers of streepjes).', status: 400 };
@@ -1053,6 +1084,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
       const data = JSON.parse(row.data);
       if (!data.shipping || data.shipping.method !== 'dpd') return { error: 'Alleen bij bezorging door DPD hoort een volgcode.', status: 409 };
       if (!['verzonden', 'afgerond'].includes(row.status)) return { error: 'Een volgcode kan pas als de bestelling is verzonden.', status: 409 };
+      if (onlyIfEmpty && data.shipping.tracking) return { order: get(tenantId, row.id), changed: false };
       const changed = (data.shipping.tracking ? data.shipping.tracking.code : '') !== (tracking ? tracking.code : '');
       data.shipping.tracking = tracking;
       prepare('UPDATE web_orders SET data = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(JSON.stringify(data), currentTimestamp(), tenantId, row.id);
@@ -1169,7 +1201,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
     return { released };
   }
 
-  return { priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, releaseExpired, listToPick, getMany, pickable, markPackingSlipsPrinted, setDropshippingSlip, onShipped, onCancelled, onTracking, withFulfilment, getDetailed, ship, setAllowPartial, listBackorders, markBackorderReady, onPartialShipped };
+  return { priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, releaseExpired, listToPick, getMany, pickable, markPackingSlipsPrinted, setDropshippingSlip, onShipped, onCancelled, onTracking, withFulfilment, getDetailed, ship, recordShipmentLabel, setAllowPartial, listBackorders, markBackorderReady, onPartialShipped };
 }
 
 /**

@@ -35,10 +35,10 @@ async function until(check) {
 
 /**
  * Hoofdtenant met beheerder, een artikel, een tweede organisatie en twee klanten; mails worden onderschept.
- * @param {{ mollie?: boolean, addressFetch?: Function }} [options] mollie: zet online betalen aan met een nagebootste Mollie (testsleutel en webadres https://winkel.example/); addressFetch: nagebootste PDOK voor het opzoeken van adressen (standaard de vaste testadressen uit pdok-fake.js).
+ * @param {{ mollie?: boolean, addressFetch?: Function, appOptions?: object }} [options] appOptions: extra opties voor createApp (bijvoorbeeld shippingLabelProviders); mollie: zet online betalen aan met een nagebootste Mollie (testsleutel en webadres https://winkel.example/); addressFetch: nagebootste PDOK voor het opzoeken van adressen (standaard de vaste testadressen uit pdok-fake.js).
  * @returns {Promise<object>} base, admin, vreemd, sent (verstuurde mails), mailFailing (zet .on aan om mails te laten mislukken), shoppers (twee klanten), app, db en bij mollie de nagebootste Mollie.
  */
-async function setup({ mollie = false, addressFetch = createPdokFake().fetchImpl } = {}) {
+async function setup({ mollie = false, addressFetch = createPdokFake().fetchImpl, appOptions = {} } = {}) {
   const db = openDb();
   const store = createStore(db);
   const main = store.ensureTenant().id;
@@ -53,7 +53,7 @@ async function setup({ mollie = false, addressFetch = createPdokFake().fetchImpl
    */
   const mailerFor = () => ({ configured: () => true, send: async (message) => { if (mailFailing.on) throw Object.assign(new Error('Mailserver onbereikbaar'), { code: 'ECONNECTION' }); sent.push(message); } });
   const mollieFake = mollie ? createMollieFake() : null;
-  const app = createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db, mailerFor, ...(mollieFake ? { mollieFetch: mollieFake.fetchImpl } : {}), addressFetch });
+  const app = createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db, mailerFor, ...(mollieFake ? { mollieFetch: mollieFake.fetchImpl } : {}), addressFetch, ...appOptions });
   const { server, base } = await listen(app);
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');

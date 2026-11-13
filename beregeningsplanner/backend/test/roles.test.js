@@ -122,7 +122,7 @@ test('Beheer > Rollen: rechten aan/uit, eigen rol, beheerder vast, verwijderen a
     assert.strictEqual((await ina.get('/app/api/admin/roles')).status, 403);
     const list = (await baas.get('/app/api/admin/roles')).body;
     assert.strictEqual(list.editable, true);
-    assert.deepStrictEqual(list.items.map((role) => role.key), ['beheerder', 'installateur', 'planner', 'klant']);
+    assert.deepStrictEqual(list.items.map((role) => role.key), ['beheerder', 'installateur', 'planner', 'picker', 'klant']);
     assert.strictEqual(list.items.find((role) => role.key === 'installateur').userCount, 2);
 
     // Installateur zonder offertes: geldt meteen; afhankelijke rechten gaan mee.
