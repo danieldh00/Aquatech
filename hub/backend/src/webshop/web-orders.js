@@ -1300,4 +1300,4 @@ function registerWebOrderRoutes(app, { orders, requireJson, audit, invoices = nu
   });
 }
 
-module.exports = { createWebOrderStore, registerWebOrderRoutes, sanitizeCheckout, deliverySameOf, totalsOf, STATUSES, TRANSITIONS, MAX_QTY, MAX_LINES, stockQtyOf, splitCartCode };
+module.exports = { createWebOrderStore, registerWebOrderRoutes, sanitizeCheckout, deliverySameOf, totalsOf, STATUSES, TRANSITIONS, MAX_QTY, MAX_LINES, stockQtyOf, stockLinesOf, splitCartCode };

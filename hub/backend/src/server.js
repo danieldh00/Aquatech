@@ -36,7 +36,8 @@ const { createShopStore, registerShopRoutes, loadArticles } = require('./webshop
 const { createShopSync } = require('./webshop/shop-sync');
 const { createShopContentStore, registerShopContentRoutes } = require('./webshop/shop-content');
 const { createStorefrontData } = require('./webshop/storefront-data');
-const { createWebOrderStore, registerWebOrderRoutes } = require('./webshop/web-orders');
+const webOrdersModule = require('./webshop/web-orders');
+const { createWebOrderStore, registerWebOrderRoutes } = webOrdersModule;
 const { createPackingSlips, registerPackingSlipRoutes } = require('./webshop/packing-slips');
 const { createOrderpick, registerOrderpickRoutes } = require('./webshop/orderpick');
 const { createShippingLabels } = require('./webshop/shipping-labels');
@@ -1823,7 +1824,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   }));
 
   // Terugzetten uit een back-up (volledig of per record/veld): platform/backup-restore.js.
-  registerBackupRestoreRoutes(app, { backupDir, vault, database, store, audit, runBackup, requireJson, loginGuard, twoFactor });
+  registerBackupRestoreRoutes(app, { backupDir, vault, database, store, audit, runBackup, requireJson, loginGuard, twoFactor, lineDeps: () => ({ QuoteCore: require(path.join(FRONTEND_DIR, 'offertes', 'quote-core.js')), totalsOf: webOrdersModule.totalsOf, stockLinesOf: webOrdersModule.stockLinesOf, stock: stockStore }) });
 
   app.get('/api/admin/backups/:name', (req, res) => {
     const name = req.params.name;

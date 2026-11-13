@@ -213,7 +213,7 @@ function comparableColumns(entity, current, backup, table) {
  * @returns {{ items: object[], hasMore: boolean }} Records (id, label, state, datum) van deze pagina.
  */
 function listRecords({ backup, current, context, kind, query = '', offset = 0 }) {
-  const entity = ENTITIES[kind];
+  const entity = Object.hasOwn(ENTITIES, kind) ? ENTITIES[kind] : undefined;
   if (!entity) throw Object.assign(new Error('Onbekende soort record.'), { status: 400 });
   const filter = filterOf(entity, query, context);
   const rows = backup.prepare(`${selectOf(backup, entity.table)} WHERE tenant_id = ?${filter.clause} ORDER BY created_at DESC, id LIMIT ${MAX_LIST + 1} OFFSET ${Math.max(0, Math.floor(Number(offset)) || 0)}`)
@@ -289,7 +289,7 @@ function missingParent(current, table, row, tenantId, seen = new Map()) {
  * @returns {object} state (ontbreekt|gewijzigd|gelijk|niet_in_back-up), label, diffs, blocked (reden, of leeg), children (aantal rijen dat mee terugkomt) en fields (de te kiezen velden).
  */
 function preview({ backup, current, context, kind, id }) {
-  const entity = ENTITIES[kind];
+  const entity = Object.hasOwn(ENTITIES, kind) ? ENTITIES[kind] : undefined;
   if (!entity) throw Object.assign(new Error('Onbekende soort record.'), { status: 400 });
   const filter = filterOf(entity, '', context);
   const before = backup.prepare(`${selectOf(backup, entity.table)} WHERE tenant_id = ? AND id = ?${filter.clause}`).get(context.tenantId, String(id), ...filter.args);
@@ -430,7 +430,7 @@ function updateFields(current, entity, backupRow, currentRow, fields, tenantId, 
  * @returns {{ results: { id: string, label: string, status: string, message: string, children: number }[] }} Per record: hersteld, bijgewerkt, overgeslagen of geblokkeerd.
  */
 function applyRestore({ backup, current, context, kind, items }) {
-  const entity = ENTITIES[kind];
+  const entity = Object.hasOwn(ENTITIES, kind) ? ENTITIES[kind] : undefined;
   if (!entity) throw Object.assign(new Error('Onbekende soort record.'), { status: 400 });
   const list = (Array.isArray(items) ? items : []).slice(0, MAX_IDS);
   if (!list.length) throw Object.assign(new Error('Kies minstens één record.'), { status: 400 });
