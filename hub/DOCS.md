@@ -976,6 +976,8 @@ node tools/corpus-export.js /tmp/corpus [organisatiecode]   # schrijft naam.png 
 node tools/recog-bench.js /tmp/corpus                       # afwijking van de lokale herkenning per tekening
 ```
 
+Zonder echte tekeningen: `node tools/plan-generator.js /tmp/verzonnen 10` tekent verzonnen tuinplannen (digitaal en scan, met de bekende waarheid in `naam.json`; gebruikt Playwright/Chromium) die dezelfde bank kan meten. De bank toont per tekening het gazon-overlap, het aandeel juist benoemde oppervlak en de *functie*-score (gazon = sproeiers, beplanting = druppel, verharding en water = geen beregening), want bed en haag door elkaar halen verandert het ontwerp niet.
+
 ## AI-koppeling (Claude en ChatGPT)
 
 Met de AI-koppeling maakt een medewerker vanuit Claude of ChatGPT (ook de app op de telefoon) een

@@ -5,8 +5,10 @@
 
 /** Vlaksoorten, in dezelfde volgorde als de AI-uitvoer (plan-analyzer.js). */
 const AREA_TYPES = ['lawn', 'bed', 'hedge', 'planter', 'wet', 'dry'];
-/** Bij overlap wint het vlak dat later in deze lijst staat (terras en water liggen "boven" het gazon). */
+/** Bij overlap wint het vlak dat later in deze lijst staat (terras en water liggen "boven" het gazon). Een vlak met een eigen `layer` (getal) gaat daarvoor: een hogere laag ligt boven een lagere. Meng binnen één lijst geen vlakken met en zonder `layer`: de volgorde tussen die twee is dan niet zinvol. */
 const DRAW_ORDER = ['lawn', 'bed', 'hedge', 'planter', 'wet', 'dry'];
+/** Wat de beregening ermee doet: gazon = sproeiers, beplanting = druppel, verharding en water = geen beregening. Bed en haag verwarren maakt voor het ontwerp geen verschil. */
+const FUNCTION_OF = { lawn: 'sprinkler', bed: 'drip', hedge: 'drip', planter: 'drip', wet: 'none', dry: 'none' };
 /** Aantal cellen langs de lange zijde van het raster. */
 const GRID_CELLS = 160;
 
@@ -28,6 +30,15 @@ function insidePolygon(pointX, pointY, points) {
 }
 
 /**
+ * Hoogte van een vlak in de tekenvolgorde: de eigen `layer` als die er is, anders de plek van de soort in DRAW_ORDER.
+ * @param {{type: string, layer?: number}} area Het vlak.
+ * @returns {number} De laag (hoger ligt boven lager).
+ */
+function layerOf(area) {
+  return typeof area.layer === 'number' ? area.layer : DRAW_ORDER.indexOf(area.type);
+}
+
+/**
  * Zet vlakken om naar een raster met per cel de vlaksoort (0 = niets).
  * @param {Array<{type: string, points: Array<{x: number, y: number}>}>} areas De vlakken.
  * @param {number} width Breedte van de tekening in pixels.
@@ -41,7 +52,7 @@ function rasterize(areas, width, height) {
   const cells = new Uint8Array(columns * rows);
   const ordered = (areas || [])
     .filter((area) => AREA_TYPES.includes(area.type) && Array.isArray(area.points) && area.points.length >= 3)
-    .sort((left, right) => DRAW_ORDER.indexOf(left.type) - DRAW_ORDER.indexOf(right.type));
+    .sort((left, right) => layerOf(left) - layerOf(right));
   for (const area of ordered) {
     const code = AREA_TYPES.indexOf(area.type) + 1;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -79,9 +90,9 @@ function countCells(cells, type) {
  * @param {object[]} found De door de lokale herkenning gevonden vlakken.
  * @param {number} width Breedte van de tekening in pixels.
  * @param {number} height Hoogte van de tekening in pixels.
- * @returns {{ iou: object, lawnIou: number|null, accuracy: number|null, lawnRatio: number|null, missing: string[], extra: string[], counts: object }}
+ * @returns {{ iou: object, lawnIou: number|null, accuracy: number|null, functionalAccuracy: number|null, lawnRatio: number|null, missing: string[], extra: string[], counts: object }}
  *   iou per soort (null als noch referentie noch uitkomst de soort heeft), lawnIou = overlap van het gazon,
- *   accuracy = aandeel cellen binnen de referentie met dezelfde soort, lawnRatio = gazonoppervlak gevonden / referentie,
+ *   accuracy = aandeel cellen binnen de referentie met dezelfde soort, functionalAccuracy = idem als bed/haag/plantenbak als één soort tellen (zo wordt het ontwerp beregend), lawnRatio = gazonoppervlak gevonden / referentie,
  *   missing = soorten die wel in de referentie staan maar niet gevonden zijn, extra = andersom, counts = aantal vlakken per soort.
  */
 function compareAreas(reference, found, width, height) {
@@ -110,6 +121,10 @@ function compareAreas(reference, found, width, height) {
     covered++;
     if (expected[index] === actual[index]) correct++;
   }
+  let functionalCorrect = 0;
+  for (let index = 0; index < expected.length; index++) {
+    if (expected[index] && FUNCTION_OF[AREA_TYPES[expected[index] - 1]] === (actual[index] ? FUNCTION_OF[AREA_TYPES[actual[index] - 1]] : '')) functionalCorrect++;
+  }
   const expectedLawn = countCells(expected, 'lawn');
   const counts = {};
   for (const type of AREA_TYPES) {
@@ -119,6 +134,7 @@ function compareAreas(reference, found, width, height) {
     iou,
     lawnIou: iou.lawn,
     accuracy: covered ? correct / covered : null,
+    functionalAccuracy: covered ? functionalCorrect / covered : null,
     lawnRatio: expectedLawn ? countCells(actual, 'lawn') / expectedLawn : null,
     missing,
     extra,
@@ -159,8 +175,8 @@ function elementDistances(reference, found, width, height) {
 
 /**
  * Vat de uitkomsten van meerdere tekeningen samen.
- * @param {Array<{ lawnIou: number|null, accuracy: number|null }>} results Uitkomsten van compareAreas.
- * @returns {{ drawings: number, meanLawnIou: number|null, meanAccuracy: number|null, lawnFound: number }}
+ * @param {Array<{ lawnIou: number|null, accuracy: number|null, functionalAccuracy?: number|null }>} results Uitkomsten van compareAreas.
+ * @returns {{ drawings: number, meanLawnIou: number|null, meanAccuracy: number|null, meanFunctionalAccuracy: number|null, lawnFound: number }}
  *   Gemiddelden (alleen over tekeningen waar de waarde bestaat) en het aantal tekeningen waarin het gazon is gevonden (overlap > 0,5).
  */
 function summarize(results) {
@@ -177,8 +193,9 @@ function summarize(results) {
     drawings: results.length,
     meanLawnIou: mean(results.map((result) => result.lawnIou)),
     meanAccuracy: mean(results.map((result) => result.accuracy)),
+    meanFunctionalAccuracy: mean(results.map((result) => result.functionalAccuracy)),
     lawnFound: results.filter((result) => result.lawnIou !== null && result.lawnIou > 0.5).length,
   };
 }
 
-module.exports = { AREA_TYPES, rasterize, compareAreas, scaleError, elementDistances, summarize };
+module.exports = { AREA_TYPES, insidePolygon, rasterize, compareAreas, scaleError, elementDistances, summarize };

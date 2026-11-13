@@ -94,13 +94,13 @@ const percent = (value) => (typeof value === 'number' ? `${Math.round(value * 10
  * @param {{ rows: object[], summary: object }} result De uitkomst van runBench.
  */
 function printReport(result) {
-  console.log('tekening'.padEnd(34), 'gazon-IoU'.padStart(10), 'juist'.padStart(7), 'gazon x'.padStart(8), 'ms'.padStart(6), 'mist / extra');
+  console.log('tekening'.padEnd(34), 'gazon-IoU'.padStart(10), 'juist'.padStart(7), 'functie'.padStart(8), 'gazon x'.padStart(8), 'ms'.padStart(6), 'mist / extra');
   for (const row of result.rows) {
     const ratio = typeof row.lawnRatio === 'number' ? row.lawnRatio.toFixed(2) : '-';
-    console.log(row.name.padEnd(34), percent(row.lawnIou).padStart(10), percent(row.accuracy).padStart(7), ratio.padStart(8), String(row.ms).padStart(6), `${row.missing.join(',') || '-'} / ${row.extra.join(',') || '-'}`);
+    console.log(row.name.padEnd(34), percent(row.lawnIou).padStart(10), percent(row.accuracy).padStart(7), percent(row.functionalAccuracy).padStart(8), ratio.padStart(8), String(row.ms).padStart(6), `${row.missing.join(',') || '-'} / ${row.extra.join(',') || '-'}`);
   }
   const { summary } = result;
-  console.log(`\n${summary.drawings} tekening(en): gemiddeld gazon-overlap ${percent(summary.meanLawnIou)}, juist ${percent(summary.meanAccuracy)}, gazon goed gevonden in ${summary.lawnFound}/${summary.drawings}`);
+  console.log(`\n${summary.drawings} tekening(en): gemiddeld gazon-overlap ${percent(summary.meanLawnIou)}, juist ${percent(summary.meanAccuracy)}, functie ${percent(summary.meanFunctionalAccuracy)}, gazon goed gevonden in ${summary.lawnFound}/${summary.drawings}`);
 }
 
 if (require.main === module) {
