@@ -115,8 +115,25 @@ async function start() {
   const client = (headers) => {
     const http = createClient(base);
     return {
+      /**
+       * GET met de koppen van deze gebruiker.
+       * @param {string} urlPath Het adres.
+       * @returns {Promise<object>} Het antwoord.
+       */
       get: (urlPath) => http.get(urlPath, headers),
+      /**
+       * PUT met de koppen van deze gebruiker.
+       * @param {string} urlPath Het adres.
+       * @param {object} body De inhoud.
+       * @returns {Promise<object>} Het antwoord.
+       */
       put: (urlPath, body) => http.request('PUT', urlPath, body, headers),
+      /**
+       * POST met de koppen van deze gebruiker.
+       * @param {string} urlPath Het adres.
+       * @param {object} body De inhoud.
+       * @returns {Promise<object>} Het antwoord.
+       */
       post: (urlPath, body) => http.post(urlPath, body, headers),
     };
   };
@@ -284,13 +301,13 @@ test('nu controleren: alleen de eigen omgeving (platform alleen met canPlatform)
     const first = await admin.post('/api/admin/monitoring/run');
     assert.strictEqual(first.status, 200);
     assert.strictEqual(first.body.ran, 3);
-    assert.deepStrictEqual(world.monitor.calls.find((call) => call[0] === 'runAll')[1], { force: true, tenantId: OTHER, platform: false });
+    assert.deepStrictEqual(world.monitor.calls.find((call) => call[0] === 'runAll')[1], { force: true, tenantId: OTHER, includePlatform: false });
     for (let i = 0; i < 5; i += 1) assert.strictEqual((await admin.post('/api/admin/monitoring/run')).status, 200);
     assert.strictEqual((await admin.post('/api/admin/monitoring/run')).status, 429);
     // De limiet geldt per gebruiker.
     const platform = await world.client(platformAdmin).post('/api/admin/monitoring/run');
     assert.strictEqual(platform.status, 200);
-    assert.deepStrictEqual(world.monitor.calls.filter((call) => call[0] === 'runAll').at(-1)[1], { force: true, tenantId: MAIN, platform: true });
+    assert.deepStrictEqual(world.monitor.calls.filter((call) => call[0] === 'runAll').at(-1)[1], { force: true, tenantId: MAIN, includePlatform: true });
   } finally {
     world.server.close();
   }

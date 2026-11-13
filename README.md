@@ -47,6 +47,11 @@ webserver in Docker (poort 3300) met PostgreSQL (een eigen container naast de ap
   (bekijken kan, opslaan niet); start de nieuwe versie niet goed, dan gaat de server terug naar de vorige. De app
   rolt zelf niets uit: het updatescript op de server pakt de aanvraag op (zie `deploy/apps01/README.md`, eenmalig
   inrichten met `setup-app-update.sh`).
+- **Bewaking en meldingen** (Beheer > Systeem > Bewaking): de app controleert zelf elke 5 minuten of de database, de schijf, de
+  lokale back-up, de update, de serverfouten, Google Drive, de mailserver, Mollie, Visma, de webshopsynchronisatie en de
+  AI-dienst werken. Bij een storing komt er een incident in Beheer en een melding per e-mail en/of webhook; bij herstel volgt
+  een herstelmelding en een herinnering zolang het open blijft. Een extern *heartbeat*-adres (bijvoorbeeld healthchecks.io)
+  vangt het geval dat de app of de server zelf uitvalt. Alles is instelbaar in de app (ontvangers, drempels, dempen per controle).
 - **Beveiliging**: sessies alleen als hash, wachtwoorden met scrypt, tweestapsverificatie (TOTP), versleutelde
   back-ups (dagelijks, ook vóór elke update, optioneel automatisch naar Google Drive vanuit Beheer; losse records, velden of orderregels terugzetten uit een back-up in Beheer), auditlog. Zie *Beveiliging en privacy* in `hub/DOCS.md`.
 

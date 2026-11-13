@@ -118,13 +118,13 @@ function createIncidentStore({ db }) {
    * @returns {object[]} De rijen.
    */
   function list(tenantId, { state = '', scope = '', limit = 50, before = '' } = {}) {
-    const filters = ['tenant_id = ?'];
+    const filters = [];
     const params = [tenantId];
     if (state === 'open' || state === 'opgelost') { filters.push('state = ?'); params.push(state); }
     if (scope === 'platform' || scope === 'tenant') { filters.push('scope = ?'); params.push(scope); }
     if (typeof before === 'string' && before) { filters.push('last_at < ?'); params.push(before.slice(0, 40)); }
     const count = Math.min(MAX_LIST, Math.max(1, Math.floor(Number(limit)) || 50));
-    return prepare(`SELECT ${INCIDENT_COLUMNS} FROM monitor_incidents WHERE ${filters.join(' AND ')} ORDER BY last_at DESC, id DESC LIMIT ${count}`).all(...params);
+    return prepare(`SELECT ${INCIDENT_COLUMNS} FROM monitor_incidents WHERE tenant_id = ?${filters.map((filter) => ` AND ${filter}`).join('')} ORDER BY last_at DESC, id DESC LIMIT ${count}`).all(...params);
   }
 
   /**

@@ -75,9 +75,12 @@ const { createNewsStore, registerNewsRoutes, unreadCount } = require('./platform
 const { createSprinklerStore, registerSprinklerRoutes } = require('./beregening/sprinklers');
 const { registerDrawingRoutes, RETENTION_DAYS: DRAWING_RETENTION_DAYS } = require('./beregening/drawings');
 const { createAiUsageStore } = require('./platform/ai-usage');
-const { createErrorReport, catchAsync, withCause } = require('./platform/error-report');
+const { createErrorReport, catchAsync, withCause, errorCounter } = require('./platform/error-report');
 const { createSystemUpdate } = require('./platform/system-update');
 const { registerBackupRestoreRoutes } = require('./platform/backup-restore-routes');
+const { createMonitor } = require('./platform/monitoring');
+const { registerMonitoringRoutes } = require('./platform/monitoring-routes');
+const { createMonitoringChecks } = require('./platform/monitoring-checks');
 const { registerSystemUpdateRoutes, maintenanceGuard } = require('./platform/system-update-routes');
 const { createIdempotency, ifBaseOf } = require('./beveiliging/idempotency');
 const { createOAuthGrants } = require('./mcp/oauth-grants');
@@ -1683,6 +1686,24 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.locals.systemUpdate = systemUpdate;
   app.locals.recordSystemUpdate = registerSystemUpdateRoutes(app, { systemUpdate, store, audit, mainTenantId: tenant.id, canUpdate }).recordFinished;
 
+  // ---------- Beheer: bewaking en meldingen (platform/monitoring.js) ----------
+  // Controles en incidenten; de controles zelf worden onderaan geregistreerd (ze hebben stores nodig die hier nog niet bestaan).
+  const monitor = createMonitor({
+    db: database, settingsFor: (id) => settingsFor(id), mainTenantId: tenant.id, mailerFor,
+    listTenantIds: () => allEnvironmentIds(),
+    /**
+     * Link naar Beheer > Bewaking voor in een melding.
+     * @param {string} tenantId De omgeving.
+     * @returns {string} De link, of '' zonder ingesteld webadres.
+     */
+    publicUrl: (tenantId) => {
+      const base = String((settingsFor(tenantId).get('shopPayment') || {}).publicUrl || '').replace(/\/+$/, '');
+      return base ? `${base}/app/beheer/#bewaking` : '';
+    },
+  });
+  app.locals.monitor = monitor;
+  registerMonitoringRoutes(app, { monitor, settingsFor: (id) => settingsFor(id), audit, requireJson, canPlatform: canUpdate, mainTenantId: tenant.id, mailerFor });
+
   // ---------- Beheer: back-ups ----------
   // Alleen versleutelde bestanden; downloaden is dus veilig voor een kopie
   // elders (zonder de hoofdsleutel onleesbaar). Een back-up bevat de hele
@@ -3233,6 +3254,21 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    * @returns {Promise<object>} Zie driveBackup.sync.
    */
   app.locals.driveBackupSync = () => driveBackup.sync({ source: 'automatisch' });
+  // De controles van de bewaking; elke ontbrekende afhankelijkheid slaat zijn controle over.
+  createMonitoringChecks({
+    db: database, settingsFor: (id) => settingsFor(id), dataDir: env.DATA_DIR || (backupDir ? path.dirname(backupDir) : ''), backupDir,
+    listBackups: backups.listBackups, systemUpdate, driveBackup, errorCounter, mailerFor,
+    mollie: createMollie(mollieFetch ? { fetchImpl: mollieFetch } : {}), visma, shop: shopStore,
+  }).forEach((check) => monitor.register(check));
+  /**
+   * Voert de controles van de bewaking uit die aan de beurt zijn (elke 5 minuten vanuit main) en ruimt oude incidenten op.
+   * @returns {Promise<object>} Zie monitor.runAll.
+   */
+  app.locals.monitorRun = async () => {
+    const out = await monitor.runAll({});
+    for (const environment of allEnvironments()) monitor.prune(environment.id, settingsFor(environment.id).get('auditRetentionDays'));
+    return out;
+  };
   return app;
 }
 
@@ -3299,6 +3335,9 @@ if (require.main === module) {
   };
   runMaintenance();
   setInterval(runMaintenance, 60 * 60 * 1000).unref();
+  // Bewaking: elke 5 minuten (de monitor slaat zelf de eerste twee minuten na het starten en onderhoudsmodus over).
+  setInterval(() => (app.locals.systemUpdate.maintenance().active ? Promise.resolve() : app.locals.monitorRun()
+    .catch((error) => console.error('Bewaking mislukt:', error.message))), 5 * 60 * 1000).unref();
   // Eerst prijs en voorraad, daarna de bestellingen (dan is de verkoop al afgeboekt).
   try {
     app.locals.recordSystemUpdate();

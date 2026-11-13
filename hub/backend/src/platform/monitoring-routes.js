@@ -286,7 +286,7 @@ function registerMonitoringRoutes(app, { monitor, settingsFor, audit, requireJso
 
   app.post(`${BASE}/run`, runLimiter, requireJson, async (req, res) => {
     const platform = platformFor(req);
-    const result = await monitor.runAll({ force: true, tenantId: req.tenantId, platform });
+    const result = await monitor.runAll({ force: true, tenantId: req.tenantId, includePlatform: platform });
     res.json({ ran: result ? result.ran : 0, ...(await overview(req)) });
   });
 

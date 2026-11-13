@@ -614,6 +614,13 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
   const prepare = (sql) => db.prepare(sql);
   const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, hours: 0, materialUsage: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0, stockItems: 0, stockMovements: 0, stockReservations: 0, suppliers: 0, purchaseOrders: 0, requests: 0, requestWorkOrders: 0, invoices: 0, debtors: 0, sprinklerParts: 0, seasonReminders: 0, businessCustomers: 0, convertedQuotes: 0 };
   const seededWos = [];
+  // Bewaking: één open waarschuwing en één opgelost incident, zodat het scherm in de testomgeving iets laat zien.
+  const incidentTime = new Date().toISOString();
+  for (const [key, state, severity, title] of [['mail', 'open', 'waarschuwing', 'Mailserver niet bereikbaar'], ['drive', 'opgelost', 'fout', 'Back-up naar Google Drive mislukt']]) {
+    prepare('INSERT INTO monitor_incidents (id, tenant_id, scope, check_key, severity, state, title, message, first_at, last_at, resolved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(crypto.randomUUID(), seeded.tenantId, 'tenant', key, severity, state, title, 'Testmelding uit de testdata.', incidentTime, incidentTime, state === 'opgelost' ? incidentTime : '');
+    counts.monitorIncidents = (counts.monitorIncidents || 0) + 1;
+  }
   // Zakelijke webshopklanten: bedrijfsgegevens, en één aanvraag die nog goedgekeurd moet worden.
   for (const [key, business] of Object.entries(BUSINESS_CUSTOMERS)) {
     const userId = seeded.users[key] && seeded.users[key].id;
