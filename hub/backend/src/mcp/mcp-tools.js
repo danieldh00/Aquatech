@@ -10,12 +10,15 @@
 // - openstaande_debiteuren: wie nog moet betalen (definitieve, onbetaalde facturen), grootste bedrag eerst.
 // - maak_concept_werkorder: een werkorder zonder offerte als NIEUW (open, niet ingepland, geen uitvoerder) aanmaken, met stappen en materiaal.
 // - boek_uren en boek_materiaal: uren en materiaalverbruik op een werkorder boeken, altijd op naam van de gebruiker zelf (zoals in de app).
+// - maak_rapport_excel: een rapport (urenstaat, openstaande facturen, voorraadlijst) als Excel-bestand; de AI krijgt een link die alleen werkt
+//   voor deze gebruiker, ingelogd in AquaTech, 15 minuten lang (mcp-downloads.js). Nooit CSV.
 // Onduidelijk? De tools raden niet: zoeken met meerdere treffers geeft keuzeNodig, en maak_concept_offerte maakt niets aan zolang er
 //   open punten zijn (status 'terugvragen'); de AI-app vraagt dat aan de gebruiker. Alleen met ookMetOpenPunten=true gaat hij door.
 // Elke tool vraagt een recht uit de toestemming (scope) én het recht van de rol van de gebruiker op dit moment.
 // Versturen, wijzigen of verwijderen kan de AI niet: daar is geen tool voor.
 const { createRateLimiter } = require('../beveiliging/rate-limit');
 const { DOCUMENT_KINDS } = require('./mcp-lookups');
+const { buildWorkbook } = require('./xlsx-writer');
 
 /** Hoeveel klanten zoek_klant hoogstens teruggeeft. */
 const CUSTOMER_RESULTS = 10;
@@ -29,6 +32,10 @@ const LOCKED_STATUSES = ['gereed', 'geannuleerd'];
 const DUPLICATE_WINDOW_MS = 10 * 60 * 1000;
 /** De soorten uren die de AI kan boeken (zoals Core.KINDS). */
 const HOUR_KINDS = ['werk', 'reistijd', 'meerwerk'];
+/** Welke soorten rapport maak_rapport_excel kent, en het recht dat ze vragen. */
+const REPORT_RIGHTS = { urenstaat: 'werkorders', openstaande_facturen: 'facturen', voorraadlijst: 'voorraad' };
+/** Hoeveel dagen een urenstaat hoogstens beslaat (zoals in de app). */
+const MAX_REPORT_DAYS = 400;
 /** Hoeveel artikelen prijs_voor_klant in één keer prijst. */
 const MAX_PRICE_CODES = 25;
 /** Het recht dat de app vraagt om een soort document te zien (zelfde als de modules). */
@@ -158,7 +165,7 @@ function findArticle(articles, code) {
  * Maakt de tools van de MCP-server.
  * @param {object} ctx { can(user, recht), searchCustomers(req, zoektekst), getCustomer(req, id), createCustomer(req, invoer),
  *   lookupAddress(invoer), verifyAddress(tekst), articleChoices(tenantId), quoteProfile(req), createDraft(req, data, customerId), quoteUrl(req, id),
- *   appUrl(req, pad), createWorkOrder(req, data), findWorkOrder(req, nummer), workLogOf(req, werkorderId), bookHours(req, werkorderId, invoer), bookMaterial(req, werkorderId, invoer), today(), customerOverview(req, klantId, gevraagd), defaultPaymentDays(req), customerBalance(req, klantId), priceCart(req, regels, klant),
+ *   appUrl(req, pad), periodLog(req, { from, to, userId }), openInvoiceRows(req), storeReport(req, bestandsnaam, buffer), createWorkOrder(req, data), findWorkOrder(req, nummer), workLogOf(req, werkorderId), bookHours(req, werkorderId, invoer), bookMaterial(req, werkorderId, invoer), today(), customerOverview(req, klantId, gevraagd), defaultPaymentDays(req), customerBalance(req, klantId), priceCart(req, regels, klant),
  *   documentStatus(req, soort, nummer, opties), openInvoices(req, opties), audit(req, actie, detail) }.
  * @returns {{ list: Function, has: Function, call: Function }} De tools.
  */
@@ -172,6 +179,7 @@ function createMcpTools(ctx) {
   const customersPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, keyFn: (req) => `mcp-klant:${req.tenantId}|${req.user.id}` });
   // Leesfuncties samen: genoeg voor een drukke werkdag, maar geen onbeperkt aflopen van nummers of klant-id's.
   const readsPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, keyFn: (req) => `mcp-lezen:${req.tenantId}|${req.user.id}` });
+  const reportsPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, keyFn: (req) => `mcp-rapport:${req.tenantId}|${req.user.id}` });
   const debtorListsPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: (req) => `mcp-debiteuren:${req.tenantId}|${req.user.id}` });
 
   /**
@@ -725,6 +733,98 @@ function createMcpTools(ctx) {
           ...(customer.name ? {} : { let_op: 'Geen klant op de werkorder.' }),
           melding: 'De werkorder staat klaar met status Nieuw (niet ingepland, geen uitvoerder). Controleer hem in AquaTech en plan hem daar in.',
         });
+      },
+    },
+    maak_rapport_excel: {
+      scope: 'rapporten.excel', rights: ['werkorders', 'facturen', 'voorraad'],
+      definition: {
+        title: 'Rapport als Excel',
+        description: 'Maakt een rapport als Excel-bestand (.xlsx) en geeft een downloadlink. De link werkt 15 minuten, alleen voor deze gebruiker en alleen als hij in AquaTech is ingelogd; '
+          + 'geef de link aan de gebruiker, open hem niet zelf. Soorten: urenstaat (uren en materiaalverbruik over een periode van hooguit 400 dagen; met het recht planning van iedereen, anders alleen de eigen regels), '
+          + 'openstaande_facturen (alle definitieve, onbetaalde facturen per klant) en voorraadlijst (artikelen met prijs en beschikbare voorraad). Er is geen CSV.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            soort: { type: 'string', enum: Object.keys(REPORT_RIGHTS) },
+            van: { type: 'string', description: 'Urenstaat: eerste datum (JJJJ-MM-DD).' },
+            tot: { type: 'string', description: 'Urenstaat: laatste datum (JJJJ-MM-DD).' },
+          },
+          required: ['soort'], additionalProperties: false,
+        },
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      },
+      /**
+       * Bouwt het rapport en zet het klaar voor download.
+       * @param {object} args { soort, van, tot }.
+       * @param {object} req Het verzoek.
+       * @returns {object} De uitkomst met de link.
+       */
+      run: (args, req) => {
+        if (!withinLimit(reportsPerHour, req)) return errorOf('Te veel rapporten dit uur via de AI-koppeling. Probeer het later opnieuw of maak het rapport in AquaTech.');
+        const kind = Object.prototype.hasOwnProperty.call(REPORT_RIGHTS, args.soort) ? args.soort : '';
+        if (!kind) return errorOf(`Kies de soort rapport: ${Object.keys(REPORT_RIGHTS).join(', ')}.`);
+        if (!ctx.can(req.user, REPORT_RIGHTS[kind])) return errorOf('Je mag dit rapport in AquaTech niet bekijken.');
+        const day = ctx.today();
+        let sheets;
+        let fileName;
+        let summary;
+        if (kind === 'urenstaat') {
+          /**
+           * Of de tekst een bestaande datum (JJJJ-MM-DD) is.
+           * @param {string} value De tekst.
+           * @returns {boolean} true bij een geldige datum.
+           */
+          const isDay = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`));
+          const from = cleanText(args.van, 10) || `${day.slice(0, 8)}01`;
+          const to = cleanText(args.tot, 10) || day;
+          if (!isDay(from) || !isDay(to) || from > to) return errorOf('Geef een geldige periode (van en tot als JJJJ-MM-DD, van niet na tot).');
+          if ((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000 > MAX_REPORT_DAYS) return errorOf(`Kies een periode van hooguit ${MAX_REPORT_DAYS} dagen.`);
+          const userId = ctx.can(req.user, 'planning') ? null : req.user.id;
+          const log = ctx.periodLog(req, { from, to, userId });
+          sheets = [
+            { name: 'Uren', columns: [
+              { header: 'Datum', key: 'datum', type: 'date', width: 12 }, { header: 'Medewerker', key: 'medewerker', width: 22 }, { header: 'Werkorder', key: 'werkorder', width: 14 },
+              { header: 'Klant', key: 'klant', width: 24 }, { header: 'Soort', key: 'soort', width: 12 }, { header: 'Begin', key: 'begin', width: 8 }, { header: 'Eind', key: 'eind', width: 8 },
+              { header: 'Pauze (min)', key: 'pauze', type: 'number', width: 11 }, { header: 'Uren', key: 'uren', type: 'number', width: 8 }, { header: 'Notitie', key: 'notitie', width: 30 }],
+            rows: log.hours.map((entry) => ({ datum: entry.workDate, medewerker: entry.user.displayName, werkorder: entry.workOrder ? entry.workOrder.number : '', klant: entry.workOrder ? entry.workOrder.customer : '',
+              soort: entry.kind, begin: entry.startTime || '', eind: entry.endTime || '', pauze: entry.breakMinutes, uren: round2(entry.minutes / 60), notitie: entry.note || '' })) },
+            { name: 'Materiaal', columns: [
+              { header: 'Datum', key: 'datum', type: 'date', width: 12 }, { header: 'Medewerker', key: 'medewerker', width: 22 }, { header: 'Werkorder', key: 'werkorder', width: 14 },
+              { header: 'Klant', key: 'klant', width: 24 }, { header: 'Artikelcode', key: 'code', width: 14 }, { header: 'Omschrijving', key: 'omschrijving', width: 32 },
+              { header: 'Eenheid', key: 'eenheid', width: 9 }, { header: 'Aantal', key: 'aantal', type: 'number', width: 9 }, { header: 'Notitie', key: 'notitie', width: 30 }],
+            rows: log.materials.map((entry) => ({ datum: entry.usedOn, medewerker: entry.user.displayName, werkorder: entry.workOrder ? entry.workOrder.number : '', klant: entry.workOrder ? entry.workOrder.customer : '',
+              code: entry.code || '', omschrijving: entry.description || '', eenheid: entry.unit || '', aantal: entry.qty, notitie: entry.note || '' })) },
+          ];
+          fileName = `urenstaat-${from}-${to}`;
+          summary = { periode: { van: from, tot: to }, aantalUrenregels: log.hours.length, totaalUren: round2(log.hours.reduce((sum, entry) => sum + Number(entry.minutes), 0) / 60),
+            aantalMateriaalregels: log.materials.length, alleenEigenRegels: Boolean(userId) };
+        } else if (kind === 'openstaande_facturen') {
+          const rows = ctx.openInvoiceRows(req);
+          sheets = [{ name: 'Openstaand', columns: [
+            { header: 'Klant', key: 'klant', width: 28 }, { header: 'Nummer', key: 'nummer', width: 14 }, { header: 'Soort', key: 'soort', width: 12 }, { header: 'Datum', key: 'datum', type: 'date', width: 12 },
+            { header: 'Vervaldatum', key: 'vervaldatum', type: 'date', width: 12 }, { header: 'Dagen te laat', key: 'dagen', type: 'number', width: 12 }, { header: 'Bedrag incl. btw', key: 'bedrag', type: 'money', width: 16 }],
+          rows: rows.map((invoice) => ({ klant: invoice.klant, nummer: invoice.nummer, soort: invoice.soort, datum: invoice.datum, vervaldatum: invoice.vervaldatum, dagen: invoice.dagenTeLaat, bedrag: invoice.bedragInclBtw })) }];
+          fileName = `openstaande-facturen-${day}`;
+          summary = { aantalFacturen: rows.length, totaalOpenstaand: round2(rows.reduce((sum, invoice) => sum + Number(invoice.bedragInclBtw || 0), 0)) };
+        } else {
+          const rows = [];
+          for (const article of articlesOf(req.tenantId)) {
+            const variants = Array.isArray(article.variants) ? article.variants : [];
+            if (variants.length) {
+              for (const variant of variants) rows.push({ code: variant.code, naam: `${article.name} ${Object.values(variant.values || {}).join(' ')}`.trim(), eenheid: article.unit || 'st', prijs: variant.salePrice, btw: article.vatRate, beschikbaar: variant.available });
+            } else rows.push({ code: article.code, naam: article.name, eenheid: article.unit || 'st', prijs: article.salePrice, btw: article.vatRate, beschikbaar: article.available });
+          }
+          sheets = [{ name: 'Voorraad', columns: [
+            { header: 'Code', key: 'code', width: 16 }, { header: 'Naam', key: 'naam', width: 40 }, { header: 'Eenheid', key: 'eenheid', width: 9 },
+            { header: 'Prijs excl. btw', key: 'prijs', type: 'money', width: 15 }, { header: 'Btw %', key: 'btw', type: 'number', width: 8 }, { header: 'Beschikbaar', key: 'beschikbaar', type: 'number', width: 12 }], rows }];
+          fileName = `voorraadlijst-${day}`;
+          summary = { aantalArtikelen: rows.length };
+        }
+        const stored = ctx.storeReport(req, fileName, buildWorkbook(sheets));
+        if (!stored) return errorOf('Het rapport kon nu niet klaargezet worden. Probeer het over een paar minuten opnieuw.');
+        ctx.audit(req, 'rapport_via_ai', { soort: kind, via: 'ai-koppeling' });
+        return resultOf({ status: 'klaar', soort: kind, ...summary, bestand: stored.fileName, downloadLink: stored.url, geldigTot: new Date(stored.expiresAt).toISOString(),
+          let_op: 'Geef de link aan de gebruiker; hij moet in AquaTech ingelogd zijn en de link werkt 15 minuten.' });
       },
     },
     maak_concept_offerte: {
