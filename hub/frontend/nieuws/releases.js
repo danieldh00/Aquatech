@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.16.8',
+      date: '2026-11-14',
+      title: 'Opmaak ook voor offerte, werkbon en klantdossier',
+      items: [
+        { text: 'De Documentopmaak uit Beheer geldt nu ook voor de offerte (ook de link die de klant opent), de werkbon en het klantdossier: logo, kopstijl, kleuren, lettertype en voettekst zijn overal gelijk.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.16.7',
       date: '2026-11-14',
       title: 'Opmaak van factuur en pakbon aanpassen',

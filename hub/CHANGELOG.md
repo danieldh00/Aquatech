@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.16.8
+
+- `shared/doc-layout.js|.css`: wikkel (`AquatechDocLayout.wrap`) met CSS-variabelen `--doc-primary`, `--doc-accent`, `--doc-font`, `--doc-logo-height` en klassen `doc-plain`, `doc-logo-right`, `doc-no-company`; `logoHtml` en `footerHtml` voor kop en voet. De afdruk-CSS van `quote-view.css` en `klantdossier.css` gebruikt de variabelen met de oude waarden als terugval.
+- `GET /api/quote-profile` en `GET /api/public/quote` geven `documentLayout` mee (geen extra verzoek); `quote-view.js` (`options.layout`), `werkorders.js` en `klantdossier.js` gebruiken hem. De twee nieuwe bestanden staan in `PUBLIC_FILES` voor de openbare offertepagina.
+- `werkorders/index.html` laadt nu `offertes/quote-view.css`, zodat de werkbon dezelfde afdrukstijl heeft als de offerte. Geen migratie.
+
 ## 1.16.7
 
 - Nieuwe instelling `documentLayout` per organisatie (`verkoop/document-layout.js`, alleen via `GET|PUT /api/admin/document-layout`, niet in de algemene instellingenlijst): logo (PNG als data-adres, ≤ 300 kB en 2400 px, opgeschoond en gecontroleerd), logopositie en -hoogte, kopstijl (balk of wit met lijn), kop- en accentkleur (anders het thema; kopkleur moet contrast 4,5 met wit houden), lettertype (Helvetica of Times), bedrijfsgegevens in de kop, bedrijfsregel en eigen tekst in de voet, paginanummers. Geen migratie.
