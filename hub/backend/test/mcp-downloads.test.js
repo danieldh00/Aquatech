@@ -32,7 +32,7 @@ test('mcp-downloads: alleen de eigen gebruiker, verloopt, begrenst per gebruiker
   const tokens = Array.from({ length: 12 }, () => store.put('t1', 'u1', 'b', Buffer.from('x')).token);
   assert.strictEqual(store.get(tokens[0], 't1', 'u1'), null, 'de oudste gaat weg na tien');
   assert.ok(store.get(tokens[11], 't1', 'u1'));
-  assert.strictEqual(store.put('t1', 'u9', 'groot', Buffer.alloc(6 * 1024 * 1024)), null, 'een rapport boven 5 MB wordt geweigerd');
+  assert.strictEqual(store.put('t1', 'u9', 'groot', Buffer.alloc(6 * 1024 * 1024)).error, 'te_groot', 'een rapport boven 5 MB wordt geweigerd');
   // Eén gebruiker houdt hoogstens 10 MB: de oudste gaat weg, de rapporten van een ander blijven.
   const other = store.put('t1', 'u2', 'x', Buffer.from('x'));
   const first = store.put('t1', 'u3', 'a', Buffer.alloc(4 * 1024 * 1024));
@@ -41,4 +41,10 @@ test('mcp-downloads: alleen de eigen gebruiker, verloopt, begrenst per gebruiker
   assert.strictEqual(store.get(first.token, 't1', 'u3'), null);
   assert.ok(store.get(second.token, 't1', 'u3') && store.get(third.token, 't1', 'u3'));
   assert.ok(store.get(other.token, 't1', 'u2'));
+  // Past het nieuwe rapport niet in de totale ruimte, dan mislukt de opslag en blijven de eigen oude links werken.
+  for (const user of ['f1', 'f2', 'f3', 'f4']) { store.put('t1', user, 'x', Buffer.alloc(5 * 1024 * 1024)); store.put('t1', user, 'y', Buffer.alloc(5 * 1024 * 1024)); }
+  const keep = store.put('t1', 'u8', 'oud', Buffer.alloc(1024 * 1024));
+  const refused = store.put('t1', 'u8', 'nieuw', Buffer.alloc(5 * 1024 * 1024));
+  assert.strictEqual(refused.error, 'vol');
+  assert.ok(store.get(keep.token, 't1', 'u8'), 'de oude link blijft werken na een mislukte opslag');
 });

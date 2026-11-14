@@ -167,7 +167,7 @@ function findArticle(articles, code) {
  * Maakt de tools van de MCP-server.
  * @param {object} ctx { can(user, recht), searchCustomers(req, zoektekst), getCustomer(req, id), createCustomer(req, invoer),
  *   lookupAddress(invoer), verifyAddress(tekst), articleChoices(tenantId), quoteProfile(req), createDraft(req, data, customerId), quoteUrl(req, id),
- *   appUrl(req, pad), periodLog(req, { from, to, userId }), openInvoiceRows(req, limit), storeReport(req, bestandsnaam, buffer), createWorkOrder(req, data), findWorkOrder(req, nummer), workLogOf(req, werkorderId), bookHours(req, werkorderId, invoer), bookMaterial(req, werkorderId, invoer), today(), customerOverview(req, klantId, gevraagd), defaultPaymentDays(req), customerBalance(req, klantId), priceCart(req, regels, klant),
+ *   appUrl(req, pad), periodLog(req, { from, to, userId }), openInvoiceRows(req, limit), storeReport(req, bestandsnaam, buffer) (geeft { error } als het niet past), maxReportRows (voor tests), createWorkOrder(req, data), findWorkOrder(req, nummer), workLogOf(req, werkorderId), bookHours(req, werkorderId, invoer), bookMaterial(req, werkorderId, invoer), today(), customerOverview(req, klantId, gevraagd), defaultPaymentDays(req), customerBalance(req, klantId), priceCart(req, regels, klant),
  *   documentStatus(req, soort, nummer, opties), openInvoices(req, opties), audit(req, actie, detail) }.
  * @returns {{ list: Function, has: Function, call: Function }} De tools.
  */
@@ -181,6 +181,8 @@ function createMcpTools(ctx) {
   const customersPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, keyFn: (req) => `mcp-klant:${req.tenantId}|${req.user.id}` });
   // Leesfuncties samen: genoeg voor een drukke werkdag, maar geen onbeperkt aflopen van nummers of klant-id's.
   const readsPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, keyFn: (req) => `mcp-lezen:${req.tenantId}|${req.user.id}` });
+  /** Hoeveel regels per tabblad een rapport krijgt (voor tests aan te passen). */
+  const maxRows = ctx.maxReportRows || MAX_REPORT_ROWS;
   const reportsPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, keyFn: (req) => `mcp-rapport:${req.tenantId}|${req.user.id}` });
   const debtorListsPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: (req) => `mcp-debiteuren:${req.tenantId}|${req.user.id}` });
 
@@ -783,9 +785,11 @@ function createMcpTools(ctx) {
           if (!isDay(from) || !isDay(to) || from > to) return errorOf('Geef een geldige periode (van en tot als JJJJ-MM-DD, van niet na tot).');
           if ((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000 > MAX_REPORT_DAYS) return errorOf(`Kies een periode van hooguit ${MAX_REPORT_DAYS} dagen.`);
           const userId = ctx.can(req.user, 'planning') ? null : req.user.id;
-          const fullLog = ctx.periodLog(req, { from, to, userId });
-          truncated = fullLog.hours.length > MAX_REPORT_ROWS || fullLog.materials.length > MAX_REPORT_ROWS;
-          const log = { hours: fullLog.hours.slice(0, MAX_REPORT_ROWS), materials: fullLog.materials.slice(0, MAX_REPORT_ROWS) };
+          const log = ctx.periodLog(req, { from, to, userId, limit: maxRows + 1 });
+          const { hourCount, minutes, materialCount } = log.totals;
+          truncated = hourCount > maxRows || materialCount > maxRows;
+          log.hours = log.hours.slice(0, maxRows);
+          log.materials = log.materials.slice(0, maxRows);
           sheets = [
             { name: 'Uren', columns: [
               { header: 'Datum', key: 'datum', type: 'date', width: 12 }, { header: 'Medewerker', key: 'medewerker', width: 22 }, { header: 'Werkorder', key: 'werkorder', width: 14 },
@@ -801,10 +805,10 @@ function createMcpTools(ctx) {
               code: entry.code || '', omschrijving: entry.description || '', eenheid: entry.unit || '', aantal: entry.qty, notitie: entry.note || '' })) },
           ];
           fileName = `urenstaat-${from}-${to}`;
-          summary = { periode: { van: from, tot: to }, aantalUrenregels: fullLog.hours.length, totaalUren: round2(fullLog.hours.reduce((sum, entry) => sum + Number(entry.minutes), 0) / 60),
-            aantalMateriaalregels: fullLog.materials.length, alleenEigenRegels: Boolean(userId) };
+          summary = { periode: { van: from, tot: to }, aantalUrenregels: hourCount, totaalUren: round2(minutes / 60),
+            aantalMateriaalregels: materialCount, alleenEigenRegels: Boolean(userId) };
         } else if (kind === 'openstaande_facturen') {
-          const { rows, truncated: tooMany } = ctx.openInvoiceRows(req, MAX_REPORT_ROWS);
+          const { rows, truncated: tooMany } = ctx.openInvoiceRows(req, maxRows);
           truncated = tooMany;
           sheets = [{ name: 'Openstaand', columns: [
             { header: 'Klant', key: 'klant', width: 28 }, { header: 'Nummer', key: 'nummer', width: 14 }, { header: 'Soort', key: 'soort', width: 12 }, { header: 'Datum', key: 'datum', type: 'date', width: 12 },
@@ -815,13 +819,13 @@ function createMcpTools(ctx) {
         } else {
           const rows = [];
           for (const article of articlesOf(req.tenantId)) {
-            if (rows.length >= MAX_REPORT_ROWS) { truncated = true; break; }
+            if (rows.length >= maxRows) { truncated = true; break; }
             const variants = Array.isArray(article.variants) ? article.variants : [];
             if (variants.length) {
               for (const variant of variants) rows.push({ code: variant.code, naam: `${article.name} ${Object.values(variant.values || {}).join(' ')}`.trim(), eenheid: article.unit || 'st', prijs: variant.salePrice, btw: article.vatRate, beschikbaar: variant.available });
             } else rows.push({ code: article.code, naam: article.name, eenheid: article.unit || 'st', prijs: article.salePrice, btw: article.vatRate, beschikbaar: article.available });
           }
-          if (rows.length > MAX_REPORT_ROWS) { rows.length = MAX_REPORT_ROWS; truncated = true; }
+          if (rows.length > maxRows) { rows.length = maxRows; truncated = true; }
           sheets = [{ name: 'Voorraad', columns: [
             { header: 'Code', key: 'code', width: 16 }, { header: 'Naam', key: 'naam', width: 40 }, { header: 'Eenheid', key: 'eenheid', width: 9 },
             { header: 'Prijs excl. btw', key: 'prijs', type: 'money', width: 15 }, { header: 'Btw %', key: 'btw', type: 'number', width: 8 }, { header: 'Beschikbaar', key: 'beschikbaar', type: 'number', width: 12 }], rows }];
@@ -829,10 +833,11 @@ function createMcpTools(ctx) {
           summary = { aantalArtikelen: rows.length };
         }
         const stored = ctx.storeReport(req, fileName, buildWorkbook(sheets));
-        if (!stored) return errorOf('Het rapport kon nu niet klaargezet worden. Probeer het over een paar minuten opnieuw.');
+        if (stored.error === 'te_groot') return errorOf('Het rapport is te groot om klaar te zetten. Kies een kortere periode of een kleiner rapport.');
+        if (stored.error) return errorOf('Het rapport kon nu niet klaargezet worden. Probeer het over een paar minuten opnieuw.');
         ctx.audit(req, 'rapport_via_ai', { soort: kind, via: 'ai-koppeling' });
         return resultOf({ status: 'klaar', soort: kind, ...summary, bestand: stored.fileName, downloadLink: stored.url, geldigTot: new Date(stored.expiresAt).toISOString(),
-          ...(truncated ? { afgekapt: true, waarschuwing: `Het rapport bevat hoogstens ${MAX_REPORT_ROWS} regels per tabblad; er zijn er meer. Zeg dat tegen de gebruiker en kies bij een urenstaat een kortere periode.` } : {}),
+          ...(truncated ? { afgekapt: true, waarschuwing: `Het rapport bevat hoogstens ${maxRows} regels per tabblad; er zijn er meer. Zeg dat tegen de gebruiker en kies bij een urenstaat een kortere periode.` } : {}),
           let_op: 'Geef de link aan de gebruiker; hij moet in AquaTech ingelogd zijn en de link werkt 15 minuten.' });
       },
     },

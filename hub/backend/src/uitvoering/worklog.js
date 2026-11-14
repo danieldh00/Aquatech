@@ -336,10 +336,10 @@ function createWorkLogStore(db, { onMaterialUsed = null } = {}) {
    * Urenstaat en verbruik over een periode (alle werkorders van de omgeving,
    * verwijderde werkorders niet).
    * @param {string} tenantId Id van de omgeving.
-   * @param {{ from: string, to: string, userId?: string }} range Eerste en laatste datum; alleen die medewerker.
+   * @param {{ from: string, to: string, userId?: string, limit?: number }} range Eerste en laatste datum; alleen die medewerker; hoogstens zoveel regels per soort (zonder limiet: alle).
    * @returns {{ hours: object[], materials: object[] }} Regels met werkordergegevens.
    */
-  function period(tenantId, { from, to, userId = null }) {
+  function period(tenantId, { from, to, userId = null, limit = 0 }) {
     const hArgs = [tenantId, from, to];
     const mArgs = [tenantId, from, to];
     let hWhere = '';
@@ -348,11 +348,27 @@ function createWorkLogStore(db, { onMaterialUsed = null } = {}) {
     return {
       hours: prepare(`SELECT ${H_COLS}, ${WO_COLS} FROM work_order_hours h JOIN work_orders w ON w.id = h.work_order_id AND w.tenant_id = h.tenant_id
         LEFT JOIN users u ON u.id = h.user_id WHERE h.tenant_id = ? AND h.work_date >= ? AND h.work_date <= ? AND w.deleted_at IS NULL${hWhere}
-        ORDER BY h.work_date, h.start_time, w.number`).all(...hArgs).map(hoursOut),
+        ORDER BY h.work_date, h.start_time, w.number${limit ? ' LIMIT ?' : ''}`).all(...hArgs, ...(limit ? [limit] : [])).map(hoursOut),
       materials: prepare(`SELECT ${M_COLS}, ${WO_COLS} FROM work_order_materials m JOIN work_orders w ON w.id = m.work_order_id AND w.tenant_id = m.tenant_id
         LEFT JOIN users u ON u.id = m.user_id WHERE m.tenant_id = ? AND m.used_on >= ? AND m.used_on <= ? AND w.deleted_at IS NULL${mWhere}
-        ORDER BY m.used_on, w.number`).all(...mArgs).map(materialOut),
+        ORDER BY m.used_on, w.number${limit ? ' LIMIT ?' : ''}`).all(...mArgs, ...(limit ? [limit] : [])).map(materialOut),
     };
+  }
+
+  /**
+   * De totalen over dezelfde periode als period(), zonder de regels te laden.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ from: string, to: string, userId?: string }} range Eerste en laatste datum; alleen die medewerker.
+   * @returns {{ hourCount: number, minutes: number, materialCount: number }} Aantal urenregels, totaal minuten en aantal materiaalregels.
+   */
+  function periodTotals(tenantId, { from, to, userId = null }) {
+    const extra = userId ? ' AND x.user_id = ?' : '';
+    const args = [tenantId, from, to, ...(userId ? [String(userId)] : [])];
+    const hours = prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(x.minutes), 0) AS minutes FROM work_order_hours x JOIN work_orders w ON w.id = x.work_order_id AND w.tenant_id = x.tenant_id
+      WHERE x.tenant_id = ? AND x.work_date >= ? AND x.work_date <= ? AND w.deleted_at IS NULL${extra}`).get(...args);
+    const materials = prepare(`SELECT COUNT(*) AS n FROM work_order_materials x JOIN work_orders w ON w.id = x.work_order_id AND w.tenant_id = x.tenant_id
+      WHERE x.tenant_id = ? AND x.used_on >= ? AND x.used_on <= ? AND w.deleted_at IS NULL${extra}`).get(...args);
+    return { hourCount: Number(hours.n), minutes: Number(hours.minutes), materialCount: Number(materials.n) };
   }
 
   /**
@@ -422,7 +438,7 @@ function createWorkLogStore(db, { onMaterialUsed = null } = {}) {
   return {
     workOrder, list, addHours, updateHours, removeHours, hoursRow: hoursEntry,
     addMaterial, updateMaterial, removeMaterial, materialRow: materialEntry,
-    period, usedByCode, counts, hook,
+    period, periodTotals, usedByCode, counts, hook,
   };
 }
 

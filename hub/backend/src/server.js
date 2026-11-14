@@ -2478,21 +2478,21 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       /**
        * De uren en het materiaal over een periode (zoals de urenstaat in de app).
        * @param {object} req Het verzoek.
-       * @param {{ from: string, to: string, userId: string|null }} range Periode en eventueel één medewerker.
-       * @returns {{ hours: object[], materials: object[] }} De regels.
+       * @param {{ from: string, to: string, userId: string|null, limit?: number }} range Periode, eventueel één medewerker en hoogstens zoveel regels per soort.
+       * @returns {{ hours: object[], materials: object[], totals: object }} De regels en de totalen over de hele periode.
        */
-      periodLog: (req, range) => workLogStore.period(req.tenantId, range),
+      periodLog: (req, range) => ({ ...workLogStore.period(req.tenantId, range), totals: workLogStore.periodTotals(req.tenantId, range) }),
       openInvoiceRows: (req, limit) => mcpLookups.openInvoiceRows(req.tenantId, limit),
       /**
        * Zet een Excel-rapport klaar voor download door deze gebruiker (15 minuten, alleen ingelogd).
        * @param {object} req Het verzoek.
        * @param {string} fileName De bestandsnaam.
        * @param {Buffer} buffer Het .xlsx-bestand.
-       * @returns {{ url: string, fileName: string, expiresAt: number }|null} De link, of null als er geen ruimte is.
+       * @returns {{ url: string, fileName: string, expiresAt: number }|{ error: string }} De link, of de reden (te_groot of vol).
        */
       storeReport: (req, fileName, buffer) => {
         const stored = mcpDownloads.put(req.tenantId, req.user.id, fileName, buffer);
-        return stored && { url: `${oauth.originOf(req)}/app/api/mcp-download/${stored.token}`, fileName: stored.fileName, expiresAt: stored.expiresAt };
+        return stored.error ? stored : { url: `${oauth.originOf(req)}/app/api/mcp-download/${stored.token}`, fileName: stored.fileName, expiresAt: stored.expiresAt };
       },
       /**
        * Maakt een werkorder zonder offerte (status Nieuw, niet ingepland, geen uitvoerder) en reserveert het materiaal.

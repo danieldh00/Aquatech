@@ -957,3 +957,34 @@ test('maak_rapport_excel: Excel-bestand met link voor alleen deze gebruiker, rec
   const narrow = await connect(base, admin, { scope: 'klanten.lezen' });
   assert.match((await callTool(base, narrow.accessToken, 'maak_rapport_excel', { soort: 'voorraadlijst' })).structuredContent.fout, /toestemming/);
 });
+
+test('maak_rapport_excel: meldt afkappen en rekent de totalen over alle regels', async () => {
+  const { createMcpTools } = require('../src/mcp/mcp-tools');
+  const stored = [];
+  /**
+   * Nep-urenregels voor het rapport.
+   * @param {number} count Hoeveel regels.
+   * @returns {object[]} De regels.
+   */
+  const rowsOf = (count) => Array.from({ length: count }, (_, index) => ({ workDate: '2026-11-01', user: { displayName: 'A' }, kind: 'werk', minutes: 60, breakMinutes: 0, note: `r${index}`, usedOn: '2026-11-01', qty: 1 }));
+  const tools = createMcpTools({
+    maxReportRows: 3, can: () => true, today: () => '2026-11-13', audit: () => {},
+    periodLog: (_req, range) => ({ hours: rowsOf(range.limit), materials: [], totals: { hourCount: 10, minutes: 600, materialCount: 0 } }),
+    openInvoiceRows: (_req, limit) => ({ rows: Array.from({ length: limit }, () => ({ klant: 'K', nummer: 'F1', soort: 'factuur', datum: '2026-11-01', vervaldatum: '2026-11-15', dagenTeLaat: 0, bedragInclBtw: 10 })), truncated: true }),
+    openInvoices: () => ({ totaalOpenstaand: 1234.5 }),
+    storeReport: (_req, fileName, buffer) => { stored.push(buffer); return { url: 'https://x/app/api/mcp-download/t', fileName: `${fileName}.xlsx`, expiresAt: Date.now() + 1000 }; },
+    articleChoices: () => [{ code: 'A', name: 'Een', salePrice: 1, vatRate: 21, available: 1, variants: [{ code: 'A1', name: 'v1', values: {}, salePrice: 1, available: 1 }, { code: 'A2', name: 'v2', values: {}, salePrice: 1, available: 1 }, { code: 'A3', name: 'v3', values: {}, salePrice: 1, available: 1 }, { code: 'A4', name: 'v4', values: {}, salePrice: 1, available: 1 }] }],
+  });
+  const req = { user: { id: 'u1' }, tenantId: 't1', mcpScopes: new Set(['rapporten.excel']) };
+  const hours = (await tools.call('maak_rapport_excel', { soort: 'urenstaat', van: '2026-11-01', tot: '2026-11-13' }, req)).structuredContent;
+  assert.strictEqual(hours.afgekapt, true);
+  assert.strictEqual(hours.aantalUrenregels, 10);
+  assert.strictEqual(hours.totaalUren, 10);
+  assert.strictEqual(readZip(stored[0])['xl/worksheets/sheet1.xml'].match(/<row /g).length, 4, 'kopregel plus drie regels');
+  const invoices = (await tools.call('maak_rapport_excel', { soort: 'openstaande_facturen' }, req)).structuredContent;
+  assert.strictEqual(invoices.afgekapt, true);
+  assert.strictEqual(invoices.totaalOpenstaand, 1234.5);
+  const stock = (await tools.call('maak_rapport_excel', { soort: 'voorraadlijst' }, req)).structuredContent;
+  assert.strictEqual(stock.afgekapt, true);
+  assert.strictEqual(readZip(stored[2])['xl/worksheets/sheet1.xml'].match(/<row /g).length, 4, 'ook varianten houden het plafond');
+});

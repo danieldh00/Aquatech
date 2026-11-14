@@ -53,24 +53,28 @@ function createDownloadStore({ now = () => Date.now(), ttlMs = TTL_MS } = {}) {
   const totalBytes = () => { let sum = 0; for (const entry of entries.values()) sum += entry.buffer.length; return sum; };
 
   /**
-   * Zet een rapport klaar; de oudste van deze gebruiker gaat weg als er te veel zijn.
+   * Zet een rapport klaar; de oudste van deze gebruiker gaat weg als er te veel zijn, maar alleen als het nieuwe rapport daarna past.
    * @param {string} tenantId De omgeving.
    * @param {string} userId De gebruiker.
    * @param {string} fileName De bestandsnaam.
    * @param {Buffer} buffer Het bestand.
-   * @returns {{ token: string, expiresAt: number, fileName: string }|null} Het token, of null als er geen ruimte is.
+   * @returns {{ token: string, expiresAt: number, fileName: string }|{ error: 'te_groot'|'vol' }} Het token, of de reden dat het niet kon.
    */
   function put(tenantId, userId, fileName, buffer) {
     sweep();
-    if (buffer.length > MAX_FILE_BYTES) return null;
+    if (buffer.length > MAX_FILE_BYTES) return { error: 'te_groot' };
     const own = [...entries.entries()].filter(([, entry]) => entry.tenantId === tenantId && entry.userId === userId);
     let ownBytes = own.reduce((sum, [, entry]) => sum + entry.buffer.length, 0);
-    while (own.length && (own.length >= MAX_PER_USER || ownBytes + buffer.length > MAX_USER_BYTES)) {
-      const [oldToken, oldEntry] = own.shift();
-      ownBytes -= oldEntry.buffer.length;
-      entries.delete(oldToken);
+    let freed = 0;
+    const evict = [];
+    // Eerst uitrekenen wat weg moet; pas verwijderen als het nieuwe rapport daarna past (anders blijven de oude links werken).
+    while (own.length - evict.length >= MAX_PER_USER || (own.length > evict.length && ownBytes - freed + buffer.length > MAX_USER_BYTES)) {
+      const [oldToken, oldEntry] = own[evict.length];
+      evict.push(oldToken);
+      freed += oldEntry.buffer.length;
     }
-    if (totalBytes() + buffer.length > MAX_TOTAL_BYTES) return null;
+    if (totalBytes() - freed + buffer.length > MAX_TOTAL_BYTES) return { error: 'vol' };
+    for (const oldToken of evict) entries.delete(oldToken);
     const token = crypto.randomBytes(32).toString('base64url');
     const entry = { tenantId, userId, fileName: safeFileName(fileName), buffer, expiresAt: now() + ttlMs };
     entries.set(token, entry);
