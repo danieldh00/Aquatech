@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.17.0',
+      date: '2026-11-14',
+      title: 'Onzichtbare captcha op openbare formulieren',
+      items: [
+        { text: 'Nieuw in Beheer > Toegang & beveiliging: *Onzichtbare captcha*. Met een sleutel van Google reCAPTCHA v3 beschermt de app de inlogpagina, tekening indienen en de webshopformulieren (inloggen, registreren, wachtwoord vergeten, zakelijk aanvragen, afrekenen) tegen robots, zonder dat klanten iets hoeven te doen. Zonder sleutels werkt alles zoals voorheen.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.16.9',
       date: '2026-11-14',
       title: 'Google Analytics in de webshop',
