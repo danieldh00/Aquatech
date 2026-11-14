@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.16.6
+
+- Nieuw `artikelen/goods-receipt.js`: `GET /api/orderpick/receipts`, `/receipts/lookup?code=`, `/receipts/:id` en `POST /receipts/:id/receive` (recht `orderpick`, geen prijzen). Boeken via `purchaseOrders.receive` (voorraad + FIFO-laag), daarna backorders vrijgeven via `markBackorderReady`. Per regel `seen` tegen dubbel boeken (409 `changed`), meer dan besteld alleen met `allowOver` (409 `over_received`).
+- Frontend: tabblad Ontvangen op `orderpick/` (`receiving-core.js`, `receiving.js`), module `ontvangst` in het moduleregister, route in `configuration.routes` van de module voorraad.
+- Tests: `goods-receipt.test.js`, `receiving-core.test.js`.
+
 ## 1.16.5
 
 - MCP-tool `plan_omzetten` (scope `plannen.concept`, plus `offertes.concept` of `werkorders.concept`): `quoteLinesFromPlan` in `beregening/plan-builder.js` (werkthread) levert de offerteregels uit `QuoteCore.fromPlan`; de offerte is een concept en hangt alleen aan een goedgekeurd plan, de werkorder krijgt stappen uit de arbeidsregels en materiaal met een bestaande artikelcode. Vraagt terug zonder klant (`ookMetOpenPunten`). Audit `offerte_concept_via_ai`/`werkorder_concept_via_ai`.

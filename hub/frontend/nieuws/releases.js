@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.16.6',
+      date: '2026-11-14',
+      title: 'Goederen ontvangen met de scanner in de orderpick-app',
+      items: [
+        { text: 'In de orderpick-app staat nu naast Picken het tabblad Ontvangen: kies een bestelde inkooporder of scan het ordernummer, de leveranciersreferentie of een artikel, scan de artikelen, bevestig de aantallen en boek de ontvangst. Een deel ontvangen kan ook; de rest blijft open staan.', for: ['orderpick'] },
+        { text: 'Na het ontvangen worden wachtende backorders van webshopbestellingen die nu kunnen worden verzonden meteen weer klaargezet onder Picken.', for: ['orderpick'] },
+      ],
+    },
+    {
       version: '1.16.5',
       date: '2026-11-14',
       title: 'Plan uit de AI-koppeling omzetten naar offerte of werkorder',
