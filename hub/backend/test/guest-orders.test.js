@@ -130,7 +130,7 @@ test('bestellen als gast: particulier, online, token niet in het antwoord, cooki
   assert.strictEqual(page.status, 200);
   assert.match(page.text, new RegExp(detail.number));
   assert.match(page.text, /persoonlijke link/);
-  assert.match(page.text, /<h2>Account maken\?<\/h2>/);
+  assert.doesNotMatch(page.text, /<h2>Account maken\?<\/h2>/, 'het aanbod komt pas na de betaling');
   assert.match(page.text, /<meta http-equiv="refresh" content="0;url=betalen\/">/);
   assert.doesNotMatch(page.text, /Al mijn bestellingen/);
   assert.ok(!page.text.includes(token), 'het token staat niet in de pagina');
@@ -332,6 +332,13 @@ test('een gast maakt na de bestelling een account: de bestelling komt erin, een 
   const world = await setup({ mollie: true });
   const { id, guest } = await placeGuest(world);
   const url = `/bestelling/${id}/account/`;
+  const unpaid = await guest.client.get(`/bestelling/${id}/`);
+  assert.doesNotMatch(unpaid.text, /<h2>Account maken\?<\/h2>/, 'een onbetaalde bestelling biedt geen account aan');
+  const early = await postForm(world.base, guest.client, url, { password: PW, password2: PW, website: '' });
+  assert.strictEqual(early.status, 303);
+  assert.strictEqual(early.location, './', 'zonder betaling geen account');
+  assert.strictEqual((await adminOrder(world, id)).userId, null);
+  await payAsGuest(world, id, guest);
   const mismatch = await postForm(world.base, guest.client, url, { password: PW, password2: `${PW}x`, website: '' });
   assert.strictEqual(mismatch.status, 400);
   assert.match(mismatch.text, /wachtwoorden zijn niet gelijk/);
@@ -365,6 +372,7 @@ test('een gast maakt na de bestelling een account: de bestelling komt erin, een 
 test('een gast met het adres van een bestaand account kan dat account niet overnemen', async () => {
   const world = await setup({ mollie: true });
   const { id, guest } = await placeGuest(world, { email: 'k1@voorbeeld.nl' });
+  await payAsGuest(world, id, guest);
   const attempt = await postForm(world.base, guest.client, `/bestelling/${id}/account/`, { password: PW, password2: PW, website: '' });
   assert.strictEqual(attempt.status, 400);
   assert.match(attempt.text, /Er is al een account met dit e-mailadres/);
@@ -404,6 +412,7 @@ test('een gast die bestaande bestellingen heeft houdt toegang als bestellen als 
 test('audit: gastbestelling en koppeling aan een account staan in het logboek zonder token', async () => {
   const world = await setup({ mollie: true });
   const { id, guest } = await placeGuest(world);
+  await payAsGuest(world, id, guest);
   await postForm(world.base, guest.client, `/bestelling/${id}/account/`, { password: PW, password2: PW, website: '' });
   const rows = world.db.prepare("SELECT action, detail FROM audit WHERE action LIKE 'webshop_%gast%' OR action = 'webshop_bestelling_geplaatst'").all();
   assert.ok(rows.some((row) => row.action === 'webshop_bestelling_geplaatst' && JSON.parse(row.detail).gast === true));

@@ -954,7 +954,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
           const invoice = orderInvoices ? orderInvoices.invoiceFor(tenantId, order.id) : null;
           const payError = req.query.betaalfout === '1' ? 'De betaalpagina is nu niet bereikbaar. Probeer het zo opnieuw met de knop hieronder.' : '';
           // Een gast zonder ingelogd account krijgt het aanbod om een account te maken, zolang de bestelling nog van niemand is.
-          const accountOffer = guest && !viewer && !order.userId && order.status !== 'geannuleerd' ? {} : null;
+          const accountOffer = guest && !viewer && !order.userId && order.status !== 'geannuleerd' && isPaid(order) ? {} : null;
           sendWithGroups(req, res, 200, (groups) => orderPage(order, groups, { thanks: req.query.bedankt === '1' || (req.query.betaald === '1' && order.pay && order.pay.status === 'betaald'), invoice: invoice && invoice.status !== 'concept' ? invoice : null, returnsHtml: returnsHtmlOf(order), payError, autoPay: req.query.betalen === '1', guest: guest && !order.userId, accountOffer, accountCreated: req.query.account === '1' }));
         } catch (error) { next(error); }
       });
@@ -1006,6 +1006,12 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
       }
       // Een gast maakt na zijn bestelling alsnog een account: alleen een wachtwoord kiezen (naam en e-mailadres komen van de bestelling) en
       // de bestelling wordt aan het account gekoppeld. Het account is gewoon een nieuwe klant (particulier, e-mailadres nog te bevestigen).
+      /**
+       * Of de bestelling online betaald is (alleen dan mag een gast er een account bij maken).
+       * @param {object} order De bestelling.
+       * @returns {boolean} true bij een betaalde bestelling.
+       */
+      const isPaid = (order) => Boolean(order.pay && order.pay.status === 'betaald');
       router.post('/bestelling/:id/account', form, async (req, res, next) => {
         try {
           if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
@@ -1014,7 +1020,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
           const access = orderAccessOf(req, req.params.id);
           if (!access) return orderAccessDenied(req, res, req.params.id, '../../inloggen/', '../../');
           const { order } = access;
-          if (!access.guest || access.viewer || order.userId) return res.redirect(303, './');
+          if (!access.guest || access.viewer || order.userId || !isPaid(order)) return res.redirect(303, './');
           req.shopBaseUrl = publicBaseUrl(req);
           const body = req.body || {};
           const human = await humanCheck(req, 'register');
