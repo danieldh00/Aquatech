@@ -347,6 +347,7 @@ function registerShopRoutes(app, { shop, requireUser, requireJson, settingsOf, t
       respondShopError(res, error, next);
     }
   });
+  return { catalogOf };
 }
 
 module.exports = { createShopStore, registerShopRoutes, matchProducts, loadArticles };

@@ -10,6 +10,8 @@
 // - openstaande_debiteuren: wie nog moet betalen (definitieve, onbetaalde facturen), grootste bedrag eerst.
 // - maak_concept_werkorder: een werkorder zonder offerte als NIEUW (open, niet ingepland, geen uitvoerder) aanmaken, met stappen en materiaal.
 // - boek_uren en boek_materiaal: uren en materiaalverbruik op een werkorder boeken, altijd op naam van de gebruiker zelf (zoals in de app).
+// - plan_maken en plan_details: een beregeningsplan maken uit vlakken in meters die de AI-app uit een tekening heeft gelezen (de app plaatst de
+//   sproeiers, deelt de zones in en rekent de stuklijst; opslaan als concept-plan in Beregeningsplanner) en een plan samenvatten. Zie beregening/plan-builder.js.
 // - maak_rapport_excel: een rapport (urenstaat, openstaande facturen, voorraadlijst) als Excel-bestand; de AI krijgt een link die alleen werkt
 //   voor deze gebruiker, ingelogd in AquaTech, 15 minuten lang (mcp-downloads.js). Nooit CSV.
 // Onduidelijk? De tools raden niet: zoeken met meerdere treffers geeft keuzeNodig, en maak_concept_offerte maakt niets aan zolang er
@@ -38,6 +40,8 @@ const REPORT_RIGHTS = { urenstaat: 'werkorders', openstaande_facturen: 'facturen
 const MAX_REPORT_DAYS = 400;
 /** Hoeveel regels per tabblad een rapport hoogstens krijgt; meer wordt afgekapt en dat staat in de uitkomst. */
 const MAX_REPORT_ROWS = 5000;
+/** Hoeveel plannen een gebruiker per uur via de AI maakt of bijwerkt (het rekenen kost seconden). */
+const PLANS_PER_HOUR = 10;
 /** Hoeveel artikelen prijs_voor_klant in één keer prijst. */
 const MAX_PRICE_CODES = 25;
 /** Het recht dat de app vraagt om een soort document te zien (zelfde als de modules). */
@@ -167,7 +171,7 @@ function findArticle(articles, code) {
  * Maakt de tools van de MCP-server.
  * @param {object} ctx { can(user, recht), searchCustomers(req, zoektekst), getCustomer(req, id), createCustomer(req, invoer),
  *   lookupAddress(invoer), verifyAddress(tekst), articleChoices(tenantId), quoteProfile(req), createDraft(req, data, customerId), quoteUrl(req, id),
- *   appUrl(req, pad), periodLog(req, { from, to, userId }), openInvoiceRows(req, limit), storeReport(req, bestandsnaam, buffer) (geeft { error } als het niet past), maxReportRows (voor tests), createWorkOrder(req, data), findWorkOrder(req, nummer), workLogOf(req, werkorderId), bookHours(req, werkorderId, invoer), bookMaterial(req, werkorderId, invoer), today(), customerOverview(req, klantId, gevraagd), defaultPaymentDays(req), customerBalance(req, klantId), priceCart(req, regels, klant),
+ *   appUrl(req, pad), buildPlan(req, invoer), savePlan(req, planId, data), getPlan(req, planId), summarizePlan(req, data), periodLog(req, { from, to, userId, limit }), openInvoiceRows(req, limit), storeReport(req, bestandsnaam, buffer) (geeft { error } als het niet past), maxReportRows (voor tests), createWorkOrder(req, data), findWorkOrder(req, nummer), workLogOf(req, werkorderId), bookHours(req, werkorderId, invoer), bookMaterial(req, werkorderId, invoer), today(), customerOverview(req, klantId, gevraagd), defaultPaymentDays(req), customerBalance(req, klantId), priceCart(req, regels, klant),
  *   documentStatus(req, soort, nummer, opties), openInvoices(req, opties), audit(req, actie, detail) }.
  * @returns {{ list: Function, has: Function, call: Function }} De tools.
  */
@@ -183,6 +187,7 @@ function createMcpTools(ctx) {
   const readsPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, keyFn: (req) => `mcp-lezen:${req.tenantId}|${req.user.id}` });
   /** Hoeveel regels per tabblad een rapport krijgt (voor tests aan te passen). */
   const maxRows = ctx.maxReportRows || MAX_REPORT_ROWS;
+  const plansPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: PLANS_PER_HOUR, keyFn: (req) => `mcp-plan:${req.tenantId}|${req.user.id}` });
   const reportsPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, keyFn: (req) => `mcp-rapport:${req.tenantId}|${req.user.id}` });
   const debtorListsPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: (req) => `mcp-debiteuren:${req.tenantId}|${req.user.id}` });
 
@@ -737,6 +742,106 @@ function createMcpTools(ctx) {
           ...(customer.name ? {} : { let_op: 'Geen klant op de werkorder.' }),
           melding: 'De werkorder staat klaar met status Nieuw (niet ingepland, geen uitvoerder). Controleer hem in AquaTech en plan hem daar in.',
         });
+      },
+    },
+    plan_maken: {
+      scope: 'plannen.concept', rights: ['plannen'],
+      definition: {
+        title: 'Beregeningsplan maken',
+        description: 'Maakt een beregeningsplan als CONCEPT in de Beregeningsplanner uit de vlakken die jij uit een tekening of foto hebt gelezen. Geef elk vlak als soort '
+          + '(lawn gazon, bed border, hedge haag, planter plantenbak, dry moet droog blijven zoals huis of terras, wet mag nat worden) met hoekpunten in METERS in een eigen assenstelsel '
+          + '(x naar rechts, y naar beneden; gebruik de maatvoering of de schaal van de tekening, schat niet stilzwijgend). AquaTech plaatst zelf de sproeiers, deelt de zones in en rekent de stuklijst met de prijzen uit de voorraad; '
+          + 'jij verzint geen sproeiers of artikelen. Het antwoord bevat vlakken, aantallen, zones, stuklijst en aandachtspunten: laat de gebruiker dat controleren en pas zo nodig de vlakken aan; roep dan opnieuw aan met dezelfde planId om het plan bij te werken. '
+          + 'Zonder druk en debiet (kraan) vraagt de tool terug; de gebruiker kent die vaak niet, dan mag ookMetAannames=true (3,5 bar, 2,0 m³/u).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            naam: { type: 'string', maxLength: 120, description: 'Naam van het plan, bijvoorbeeld "Tuin Jansen".' },
+            klantId: { type: 'string', maxLength: 64, description: 'Id van de klant uit zoek_klant (vult klantnaam en adres in; alleen met het recht klanten).' },
+            klantNaam: { type: 'string', maxLength: 120 },
+            adres: { type: 'string', maxLength: 200 },
+            vlakken: {
+              type: 'array', minItems: 1, maxItems: 40,
+              items: {
+                type: 'object',
+                properties: {
+                  soort: { type: 'string', enum: ['lawn', 'bed', 'hedge', 'planter', 'wet', 'dry'] },
+                  naam: { type: 'string', maxLength: 60 },
+                  punten: { type: 'array', minItems: 3, maxItems: 60, items: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' } }, required: ['x', 'y'], additionalProperties: false } },
+                },
+                required: ['soort', 'punten'], additionalProperties: false,
+              },
+            },
+            elementen: {
+              type: 'array', maxItems: 12, description: 'Alleen als op de tekening staat waar de wateraansluiting (source), beregeningscomputer (controller), ventielkast (valvebox) of een tappunt (outlet) zit; anders zet AquaTech ze zelf.',
+              items: { type: 'object', properties: { soort: { type: 'string', enum: ['source', 'controller', 'valvebox', 'outlet'] }, x: { type: 'number' }, y: { type: 'number' } }, required: ['soort', 'x', 'y'], additionalProperties: false },
+            },
+            druk: { type: 'number', minimum: 0.5, maximum: 10, description: 'Waterdruk aan de kraan in bar (dynamisch).' },
+            debiet: { type: 'number', minimum: 0.2, maximum: 30, description: 'Beschikbaar debiet aan de kraan in m³/u.' },
+            sproeiertype: { type: 'string', enum: ['auto', 'rotator', 'spray', 'rotor'], default: 'auto' },
+            methodes: { type: 'object', description: 'Beregening per soort beplanting: bed, hedge, planter = dripline, drippers of none.', additionalProperties: { type: 'string' } },
+            planId: { type: 'string', maxLength: 64, description: 'Id van een eerder gemaakt plan om bij te werken (alleen eigen plannen, of alle met het recht plannen.alle).' },
+            ookMetAannames: { type: 'boolean', description: 'Alleen true nadat de gebruiker heeft gezegd dat druk en debiet onbekend zijn of dat de aannames goed zijn.' },
+          },
+          required: ['vlakken'], additionalProperties: false,
+        },
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      },
+      /**
+       * Bouwt het plan en bewaart het als concept.
+       * @param {object} args De invoer.
+       * @param {object} req Het verzoek.
+       * @returns {object} De uitkomst.
+       */
+      run: (args, req) => {
+        if (!withinLimit(plansPerHour, req)) return errorOf(`Te veel plannen dit uur via de AI-koppeling (hoogstens ${PLANS_PER_HOUR}). Probeer het later opnieuw of werk in de Beregeningsplanner.`);
+        let customerName = cleanText(args.klantNaam, 120);
+        let address = cleanText(args.adres, 200);
+        const wantedId = cleanText(args.klantId, 64);
+        if (wantedId) {
+          if (!ctx.can(req.user, 'klanten')) return errorOf('Je mag in AquaTech geen klantgegevens opzoeken. Geef de klant als tekst op (klantNaam en adres) in plaats van klantId.');
+          const account = ctx.getCustomer(req, wantedId);
+          if (!account || account.disabled) return errorOf('Deze klant bestaat niet (meer). Zoek opnieuw met zoek_klant.');
+          customerName = account.companyName || account.displayName;
+          address = address || account.address || '';
+        }
+        const questions = [];
+        if (args.druk == null || args.debiet == null) questions.push({ onderwerp: 'kraan', vraag: 'Wat zijn de waterdruk (bar) en het debiet (m³/u) aan de kraan? De gebruiker kan dat meten met een emmer en een manometer; weet hij het niet, dan gaat het plan uit van 3,5 bar en 2,0 m³/u.' });
+        if (questions.length && args.ookMetAannames !== true) {
+          return resultOf({ status: 'terugvragen', aangemaakt: false, vragen: questions,
+            melding: 'Er is nog geen plan gemaakt. Leg de vraag voor aan de gebruiker en roep opnieuw aan (met druk en debiet, of met ookMetAannames=true).' });
+        }
+        const built = ctx.buildPlan(req, { ...args, klantNaam: customerName, adres: address });
+        if (built.problems) return errorOf(`Het plan kon niet gemaakt worden: ${built.problems.join(' ')}`, { problemen: built.problems });
+        const planId = cleanText(args.planId, 64);
+        const saved = ctx.savePlan(req, planId || null, built.state);
+        if (!saved) return errorOf('Dit plan bestaat niet (meer) of is van een ander. Maak een nieuw plan zonder planId.');
+        ctx.audit(req, 'plan_via_ai', { planId: saved.id, bijgewerkt: Boolean(planId), vlakken: built.report.vlakken.length, sproeiers: built.report.sproeiers.totaal });
+        return resultOf({
+          planId: saved.id, status: 'concept', bijgewerkt: Boolean(planId), link: ctx.appUrl(req, `beregening/?plan=${encodeURIComponent(saved.id)}`), ...built.report,
+          melding: 'Het plan staat als concept in AquaTech. Laat de gebruiker het verslag controleren (vlakken, aantallen, aandachtspunten) en kijk het plan na in de Beregeningsplanner voordat er een offerte of werkorder van komt.',
+        });
+      },
+    },
+    plan_details: {
+      scope: 'plannen.concept', rights: ['plannen'],
+      definition: {
+        title: 'Beregeningsplan bekijken',
+        description: 'Geeft de samenvatting van een bestaand plan: vlakken, sproeiers, zones, stuklijst met prijzen en aandachtspunten. Alleen eigen plannen (of alle met het recht plannen.alle).',
+        inputSchema: { type: 'object', properties: { planId: { type: 'string', minLength: 1, maxLength: 64 } }, required: ['planId'], additionalProperties: false },
+        annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      },
+      /**
+       * Vat het plan samen.
+       * @param {object} args { planId }.
+       * @param {object} req Het verzoek.
+       * @returns {object} De uitkomst.
+       */
+      run: (args, req) => {
+        if (!withinLimit(readsPerHour, req)) return errorOf(READS_LIMITED);
+        const plan = ctx.getPlan(req, cleanText(args.planId, 64));
+        if (!plan) return errorOf('Geen plan met dit id gevonden.');
+        return resultOf({ planId: plan.id, status: (plan.review && plan.review.status) || 'concept', link: ctx.appUrl(req, `beregening/?plan=${encodeURIComponent(plan.id)}`), ...ctx.summarizePlan(req, plan.data) });
       },
     },
     maak_rapport_excel: {
