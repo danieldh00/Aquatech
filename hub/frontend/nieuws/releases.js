@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.16.9',
+      date: '2026-11-14',
+      title: 'Google Analytics in de webshop',
+      items: [
+        { text: 'Je kunt Google Analytics 4 aanzetten voor de webshop (Beheer > Webshop > Google Analytics). Bezoekers krijgen eerst een cookiemelding; zonder toestemming wordt er niets gemeten of van Google geladen.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.16.8',
       date: '2026-11-14',
       title: 'Opmaak ook voor offerte, werkbon en klantdossier',
