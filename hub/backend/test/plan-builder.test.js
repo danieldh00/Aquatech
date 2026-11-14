@@ -88,3 +88,8 @@ test('runPlanTask: rekent in een werkthread en meldt een fout als een melding', 
   const broken = await runPlanTask('bestaatNiet', []);
   assert.ok(broken.problems.length);
 });
+
+test('runPlanTask: meer berekeningen dan er tegelijk mogen draaien wachten hun beurt af en geven allemaal een uitkomst', async () => {
+  const outcomes = await Promise.all(Array.from({ length: 6 }, () => runPlanTask('buildPlan', [{ druk: 3, debiet: 2, vlakken: [LAWN] }, {}])));
+  assert.ok(outcomes.every((outcome) => outcome.report && outcome.report.sproeiers.totaal >= 1));
+});

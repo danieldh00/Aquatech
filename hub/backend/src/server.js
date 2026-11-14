@@ -2501,7 +2501,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
        */
       savePlan: (req, planId, data) => store.savePlan({ ...req.user, tenant_id: req.tenantId }, planId, data, ipOf(req)),
       getPlan: (req, planId) => store.getPlan({ ...req.user, tenant_id: req.tenantId }, planId),
-      summarizePlan: (req, data) => runPlanTask('summarizePlan', [data, planTenantData(req.tenantId)]),
+      summarizePlan: (req, data) => runPlanTask('summarizePlan', [{ ...data, background: undefined }, planTenantData(req.tenantId)]),
       /**
        * Zet een Excel-rapport klaar voor download door deze gebruiker (15 minuten, alleen ingelogd).
        * @param {object} req Het verzoek.
