@@ -8,6 +8,7 @@ const { version: SHOP_VERSION } = require('../../package.json');
 const { DEFAULT_SITE } = require('./shop-content');
 const { LEGAL_SLUGS, LEGAL_TITLES } = require('./legal-pages');
 const Seo = require('./seo');
+const Analytics = require('./shop-analytics');
 
 const SHOP_NAME = 'Aquatechshop.nl';
 /** Maximaal aantal resultaten op de zoekpagina. */
@@ -38,7 +39,7 @@ function formatPrice(amount) {
 /** De inhoud (blokken en pagina's uit Beheer) waarmee de pagina's die nu worden opgebouwd, worden getekend. */
 let activeContent = { site: DEFAULT_SITE, pages: [] };
 /** Of bestellen aan staat, hoeveel regels er in de winkelwagen van de bezoeker zitten en of hij een groothandelsklant is, met het kopje Groothandel (voor de pagina's die nu worden opgebouwd). */
-let activeShop = { ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '' };
+let activeShop = { ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '', analytics: '' };
 
 /**
  * Bouwt pagina's op met de inhoud uit Beheer. Het opbouwen is synchroon, dus
@@ -48,7 +49,7 @@ let activeShop = { ordering: false, cartCount: 0, business: false, staff: false,
  * @param {{ ordering: boolean, cartCount: number, business?: boolean, wholesale?: boolean, baseUrl?: string }} [shop] Het volledige webadres van de shop (met slash achteraan; leeg = geen canonical-link en OpenGraph), of bestellen aan staat, het aantal regels in de winkelwagen, of de bezoeker een zakelijke klant is (prijzen excl. btw) en of hij groothandelsklant is (kopje Groothandel).
  * @returns {*} Wat `render` teruggeeft.
  */
-function renderWith(content, render, shop = { ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '' }) {
+function renderWith(content, render, shop = { ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '', analytics: '' }) {
   const previous = activeContent;
   const previousShop = activeShop;
   activeContent = content;
@@ -210,12 +211,40 @@ ${Seo.jsonLdBlock(jsonLd)}`;
 }
 
 /**
+ * De koopfunnel-gebeurtenissen van een lijst producten (alleen als Google Analytics aan staat).
+ * @param {string} listName Naam van de lijst (categorie, "Zoekresultaten").
+ * @param {object[]} products De getoonde producten.
+ * @param {{ searchTerm?: string, resultCount?: number }} [search] De zoekopdracht en het totaal aantal resultaten.
+ * @returns {object[]} De gebeurtenissen, leeg zonder Google Analytics.
+ */
+function listEventsOf(listName, products, search = {}) {
+  if (!activeShop.analytics) return [];
+  const items = products.map((product, index) => Analytics.itemOfProduct(product, shownPrice((product.variants && product.variants[0]) || product), { listName, index: index + 1 }));
+  return Analytics.listEvents({ listName, items, ...search });
+}
+
+/**
+ * De attributen op <body> waarmee `analytiek.js` Google Analytics na toestemming laadt: het meet-ID, de klantgroep, het
+ * pad naar de privacyverklaring en de gebeurtenissen van de pagina. Zonder actief meet-ID (instelling uit of geen ID) is
+ * het resultaat leeg en staat er niets van Google Analytics in de pagina.
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @param {object[]} events De gebeurtenissen van de pagina (zie shop-analytics.js).
+ * @returns {string} De attributen met een spatie ervoor, of een lege tekst.
+ */
+function analyticsAttributes(root, events) {
+  if (!activeShop.analytics) return '';
+  const group = activeShop.wholesale ? 'groothandel' : activeShop.business ? 'zakelijk' : 'particulier';
+  const json = Analytics.eventsJson(events);
+  return ` data-shop-analytics="${escapeHtml(activeShop.analytics)}" data-customer-group="${group}" data-privacy-url="${escapeHtml(root)}pagina/privacyverklaring/"${activeShop.staff ? ' data-internal="1"' : ''}${json ? ` data-shop-events="${escapeHtml(json)}"` : ''}`;
+}
+
+/**
  * Het kader om elke pagina: kop met logo, zoeken, winkelwagen en account,
  * menu van productgroepen, inhoud en voet.
- * @param {{ root: string, title: string, description: string, body: string, groups: object[], query?: string, wide?: boolean, variantScript?: boolean, script?: string|string[], refresh?: string, canonicalPath?: ?string, ogImage?: string, ogType?: string, jsonLd?: object[] }} options root = relatief pad naar de shop-startpagina, title, description (meta), body (HTML), groups = hoofdcategorieën voor menu en voet en query = ingevulde zoekterm en wide = de inhoud over de volle breedte (startpagina) en variantScript = of de pagina het script voor de keuzelijsten van varianten laadt en script = de naam (of namen) van andere scripts uit de assets die de pagina laadt (leeg = geen) en refresh = een adres waar de pagina de bezoeker meteen heen stuurt (leeg = niet) en canonicalPath = het pad van de pagina vanaf de startpagina ('' = startpagina) voor de canonical-link, OpenGraph en zoekmachines (null = geen: de pagina is dan voor zoekmachines niet bedoeld en krijgt noindex) en ogImage = volledig adres van de afbeelding voor delen (leeg = het logo) en ogType = het OpenGraph-type ('website' of 'product') en jsonLd = Schema.org-objecten voor in de pagina.
+ * @param {{ root: string, title: string, description: string, body: string, groups: object[], query?: string, wide?: boolean, variantScript?: boolean, script?: string|string[], refresh?: string, canonicalPath?: ?string, ogImage?: string, ogType?: string, jsonLd?: object[], events?: object[] }} options root = relatief pad naar de shop-startpagina, title, description (meta), body (HTML), groups = hoofdcategorieën voor menu en voet en query = ingevulde zoekterm en wide = de inhoud over de volle breedte (startpagina) en variantScript = of de pagina het script voor de keuzelijsten van varianten laadt en script = de naam (of namen) van andere scripts uit de assets die de pagina laadt (leeg = geen) en refresh = een adres waar de pagina de bezoeker meteen heen stuurt (leeg = niet) en canonicalPath = het pad van de pagina vanaf de startpagina ('' = startpagina) voor de canonical-link, OpenGraph en zoekmachines (null = geen: de pagina is dan voor zoekmachines niet bedoeld en krijgt noindex) en ogImage = volledig adres van de afbeelding voor delen (leeg = het logo) en ogType = het OpenGraph-type ('website' of 'product') en jsonLd = Schema.org-objecten voor in de pagina en events = de koopfunnel-gebeurtenissen van de pagina (alleen gebruikt als Google Analytics aan staat, zie shop-analytics.js).
  * @returns {string} De volledige HTML-pagina.
  */
-function layout({ root, title, description, body, groups, query = '', wide = false, variantScript = false, script = '', refresh = '', canonicalPath = null, ogImage = '', ogType = 'website', jsonLd = [] }) {
+function layout({ root, title, description, body, groups, query = '', wide = false, variantScript = false, script = '', refresh = '', canonicalPath = null, ogImage = '', ogType = 'website', jsonLd = [], events = [] }) {
   const home = root || './';
   const { site, pages } = activeContent;
   const phone = site.contact.phone;
@@ -233,8 +262,8 @@ function layout({ root, title, description, body, groups, query = '', wide = fal
 ${seoHead({ title, description, canonicalPath, ogImage, ogType, jsonLd, root })}${refresh ? `<meta http-equiv="refresh" content="0;url=${escapeHtml(refresh)}">\n` : ''}<link rel="icon" type="image/png" href="${assetUrl(root, 'favicon.png')}">
 <link rel="stylesheet" href="${assetUrl(root, 'brand.css')}">
 <link rel="stylesheet" href="${assetUrl(root, 'winkel.css')}">
-${nav.includes('nav-fly') ? `<script src="${assetUrl(root, 'menu.js')}" defer></script>\n` : ''}${variantScript ? `<script src="${assetUrl(root, 'varianten.js')}" defer></script>\n` : ''}${[].concat(script || []).map((name) => `<script src="${assetUrl(root, name)}" defer></script>\n`).join('')}</head>
-<body>
+${nav.includes('nav-fly') ? `<script src="${assetUrl(root, 'menu.js')}" defer></script>\n` : ''}${variantScript ? `<script src="${assetUrl(root, 'varianten.js')}" defer></script>\n` : ''}${[].concat(script || [], activeShop.analytics ? 'analytiek.js' : []).map((name) => `<script src="${assetUrl(root, name)}" defer></script>\n`).join('')}</head>
+<body${analyticsAttributes(root, events)}>
 ${site.notice.enabled && site.notice.text ? `<div class="shop-notice kleur-${escapeHtml(site.notice.color || 'purple')}">${escapeHtml(site.notice.text)}</div>` : ''}
 <header class="shop-head">
   <div class="shop-bar">
@@ -263,7 +292,7 @@ ${body}
     <div><strong>Account</strong><ul><li><a href="${root}account/">Mijn account</a></li><li><a href="${root}account/">Inloggen of registreren</a></li></ul></div>
     <div><strong>Over ons</strong><p>${escapeHtml(site.footer.about)}</p><p><a href="${root}over-ons/">Lees ons verhaal</a></p>${footerPages.length ? `<ul>${footerPages.map((page) => `<li><a href="${root}pagina/${escapeHtml(page.slug)}/">${escapeHtml(page.title)}</a></li>`).join('')}</ul>` : ''}</div>
   </div>
-  <nav class="foot-legal" aria-label="Voorwaarden">${legalLinks}</nav>
+  <nav class="foot-legal" aria-label="Voorwaarden">${legalLinks}${activeShop.analytics ? '<button type="button" class="link-button" data-consent-settings>Cookie-instellingen</button>' : ''}</nav>
   <div class="foot-note"><span>${activeShop.business ? 'Je ziet zakelijke prijzen: alle prijzen zijn exclusief btw.' : 'Alle prijzen zijn inclusief btw.'}</span><img src="${assetUrl(root, 'betaalmethoden.png')}" alt="Betaalmethoden" width="286" height="26" loading="lazy"></div>
 </footer>
 </body>
@@ -317,11 +346,13 @@ function productHref(root, product, variant) {
  * @param {string} code Artikelnummer van het artikel (of van de gekozen variant).
  * @param {boolean} inStock Of het artikel op voorraad is.
  * @param {string} className Klasse van het formulier.
+ * @param {?object} [item] Het artikel als GA4-artikel (shop-analytics.js, itemOf) voor de gebeurtenis add_to_cart; leeg zonder Google Analytics.
  * @returns {string} HTML.
  */
-function orderForm(root, code, inStock, className) {
+function orderForm(root, code, inStock, className, item = null) {
   if (!activeShop.ordering) return `<div class="${className}"><input type="number" value="1" min="1" aria-label="Aantal" disabled><button class="button" type="button" disabled>In winkelwagen</button></div>`;
-  return `<form class="${className}" method="post" action="${root}winkelwagen/">
+  const itemData = item && activeShop.analytics ? ` data-item="${escapeHtml(JSON.stringify(item))}"` : '';
+  return `<form class="${className}" method="post" action="${root}winkelwagen/"${itemData}>
       <input type="hidden" name="action" value="add"><input type="hidden" name="code" value="${escapeHtml(code)}" data-order-code>
       <input type="number" name="qty" value="1" min="1" max="99" aria-label="Aantal"${inStock ? '' : ' disabled'}><button class="button" type="submit"${inStock ? '' : ' disabled'}>In winkelwagen</button>
     </form>`;
@@ -342,7 +373,7 @@ function productCard(product, root) {
   const selected = variants.length ? (variants.find((variant) => variant.inStock) || variants[0]) : product;
   const href = productHref(root, product, variants.length ? selected : null);
   const image = product.image ? `<img src="${productImageSrc(root, product.image)}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>';
-  const options = variants.map((variant) => `<option value="${escapeHtml(variant.code)}" data-code="${escapeHtml(variant.code)}" data-meta="${escapeHtml(variant.meta)}" data-price="${escapeHtml(formatPrice(shownPrice(variant)))}" ${activeShop.business ? ` data-price-incl="${escapeHtml(formatPrice(variant.priceBusinessIncl))}"` : ''} data-stock="${variant.inStock ? 'in' : 'out'}" data-href="${productHref(root, product, variant)}"${variant === selected ? ' selected' : ''}>${escapeHtml(variant.label)}</option>`).join('');
+  const options = variants.map((variant) => `<option value="${escapeHtml(variant.code)}" data-code="${escapeHtml(variant.code)}" data-meta="${escapeHtml(variant.meta)}" data-price="${escapeHtml(formatPrice(shownPrice(variant)))}" ${activeShop.business ? ` data-price-incl="${escapeHtml(formatPrice(variant.priceBusinessIncl))}"` : ''} data-stock="${variant.inStock ? 'in' : 'out'}" data-value="${escapeHtml(String(shownPrice(variant)))}" data-label="${escapeHtml(variant.label)}" data-href="${productHref(root, product, variant)}"${variant === selected ? ' selected' : ''}>${escapeHtml(variant.label)}</option>`).join('');
   const picker = variants.length ? `<form class="variant-pick" method="get" action="${root}product/${escapeHtml(product.slug)}/">
     <label>${escapeHtml(product.attributeName)}<select name="v" data-variant-select>${options}</select></label>
     <span class="variant-count">${variants.length} varianten</span>
@@ -356,7 +387,7 @@ function productCard(product, root) {
   <div class="product-foot">
     <p class="product-price"><strong data-variant-price>${escapeHtml(formatPrice(shownPrice(selected)))}</strong> <small>${vatLabel(selected)}</small></p>
     <p class="stock ${selected.inStock ? 'in' : 'out'}" data-variant-stock>${selected.inStock ? 'Op voorraad' : 'Niet op voorraad'}</p>
-    ${orderForm(root, selected.code, selected.inStock, 'card-order')}
+    ${orderForm(root, selected.code, selected.inStock, 'card-order', Analytics.itemOfProduct({ code: selected.code, name: product.name, categoryName: product.categoryName }, shownPrice(selected), { variant: variants.length ? selected.label : '' }))}
   </div>
 </article>`;
 }
@@ -623,7 +654,7 @@ ${list}
 </div>`;
   const browsePath = `${category ? `categorie/${category.slug}` : `groep/${group.slug}`}/${page > 1 ? `?pagina=${page}` : ''}`;
   const breadcrumbSteps = [{ name: 'Shop', path: '' }, { name: group.name, path: `groep/${group.slug}/` }, ...chain.map((item) => ({ name: item.name, path: `categorie/${item.slug}/` }))];
-  return layout({ root, wide: true, canonicalPath: browsePath, jsonLd: [Seo.breadcrumbJsonLd(breadcrumbSteps, activeShop.baseUrl)], variantScript: shown.some((product) => product.variants), title: `${subject.name} – ${SHOP_NAME}`, description: `${subject.name} van AquaTech Service: ${productCount(subject.count)}.`, body, groups });
+  return layout({ root, wide: true, canonicalPath: browsePath, jsonLd: [Seo.breadcrumbJsonLd(breadcrumbSteps, activeShop.baseUrl)], events: listEventsOf(subject.name, shown), variantScript: shown.some((product) => product.variants), title: `${subject.name} – ${SHOP_NAME}`, description: `${subject.name} van AquaTech Service: ${productCount(subject.count)}.`, body, groups });
 }
 
 /**
@@ -667,7 +698,7 @@ ${query ? stockFilter(onlyInStock, `q=${encodeURIComponent(query)}`, `q=${encode
 <div class="product-grid">
 ${shown.map((product) => productCard(product, root)).join('\n')}
 </div>`;
-  return layout({ root, variantScript: shown.some((product) => product.variants), title: `Zoeken – ${SHOP_NAME}`, description: 'Zoek een product in de webshop van AquaTech Service.', body, groups, query });
+  return layout({ root, events: query ? listEventsOf('Zoekresultaten', shown, { searchTerm: query, resultCount: products.length }) : [], variantScript: shown.some((product) => product.variants), title: `Zoeken – ${SHOP_NAME}`, description: 'Zoek een product in de webshop van AquaTech Service.', body, groups, query });
 }
 
 /**
@@ -733,6 +764,7 @@ function productPage(product, groups, chosenCode = '', details = new Map(), { pa
     </form>` : '';
   const shownDetails = details.get(shown.code) || details.get(product.code) || { description: '', specifications: [] };
   const parentLink = product.parentSlug ? `<p class="note"><a href="${root}product/${escapeHtml(product.parentSlug)}/?v=${encodeURIComponent(shown.code)}">Alle uitvoeringen van ${escapeHtml(product.parentName)}</a></p>` : '';
+  const viewedItem = activeShop.analytics ? Analytics.itemOfProduct({ code: pack ? pack.cartCode : shown.code, name: product.name, categoryName: product.categoryName }, pack ? pack.price : shownPrice(shown), { variant: chosen ? chosen.label : '' }) : null;
   const body = `<nav class="crumbs" aria-label="Kruimelpad"><a href="${root}">Shop</a>${group ? ` › <a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a>` : ''} › <a href="${root}categorie/${escapeHtml(product.categorySlug)}/">${escapeHtml(product.categoryName)}</a> › <span>${escapeHtml(product.name)}</span></nav>
 <article class="product-detail">
   <div class="product-image large">${image}</div>
@@ -743,7 +775,7 @@ function productPage(product, groups, chosenCode = '', details = new Map(), { pa
     ${packagingPicker}
     <p class="price">${escapeHtml(formatPrice(pack ? pack.price : shownPrice(shown)))} <small>${activeShop.business ? `excl. ${shown.vatRate}% btw · per ${escapeHtml(pack ? `${pack.name} (${pack.factor} ${product.unit})` : product.unit)}<br><span class="price-incl">incl. btw ${escapeHtml(formatPrice(pack ? pack.priceIncl : shown.priceBusinessIncl))}</span>` : `incl. ${shown.vatRate}% btw · per ${escapeHtml(pack ? `${pack.name} (${pack.factor} ${product.unit})` : product.unit)}`}</small></p>
     <p class="stock ${(pack ? pack.inStock : shown.inStock) ? 'in' : 'out'}">${(pack ? pack.inStock : shown.inStock) ? 'Op voorraad' : 'Niet op voorraad'}</p>
-    ${activeShop.ordering ? orderForm(root, pack ? pack.cartCode : shown.code, pack ? pack.inStock : shown.inStock, 'product-order') : '<button class="button" type="button" disabled>In winkelwagen</button>\n    <p class="note">Online bestellen volgt binnenkort.</p>'}
+    ${activeShop.ordering ? orderForm(root, pack ? pack.cartCode : shown.code, pack ? pack.inStock : shown.inStock, 'product-order', viewedItem) : '<button class="button" type="button" disabled>In winkelwagen</button>\n    <p class="note">Online bestellen volgt binnenkort.</p>'}
     ${parentLink}
   </div>
 </article>
@@ -753,7 +785,7 @@ ${detailsSection(shownDetails)}`;
   const jsonProduct = product.parentSlug ? { ...product, variants: [] } : product;
   const productDescription = shownDetails.description ? shortText(shownDetails.description, 500) : `${product.name}, artikelnummer ${product.code}${product.categoryName ? `, uit de categorie ${product.categoryName}` : ''} bij ${SHOP_NAME}.`;
   const breadcrumbSteps = [{ name: 'Shop', path: '' }, ...(group ? [{ name: group.name, path: `groep/${group.slug}/` }] : []), { name: product.categoryName, path: `categorie/${product.categorySlug}/` }, { name: product.name, path: productPath }];
-  return layout({ root, canonicalPath: productPath, ogType: 'product', ogImage: Seo.imageUrlOf(activeShop.baseUrl, imageUrl), variantScript: Boolean(chosen || packagings.length), jsonLd: [Seo.productJsonLd({ product: jsonProduct, baseUrl: activeShop.baseUrl, canonicalPath: productPath, shopName: SHOP_NAME, description: productDescription }), Seo.breadcrumbJsonLd(breadcrumbSteps, activeShop.baseUrl)], title: `${product.name} – ${SHOP_NAME}`, description: shownDetails.description ? shortText(shownDetails.description, 155) : `${product.name} (${formatPrice(shownPrice(shown))} ${activeShop.business ? 'excl.' : 'incl.'} btw) bij AquaTech Service.`, body, groups });
+  return layout({ root, events: viewedItem ? Analytics.viewItemEvents(viewedItem, { inStock: pack ? pack.inStock : shown.inStock }) : [], canonicalPath: productPath, ogType: 'product', ogImage: Seo.imageUrlOf(activeShop.baseUrl, imageUrl), variantScript: Boolean(chosen || packagings.length), jsonLd: [Seo.productJsonLd({ product: jsonProduct, baseUrl: activeShop.baseUrl, canonicalPath: productPath, shopName: SHOP_NAME, description: productDescription }), Seo.breadcrumbJsonLd(breadcrumbSteps, activeShop.baseUrl)], title: `${product.name} – ${SHOP_NAME}`, description: shownDetails.description ? shortText(shownDetails.description, 155) : `${product.name} (${formatPrice(shownPrice(shown))} ${activeShop.business ? 'excl.' : 'incl.'} btw) bij AquaTech Service.`, body, groups });
 }
 
 /**

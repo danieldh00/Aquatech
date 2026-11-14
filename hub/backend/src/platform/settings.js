@@ -5,6 +5,7 @@ const { sanitizeMail } = require('./mailer');
 const { sanitizeShop } = require('../webshop/woocommerce');
 const { sanitizeShipping } = require('../webshop/shipping');
 const { sanitizePayment } = require('../webshop/mollie');
+const { sanitizeAnalytics } = require('../webshop/shop-analytics');
 const { sanitizeOutsourcing } = require('../uitvoering/outsourcing');
 const { sanitizeInvoicing } = require('../verkoop/invoices');
 const { sanitizeSeasonReminders } = require('../uitvoering/season-reminders');
@@ -61,6 +62,8 @@ const FIELDS = {
   shopShipping: { type: 'object', default: {}, sanitize: sanitizeShipping },
   // Betalen in de webshop (webshop/mollie.js): online betalen via Mollie, op rekening en de bewaartijd van onbetaalde bestellingen; de API-sleutel staat apart en versleuteld.
   shopPayment: { type: 'object', default: {}, sanitize: sanitizePayment },
+  // Google Analytics (GA4) in de webshop: aan/uit en meet-ID; stuurt een extern systeem aan, dus alleen live (zie shop-analytics.js).
+  shopAnalytics: { type: 'object', default: {}, sanitize: sanitizeAnalytics, liveOnly: true },
   mollieApiKey: { type: 'secret', default: '', min: 10, max: 200, hint: true, liveOnly: true },
   anthropicApiKey: { type: 'secret', env: 'ANTHROPIC_API_KEY', default: '', min: 20, hint: true },
   aiEnabled: { type: 'bool', default: true },

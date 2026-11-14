@@ -1887,7 +1887,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // aiFromLive: testomgeving zonder eigen sleutel gebruikt die van live.
     const aiFrom = aiTenantOf(req.tenantId);
     const settings = settingsFor(req.tenantId).view();
-    if (req.tenantId !== tenant.id) { delete settings.storefront; delete settings.shopPlanner; delete settings.shopOrdering; delete settings.shopShipping; delete settings.shopPayment; delete settings.mollieApiKey; }
+    if (req.tenantId !== tenant.id) { delete settings.storefront; delete settings.shopPlanner; delete settings.shopOrdering; delete settings.shopShipping; delete settings.shopPayment; delete settings.shopAnalytics; delete settings.mollieApiKey; }
     res.json({ settings, via: auth.session(req)?.via || null,
       // De eigen webshop (winkel/) toont alleen de hoofdtenant: de schakelaar hoort alleen daar.
       storefrontAllowed: req.tenantId === tenant.id,
@@ -1914,7 +1914,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       return res.status(400).json({ error: 'invalid_setting', field: platformField,
         message: FIELDS[platformField].internal ? 'Deze instelling wijzig je in de module zelf.' : (platformField === 'theme' ? 'Kleuren wijzig je in Beheer > Kleuren.' : 'Deze instelling wijzig je in Hoofdbeheer.') });
     }
-    if (req.tenantId !== tenant.id && ['storefront', 'shopPlanner', 'shopOrdering', 'shopShipping', 'shopPayment', 'mollieApiKey'].some((key) => [...Object.keys(patch), ...resets].includes(key))) {
+    if (req.tenantId !== tenant.id && ['storefront', 'shopPlanner', 'shopOrdering', 'shopShipping', 'shopPayment', 'shopAnalytics', 'mollieApiKey'].some((key) => [...Object.keys(patch), ...resets].includes(key))) {
       return res.status(400).json({ error: 'invalid_setting', field: 'storefront', message: 'De eigen webshop geldt alleen voor de hoofdtenant.' });
     }
     const codeAfter = patch.accessCode !== undefined ? String(patch.accessCode).trim()
@@ -1936,7 +1936,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       audit(req, 'instellingen_gewijzigd', { fields: changed });
     }
     const responseSettings = settings.view();
-    if (req.tenantId !== tenant.id) { delete responseSettings.storefront; delete responseSettings.shopPlanner; delete responseSettings.shopOrdering; delete responseSettings.shopShipping; delete responseSettings.shopPayment; delete responseSettings.mollieApiKey; }
+    if (req.tenantId !== tenant.id) { delete responseSettings.storefront; delete responseSettings.shopPlanner; delete responseSettings.shopOrdering; delete responseSettings.shopShipping; delete responseSettings.shopPayment; delete responseSettings.shopAnalytics; delete responseSettings.mollieApiKey; }
     res.json({ settings: responseSettings, changed });
   });
 

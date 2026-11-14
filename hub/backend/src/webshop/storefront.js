@@ -26,6 +26,7 @@ const { legalDefaults, LEGAL_SLUGS, LEGAL_TITLES } = require('./legal-pages');
 const Shipping = require('./shipping');
 const Vat = require('./vat');
 const { validPaymentId, cleanPublicUrl, sanitizePayment } = require('./mollie');
+const Analytics = require('./shop-analytics');
 const Seo = require('./seo');
 const { readCart, writeCart, applyCartAction, cartActionRejected, addCartLines, setCartLines, plannedLinesFrom, convertPlannedQty, MAX_QTY } = require('./storefront-cart');
 const { deliverySameOf } = require('./web-orders');
@@ -50,6 +51,7 @@ const ASSETS = {
   'varianten.js': { file: path.join(__dirname, 'storefront-variants.js'), type: 'text/javascript; charset=utf-8' },
   'adres.js': { file: path.join(SHARED_DIR, 'address-lookup.js'), type: 'text/javascript; charset=utf-8' },
   'afrekenen.js': { file: path.join(__dirname, 'storefront-checkout.js'), type: 'text/javascript; charset=utf-8' },
+  'analytiek.js': { file: path.join(__dirname, 'storefront-analytics.js'), type: 'text/javascript; charset=utf-8' },
   'pakbon.js': { file: path.join(__dirname, 'storefront-slip.js'), type: 'text/javascript; charset=utf-8' },
   'groothandel.js': { file: path.join(__dirname, 'storefront-wholesale.js'), type: 'text/javascript; charset=utf-8' },
   'account-link.js': { file: path.join(__dirname, 'storefront-account-link.js'), type: 'text/javascript; charset=utf-8' },
@@ -153,7 +155,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     // Een medewerker of beheerder krijgt de knop naar het beheer; die pagina's zijn persoonlijk en worden niet gedeeld.
     const staff = Boolean(viewer) && viewer.isStaff;
     if (business || (staff && !preview)) res.setHeader('Cache-Control', 'private, no-store');
-    const html = renderWith(contentOf(req), render, { baseUrl: preview ? '' : publicBaseUrl(req), ordering, cartCount: ordering ? (req.pendingCart || readCart(req)).reduce((total, line) => total + line.qty, 0) : 0, business, staff, wholesale: ordering && business && viewer.wholesale, businessForm: Boolean(orderMail && orderMail.businessRequestReady && orderMail.businessRequestReady(tenantId)), businessSent: ['ja', 'fout'].includes(req.query.aanvraag) ? req.query.aanvraag : '' });
+    const html = renderWith(contentOf(req), render, { baseUrl: preview ? '' : publicBaseUrl(req), analytics: preview ? '' : analyticsIdOf(), ordering, cartCount: ordering ? (req.pendingCart || readCart(req)).reduce((total, line) => total + line.qty, 0) : 0, business, staff, wholesale: ordering && business && viewer.wholesale, businessForm: Boolean(orderMail && orderMail.businessRequestReady && orderMail.businessRequestReady(tenantId)), businessSent: ['ja', 'fout'].includes(req.query.aanvraag) ? req.query.aanvraag : '' });
     const withPlanner = html.replace(/<!--planner:([^>]*)-->/g, (_, root) => (plannerOn() ? `<li class="nav-planner"><a href="${root}planner/">Planner</a></li>` : ''));
     // In een voorbeeld blijven de menu- en categorielinks in het concept, ook voor categorieën die er alleen in staan.
     // Ook het zoekformulier houdt de voorbeeldstatus vast (verborgen veld), anders valt een zoekopdracht terug op de gepubliceerde boom.
@@ -162,6 +164,12 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
       .replace(/(<form class="shop-search"[^>]*>)/, '$1<input type="hidden" name="voorbeeld" value="1">');
     res.type('html').send(preview ? inPreview : withPlanner);
   };
+  /**
+   * Het actieve GA4-meet-ID van de shop (instelling shopAnalytics: aan en een geldig ID).
+   * @returns {string} Het meet-ID, leeg als er niet gemeten mag worden.
+   */
+  const analyticsIdOf = () => Analytics.activeMeasurementId(settingsFor(tenantId).get('shopAnalytics'));
+
   /**
    * Of dit verzoek het concept van de inhoud moet tonen: `?voorbeeld=1` door een beheerder.
    * @param {object} req Het verzoek.
@@ -193,7 +201,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
 
   router.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Content-Security-Policy', STOREFRONT_CSP);
+    res.setHeader('Content-Security-Policy', Analytics.cspWith(STOREFRONT_CSP, analyticsIdOf()));
     res.setHeader('Referrer-Policy', 'same-origin');
     const accountPost = req.method === 'POST' && ((accounts && (ACCOUNT_POSTS.test(req.path) || (orders && ORDER_POSTS.test(req.path)))) || (orderMail && orderMail.sendBusinessRequest && REQUEST_POST.test(req.path)));
     if (req.method !== 'GET' && req.method !== 'HEAD' && !accountPost) return res.status(405).set('Allow', 'GET, HEAD').end();
@@ -719,7 +727,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
         if (!cart.lines.length || !cart.ok) return res.redirect(302, '../winkelwagen/');
         const viewer = withBusinessProfile(accounts.viewer(req));
-        if (!viewer) return sendWithGroups(req, res, 200, (groups) => checkoutLoginPage(groups));
+        if (!viewer) return sendWithGroups(req, res, 200, (groups) => checkoutLoginPage(groups, cart));
         sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), ...checkoutChoice(cart, { vatNumber: viewer.profile ? viewer.profile.vatNumber : '', ...(req.query || {}) }, viewer) }, groups));
       });
       router.post('/afrekenen', form, async (req, res, next) => {
