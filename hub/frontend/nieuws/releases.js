@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.16.7',
+      date: '2026-11-14',
+      title: 'Opmaak van factuur en pakbon aanpassen',
+      items: [
+        { text: 'Nieuw in Beheer: Documentopmaak. Kies je eigen logo, de positie van het logo, een gekleurde of witte kop, de kleuren, het lettertype en een eigen voettekst voor de factuur en de pakbon. Het voorbeeld ernaast past zich meteen aan.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.16.6',
       date: '2026-11-14',
       title: 'Goederen ontvangen met de scanner in de orderpick-app',
