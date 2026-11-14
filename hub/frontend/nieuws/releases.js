@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.17.1',
+      date: '2026-11-14',
+      title: 'Bestellen in de webshop zonder account',
+      items: [
+        { text: 'Klanten kunnen in de webshop afrekenen zonder account: alleen naam, e-mailadres en adres invullen en direct online betalen. Je volgt je bestelling met de persoonlijke link in de bevestigingsmail en kunt daar ook een retour aanvragen of de factuur downloaden.' },
+        { text: 'Na de bestelling kan een klant alsnog een account maken door alleen een wachtwoord te kiezen; de bestelling staat dan in zijn account.' },
+        { text: 'Onder Beheer > Webshop > Betalen staat een schakelaar *Bestellen zonder account toestaan*. Zakelijk bestellen, op rekening betalen en dropshipping blijven alleen met een account.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.17.0',
       date: '2026-11-14',
       title: 'Onzichtbare captcha op openbare formulieren',

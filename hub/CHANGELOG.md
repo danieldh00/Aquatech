@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.17.1
+
+Bestellen als gast (webshop):
+- Loginmuur op `afrekenen/` krijgt de keuze *Bestellen zonder account* (`?gast=1`) als online betalen werkt en `shopPayment.guestCheckout` (standaard aan) niet is uitgezet. Een gast is altijd een particulier (geen zakelijke prijzen, btw-verlegging, groothandel of dropshipping), betaalt altijd online en bestelt met dezelfde voorraadcontrole als een account.
+- Gastbestelling: `web_orders.user_id` leeg, `data.guest` met de SHA-256 van het toegangstoken en het versleutelde token (geen migratie). Toegang via cookie `aquatech_gastbestelling` of de link `bestelling/<id>/?k=<token>` uit de bevestigings- en verzendmail, die tegen het cookie wordt ingewisseld en doorstuurt naar het adres zonder token. Verloopt na 180 dagen (of 90 na de laatste wijziging).
+- Bestelpagina, betalen, factuur-PDF en retour (aanvragen en intrekken) werken ook voor een gast; zonder toegang toont een gastbestelling een neutrale pagina zonder gegevens.
+- Limieten: 3 gastbestellingen per e-mailadres en 10 per bezoeker per uur.
+- Na de bestelling optioneel een account maken (`POST bestelling/<id>/account`): koppelt alleen die bestelling, nooit op e-mailadres aan een bestaand account.
+- GA4: `checkout_guest` bij het gastformulier en `checkout_type` op `purchase`.
+- Tests: `guest-orders.test.js` (SQLite en PostgreSQL).
+
 ## 1.17.0
 
 - Nieuw `beveiliging/captcha.js` (`createCaptcha`): instelling `captcha` {enabled, siteKey, minScore, onUnreachable} en geheim `captchaSecret` (versleuteld, `liveOnly`, nooit naar de browser), controle van het token bij Google (`siteverify`, 4 s, de actie en de minimumscore moeten kloppen), `captchaFetch` in `createApp` voor tests.
