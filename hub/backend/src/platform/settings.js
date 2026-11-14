@@ -6,6 +6,7 @@ const { sanitizeShop } = require('../webshop/woocommerce');
 const { sanitizeShipping } = require('../webshop/shipping');
 const { sanitizePayment } = require('../webshop/mollie');
 const { sanitizeAnalytics } = require('../webshop/shop-analytics');
+const { sanitizeCaptcha } = require('../beveiliging/captcha');
 const { sanitizeOutsourcing } = require('../uitvoering/outsourcing');
 const { sanitizeInvoicing } = require('../verkoop/invoices');
 const { sanitizeSeasonReminders } = require('../uitvoering/season-reminders');
@@ -64,6 +65,10 @@ const FIELDS = {
   shopPayment: { type: 'object', default: {}, sanitize: sanitizePayment },
   // Google Analytics (GA4) in de webshop: aan/uit en meet-ID; stuurt een extern systeem aan, dus alleen live (zie shop-analytics.js).
   shopAnalytics: { type: 'object', default: {}, sanitize: sanitizeAnalytics, liveOnly: true },
+  // Onzichtbare captcha (Google reCAPTCHA v3) op de openbare formulieren (beveiliging/captcha.js): aan/uit, sitesleutel, minimumscore en
+  // gedrag bij een onbereikbaar Google; het geheim staat apart en versleuteld. Per omgeving, en alleen live (stuurt een extern systeem aan).
+  captcha: { type: 'object', default: {}, sanitize: sanitizeCaptcha, liveOnly: true },
+  captchaSecret: { type: 'secret', default: '', min: 20, max: 100, liveOnly: true },
   mollieApiKey: { type: 'secret', default: '', min: 10, max: 200, hint: true, liveOnly: true },
   anthropicApiKey: { type: 'secret', env: 'ANTHROPIC_API_KEY', default: '', min: 20, hint: true },
   aiEnabled: { type: 'bool', default: true },

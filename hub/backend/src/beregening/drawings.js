@@ -68,6 +68,7 @@ function sanitizeSubmission(body) {
  */
 function registerDrawingRoutes(app, ctx) {
   const { store, identify, requirePlans, requireRight, requireJson, audit, settingsFor, remoteIp, publicLimiter } = ctx;
+  const { captcha, captchaGate } = ctx;
   const tenantActive = ctx.tenantActive || (() => true);
   const mailerFor = ctx.mailerFor || ((settings) => createMailer(settings));
   const planLimiter = ctx.planLimiter || ((req, res, next) => next());
@@ -99,10 +100,10 @@ function registerDrawingRoutes(app, ctx) {
   app.get('/api/public/drawing', publicLimiter, (req, res) => {
     const found = drawingTenant(req.query.org);
     if (!found) return res.json({ enabled: false });
-    res.json({ enabled: true, company: found.settings.get('quoteProfile').companyName || found.tenant.name, limits: LIMITS });
+    res.json({ enabled: true, company: found.settings.get('quoteProfile').companyName || found.tenant.name, limits: LIMITS, captcha: captcha ? captcha.publicOf(found.tenant.id) : null });
   });
 
-  app.post('/api/public/drawing', requireJson, ipLimiter, (req, res) => {
+  app.post('/api/public/drawing', requireJson, ipLimiter, async (req, res) => {
     const body = req.body || {};
     // Honeypot: een verborgen veld dat alleen bots invullen. Zelfde antwoord
     // als bij succes, zodat een bot niet leert dat hij is herkend.
@@ -111,6 +112,11 @@ function registerDrawingRoutes(app, ctx) {
     if (!found) return res.status(404).json({ error: 'not_available', message: 'Bij deze organisatie kun je (nog) geen tekening indienen.' });
     const input = sanitizeSubmission(body);
     if (input.error) return res.status(400).json({ error: 'invalid', message: input.error });
+    // Onzichtbare captcha van deze organisatie (alleen als die aan staat), vóór het zware werk met de tekening.
+    if (captchaGate) {
+      const human = await captchaGate(req, found.tenant.id, 'drawing_submit', body.captchaToken);
+      if (!human.ok) return res.status(human.status).json({ error: human.error, message: human.message });
+    }
     const planChars = JSON.stringify(input.value.data).length;
     if (planChars > MAX_PLAN_CHARS) return res.status(413).json({ error: 'too_large', message: 'De tekening is te groot (maximaal 2 MB, inclusief de achtergrond).' });
     if (store.pendingDrawingChars(found.tenant.id) + planChars > MAX_PENDING_CHARS) {

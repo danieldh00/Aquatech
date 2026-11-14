@@ -39,7 +39,19 @@ function formatPrice(amount) {
 /** De inhoud (blokken en pagina's uit Beheer) waarmee de pagina's die nu worden opgebouwd, worden getekend. */
 let activeContent = { site: DEFAULT_SITE, pages: [] };
 /** Of bestellen aan staat, hoeveel regels er in de winkelwagen van de bezoeker zitten en of hij een groothandelsklant is, met het kopje Groothandel (voor de pagina's die nu worden opgebouwd). */
-let activeShop = { ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '', analytics: '' };
+let activeShop = { ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '', analytics: '', captcha: '' };
+
+/**
+ * De velden die een formulier nodig heeft voor de onzichtbare captcha: het verborgen veld waar het script een token in zet en de
+ * verplichte vermelding van Google (het kenmerk van reCAPTCHA zelf is verborgen). Leeg als de captcha uit staat.
+ * @param {string} action De actienaam van het formulier (zie ACTIONS in beveiliging/captcha.js).
+ * @returns {string} De HTML, leeg zonder captcha.
+ */
+function captchaFields(action) {
+  if (!activeShop.captcha) return '';
+  return `<input type="hidden" name="captchaToken" value="" data-site-key="${escapeHtml(activeShop.captcha)}" data-captcha-action="${escapeHtml(action)}">
+<p class="captcha-note">Deze site wordt beschermd door reCAPTCHA. Het <a href="https://policies.google.com/privacy" rel="noopener noreferrer" target="_blank">privacybeleid</a> en de <a href="https://policies.google.com/terms" rel="noopener noreferrer" target="_blank">servicevoorwaarden</a> van Google zijn van toepassing.</p>`;
+}
 
 /**
  * Bouwt pagina's op met de inhoud uit Beheer. Het opbouwen is synchroon, dus
@@ -49,7 +61,7 @@ let activeShop = { ordering: false, cartCount: 0, business: false, staff: false,
  * @param {{ ordering: boolean, cartCount: number, business?: boolean, wholesale?: boolean, baseUrl?: string }} [shop] Het volledige webadres van de shop (met slash achteraan; leeg = geen canonical-link en OpenGraph), of bestellen aan staat, het aantal regels in de winkelwagen, of de bezoeker een zakelijke klant is (prijzen excl. btw) en of hij groothandelsklant is (kopje Groothandel).
  * @returns {*} Wat `render` teruggeeft.
  */
-function renderWith(content, render, shop = { ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '', analytics: '' }) {
+function renderWith(content, render, shop = { ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '', analytics: '', captcha: '' }) {
   const previous = activeContent;
   const previousShop = activeShop;
   activeContent = content;
@@ -262,7 +274,7 @@ function layout({ root, title, description, body, groups, query = '', wide = fal
 ${seoHead({ title, description, canonicalPath, ogImage, ogType, jsonLd, root })}${refresh ? `<meta http-equiv="refresh" content="0;url=${escapeHtml(refresh)}">\n` : ''}<link rel="icon" type="image/png" href="${assetUrl(root, 'favicon.png')}">
 <link rel="stylesheet" href="${assetUrl(root, 'brand.css')}">
 <link rel="stylesheet" href="${assetUrl(root, 'winkel.css')}">
-${nav.includes('nav-fly') ? `<script src="${assetUrl(root, 'menu.js')}" defer></script>\n` : ''}${variantScript ? `<script src="${assetUrl(root, 'varianten.js')}" defer></script>\n` : ''}${[].concat(script || [], activeShop.analytics ? 'analytiek.js' : []).map((name) => `<script src="${assetUrl(root, name)}" defer></script>\n`).join('')}</head>
+${nav.includes('nav-fly') ? `<script src="${assetUrl(root, 'menu.js')}" defer></script>\n` : ''}${variantScript ? `<script src="${assetUrl(root, 'varianten.js')}" defer></script>\n` : ''}${[].concat(script || [], activeShop.analytics ? 'analytiek.js' : [], activeShop.captcha ? 'captcha.js' : []).map((name) => `<script src="${assetUrl(root, name)}" defer></script>\n`).join('')}</head>
 <body${analyticsAttributes(root, events)}>
 ${site.notice.enabled && site.notice.text ? `<div class="shop-notice kleur-${escapeHtml(site.notice.color || 'purple')}">${escapeHtml(site.notice.text)}</div>` : ''}
 <header class="shop-head">
@@ -439,6 +451,7 @@ ${sent === 'fout' ? '<p class="error" role="alert">Versturen is niet gelukt. Con
 <label>Telefoonnummer*<input type="tel" name="phone" required maxlength="30" autocomplete="tel"></label>
 <label>Bericht (optioneel)<textarea name="message" rows="4" maxlength="1000"></textarea></label>
 <label class="trap" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
+${captchaFields('business_request')}
 <button class="button" type="submit">Verstuur</button>
 </form>`;
 }
@@ -844,4 +857,4 @@ function notFoundPage(root, groups) {
   return layout({ root, groups, title: `Pagina niet gevonden – ${SHOP_NAME}`, description: 'Deze pagina bestaat niet.', body: `<h1>Pagina niet gevonden</h1><p><a href="${root || './'}">Terug naar de shop</a></p>` });
 }
 
-module.exports = { layout, renderWith, contentPage, homePage, aboutPage, groupPage, categoryPage, searchPage, productPage, notFoundPage, escapeHtml, formatPrice };
+module.exports = { layout, renderWith, captchaFields, contentPage, homePage, aboutPage, groupPage, categoryPage, searchPage, productPage, notFoundPage, escapeHtml, formatPrice };

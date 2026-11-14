@@ -39,6 +39,7 @@
     ] },
     { title: 'Toegang & beveiliging', sections: [
       { id: 'access', label: 'Inloggen en bezoekers', pane: 'settings', form: 's-access', words: 'gasten toegangscode tekening indienen openbaar' },
+      { id: 'captcha', label: 'Onzichtbare captcha', pane: 'settings', form: 's-captcha', words: 'recaptcha google robots spam bots formulier beveiliging captcha score sleutel' },
       { id: 'security', label: 'Sessies en bewaartermijnen', pane: 'settings', form: 's-security', words: 'sessie ip adressen avg bewaren uitloggen auditlog' },
       { id: 'audit', label: 'Auditlog', pane: 'audit', words: 'inloggen beveiliging gebeurtenissen' },
     ] },
@@ -57,7 +58,7 @@
   const ALIASES = { settings: 'modules' };
 
   /** Alle formulieren van het tabblad Instellingen: er is er telkens één zichtbaar. */
-  const SETTINGS_FORMS = ['s-modules', 's-outsourcing', 's-season', 's-labels', 's-purchase-proposals', 's-mail', 's-ai', 's-ai-connector', 's-access', 's-security', 's-backup', 's-backup-drive', 's-restore', 's-debug'];
+  const SETTINGS_FORMS = ['s-modules', 's-outsourcing', 's-season', 's-labels', 's-purchase-proposals', 's-mail', 's-ai', 's-ai-connector', 's-access', 's-captcha', 's-security', 's-backup', 's-backup-drive', 's-restore', 's-debug'];
 
   const OPEN_KEY = 'aquatech_beheer_groups';
 
