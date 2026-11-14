@@ -5,6 +5,9 @@ const test = require('node:test');
 const { after } = test;
 const assert = require('node:assert');
 const zlib = require('zlib');
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
 const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
@@ -215,7 +218,7 @@ async function setup() {
   const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db, loginDelayMs: 0 }));
   servers.push(server);
   const as = createLogin(base, { password: PW });
-  return { admin: await as('baas'), planner: await as('planner1'), customer: await as('klant1'), outsider: await as('vreemd', 'ander') };
+  return { admin: await as('baas'), planner: await as('planner1'), customer: await as('klant1'), outsider: await as('vreemd', 'ander'), base };
 }
 
 test('routes: lezen, opslaan, voorbeeld, rechten en scheiding tussen organisaties', async () => {
@@ -288,4 +291,71 @@ test('de opmaak staat niet in de algemene instellingen (alleen via het eigen sch
   const attempt = await admin.put('/app/api/admin/settings', { documentLayout: { footerText: 'via instellingen' } });
   assert.notStrictEqual(attempt.status, 200);
   assert.strictEqual((await admin.get('/app/api/admin/document-layout')).body.layout.footerText, 'Geheim?');
+});
+
+/**
+ * Laadt shared/doc-layout.js in een sandbox met een window, zoals de browser dat doet.
+ * @returns {{ wrap: Function, logoHtml: Function, footerHtml: Function }} De hulpfuncties.
+ */
+function loadBrowserLayout() {
+  const sandbox = { window: {} };
+  vm.createContext(sandbox);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'shared', 'doc-layout.js'), 'utf8'), sandbox);
+  return sandbox.window.AquatechDocLayout;
+}
+
+test('afgedrukte documenten: wikkel, logo en voet volgens de opmaak', () => {
+  const layout = loadBrowserLayout();
+  const png = dataUrl();
+  // Zonder opmaak blijft alles zoals het was.
+  assert.strictEqual(layout.wrap('<p>x</p>', null), '<p>x</p>');
+  assert.match(layout.logoHtml(null, { defaultSrc: '../shared/logo-white.png', name: 'A & B' }), /<img src="..\/shared\/logo-white.png" alt="A &amp; B">/);
+  assert.strictEqual(layout.footerHtml(null, 'KvK 1'), 'KvK 1');
+
+  // Standaardopmaak: alleen de wikkel met het lettertype van de app.
+  const standard = layout.wrap('<p>x</p>', DEFAULTS);
+  assert.match(standard, /^<div class="doc-layout"/);
+  assert.doesNotMatch(standard, /doc-plain|doc-logo-right|doc-no-company/);
+  assert.match(standard, /--doc-logo-height:42px/);
+
+  const custom = { ...DEFAULTS, logoMode: 'custom', logo: png, headerStyle: 'plain', logoPosition: 'right', showCompanyInHeader: false,
+    headerColor: '#224466', accentColor: '#118844', font: 'serif', footerText: 'Eerste<script>\nTweede\nDerde', footerCompanyInfo: false };
+  const wrapped = layout.wrap('<p>x</p>', custom);
+  assert.match(wrapped, /class="doc-layout doc-plain doc-logo-right doc-no-company"/);
+  assert.match(wrapped, /--doc-primary:#224466/);
+  assert.match(wrapped, /--doc-accent:#118844/);
+  assert.match(wrapped, /--doc-font:Georgia/);
+  assert.ok(wrapped.endsWith('<p>x</p></div>'));
+  // Een kleur die geen #rrggbb is komt nooit in de stijl terecht.
+  assert.doesNotMatch(layout.wrap('', { ...DEFAULTS, headerColor: 'red;background:url(x)' }), /--doc-primary/);
+
+  assert.ok(layout.logoHtml(custom, { defaultSrc: 'x.png', name: 'Naam' }).includes(png));
+  assert.doesNotMatch(layout.logoHtml({ ...custom, logo: 'javascript:alert(1)' }, { defaultSrc: 'x.png', name: 'Naam' }), /<img/, 'een onbekend logo valt terug op de naam als tekst bij een witte kop');
+  assert.match(layout.logoHtml({ ...DEFAULTS, logoMode: 'none' }, { defaultSrc: 'x.png', name: 'Naam' }), /<span class="p-name">Naam<\/span>/);
+  assert.match(layout.logoHtml({ ...DEFAULTS, headerStyle: 'plain' }, { defaultSrc: 'x.png', name: 'Naam' }), /p-name/, 'het witte logo staat niet op een witte kop');
+  assert.match(layout.logoHtml(DEFAULTS, { defaultSrc: 'x.png', name: 'Naam' }), /<img src="x.png"/);
+
+  // Voet: eigen tekst (hoogstens twee regels, veilig gemaakt) en de bedrijfsregel.
+  assert.strictEqual(layout.footerHtml(custom, 'KvK 1'), 'Eerste&lt;script&gt;<br>Tweede');
+  assert.strictEqual(layout.footerHtml({ ...custom, footerCompanyInfo: true }, 'KvK 1'), 'Eerste&lt;script&gt;<br>Tweede<br>KvK 1');
+});
+
+test('de opmaak komt mee met het bedrijfsprofiel en de openbare offerte, per organisatie', async () => {
+  const { admin, planner, outsider, base } = await setup();
+  assert.deepStrictEqual((await planner.get('/app/api/quote-profile')).body.documentLayout, DEFAULTS);
+  await admin.put('/app/api/admin/document-layout', { layout: { ...DEFAULTS, font: 'serif', footerText: 'Onze voet' } });
+  const seen = (await planner.get('/app/api/quote-profile')).body;
+  assert.strictEqual(seen.documentLayout.font, 'serif');
+  assert.strictEqual(seen.documentLayout.footerText, 'Onze voet');
+  assert.strictEqual((await outsider.get('/app/api/quote-profile')).body.documentLayout.footerText, '', 'een andere organisatie ziet de opmaak niet');
+
+  // Openbare offerte: de klant ziet het document in dezelfde opmaak.
+  const year = new Date().getFullYear();
+  const quote = (await admin.post('/app/api/quotes', { data: { title: 'Test', date: `${year}-01-01`, validUntil: `${year + 1}-01-01`, customer: { name: 'Fam. Jansen' },
+    lines: [{ id: 'r1', section: 'materiaal', description: 'Sproeier', qty: 1, price: 10, vat: 21 }] } })).body;
+  const url = 'https://aquatech.example/pad/openbaar/offerte.html';
+  const shared = (await admin.post(`/app/api/quotes/${quote.id}/share`, { url })).body;
+  const token = shared.share.url.split('#t=')[1];
+  const response = await fetch(`${base}/app/api/public/quote`, { headers: { 'X-Offerte-Token': token } });
+  assert.strictEqual((await response.json()).documentLayout.footerText, 'Onze voet');
 });

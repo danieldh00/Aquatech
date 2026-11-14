@@ -4,8 +4,8 @@
 .edit-bar .chk { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
 .badge-acc { display: inline-block; margin-left: 6px; font-size: 11px; padding: 0 7px; border-radius: 999px; background: #e0f7fa; color: #00838f; vertical-align: middle; }
 
-.d-head { display: flex; align-items: center; gap: 16px; background: var(--at-navy, #172f5e); color: #fff; border-radius: var(--radius); padding: 14px 18px; margin-bottom: 14px; }
-.d-head img { height: 34px; }
+.d-head { display: flex; align-items: center; gap: 16px; background: var(--doc-primary, var(--at-navy, #172f5e)); color: #fff; border-radius: var(--radius); padding: 14px 18px; margin-bottom: 14px; }
+.d-head img { height: var(--doc-logo-height, 34px); max-width: 30%; object-fit: contain; }
 .d-head .d-title { flex: 1; }
 .d-head h1 { margin: 0; font-size: 22px; color: #fff; }
 .d-head .sub { color: #c9d4e3; font-size: 13px; }

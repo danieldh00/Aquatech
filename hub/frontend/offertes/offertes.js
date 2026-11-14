@@ -85,7 +85,7 @@
 
   const QuoteView = window.QuoteView;
   const state = {
-    me: null, admin: false, all: false, klant: false, profile: null, canEdit: false, mail: false,
+    me: null, admin: false, all: false, klant: false, profile: null, documentLayout: null, canEdit: false, mail: false,
     items: [], sort: { key: 'updatedAt', dir: -1 },
     quote: null, saveTimer: null, saving: null, dirty: false, warnings: [],
   };
@@ -915,7 +915,7 @@
     }[status];
     $('#v-notice').textContent = notice || '';
     $('#v-notice').hidden = !notice;
-    $('#print').innerHTML = QuoteView.documentHtml(quote, state.profile, { interactive: open });
+    $('#print').innerHTML = QuoteView.documentHtml(quote, state.profile, { interactive: open, layout: state.documentLayout });
     $('#v-sign').hidden = !open;
     if (open) {
       /**
@@ -928,7 +928,7 @@
         if (!line) return;
         line.selected = event.target.checked;
         const scrollPosition = window.scrollY;
-        $('#print').innerHTML = QuoteView.documentHtml(quote, state.profile, { interactive: true });
+        $('#print').innerHTML = QuoteView.documentHtml(quote, state.profile, { interactive: true, layout: state.documentLayout });
         window.scrollTo(0, scrollPosition);
         form.update();
       };
@@ -1378,7 +1378,7 @@
   // ---------- PDF (afdrukversie) ----------
   /** Zet de afdrukversie van de offerte klaar. */
   function renderPrint() {
-    $('#print').innerHTML = QuoteView.documentHtml(state.quote, state.profile);
+    $('#print').innerHTML = QuoteView.documentHtml(state.quote, state.profile, { layout: state.documentLayout });
   }
 
   /**
@@ -1680,6 +1680,7 @@
     ]);
     if (profileResult) {
       state.profile = profileResult.profile;
+      state.documentLayout = profileResult.documentLayout || null;
       state.canEdit = profileResult.canEdit;
       state.mail = Boolean(profileResult.mail);
     } else {

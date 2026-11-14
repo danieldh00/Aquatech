@@ -171,7 +171,7 @@ const PUBLIC_FILES = new Set([
   '/openbaar/offerte.html', '/openbaar/offerte.js', '/openbaar/offerte.css',
   '/openbaar/afspraak.html', '/openbaar/afspraak.js', '/openbaar/afspraak.css', '/werkorders/workorder-core.js',
   '/shared/brand.css', '/shared/theme.css', '/shared/theme.js', '/shared/logo-white.png',
-  '/shared/doc-text.js', '/offertes/quote-core.js', '/offertes/quote-view.js', '/offertes/quote-view.css',
+  '/shared/doc-text.js', '/shared/doc-layout.js', '/shared/doc-layout.css', '/offertes/quote-core.js', '/offertes/quote-view.js', '/offertes/quote-view.css',
   // Installeerbare app en offline werken: geen gegevens, wel nodig voordat
   // (en nadat) iemand is ingelogd (manifest en service worker worden zonder
   // cookies of buiten de sessie opgehaald).

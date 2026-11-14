@@ -71,7 +71,7 @@
   const FINISHED = ['gereed', 'geannuleerd'];
 
   const state = {
-    me: null, admin: false, staff: [], profile: null, mail: false,
+    me: null, admin: false, staff: [], profile: null, documentLayout: null, mail: false,
     items: [], sort: { key: 'plannedDate', dir: 1 },
     workOrder: null, saveTimer: null, saving: null, dirty: false, warnings: [],
   };
@@ -1165,9 +1165,15 @@
      * @returns {string} HTML, of leeg zonder tekst
      */
     const text = (title, content) => (content ? `<h2>${esc(title)}</h2><p class="p-text">${esc(content)}</p>` : '');
-    $('#print').innerHTML = `
+    const docLayout = window.AquatechDocLayout;
+    const layout = state.documentLayout;
+    const companyName = profile.companyName || 'AquaTech Service';
+    const logoBlock = docLayout ? docLayout.logoHtml(layout, { defaultSrc: '../shared/logo-white.png', name: companyName }) : `<img src="../shared/logo-white.png" alt="${esc(companyName)}">`;
+    const footLine = [profile.companyName, profile.website].filter(Boolean).join(' · ');
+    const footBlock = docLayout ? docLayout.footerHtml(layout, footLine) : esc(footLine);
+    const printHtml = `
       <header class="p-head">
-        <img src="../shared/logo-white.png" alt="${esc(profile.companyName || 'AquaTech Service')}">
+        ${logoBlock}
         <div class="p-company"><b>${esc(profile.companyName || '')}</b>\n${esc(company)}</div>
       </header>
       <div class="p-meta">
@@ -1202,8 +1208,9 @@
         <h2>Oplevering</h2>
         <p class="p-text p-notes">${esc(data.report.notes || '')}</p>
         <div class="p-sign"><div>Uitvoerder (naam, datum)</div><div>Klant voor gezien${data.report.signedBy ? `: ${esc(data.report.signedBy)}` : ''}${data.report.completedOn ? `, ${esc(shortDate(data.report.completedOn))}` : ''}</div></div>
-        <footer class="p-foot">${esc([profile.companyName, profile.website].filter(Boolean).join(' · '))}</footer>
+        <footer class="p-foot">${footBlock}</footer>
       </div>`;
+    $('#print').innerHTML = docLayout ? docLayout.wrap(printHtml, layout) : printHtml;
   }
 
   /**
@@ -1510,6 +1517,7 @@
     }
     const [profileResult, staff] = await Promise.all([api('quote-profile').catch(() => null), api('workorder-staff').catch(() => null)]);
     state.profile = profileResult ? profileResult.profile : { companyName: 'AquaTech Service' };
+    state.documentLayout = (profileResult && profileResult.documentLayout) || null;
     state.mail = Boolean(profileResult && profileResult.mail);
     state.staff = (staff && staff.items) || [];
     $('#l-status').innerHTML = '<option value="">Openstaand</option>' + Object.entries(WorkOrderCore.STATUSES)

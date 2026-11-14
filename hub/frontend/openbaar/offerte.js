@@ -13,7 +13,7 @@
   const $ = (selector) => document.querySelector(selector);
   const token = new URLSearchParams(location.hash.slice(1)).get('t') || '';
   const preview = new URLSearchParams(location.hash.slice(1)).get('voorbeeld') === '1';
-  const state = { quote: null, profile: null, form: null };
+  const state = { quote: null, profile: null, documentLayout: null, form: null };
 
   /**
    * Roept de openbare offerte-API aan met het token als kop.
@@ -75,7 +75,7 @@
     const translate = (key, values) => window.DocText.text(lang, key, values);
     document.title = `${translate('quote.title')} ${quote.number}${profile.companyName ? ` – ${profile.companyName}` : ''}`;
     $('#o-company').textContent = profile.companyName || translate('quote.title');
-    $('#print').innerHTML = QuoteView.documentHtml(quote, profile, { interactive: open });
+    $('#print').innerHTML = QuoteView.documentHtml(quote, profile, { interactive: open, layout: state.documentLayout });
     $('#print').hidden = false;
     $('#o-print').hidden = false;
     message('');
@@ -97,7 +97,7 @@
       const line = quote.data.lines.find((candidate) => candidate.id === id);
       if (line) line.selected = event.target.checked;
       const scrollPosition = window.scrollY;
-      $('#print').innerHTML = QuoteView.documentHtml(quote, profile, { interactive: true });
+      $('#print').innerHTML = QuoteView.documentHtml(quote, profile, { interactive: true, layout: state.documentLayout });
       window.scrollTo(0, scrollPosition);
       state.form.update();
     };
@@ -132,6 +132,7 @@
       const out = await api('quote');
       state.quote = out.quote;
       state.profile = out.profile;
+      state.documentLayout = out.documentLayout || null;
       if (window.AquatechTheme) window.AquatechTheme.apply(out.theme);
       render();
     } catch (error) {

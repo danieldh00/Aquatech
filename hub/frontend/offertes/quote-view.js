@@ -59,7 +59,7 @@
    * HTML van het offertedocument, in de documenttaal van de offerte (data.language).
    * @param {object} quote De offerte (number, data, acceptance, fixed).
    * @param {object} profile Bedrijfsprofiel (naam, adres, KvK, enz.).
-   * @param {object} [options] { interactive: opties zijn aan te vinken (data-opt="<regel-id>"), logo: pad naar het witte logo }.
+   * @param {object} [options] { interactive: opties zijn aan te vinken (data-opt="<regel-id>"), logo: pad naar het witte logo, layout: documentopmaak van de organisatie }.
    * @returns {string} De HTML.
    */
   function documentHtml(quote, profile, options = {}) {
@@ -89,6 +89,8 @@
     const totals = totalsOf(quote);
     const customer = data.customer || {};
     const logo = options.logo || '../shared/logo-white.png';
+    const docLayout = typeof window !== 'undefined' ? window.AquatechDocLayout : null;
+    const layout = options.layout || null;
     const companyLines = [companyProfile.address, [companyProfile.phone, companyProfile.email].filter(Boolean).join(' · '), companyProfile.website].filter(Boolean).join('\n');
     const recipient = [customer.name, customer.contact ? `${translate('quote.attn')} ${customer.contact}` : '', customer.address].filter(Boolean).join('\n');
     // Een afwijkend afleveradres staat onder de ontvanger (het adres van de klant is het factuuradres).
@@ -147,9 +149,11 @@
     const head = showPrices
       ? `<th>${esc(translate('col.description'))}</th><th class="num">${esc(translate('col.qty'))}</th><th>${esc(translate('col.unit'))}</th><th class="num">${esc(translate('col.price'))}</th><th class="num">${esc(translate('col.vat'))}</th><th class="num">${esc(translate('col.total'))}</th>`
       : `<th colspan="4">${esc(translate('col.description'))}</th><th class="num">${esc(translate('col.qty'))}</th><th class="num"></th>`;
-    return `
+    const logoBlock = docLayout ? docLayout.logoHtml(layout, { defaultSrc: logo, name: companyProfile.companyName }) : `<img src="${esc(logo)}" alt="${esc(companyProfile.companyName)}">`;
+    const footBlock = docLayout ? docLayout.footerHtml(layout, foot) : esc(foot);
+    const documentBody = `
       <header class="p-head">
-        <img src="${esc(logo)}" alt="${esc(companyProfile.companyName)}">
+        ${logoBlock}
         <div class="p-company"><b>${esc(companyProfile.companyName)}</b>\n${esc(companyLines)}</div>
       </header>
       <div class="p-meta">
@@ -181,8 +185,9 @@
       ${data.terms ? `<h2 id="p-terms">${esc(translate('quote.terms'))}</h2><p class="p-text">${esc(data.terms)}</p>` : ''}
       <div class="p-end">
         ${closing}
-        <footer class="p-foot">${esc(foot)}</footer>
+        <footer class="p-foot">${footBlock}</footer>
       </div>`;
+    return docLayout ? docLayout.wrap(documentBody, layout) : documentBody;
   }
 
   /**
