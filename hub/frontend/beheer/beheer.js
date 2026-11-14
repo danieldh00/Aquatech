@@ -604,6 +604,7 @@
     renderShipping(view.shopShipping?.value);
     $('#s-shipping').hidden = !state.storefrontAllowed;
     renderPayment(view);
+    renderAnalytics(view);
     codeState.className = `state ${code.set ? 'ok' : 'off'}`;
     $('[data-clear="anthropicApiKey"]').disabled = !key.set;
     $('[data-clear="accessCode"]').disabled = !code.set;
@@ -871,6 +872,23 @@
   }
 
   /**
+   * Vult het formulier Google Analytics met de opgeslagen instelling en toont of de meting nu actief is.
+   * @param {object} view De instellingen zoals de server ze toont (shopAnalytics).
+   * @returns {void}
+   */
+  function renderAnalytics(view) {
+    const form = $('#s-analytics');
+    const analytics = view.shopAnalytics?.value || {};
+    form.hidden = !state.storefrontAllowed;
+    form.enabled.checked = Boolean(analytics.enabled);
+    form.measurementId.value = analytics.measurementId || '';
+    const status = $('#s-analytics-state');
+    const active = Boolean(analytics.enabled && analytics.measurementId);
+    status.textContent = active ? `Actief: de webshop meet met ${analytics.measurementId}, na toestemming van de bezoeker.` : analytics.enabled ? 'Niet actief: vul een geldig meet-ID in.' : 'Uit: de webshop laadt niets van Google.';
+    status.className = `state ${active ? 'ok' : 'off'}`;
+  }
+
+  /**
    * Vult het formulier Betalen met de opgeslagen instelling.
    * @param {object} view De instellingen zoals de server ze toont (shopPayment en mollieApiKey).
    * @returns {void}
@@ -1110,6 +1128,18 @@
       const patch = { shopPayment: { online: paymentForm.online.checked, publicUrl: paymentForm.publicUrl.value.trim(), onAccount: paymentForm.onAccount.value, holdHours: Number(paymentForm.holdHours.value), accountHoldDays: paymentForm.accountHoldDays.value.trim() === '' ? '' : Number(paymentForm.accountHoldDays.value) } };
       if (paymentForm.mollieApiKey.value.trim()) patch.mollieApiKey = paymentForm.mollieApiKey.value.trim();
       saveSettings(paymentForm, patch, 'Betalen opgeslagen');
+    };
+    const analyticsForm = $('#s-analytics');
+    /**
+     * Slaat de instelling voor Google Analytics op; een ongeldig meet-ID wordt niet bewaard.
+     * @param {SubmitEvent} event het verzenden
+     */
+    analyticsForm.onsubmit = (event) => {
+      event.preventDefault();
+      const measurementId = analyticsForm.measurementId.value.trim().toUpperCase();
+      if (measurementId && !/^G-[A-Z0-9]{4,14}$/.test(measurementId)) { $('.err', analyticsForm).textContent = 'Dit is geen geldig meet-ID. Het begint met G- en heeft 4 tot 14 letters of cijfers.'; return; }
+      if (analyticsForm.enabled.checked && !measurementId) { $('.err', analyticsForm).textContent = 'Vul een meet-ID in om Google Analytics aan te zetten.'; return; }
+      saveSettings(analyticsForm, { shopAnalytics: { enabled: analyticsForm.enabled.checked, measurementId } }, 'Google Analytics opgeslagen');
     };
     const shippingForm = $('#s-shipping');
     /**

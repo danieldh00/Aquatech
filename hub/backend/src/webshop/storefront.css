@@ -481,3 +481,11 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
 .pager a { padding: 6px 12px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 6px; text-decoration: none; }
 .pager a[aria-current] { background: var(--at-shop-navy); border-color: var(--at-shop-navy); color: var(--at-white); }
 @media (max-width: 860px) { .browse { grid-template-columns: minmax(0, 1fr); gap: 16px; } .browse-side { order: 2; } }
+
+/* Toestemmingsbalk voor Google Analytics (storefront-analytics.js): Accepteren en Weigeren zijn even duidelijk. */
+.consent-banner { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding: 16px max(16px, calc((100% - 1168px) / 2)); background: var(--at-white); border-top: 3px solid var(--at-shop-navy); box-shadow: 0 -4px 16px rgba(20, 42, 82, 0.15); }
+.consent-banner p { flex: 1 1 360px; margin: 0; font-size: 0.9rem; }
+.consent-actions { display: flex; gap: 10px; flex: 0 0 auto; }
+.consent-actions .button { min-width: 120px; }
+.link-button { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-decoration: underline; cursor: pointer; }
+@media (max-width: 600px) { .consent-actions { width: 100%; } .consent-actions .button { flex: 1; } }

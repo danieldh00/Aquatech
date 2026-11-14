@@ -4,6 +4,7 @@
 
 const { layout, escapeHtml, formatPrice } = require('./storefront-pages');
 const { deliverySameOf } = require('./web-orders');
+const Analytics = require('./shop-analytics');
 
 /** Relatief pad van deze pagina's naar de shop-startpagina. */
 const ROOT = '../';
@@ -30,6 +31,16 @@ ${totals.byRate.filter((row) => row.rate > 0).map((row) => `<tr class="sub"><td 
 <tr class="total"><th colspan="3" scope="row">${shifted ? 'Totaal (btw verlegd)' : 'Totaal incl. btw'}</th><td class="num">${escapeHtml(formatPrice(totals.total))}</td></tr>`;
 }
 
+/**
+ * De winkelwagenregels als GA4-artikelen.
+ * @param {object[]} lines De regels (code, name, qty en unitIncl/unitExcl).
+ * @param {boolean} excl true voor een zakelijke klant: prijzen excl. btw.
+ * @returns {object[]} De GA4-artikelen.
+ */
+function analyticsItems(lines, excl) {
+  return lines.map((line) => Analytics.itemOf({ id: line.code, name: line.name, price: excl ? line.unitExcl : line.unitIncl, quantity: line.qty }));
+}
+
 /** Hoe een korting op een winkelwagenregel heet, per bron. */
 const DISCOUNT_LABELS = { staffel: 'staffelkorting', klant: 'groothandelskorting', categorie: 'categoriekorting' };
 
@@ -44,7 +55,7 @@ const DISCOUNT_LABELS = { staffel: 'staffelkorting', klant: 'groothandelskorting
 function cartPage(cart, groups = [], notice = '', fromPlan = null) {
   const planInfo = fromPlan ? `${fromPlan.added > 0 ? `<div class="form-info" role="status"><p>Het materiaal uit je plan staat in je winkelwagen (${fromPlan.added} ${fromPlan.added === 1 ? 'artikel' : 'artikelen'}). Controleer de aantallen en reken af.</p></div>` : ''}${fromPlan.notOrderable.length ? `<div class="form-error" role="alert"><p>Deze onderdelen uit je plan zijn niet in de webshop te bestellen: ${fromPlan.notOrderable.map(escapeHtml).join(', ')}.</p></div>` : ''}${fromPlan.otherUnit && fromPlan.otherUnit.length ? `<div class="form-error" role="alert"><p>Deze onderdelen verkopen we in een andere eenheid dan je plan (bijvoorbeeld per rol in plaats van per meter) en staan daarom niet in je winkelwagen: ${fromPlan.otherUnit.map(escapeHtml).join(', ')}. Kies zelf het aantal dat je nodig hebt.</p></div>` : ''}` : '';
   if (!cart.lines.length && !cart.missing.length) {
-    return layout({ root: ROOT, title: 'Winkelwagen – Aquatechshop.nl', description: 'Je winkelwagen bij Aquatechshop.nl.', groups,
+    return layout({ root: ROOT, title: 'Winkelwagen – Aquatechshop.nl', description: 'Je winkelwagen bij Aquatechshop.nl.', groups, events: Analytics.cartEvents({ items: [], value: 0, fromPlanner: fromPlan ? fromPlan.added : 0 }),
       body: `<section class="cart"><h1>Winkelwagen</h1>${planInfo}<p>Je winkelwagen is leeg.</p><p><a class="button" href="${ROOT}">Verder winkelen</a></p></section>` });
   }
   const rows = cart.lines.map((line) => `<tr${line.enough && !line.packProblem ? '' : ' class="problem"'}>
@@ -64,7 +75,7 @@ ${planInfo}${full}${missing}
 <div class="cart-actions"><a class="button secondary" href="${ROOT}">Verder winkelen</a>
 ${cart.ok ? `<a class="button" href="${ROOT}afrekenen/">Naar afrekenen</a>` : '<span class="note">Pas eerst je winkelwagen aan om af te rekenen.</span>'}</div>
 </section>`;
-  return layout({ root: ROOT, title: 'Winkelwagen – Aquatechshop.nl', description: 'Je winkelwagen bij Aquatechshop.nl.', body, groups });
+  return layout({ root: ROOT, title: 'Winkelwagen – Aquatechshop.nl', description: 'Je winkelwagen bij Aquatechshop.nl.', body, groups, events: Analytics.cartEvents({ items: analyticsItems(cart.lines, cart.pricesExcl), value: cart.totals.total, fromPlanner: fromPlan ? fromPlan.added : 0 }) });
 }
 
 /**
@@ -243,7 +254,7 @@ function checkoutPage({ cart, quote, country, method, summary = null, summaries 
   const body = `<section class="cart checkout"><h1>Afrekenen</h1>
 ${error ? `<p class="form-error" role="alert">${escapeHtml(error)}</p>` : ''}
 <div class="checkout-grid">
-<form method="post" action="./" class="account-form" data-address-endpoint="${ROOT}adres/">
+<form method="post" action="./" class="account-form" data-shop-checkout data-address-endpoint="${ROOT}adres/">
 <button type="submit" hidden>Bestelling plaatsen</button>
 <input type="hidden" name="expectedTotal" value="${escapeHtml(String(total))}" data-expected-total>
 <h2>Je gegevens</h2>
@@ -274,20 +285,21 @@ ${paymentChoice(paymentOptions, value.paymentMethod)}
 <p class="checkout-total"><span data-total-caption>${totalCaption(business, Boolean(summary && summary.shifted))}</span><strong data-total-text>${escapeHtml(formatPrice(total))}</strong></p>${vatNote}
 <p><a href="${ROOT}winkelwagen/">Winkelwagen aanpassen</a></p></aside>
 </div></section>`;
-  return layout({ root: ROOT, title: 'Afrekenen – Aquatechshop.nl', description: 'Reken je bestelling af bij Aquatechshop.nl.', body, groups, script: ['adres.js', 'afrekenen.js'] });
+  return layout({ root: ROOT, title: 'Afrekenen – Aquatechshop.nl', description: 'Reken je bestelling af bij Aquatechshop.nl.', body, groups, script: ['adres.js', 'afrekenen.js'], events: Analytics.checkoutEvents({ items: analyticsItems(cart.lines, business), value: total, loggedIn: true, error }) });
 }
 
 /**
  * Afrekenen zonder account: uitleg met links om in te loggen of te registreren, waarna de klant terugkomt bij het afrekenen.
  * @param {object[]} groups Alle hoofdcategorieën.
+ * @param {{ lines: object[], totals: { total: number }, pricesExcl: boolean }} [cart] De geprijsde winkelwagen (voor de meting van de loginmuur).
  * @returns {string} De HTML-pagina.
  */
-function checkoutLoginPage(groups = []) {
+function checkoutLoginPage(groups = [], cart = { lines: [], totals: { total: 0 }, pricesExcl: false }) {
   const body = `<section class="account-card"><h1>Afrekenen</h1>
 <p>Log in of maak een account om je bestelling af te ronden. Je winkelwagen blijft bewaard.</p>
 <div class="account-actions"><a class="button" href="${ROOT}inloggen/?volgende=afrekenen">Inloggen</a><a class="button secondary" href="${ROOT}registreren/?volgende=afrekenen">Account maken</a></div>
 </section>`;
-  return layout({ root: ROOT, title: 'Afrekenen – Aquatechshop.nl', description: 'Log in om af te rekenen bij Aquatechshop.nl.', body, groups });
+  return layout({ root: ROOT, title: 'Afrekenen – Aquatechshop.nl', description: 'Log in om af te rekenen bij Aquatechshop.nl.', body, groups, events: Analytics.checkoutEvents({ items: analyticsItems(cart.lines, cart.pricesExcl), value: cart.totals.total, loggedIn: false }) });
 }
 
 /**
@@ -368,7 +380,7 @@ ${dropshipBlock(order, thanks)}${payBlock}<p>Status: <strong>${escapeHtml(order.
 ${invoiceBlock}${history}
 ${returnsHtml}
 <p><a class="button" href="${DETAIL_ROOT}">Verder winkelen</a> <a class="button secondary" href="${DETAIL_ROOT}bestellingen/">Al mijn bestellingen</a></p></section>`;
-  return layout({ root: DETAIL_ROOT, title: `Bestelling ${order.number} – Aquatechshop.nl`, description: 'Je bestelling bij Aquatechshop.nl.', body, groups, script: order.dropshipping && order.status === 'nieuw' && !order.packingSlip ? 'pakbon.js' : '', refresh: autoPay && waiting && !payError ? 'betalen/' : '' });
+  return layout({ root: DETAIL_ROOT, title: `Bestelling ${order.number} – Aquatechshop.nl`, description: 'Je bestelling bij Aquatechshop.nl.', body, groups, events: thanks && !waiting ? Analytics.purchaseEvents({ number: order.number, total: order.totals.total, tax: order.totals.byRate.reduce((sum, row) => sum + row.vat, 0), shipping: order.shipping ? order.shipping.price : 0, payment: order.payment, items: analyticsItems(order.lines, business) }) : [], script: order.dropshipping && order.status === 'nieuw' && !order.packingSlip ? 'pakbon.js' : '', refresh: autoPay && waiting && !payError ? 'betalen/' : '' });
 }
 
 /**

@@ -425,6 +425,16 @@
           <p><button class="btn primary" type="submit">Betalen opslaan</button></p>
           <div class="err" role="alert"></div>
         </form>
+        <form id="s-analytics" class="card-form settings">
+          <h3>Google Analytics</h3>
+          <p class="muted small">Meet hoe bezoekers de webshop gebruiken (producten bekeken, in de winkelwagen, afrekenen, bestelling) met Google Analytics 4. De bezoeker krijgt eerst een cookiemelding; zonder toestemming wordt er niets van Google geladen en niets doorgegeven. Advertentiefuncties staan altijd uit en er gaan nooit namen, e-mailadressen of adressen mee. Zonder meet-ID of met deze schakelaar uit staat er niets van Google Analytics in de pagina. Alleen voor de hoofdtenant.</p>
+          <label class="chk"><input type="checkbox" name="enabled"> <span>Google Analytics gebruiken in de webshop</span></label>
+          <label>Meet-ID<input name="measurementId" placeholder="G-XXXXXXXXXX" autocomplete="off" spellcheck="false" maxlength="20" pattern="[Gg]-[A-Za-z0-9]{4,14}"></label>
+          <span class="muted small">Te vinden in Google Analytics onder Beheer → Gegevensstreams → je webstream (begint met <code>G-</code>). Je medewerkers in het beheer tellen mee; sluit ze in Google Analytics uit met een filter op intern verkeer. Vermeld Google Analytics ook in je privacyverklaring.</span>
+          <p class="state" id="s-analytics-state" role="status"></p>
+          <p><button class="btn primary" type="submit">Google Analytics opslaan</button></p>
+          <div class="err" role="alert"></div>
+        </form>
         <form id="w-form" class="card-form settings">
           <h3>WooCommerce</h3>
           <label>Webadres van de webshop<input name="url" type="url" placeholder="https://www.voorbeeld.nl" spellcheck="false"></label>
