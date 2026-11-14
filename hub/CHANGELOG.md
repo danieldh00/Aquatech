@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.3
+
+- MCP-tool `maak_rapport_excel` met nieuwe scope `rapporten.excel`: soorten `urenstaat` (periode hooguit 400 dagen; met recht `planning` iedereen, anders alleen eigen regels; bladen Uren en Materiaal), `openstaande_facturen` (recht `facturen`) en `voorraadlijst` (recht `voorraad`). Eigen kleine xlsx-schrijver zonder bibliotheek (`mcp/xlsx-writer.js`, cellen die op een formule lijken worden tekst). Het bestand wacht 15 minuten in het geheugen (`mcp/mcp-downloads.js`, maximaal 10 per gebruiker en 50 MB totaal) en wordt opgehaald via `GET /app/api/mcp-download/<token>` voor dezelfde gebruiker en omgeving (anders 404, niet ingelogd 401). Limiet 20 rapporten per uur, audit `rapport_via_ai` en `rapport_gedownload`.
+
 ## 1.16.2
 
 - MCP-tools `boek_uren` en `boek_materiaal` met nieuwe scope `werkregistratie.boeken` (recht `werkorders`): boeken via `workLogStore.addHours/addMaterial` op naam van de gebruiker zelf, werkorder op nummer (`mcpLookups.workOrderByNumber`, per omgeving). Afgeronde of geannuleerde werkorder alleen met recht `planning`; een gelijke boeking binnen 10 minuten geeft `terugvragen`; onbekend artikel of variant geeft `terugvragen`; datum niet verder dan morgen (zoals in de app). Limiet 60 boekingen per uur per gebruiker, audit met `via: 'ai-koppeling'`.
