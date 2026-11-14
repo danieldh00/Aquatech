@@ -171,15 +171,15 @@ function createWebReturnStore(db, { orders, stock }) {
   /**
    * Een klant vraagt een retour aan voor (een deel van) zijn eigen bestelling.
    * @param {string} tenantId Id van de omgeving.
-   * @param {{ id: string, display_name?: string, displayName?: string }} user De klant.
+   * @param {{ id?: string, display_name?: string, displayName?: string, guestOrderId?: string }} user De klant. Een gast (`guestOrderId`) mag alleen voor die ene bestelling een retour aanvragen; de aanroeper heeft zijn toegangstoken dan al gecontroleerd.
    * @param {string} orderId Id van de bestelling.
    * @param {{ lines?: { code: string, qty: * }[], reason?: string, note?: string }} raw De gekozen regels, de reden en een toelichting.
    * @returns {{ return?: object, error?: string, status?: number }} De aangevraagde retour of een foutmelding.
    */
   function request(tenantId, user, orderId, raw) {
     const result = transaction(db, () => {
-      const order = orders.getForUser(tenantId, user.id, orderId);
-      if (!order) return { error: 'Bestelling niet gevonden.', status: 404 };
+      const order = user.guestOrderId ? (user.guestOrderId === String(orderId) ? orders.get(tenantId, orderId) : null) : orders.getForUser(tenantId, user.id, orderId);
+      if (!order || (user.guestOrderId && !order.guest)) return { error: 'Bestelling niet gevonden.', status: 404 };
       lockOrder(tenantId, order.id);
       const eligible = eligibility(tenantId, order);
       if (!eligible.shipped) return { error: 'Een retour kan pas als de bestelling is verzonden.', status: 409 };
@@ -209,7 +209,7 @@ function createWebReturnStore(db, { orders, stock }) {
       };
       const number = nextNumber(tenantId, order);
       prepare('INSERT INTO web_returns (id, tenant_id, order_id, user_id, number, status, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-        .run(id, tenantId, order.id, user.id, number, 'aangevraagd', JSON.stringify(data), timestamp, timestamp);
+        .run(id, tenantId, order.id, order.userId || null, number, 'aangevraagd', JSON.stringify(data), timestamp, timestamp);
       return { return: get(tenantId, id) };
     });
     if (result.return) runHooks(requestedHooks, tenantId, result.return);
@@ -304,12 +304,15 @@ function createWebReturnStore(db, { orders, stock }) {
   /**
    * De klant trekt een aangevraagde retour in.
    * @param {string} tenantId Id van de omgeving.
-   * @param {{ id: string, display_name?: string, displayName?: string }} user De klant.
+   * @param {{ id?: string, display_name?: string, displayName?: string, guestOrderId?: string }} user De klant. Een gast (`guestOrderId`) mag alleen een retour van die ene bestelling intrekken.
    * @param {string} id Id van de retour.
    * @returns {{ return?: object, error?: string, status?: number }} De ingetrokken retour of een foutmelding.
    */
   function withdraw(tenantId, user, id) {
-    return move(tenantId, id, 'ingetrokken', user, null, user.id);
+    if (!user.guestOrderId) return move(tenantId, id, 'ingetrokken', user, null, user.id);
+    const found = get(tenantId, id);
+    if (!found || found.orderId !== user.guestOrderId) return { error: 'Retour niet gevonden.', status: 404 };
+    return move(tenantId, id, 'ingetrokken', user);
   }
 
   /**

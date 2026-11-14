@@ -49,6 +49,7 @@ const { createOrderSlips } = require('./webshop/order-slips');
 const { createQuoteOrders, registerQuoteOrderRoutes } = require('./verkoop/quote-orders');
 const { createWebOrderInvoices } = require('./verkoop/web-order-invoices');
 const { createOrderMailer } = require('./webshop/web-orders-mail');
+const { createGuestOrders } = require('./webshop/guest-orders');
 const { createMollie, cleanPublicUrl } = require('./webshop/mollie');
 const { createWebPayments } = require('./webshop/web-payments');
 const { createWebReturnStore, registerWebReturnRoutes } = require('./webshop/web-returns');
@@ -2762,7 +2763,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Kortingen per productcategorie voor zakelijke klanten (Beheer > Webshop > Zakelijke kortingen, zie category-discounts.js).
   app.use('/api/admin/category-discounts', express.json({ limit: '32kb' }));
   registerCategoryDiscountRoutes(app, { settingsOf: (req) => settingsFor(req.tenantId), treeOf: (tenantId) => shopContentStore.publicContent(tenantId).tree, audit, requireJson });
-  const webOrderMail = createOrderMailer({ orders: webOrders, settingsFor: (id) => settingsFor(id), mailerFor, mailBody });
+  // Bestellen als gast: de toegang van een gast tot zijn bestelling (persoonlijke link, zie webshop/guest-orders.js).
+  const guestOrders = createGuestOrders({ orders: webOrders, vault });
+  const webOrderMail = createOrderMailer({ orders: webOrders, settingsFor: (id) => settingsFor(id), mailerFor, mailBody, guestLinkOf: guestOrders.linkOf });
   const webReturns = createWebReturnStore(database, { orders: webOrders, stock: stockStore });
   const webReturnMail = createReturnMailer({ returns: webReturns, settingsFor: (id) => settingsFor(id), mailerFor, mailBody });
   const webOrderInvoices = createWebOrderInvoices({ orders: webOrders, invoices: invoiceStore, returns: webReturns, debtors: debtorStore, stock: stockStore, sender: invoiceSender, settingsFor: (id) => settingsFor(id) });
@@ -3187,9 +3190,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, loginGuard, twoFactor, tokens: accountTokens, mailerFor, settingsFor: (id) => settingsFor(id), mailBody });
   storefrontRouter = createStorefront({
     addressLookup, addressGuard, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore, data: storefrontData, itemImages: itemImageStore,
-    orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, orderSlips, returns: webReturns, payments: webPayments,
+    orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, orderSlips, returns: webReturns, guestOrders, payments: webPayments,
     vies, captcha, captchaGate,
-    onOrder: (req, order) => audit(req, 'webshop_bestelling_geplaatst', { number: order.number, total: order.total }, order.userId, tenant.id),
+    onOrder: (req, order) => audit(req, 'webshop_bestelling_geplaatst', { number: order.number, total: order.total, ...(order.guest ? { gast: true } : {}) }, order.userId, tenant.id),
+    onGuestAccount: (req, order, user) => audit(req, 'webshop_gastbestelling_gekoppeld', { number: order.number }, user.id, tenant.id),
     onReturn: (req, record) => audit(req, 'webshop_retour_aangevraagd', { number: record.number }, record.userId, tenant.id),
     onSlip: (req, order, action) => audit(req, `webshop_pakbon_${action}`, { number: order.number }, order.userId, tenant.id),
     // Een beheerder van de hoofdorganisatie bekijkt het concept met ?voorbeeld=1.

@@ -65,7 +65,10 @@ test('gebeurtenissen: artikel, lijst, zoekopdracht, winkelwagen, afrekenen en aa
   assert.strictEqual(Analytics.errorTypeOf('iets anders'), 'other');
 
   const purchase = Analytics.purchaseEvents({ number: 'WEB-1', total: 24.2, tax: 4.2, shipping: 6.95, payment: 'online', items: [item] });
-  assert.deepStrictEqual(purchase[0].params, { transaction_id: 'WEB-1', currency: 'EUR', value: 24.2, tax: 4.2, shipping: 6.95, payment_type: 'online', items: [item] });
+  assert.deepStrictEqual(purchase[0].params, { transaction_id: 'WEB-1', currency: 'EUR', value: 24.2, tax: 4.2, shipping: 6.95, payment_type: 'online', checkout_type: 'account', items: [item] });
+  assert.strictEqual(Analytics.purchaseEvents({ number: 'WEB-2', total: 1, tax: 0, shipping: 0, payment: 'online', guest: true, items: [] })[0].params.checkout_type, 'gast');
+  const guestForm = Analytics.checkoutEvents({ items: [item], value: 24.2, loggedIn: false, guestForm: true });
+  assert.deepStrictEqual(guestForm.map((event) => event.name), ['checkout_guest'], 'het gastformulier meldt alleen de keuze, geen tweede begin_checkout');
   assert.strictEqual(Analytics.eventsJson([]), '');
   assert.ok(Analytics.eventsJson(purchase).startsWith('[{"name":"purchase"'));
 });

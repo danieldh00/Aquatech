@@ -24,7 +24,7 @@ const MOLLIE_STATES = { paid: 'betaald', open: 'open', pending: 'open', authoriz
 /**
  * Maakt de betaalfuncties voor webshopbestellingen.
  * @param {{ orders: object, mollie: object, settingsFor: Function, log?: object }} deps De bestelopslag (web-orders.js), de Mollie-client (mollie.js), de instellingen per omgeving en de logger.
- * @returns {{ start: Function, sync: Function, expireUnpaid: Function, onPaid: Function, optionsFor: Function, refund: Function }} De functies.
+ * @returns {{ start: Function, sync: Function, expireUnpaid: Function, onPaid: Function, optionsFor: Function, guestCheckoutAllowed: Function, refund: Function }} De functies.
  */
 function createWebPayments({ orders, mollie, settingsFor, log = console }) {
   const paidHooks = [];
@@ -49,6 +49,17 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
     // Staat online betalen aan maar klopt de sleutel of het webadres niet, dan blijft de beperking voor op rekening gelden (bij 'nooit' kan er dan niet besteld worden).
     const onAccount = !config.wanted || config.onAccount === 'iedereen' || (config.onAccount === 'zakelijk' && business);
     return [...(config.online ? ['online'] : []), ...(onAccount ? ['rekening'] : [])];
+  }
+
+  /**
+   * Of een bezoeker zonder account mag afrekenen: alleen als online betalen werkt (een gast betaalt altijd vooraf, nooit op rekening)
+   * en de beheerder bestellen als gast niet heeft uitgezet.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {boolean} true als afrekenen als gast kan.
+   */
+  function guestCheckoutAllowed(tenantId) {
+    const config = configOf(settingsFor(tenantId));
+    return config.online && config.guestCheckout;
   }
 
   /**
@@ -259,7 +270,7 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
     return { order: out.order || order, refund: { id: made.id, amount: value, status: made.status } };
   }
 
-  return { start, sync, expireUnpaid, onPaid, optionsFor, refund };
+  return { start, sync, expireUnpaid, onPaid, optionsFor, guestCheckoutAllowed, refund };
 }
 
 module.exports = { createWebPayments, MOLLIE_STATES };

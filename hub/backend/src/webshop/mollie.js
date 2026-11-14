@@ -53,7 +53,7 @@ function cleanPublicUrl(raw) {
 /**
  * Saneert de instelling `shopPayment`. Lege of onbruikbare invoer geeft de standaardwaarden.
  * @param {*} raw De ingevoerde instelling.
- * @returns {{ online: boolean, publicUrl: string, onAccount: string, holdHours: number, accountHoldDays: number }} De gesaneerde instelling.
+ * @returns {{ online: boolean, publicUrl: string, onAccount: string, holdHours: number, accountHoldDays: number, guestCheckout: boolean }} De gesaneerde instelling (guestCheckout: bestellen zonder account, standaard aan; werkt alleen als online betalen werkt).
  */
 function sanitizePayment(raw) {
   const input = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
@@ -66,6 +66,7 @@ function sanitizePayment(raw) {
     onAccount: ON_ACCOUNT.includes(input.onAccount) ? input.onAccount : 'iedereen',
     holdHours: Number.isFinite(hours) && hours >= 1 && hours <= 168 ? hours : DEFAULT_HOLD_HOURS,
     accountHoldDays: Number.isInteger(days) && days >= 0 && days <= 90 ? days : DEFAULT_ACCOUNT_HOLD_DAYS,
+    guestCheckout: input.guestCheckout !== false,
   };
 }
 

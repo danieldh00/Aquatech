@@ -137,12 +137,14 @@ function cartEvents({ items, value, fromPlanner = 0 }) {
 /**
  * De gebeurtenissen voor afrekenen: begin_checkout, en bij de loginmuur ook checkout_login_wall; een foutmelding in het
  * formulier is alleen checkout_error.
- * @param {{ items: object[], value: number, loggedIn: boolean, error?: string }} input Artikelen, totaalbedrag, inlogstatus en de melding.
+ * @param {{ items: object[], value: number, loggedIn: boolean, guestForm?: boolean, error?: string }} input Artikelen, totaalbedrag, inlogstatus, of dit het afrekenformulier voor een gast (zonder account) is en de melding.
  * @returns {object[]} De gebeurtenissen.
  */
-function checkoutEvents({ items, value, loggedIn, error = '' }) {
+function checkoutEvents({ items, value, loggedIn, guestForm = false, error = '' }) {
   // Na een fout toont de server het formulier opnieuw: dat is geen nieuw begin van het afrekenen.
   if (error) return [{ name: 'checkout_error', params: { type: errorTypeOf(error) } }];
+  // De keuze om als gast te bestellen (op de loginmuur) is al begin_checkout geweest; het formulier meldt alleen de keuze.
+  if (guestForm) return [{ name: 'checkout_guest', params: { currency: 'EUR', value: money(value) } }];
   const events = [{ name: 'begin_checkout', params: { currency: 'EUR', value: money(value), login_status: loggedIn ? 'ingelogd' : 'gast', items: items.slice(0, MAX_EVENT_ITEMS) } }];
   if (!loggedIn) events.push({ name: 'checkout_login_wall', params: {} });
   return events;
@@ -166,11 +168,11 @@ function errorTypeOf(message) {
 /**
  * De gebeurtenis voor een geplaatste en (bij online betalen) betaalde bestelling. De pagina vermeldt het bestelnummer als
  * transaction_id, zodat Google en `analytiek.js` een herlading niet dubbel tellen.
- * @param {{ number: string, total: number, tax: number, shipping: number, items: object[], payment: string }} order De bestelling.
+ * @param {{ number: string, total: number, tax: number, shipping: number, items: object[], payment: string, guest?: boolean }} order De bestelling (guest = besteld zonder account).
  * @returns {object[]} De gebeurtenissen.
  */
 function purchaseEvents(order) {
-  return [{ name: 'purchase', params: { transaction_id: String(order.number).slice(0, 60), currency: 'EUR', value: money(order.total), tax: money(order.tax), shipping: money(order.shipping), payment_type: order.payment === 'online' ? 'online' : 'rekening', items: order.items.slice(0, MAX_EVENT_ITEMS) } }];
+  return [{ name: 'purchase', params: { transaction_id: String(order.number).slice(0, 60), currency: 'EUR', value: money(order.total), tax: money(order.tax), shipping: money(order.shipping), payment_type: order.payment === 'online' ? 'online' : 'rekening', checkout_type: order.guest ? 'gast' : 'account', items: order.items.slice(0, MAX_EVENT_ITEMS) } }];
 }
 
 /**

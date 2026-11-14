@@ -235,11 +235,11 @@ function dropshipChoice(value) {
 
 /**
  * De pagina Afrekenen: gegevens van de klant, de verzendmethode, het afleveradres en een overzicht van de bestelling.
- * @param {{ cart: object, quote: object, country: string, method: string, summary?: object|null, values?: object, error?: string, viewer: { displayName: string, email: string }, paymentOptions?: string[] }} state De geprijsde winkelwagen, de verzendopties, het gekozen land en de gekozen methode, de uitgerekende totalen (web-orders.js, orderTotals), eerder ingevulde waarden, een foutmelding, de ingelogde klant en de betaalwijzen die hij mag kiezen (online en/of rekening).
+ * @param {{ cart: object, quote: object, country: string, method: string, summary?: object|null, values?: object, error?: string, viewer: { displayName: string, email: string }, paymentOptions?: string[], guest?: boolean }} state De geprijsde winkelwagen, de verzendopties, het gekozen land en de gekozen methode, de uitgerekende totalen (web-orders.js, orderTotals), eerder ingevulde waarden, een foutmelding, de ingelogde klant en de betaalwijzen die hij mag kiezen (online en/of rekening). Met `guest` rekent een bezoeker zonder account af (als particulier, betalen vooraf, geen dropshipping); `viewer` is dan een leeg gastprofiel.
  * @param {object[]} groups Alle hoofdcategorieën.
  * @returns {string} De HTML-pagina.
  */
-function checkoutPage({ cart, quote, country, method, summary = null, summaries = {}, values = {}, error = '', viewer, paymentOptions = ['rekening'] }, groups = []) {
+function checkoutPage({ cart, quote, country, method, summary = null, summaries = {}, values = {}, error = '', viewer, paymentOptions = ['rekening'], guest = false }, groups = []) {
   const profile = viewer.profile || {};
   const value = { name: viewer.displayName, email: viewer.email, company: profile.companyName || '', vatNumber: profile.vatNumber || '', ...values };
   const chosen = quote.options.find((option) => option.method === method && option.available);
@@ -257,11 +257,13 @@ ${error ? `<p class="form-error" role="alert">${escapeHtml(error)}</p>` : ''}
 <form method="post" action="./" class="account-form" data-shop-checkout data-address-endpoint="${ROOT}adres/">
 <button type="submit" hidden>Bestelling plaatsen</button>
 <input type="hidden" name="expectedTotal" value="${escapeHtml(String(total))}" data-expected-total>
+${guest ? '<input type="hidden" name="guest" value="ja">' : ''}
 <h2>Je gegevens</h2>
+${guest ? `<p class="note">Je bestelt zonder account en betaalt direct online. Een account nodig (bijvoorbeeld om zakelijk of op rekening te bestellen)? <a href="${ROOT}inloggen/?volgende=afrekenen">Log in</a> of <a href="${ROOT}registreren/?volgende=afrekenen">maak een account</a>.</p>` : ''}
 ${checkoutField({ name: 'name', label: 'Naam', value: value.name || '', autocomplete: 'name' })}
-${checkoutField({ name: 'company', label: business ? 'Bedrijfsnaam' : 'Bedrijfsnaam (optioneel)', value: value.company || '', autocomplete: 'organization', required: business })}
+${guest ? '' : checkoutField({ name: 'company', label: business ? 'Bedrijfsnaam' : 'Bedrijfsnaam (optioneel)', value: value.company || '', autocomplete: 'organization', required: business })}
 ${business ? checkoutField({ name: 'vatNumber', label: 'Btw-nummer (optioneel, bijvoorbeeld BE0123456789)', value: value.vatNumber || '', autocomplete: 'off', required: false }) : ''}
-${viewer.email ? `<label class="form-field"><span>E-mailadres</span><input name="email" type="email" value="${escapeHtml(viewer.email)}" autocomplete="email" readonly><small>De bevestiging gaat naar het e-mailadres van je account; wijzigen kan in <a href="../app/profiel/">Mijn profiel</a>.</small></label>` : checkoutField({ name: 'email', label: 'E-mailadres', value: value.email || '', autocomplete: 'email', type: 'email' })}
+${viewer.email ? `<label class="form-field"><span>E-mailadres</span><input name="email" type="email" value="${escapeHtml(viewer.email)}" autocomplete="email" readonly><small>De bevestiging gaat naar het e-mailadres van je account; wijzigen kan in <a href="../app/profiel/">Mijn profiel</a>.</small></label>` : checkoutField({ name: 'email', label: guest ? 'E-mailadres (hierheen sturen we de bevestiging en de link naar je bestelling)' : 'E-mailadres', value: value.email || '', autocomplete: 'email', type: 'email' })}
 ${checkoutField({ name: 'phone', label: 'Telefoon (optioneel)', value: value.phone || '', autocomplete: 'tel', required: false, type: 'tel' })}
 ${shippingChoice(quote, country, method, summaries, business)}
 <h2>Factuuradres</h2>
@@ -276,7 +278,7 @@ ${addressBlock({ delivery: false, value, countries: quote.countries, country: va
 ${addressBlock({ delivery: true, value })}
 </div>
 <label class="form-field"><span>Opmerking (optioneel)</span><textarea name="note" rows="3" maxlength="500">${escapeHtml(value.note || '')}</textarea></label>
-${dropshipChoice(value)}
+${guest ? '' : dropshipChoice(value)}
 ${paymentChoice(paymentOptions, value.paymentMethod)}
 <label class="terms-check"><input type="checkbox" name="terms" value="ja" required${value.terms === 'ja' ? ' checked' : ''}><span>Ik ga akkoord met de <a href="${ROOT}pagina/algemene-voorwaarden/" target="_blank" rel="noopener">algemene voorwaarden</a> en heb de <a href="${ROOT}pagina/privacyverklaring/" target="_blank" rel="noopener">privacyverklaring</a> gelezen. Als consument heb je <a href="${ROOT}pagina/herroepingsrecht/" target="_blank" rel="noopener">herroepingsrecht</a>.</span></label>
 ${captchaFields('checkout')}
@@ -286,19 +288,21 @@ ${captchaFields('checkout')}
 <p class="checkout-total"><span data-total-caption>${totalCaption(business, Boolean(summary && summary.shifted))}</span><strong data-total-text>${escapeHtml(formatPrice(total))}</strong></p>${vatNote}
 <p><a href="${ROOT}winkelwagen/">Winkelwagen aanpassen</a></p></aside>
 </div></section>`;
-  return layout({ root: ROOT, title: 'Afrekenen – Aquatechshop.nl', description: 'Reken je bestelling af bij Aquatechshop.nl.', body, groups, script: ['adres.js', 'afrekenen.js'], events: Analytics.checkoutEvents({ items: analyticsItems(cart.lines, business), value: total, loggedIn: true, error }) });
+  return layout({ root: ROOT, title: 'Afrekenen – Aquatechshop.nl', description: 'Reken je bestelling af bij Aquatechshop.nl.', body, groups, script: ['adres.js', 'afrekenen.js'], events: Analytics.checkoutEvents({ items: analyticsItems(cart.lines, business), value: total, loggedIn: !guest, guestForm: guest, error }) });
 }
 
 /**
  * Afrekenen zonder account: uitleg met links om in te loggen of te registreren, waarna de klant terugkomt bij het afrekenen.
  * @param {object[]} groups Alle hoofdcategorieën.
  * @param {{ lines: object[], totals: { total: number }, pricesExcl: boolean }} [cart] De geprijsde winkelwagen (voor de meting van de loginmuur).
+ * @param {{ guestAllowed?: boolean }} [options] Met `guestAllowed` kan de bezoeker ook zonder account bestellen (als particulier, direct online betalen).
  * @returns {string} De HTML-pagina.
  */
-function checkoutLoginPage(groups = [], cart = { lines: [], totals: { total: 0 }, pricesExcl: false }) {
+function checkoutLoginPage(groups = [], cart = { lines: [], totals: { total: 0 }, pricesExcl: false }, { guestAllowed = false } = {}) {
   const body = `<section class="account-card"><h1>Afrekenen</h1>
-<p>Log in of maak een account om je bestelling af te ronden. Je winkelwagen blijft bewaard.</p>
-<div class="account-actions"><a class="button" href="${ROOT}inloggen/?volgende=afrekenen">Inloggen</a><a class="button secondary" href="${ROOT}registreren/?volgende=afrekenen">Account maken</a></div>
+<p>${guestAllowed ? 'Log in, maak een account of bestel zonder account.' : 'Log in of maak een account om je bestelling af te ronden.'} Je winkelwagen blijft bewaard.</p>
+<div class="account-actions"><a class="button" href="${ROOT}inloggen/?volgende=afrekenen">Inloggen</a><a class="button secondary" href="${ROOT}registreren/?volgende=afrekenen">Account maken</a>${guestAllowed ? `<a class="button secondary" href="${ROOT}afrekenen/?gast=1">Bestellen zonder account</a>` : ''}</div>
+${guestAllowed ? '<p class="note">Zonder account bestel je als particulier en betaal je direct online; je volgt je bestelling met de link in de bevestigingsmail. Zakelijk bestellen (prijzen excl. btw), op rekening betalen en je bestelhistorie vragen een account.</p>' : ''}
 </section>`;
   return layout({ root: ROOT, title: 'Afrekenen – Aquatechshop.nl', description: 'Log in om af te rekenen bij Aquatechshop.nl.', body, groups, events: Analytics.checkoutEvents({ items: analyticsItems(cart.lines, cart.pricesExcl), value: cart.totals.total, loggedIn: false }) });
 }
@@ -355,10 +359,10 @@ const formatDate = (iso) => {
  * plaatsen (`thanks`) met een bedankt, anders als onderdeel van de bestelhistorie.
  * @param {object} order De bestelling (met regels, adres, totalen en verloop).
  * @param {object[]} groups Alle hoofdcategorieën.
- * @param {{ thanks?: boolean, invoice?: ?{ number: string, status: string }, returnsHtml?: string, payError?: string, autoPay?: boolean }} [options] thanks: direct na het plaatsen; invoice: de definitieve factuur bij de bestelling (download als PDF); returnsHtml: het blok Retourneren (storefront-return-pages.js); payError: een melding bij het starten van de betaling; autoPay: stuur de klant meteen door naar de betaalpagina.
+ * @param {{ thanks?: boolean, invoice?: ?{ number: string, status: string }, returnsHtml?: string, payError?: string, autoPay?: boolean, guest?: boolean, accountOffer?: ?{ error?: string }, accountCreated?: boolean }} [options] thanks: direct na het plaatsen; invoice: de definitieve factuur bij de bestelling (download als PDF); returnsHtml: het blok Retourneren (storefront-return-pages.js); payError: een melding bij het starten van de betaling; autoPay: stuur de klant meteen door naar de betaalpagina; guest: de klant bekijkt de bestelling met de persoonlijke link (zonder account); accountOffer: het aanbod om een account te maken (alleen voor een gast zonder ingelogd account; met een eventuele foutmelding); accountCreated: het account is zojuist gemaakt.
  * @returns {string} De HTML-pagina.
  */
-function orderPage(order, groups = [], { thanks = false, invoice = null, returnsHtml = '', payError = '', autoPay = false } = {}) {
+function orderPage(order, groups = [], { thanks = false, invoice = null, returnsHtml = '', payError = '', autoPay = false, guest = false, accountOffer = null, accountCreated = false } = {}) {
   const business = order.customerGroup === 'zakelijk';
   const rows = order.lines.map((line) => `<tr><td>${escapeHtml(line.name)}<br><small>Artikelnr.: ${escapeHtml(line.code)}</small></td><td class="num">${escapeHtml(formatPrice(business ? line.unitExcl : line.unitIncl))}</td><td class="num">${line.qty}</td><td class="num">${escapeHtml(formatPrice(business && line.lineExcl !== undefined ? line.lineExcl : line.lineTotal))}</td></tr>`).join('');
   const vatNote = order.vat && order.vat.shifted ? `<p class="note">Btw verlegd naar de afnemer${order.vat.number ? ` (btw-nummer ${escapeHtml(order.vat.number)})` : ''}.</p>` : business && order.vat && order.vat.number ? `<p class="note">Btw-nummer: ${escapeHtml(order.vat.number)}</p>` : '';
@@ -367,7 +371,7 @@ function orderPage(order, groups = [], { thanks = false, invoice = null, returns
   const waiting = Boolean(online && !paid && order.status === 'nieuw');
   const intro = thanks
     ? `<h1>Bedankt voor je bestelling</h1>
-<p>Je bestelling <strong>${escapeHtml(order.number)}</strong> is ontvangen.${paid ? ` We hebben je betaling ontvangen en sturen een bevestiging naar ${escapeHtml(order.email)}.` : waiting ? ' Rond je betaling af, dan bevestigen we je bestelling per mail.' : ` We sturen een bevestiging naar ${escapeHtml(order.email)}. Je bestelling gaat op rekening: je ontvangt de factuur van ons.`}</p>`
+<p>Je bestelling <strong>${escapeHtml(order.number)}</strong> is ontvangen.${paid ? ` We hebben je betaling ontvangen en sturen een bevestiging${guest ? ' met de link naar deze bestelling' : ''} naar ${escapeHtml(order.email)}.` : waiting ? ' Rond je betaling af, dan bevestigen we je bestelling per mail.' : ` We sturen een bevestiging naar ${escapeHtml(order.email)}. Je bestelling gaat op rekening: je ontvangt de factuur van ons.`}</p>`
     : `<h1>Bestelling ${escapeHtml(order.number)}</h1>
 <p>Geplaatst op ${escapeHtml(formatDate(order.createdAt))}. ${online ? (paid ? 'Je hebt online betaald.' : 'Je bestelling wordt online betaald.') : 'Je bestelling gaat op rekening.'}</p>`;
   const payBlock = online ? paymentBlock(order, { payError, waiting }) : '';
@@ -380,8 +384,9 @@ ${vatNote}${deliveryBlock(order)}
 ${dropshipBlock(order, thanks)}${payBlock}<p>Status: <strong>${escapeHtml(order.statusLabel)}</strong></p>
 ${invoiceBlock}${history}
 ${returnsHtml}
-<p><a class="button" href="${DETAIL_ROOT}">Verder winkelen</a> <a class="button secondary" href="${DETAIL_ROOT}bestellingen/">Al mijn bestellingen</a></p></section>`;
-  return layout({ root: DETAIL_ROOT, title: `Bestelling ${order.number} – Aquatechshop.nl`, description: 'Je bestelling bij Aquatechshop.nl.', body, groups, events: thanks && !waiting ? Analytics.purchaseEvents({ number: order.number, total: order.totals.total, tax: order.totals.byRate.reduce((sum, row) => sum + row.vat, 0), shipping: order.shipping ? order.shipping.price : 0, payment: order.payment, items: analyticsItems(order.lines, business) }) : [], script: order.dropshipping && order.status === 'nieuw' && !order.packingSlip ? 'pakbon.js' : '', refresh: autoPay && waiting && !payError ? 'betalen/' : '' });
+${guest ? guestNote() : ''}${accountCreated ? '<p class="form-info" role="status">Je account is aangemaakt en deze bestelling staat erin. We hebben je een mail gestuurd om je e-mailadres te bevestigen.</p>' : ''}${accountOffer ? accountOfferBlock(order, accountOffer) : ''}
+<p><a class="button" href="${DETAIL_ROOT}">Verder winkelen</a>${guest ? '' : ` <a class="button secondary" href="${DETAIL_ROOT}bestellingen/">Al mijn bestellingen</a>`}</p></section>`;
+  return layout({ root: DETAIL_ROOT, title: `Bestelling ${order.number} – Aquatechshop.nl`, description: 'Je bestelling bij Aquatechshop.nl.', body, groups, events: thanks && !waiting ? Analytics.purchaseEvents({ number: order.number, total: order.totals.total, tax: order.totals.byRate.reduce((sum, row) => sum + row.vat, 0), shipping: order.shipping ? order.shipping.price : 0, payment: order.payment, guest: Boolean(order.guest), items: analyticsItems(order.lines, business) }) : [], script: order.dropshipping && order.status === 'nieuw' && !order.packingSlip ? 'pakbon.js' : '', refresh: autoPay && waiting && !payError ? 'betalen/' : '' });
 }
 
 /**
@@ -425,6 +430,61 @@ function paymentBlock(order, { payError, waiting }) {
 }
 
 /**
+ * De uitleg voor een gast die zijn bestelling met de persoonlijke link bekijkt.
+ * @returns {string} HTML van de opmerking.
+ */
+function guestNote() {
+  return '<p class="note">Je bekijkt deze bestelling met je persoonlijke link zonder account. Bewaar de bevestigingsmail om de bestelling later opnieuw te openen; deelt je de link met iemand, dan kan die persoon de bestelling ook zien.</p>';
+}
+
+/**
+ * Het aanbod aan een gast om na de bestelling alsnog een account te maken: alleen een wachtwoord kiezen, naam en e-mailadres
+ * komen van de bestelling en de bestelling wordt aan het account gekoppeld.
+ * @param {{ number: string, email: string }} order De bestelling.
+ * @param {{ error?: string }} offer De eventuele foutmelding van een eerdere poging.
+ * @returns {string} HTML van het blok.
+ */
+function accountOfferBlock(order, offer) {
+  return `<section class="guest-account"><h2>Account maken?</h2>
+<p>Volgende keer sneller bestellen en al je bestellingen op één plek. We gebruiken je naam en e-mailadres (${escapeHtml(order.email)}) van deze bestelling; kies alleen een wachtwoord. Dit is niet verplicht.</p>
+${offer.error ? `<p class="form-error" role="alert">${escapeHtml(offer.error)}</p>` : ''}
+<form method="post" action="account" class="account-form">
+${checkoutField({ name: 'password', label: 'Wachtwoord (minimaal 12 tekens)', value: '', autocomplete: 'new-password', type: 'password' })}
+${checkoutField({ name: 'password2', label: 'Wachtwoord herhalen', value: '', autocomplete: 'new-password', type: 'password' })}
+<input class="trap" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+${captchaFields('register')}
+<button class="button secondary" type="submit">Account maken</button>
+</form></section>`;
+}
+
+/**
+ * De pagina als een gast een bestelling opent zonder (geldige) persoonlijke link, bijvoorbeeld na het betalen in een andere browser:
+ * alleen een bedankje en uitleg, zonder gegevens van de bestelling.
+ * @param {object[]} groups Alle hoofdcategorieën.
+ * @returns {string} De HTML-pagina.
+ */
+function guestNoAccessPage(groups = []) {
+  const body = `<section class="account-card"><h1>Bedankt voor je bestelling</h1>
+<p>Om je bestelling te bekijken heb je de persoonlijke link uit de bevestigingsmail nodig. Heb je net betaald? Dan krijg je die mail zodra we je betaling hebben ontvangen. Vragen? Neem dan contact met ons op.</p>
+<div class="account-actions"><a class="button" href="${DETAIL_ROOT}">Verder winkelen</a><a class="button secondary" href="${DETAIL_ROOT}inloggen/">Inloggen</a></div>
+</section>`;
+  return layout({ root: DETAIL_ROOT, title: 'Je bestelling – Aquatechshop.nl', description: 'Je bestelling bij Aquatechshop.nl.', body, groups });
+}
+
+/**
+ * De pagina bij een persoonlijke link naar een bestelling die niet (meer) werkt: onjuist of verlopen.
+ * @param {object[]} groups Alle hoofdcategorieën.
+ * @returns {string} De HTML-pagina.
+ */
+function guestLinkInvalidPage(groups = []) {
+  const body = `<section class="account-card"><h1>Deze link werkt niet meer</h1>
+<p>De link naar je bestelling is onjuist of verlopen. Open de link in de bevestigingsmail opnieuw, of neem contact met ons op.</p>
+<div class="account-actions"><a class="button" href="${DETAIL_ROOT}">Naar de webshop</a></div>
+</section>`;
+  return layout({ root: DETAIL_ROOT, title: 'Link werkt niet – Aquatechshop.nl', description: 'De link naar je bestelling werkt niet meer.', body, groups });
+}
+
+/**
  * De bestelhistorie van de ingelogde klant: een tabel met elke bestelling en een link naar het detail, met bladeren bij meer dan één pagina.
  * @param {{ items: { id: string, number: string, statusLabel: string, total: number, createdAt: string }[], total: number }} list De bestellingen van deze pagina (nieuwste eerst) en het totaal aantal.
  * @param {object[]} groups Alle hoofdcategorieën.
@@ -442,4 +502,4 @@ ${list.items.length ? `<div class="tablewrap"><table class="cart-table"><thead><
   return layout({ root: ROOT, title: 'Mijn bestellingen – Aquatechshop.nl', description: 'Je bestellingen bij Aquatechshop.nl.', body, groups });
 }
 
-module.exports = { cartPage, checkoutPage, checkoutLoginPage, orderPage, ordersPage };
+module.exports = { cartPage, checkoutPage, checkoutLoginPage, orderPage, ordersPage, guestNoAccessPage, guestLinkInvalidPage };

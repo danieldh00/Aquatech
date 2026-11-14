@@ -372,7 +372,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
    */
   const shapeFull = (row) => {
     const data = JSON.parse(row.data);
-    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, billingAddress: data.billingAddress || null, deliverySame: data.deliverySame !== false, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null, consent: data.consent || null, invoiceError: data.invoiceError || '', shipMail: data.shipMail || null, payment: data.payment || 'op rekening', pay: data.pay || null, creditNote: data.creditNote || null, reservedUntil: data.reservedUntil || null, reservationReleasedAt: data.reservationReleasedAt || null, quote: data.quote || null, paymentDays: data.paymentDays === undefined ? null : data.paymentDays, language: data.language === 'en' ? 'en' : 'nl', packingSlip: data.packingSlip || null, dropshipping: data.dropshipping || null, allowPartial: data.allowPartial !== false, shipments: data.shipments || [], backorderSince: data.backorderSince || null, backorderReadyAt: data.backorderReadyAt || null };
+    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, billingAddress: data.billingAddress || null, deliverySame: data.deliverySame !== false, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null, consent: data.consent || null, invoiceError: data.invoiceError || '', shipMail: data.shipMail || null, payment: data.payment || 'op rekening', pay: data.pay || null, creditNote: data.creditNote || null, reservedUntil: data.reservedUntil || null, reservationReleasedAt: data.reservationReleasedAt || null, quote: data.quote || null, paymentDays: data.paymentDays === undefined ? null : data.paymentDays, language: data.language === 'en' ? 'en' : 'nl', packingSlip: data.packingSlip || null, dropshipping: data.dropshipping || null, allowPartial: data.allowPartial !== false, shipments: data.shipments || [], backorderSince: data.backorderSince || null, backorderReadyAt: data.backorderReadyAt || null, guest: Boolean(data.guest) };
   };
   const COLUMNS = 'id, number, user_id, status, customer_name, email, total, created_at, updated_at';
 
@@ -459,7 +459,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
    * opnieuw, legt de bestelling vast en reserveert de voorraad, alles in één
    * transactie.
    * @param {string} tenantId Id van de omgeving.
-   * @param {{ id: string, group?: string, wholesale?: ?{ discountPct: number }, vatNumber?: string, vies?: object, addressUnverified?: boolean, deliveryUnverified?: boolean }} user De klant die bestelt, met zijn klantgroep ('zakelijk' of leeg), bij een groothandelsklant zijn vaste korting, het goedgekeurde btw-nummer van het account en de uitkomst van de VIES-controle (vies.js) als bewijs bij verlegging, en of het factuuradres (addressUnverified) en het afwijkende afleveradres (deliveryUnverified) met de hand zijn ingevuld zonder PDOK-controle.
+   * @param {{ id: ?string, group?: string, wholesale?: ?{ discountPct: number }, vatNumber?: string, vies?: object, addressUnverified?: boolean, deliveryUnverified?: boolean, guest?: { hash: string, sealFor: Function } }} user De klant die bestelt, met zijn klantgroep ('zakelijk' of leeg), bij een groothandelsklant zijn vaste korting, het goedgekeurde btw-nummer van het account en de uitkomst van de VIES-controle (vies.js) als bewijs bij verlegging, en of het factuuradres (addressUnverified) en het afwijkende afleveradres (deliveryUnverified) met de hand zijn ingevuld zonder PDOK-controle. Een gast (`guest`, id leeg; zie guest-orders.js) is altijd een particulier zonder dropshipping en betaalt altijd online; `guest.hash` is de SHA-256 van zijn toegangstoken en `guest.sealFor(orderId)` geeft het versleutelde token voor de links in de mails.
    * @param {object} rawFields De gegevens van het afrekenformulier (zie sanitizeCheckout, plus shippingMethod en country).
    * @param {{ code: string, qty: number }[]} wanted De winkelwagen.
    * @param {object} [shippingConfig] De verzendinstelling (shipping.js); standaard de startwaarden.
@@ -473,19 +473,23 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
     const method = String(input.shippingMethod || '');
     const country = method === 'ophalen' ? 'NL' : String(input.country || 'NL').toUpperCase();
     if (!Shipping.METHODS.includes(method)) return { error: 'Kies een verzendmethode.', field: 'shippingMethod', status: 400 };
-    const group = user.group === 'zakelijk' ? 'zakelijk' : '';
+    const guest = user.guest || null;
+    // Een gast is altijd een particulier: zakelijke prijzen, btw verleggen en groothandelsvoorwaarden horen bij een account.
+    const group = !guest && user.group === 'zakelijk' ? 'zakelijk' : '';
     // Het land van het factuuradres is dat van de aflevering, tenzij het afleveradres afwijkt: dan kiest de klant het zelf (standaard Nederland).
     const billingCountry = deliverySameOf(input) ? country : String(input.billingCountry || 'NL').toUpperCase();
     if (method !== 'ophalen' && billingCountry !== country && !Shipping.countriesOf(shippingConfig).some((entry) => entry.code === billingCountry)) return { error: 'Kies een land voor het factuuradres.', field: 'billingCountry', status: 400 };
     const checked = sanitizeCheckout(input, { method, country, billingCountry, group });
     if (checked.error) return { error: checked.error, field: checked.field, status: 400 };
-    const dropshipping = dropshippingOf(input, method);
+    // Dropshipping (met eigen pakbon uploaden) vraagt een account.
+    const dropshipping = guest ? { value: null } : dropshippingOf(input, method);
     if (dropshipping.error) return { error: dropshipping.error, field: dropshipping.field, status: 400 };
     if (input.terms !== 'ja') return { error: 'Ga akkoord met de algemene voorwaarden om te bestellen.', field: 'terms', status: 400 };
     const asked = String(input.paymentMethod || '');
     const paymentMethod = paymentOptions.length === 1 && !asked ? paymentOptions[0] : asked;
     if (!paymentOptions.includes(paymentMethod)) return { error: 'Kies hoe je wilt betalen.', field: 'paymentMethod', status: 400 };
     const online = paymentMethod === 'online';
+    if (guest && !online) return { error: 'Een bestelling als gast betaal je direct online.', field: 'paymentMethod', status: 400 };
     return transaction(db, () => {
       lockItems(tenantId, wanted);
       const cart = priceCart(tenantId, wanted, { group, wholesale: group === 'zakelijk' ? user.wholesale || null : null });
@@ -518,13 +522,14 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
         customerGroup: group, vat: group === 'zakelijk' ? { number: fields.vatNumber, shifted: calculated.shifted, ...(calculated.shifted && user.vies ? { vies: user.vies } : {}) } : null,
         note: fields.note, totals, payment: online ? 'online' : 'op rekening', consent: { terms: true, at: timestamp },
         ...(dropshipping.value ? { dropshipping: dropshipping.value } : {}),
+        ...(guest ? { guest: { hash: guest.hash, sealed: guest.sealFor(id) } } : {}),
         ...(online ? { pay: { provider: 'mollie', status: 'open', id: null, ids: [], checkoutUrl: '', createdAt: timestamp, paidAt: null } } : {}),
         ...(reservedUntil ? { reservedUntil } : {}),
         history: [{ at: timestamp, status: 'nieuw', by: fields.name }],
       };
       prepare(`INSERT INTO web_orders (id, tenant_id, number, user_id, status, customer_name, email, total, data, created_at, updated_at)
         VALUES (?, ?, ?, ?, 'nieuw', ?, ?, ?, ?, ?, ?)`)
-        .run(id, tenantId, number, user.id, fields.company || fields.name, fields.email, totals.total, JSON.stringify(data), timestamp, timestamp);
+        .run(id, tenantId, number, guest ? null : user.id, fields.company || fields.name, fields.email, totals.total, JSON.stringify(data), timestamp, timestamp);
       stock.reserveOrder(tenantId, id, stockLinesOf(cart.lines));
       return { order: shapeFull(prepare(`SELECT ${COLUMNS}, data FROM web_orders WHERE tenant_id = ? AND id = ?`).get(tenantId, id)) };
     });
@@ -610,6 +615,42 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
   function getForUser(tenantId, userId, id) {
     const row = prepare(`SELECT ${COLUMNS}, data FROM web_orders WHERE tenant_id = ? AND user_id = ? AND id = ?`).get(tenantId, String(userId), String(id));
     return row ? shapeFull(row) : null;
+  }
+
+  /**
+   * De toegangsgegevens van een gastbestelling: de SHA-256 van het toegangstoken en het versleutelde token (voor de links in mails).
+   * Staat bewust niet in de bestelling zelf, zodat ze nooit mee kunnen naar Beheer of een API-antwoord.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} id Id van de bestelling.
+   * @returns {{ hash: string, sealed: string, createdAt: string, updatedAt: string }|null} De gegevens, of null als het geen gastbestelling is (of niet bestaat).
+   */
+  function guestAccessOf(tenantId, id) {
+    const row = prepare('SELECT data, created_at, updated_at FROM web_orders WHERE tenant_id = ? AND id = ?').get(tenantId, String(id));
+    if (!row) return null;
+    const guest = JSON.parse(row.data).guest;
+    return guest && guest.hash ? { hash: String(guest.hash), sealed: String(guest.sealed || ''), createdAt: row.created_at, updatedAt: row.updated_at } : null;
+  }
+
+  /**
+   * Telt de bestellingen als gast met dit e-mailadres sinds een moment (bestellimiet per adres, tegen misbruik van andermans adres).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} email Het e-mailadres (kleine letters).
+   * @param {string} since ISO-moment.
+   * @returns {number} Het aantal bestellingen.
+   */
+  function countGuestSince(tenantId, email, since) {
+    return Number(prepare('SELECT COUNT(*) AS n FROM web_orders WHERE tenant_id = ? AND user_id IS NULL AND email = ? AND created_at > ?').get(tenantId, String(email || '').trim().toLowerCase(), since).n) || 0;
+  }
+
+  /**
+   * Koppelt een gastbestelling aan een (nieuw) account. Alleen als de bestelling nog van niemand is; een tweede poging doet niets.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} id Id van de bestelling.
+   * @param {string} userId Id van het account.
+   * @returns {boolean} true als de bestelling nu aan het account hangt.
+   */
+  function attachToUser(tenantId, id, userId) {
+    return prepare('UPDATE web_orders SET user_id = ? WHERE tenant_id = ? AND id = ? AND user_id IS NULL').run(String(userId), tenantId, String(id)).changes > 0;
   }
 
   /**
@@ -1201,7 +1242,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
     return { released };
   }
 
-  return { priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, releaseExpired, listToPick, getMany, pickable, markPackingSlipsPrinted, setDropshippingSlip, onShipped, onCancelled, onTracking, withFulfilment, getDetailed, ship, recordShipmentLabel, setAllowPartial, listBackorders, markBackorderReady, onPartialShipped };
+  return { priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, countGuestSince, guestAccessOf, attachToUser, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, releaseExpired, listToPick, getMany, pickable, markPackingSlipsPrinted, setDropshippingSlip, onShipped, onCancelled, onTracking, withFulfilment, getDetailed, ship, recordShipmentLabel, setAllowPartial, listBackorders, markBackorderReady, onPartialShipped };
 }
 
 /**
