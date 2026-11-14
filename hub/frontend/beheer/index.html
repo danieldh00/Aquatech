@@ -436,6 +436,8 @@
           </div>
           <label>Webadres van de webshop (ook voor zoekmachines en de sitemap)<input name="publicUrl" type="url" placeholder="https://aquatech.den-hollander.com/" spellcheck="false"></label>
           <span class="muted small">Het openbare adres van de webshop, voor de terugkeer van de klant en de melding van Mollie (<code>mollie/webhook/…</code>). Moet vanaf internet bereikbaar zijn en met https beginnen.</span>
+          <label class="chk"><input type="checkbox" name="guestCheckout"> <span>Bestellen zonder account toestaan</span></label>
+          <span class="muted small">Een bezoeker rekent dan af met alleen e-mailadres en adres: als particulier en met direct online betalen (nooit op rekening). Hij volgt zijn bestelling met een persoonlijke link in de bevestigingsmail en kan daarna alsnog een account maken. Zakelijk bestellen (prijzen excl. btw), groothandel en dropshipping blijven alleen met een account. Werkt alleen als online betalen werkt.</span>
           <label>Op rekening bestellen<select name="onAccount">
             <option value="iedereen">Voor iedereen (naast online betalen)</option>
             <option value="zakelijk">Alleen voor zakelijke klanten</option>

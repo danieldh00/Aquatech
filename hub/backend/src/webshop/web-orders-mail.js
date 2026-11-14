@@ -6,6 +6,7 @@
 // halen); komt de volgcode later, dan volgt één mail met die code (data.shipMail).
 const { validEmail, mailFailure, MAIL_SETUP_FAILED } = require('../platform/mailer');
 const { WITHDRAWAL_DAYS } = require('./legal-pages');
+const { cleanPublicUrl } = require('./mollie');
 
 /**
  * Een ISO-datum als dd-mm-jjjj voor in een mail.
@@ -21,10 +22,10 @@ const EUR = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' 
 
 /**
  * Maakt de verzender van bestelmails.
- * @param {{ orders: object, settingsFor: Function, mailerFor: Function, mailBody: Function }} deps De bestelopslag, de instellingen per omgeving, de mailserver en de opmaak van de mail.
+ * @param {{ orders: object, settingsFor: Function, mailerFor: Function, mailBody: Function, guestLinkOf?: Function }} deps De bestelopslag, de instellingen per omgeving, de mailserver en de opmaak van de mail, en `guestLinkOf(tenantId, order, baseUrl)` = de persoonlijke link naar een gastbestelling (guest-orders.js; zonder geen link in de mails).
  * @returns {{ sendPlaced: Function, sendShipment: Function, sendBusinessRequest: Function, businessRequestReady: Function }} De functies.
  */
-function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
+function createOrderMailer({ orders, settingsFor, mailerFor, mailBody, guestLinkOf = () => '' }) {
   /**
    * De regels van de bestelling als tekst, één per regel.
    * @param {object} order De bestelling (met regels).
@@ -73,6 +74,20 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
   };
 
   /**
+   * De persoonlijke link naar een gastbestelling voor in een mail aan de klant (nooit in de melding aan het bedrijf).
+   * Het webadres komt uit Beheer (Betalen), nooit uit een verzoek.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} order De bestelling.
+   * @param {object} settings De instellingen van de omgeving.
+   * @returns {string} De link, of een lege tekst (geen gastbestelling of geen webadres).
+   */
+  const guestLink = (tenantId, order, settings) => {
+    if (!order.guest) return '';
+    const payment = settings.get('shopPayment');
+    return guestLinkOf(tenantId, order, cleanPublicUrl(payment && payment.publicUrl));
+  };
+
+  /**
    * Stuurt de bevestiging naar de klant en de melding naar het bedrijf, en
    * legt vast hoe dat is gegaan. Bij een online bestelling gebeurt dat pas als hij betaald is.
    * @param {string} tenantId Id van de omgeving.
@@ -93,13 +108,15 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
     if (!mailer.configured()) { orders.updateData(tenantId, order.id, { mail: { sent: false, error: 'Geen mailserver ingesteld.', at: new Date().toISOString() } }); return; }
     const profile = settings.get('quoteProfile') || {};
     const paid = Boolean(order.pay && order.pay.status === 'betaald');
+    const link = guestLink(tenantId, order, settings);
     const details = `Bestelling ${order.number}\n\n${linesText(order)}\n\n${totalsText(order)}\n\n${shippingText(order)}${order.note ? `\n\nJe opmerking: ${order.note}` : ''}`;
     let error = '';
     try {
       const customerMail = mailBody(profile, [
         `Beste ${order.customer.name},`, paid ? 'Bedankt voor je bestelling en je betaling. We hebben beide ontvangen en reserveren de artikelen voor je.' : 'Bedankt voor je bestelling. We hebben hem ontvangen en reserveren de artikelen voor je.',
         details, paid ? `Je hebt ${EUR.format(order.totals.total)} online betaald. Je ontvangt de factuur van ons. Zodra je bestelling onderweg is of klaarstaat, laten we het je weten.` : 'Je bestelling gaat op rekening: je ontvangt de factuur van ons. Zodra je bestelling onderweg is of klaarstaat, laten we het je weten.',
-        `Als consument kun je binnen ${WITHDRAWAL_DAYS} dagen na ontvangst herroepen: log in en kies bij je bestelling Retour aanvragen, of antwoord op deze mail. Onze algemene voorwaarden, privacyverklaring en het herroepingsrecht met modelformulier staan onderaan elke pagina van de webshop.`,
+        ...(link ? [`Bekijk de status van je bestelling, download de factuur of vraag een retour aan via deze persoonlijke link (bewaar deze mail en deel de link niet):\n${link}`] : []),
+        `Als consument kun je binnen ${WITHDRAWAL_DAYS} dagen na ontvangst herroepen: ${link ? 'open je bestelling via de link hierboven' : 'log in'} en kies bij je bestelling Retour aanvragen, of antwoord op deze mail. Onze algemene voorwaarden, privacyverklaring en het herroepingsrecht met modelformulier staan onderaan elke pagina van de webshop.`,
       ]);
       await mailer.send({ to: order.email, subject: `Bevestiging van je bestelling ${order.number}`, text: customerMail.text, html: customerMail.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
       if (validEmail(profile.email)) {
@@ -187,10 +204,12 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
     const record = (patch) => orders.updateData(tenantId, order.id, { shipMail: { tracking: tracking ? tracking.code : null, at: new Date().toISOString(), ...patch } });
     let mailer;
     let profile;
+    let link = '';
     try {
       const settings = settingsFor(tenantId);
       mailer = mailerFor(settings);
       profile = settings.get('quoteProfile') || {};
+      link = guestLink(tenantId, order, settings);
     } catch (failure) {
       console.error('Mailinstellingen lezen mislukt:', failure);
       record({ sent: false, error: MAIL_SETUP_FAILED });
@@ -217,7 +236,7 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody }) {
         : `Je bestelling ${order.number} is onderweg met DPD. Zodra we de volgcode hebben, sturen we hem je toe.`;
     let error = '';
     try {
-      const message = mailBody(profile, [`Beste ${order.customer.name},`, ...intro.split(/\n{2,}/), `Bestelling ${order.number}\n\n${shippedText}`,
+      const message = mailBody(profile, [`Beste ${order.customer.name},`, ...intro.split(/\n{2,}/), `Bestelling ${order.number}\n\n${shippedText}`, ...(link ? [`Je bestelling bekijken: ${link}`] : []),
         ...(backorderText ? [`Nog niet geleverd (backorder):\n${backorderText}`, 'Zodra de rest binnen is, sturen we het je na. Je ontvangt dan opnieuw bericht.'] : [])]);
       const subject = shipment ? `Een deel van je bestelling ${order.number} is ${pickup ? 'klaar' : 'onderweg'}` : pickup ? `Je bestelling ${order.number} staat klaar` : tracking ? `Je bestelling ${order.number} is onderweg (volgcode ${tracking.code})` : `Je bestelling ${order.number} is onderweg`;
       await mailer.send({ to: order.email, subject, text: message.text, html: message.html, replyTo: validEmail(profile.email) ? profile.email : undefined });

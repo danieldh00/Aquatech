@@ -18,7 +18,8 @@ const { homePage, aboutPage, contentPage, renderWith, groupPage, categoryPage, s
 const { DEFAULT_SITE } = require('./shop-content');
 const { wantsBusiness } = require('./business-profile');
 const { loginPage, registerPage, accountPage, plannerPage, forgotPage, resetPage, verifyPage } = require('./storefront-account-pages');
-const { cartPage, checkoutPage, checkoutLoginPage, orderPage, ordersPage } = require('./storefront-order-pages');
+const { cartPage, checkoutPage, checkoutLoginPage, orderPage, ordersPage, guestNoAccessPage, guestLinkInvalidPage } = require('./storefront-order-pages');
+const { rememberGrant } = require('./guest-orders');
 const { wholesalePage, orderableProducts } = require('./storefront-wholesale-pages');
 const Wholesale = require('./wholesale');
 const { returnsBlock } = require('./storefront-return-pages');
@@ -68,7 +69,7 @@ for (const name of fs.readdirSync(path.join(__dirname, 'assets'))) {
 /** Paden waar een formulier naartoe mag posten (inloggen, registreren, uitloggen, planner, wachtwoord vergeten en herstellen, e-mail bevestigen). */
 const ACCOUNT_POSTS = /^\/(inloggen|registreren|uitloggen|planner|account\/zakelijk|account\/bevestigen|wachtwoord-vergeten|wachtwoord-herstellen|e-mail-bevestigen)\/?$/;
 /** Paden waar de winkelwagen, het groothandelsvenster, het afrekenformulier, de webhook van Mollie en het retourformulier (met intrekken) naartoe posten. */
-const ORDER_POSTS = /^\/(winkelwagen(?:\/planner)?|afrekenen|groothandel|mollie\/webhook\/[^/]+|bestelling\/[^/]+\/(?:retour(?:\/[^/]+\/intrekken)?|pakbon))\/?$/;
+const ORDER_POSTS = /^\/(winkelwagen(?:\/planner)?|afrekenen|groothandel|mollie\/webhook\/[^/]+|bestelling\/[^/]+\/(?:retour(?:\/[^/]+\/intrekken)?|pakbon|account))\/?$/;
 /** Pad van het aanvraagformulier voor een zakelijk account op de startpagina. */
 const REQUEST_POST = /^\/zakelijk-aanvraag\/?$/;
 /** Aantal bestellingen per pagina in de bestelhistorie van een klant. */
@@ -77,10 +78,10 @@ const FONT_FILE = /^montserrat-latin-(400|600|700|800)-normal\.woff2$/;
 
 /**
  * Maakt de router van de webshop.
- * @param {{ data?: object, addressLookup?: object, addressGuard?: object, db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, itemImages?: object, previewAllowed?: Function, orders?: object, orderMail?: object, orderInvoices?: object, returns?: object, payments?: object, vies?: object, onOrder?: Function, onReturn?: Function }} options data = de gegevenslaag met de catalogus (storefront-data.js; zonder een eigen met de standaard categorieboom), addressLookup = de opzoekdienst voor adressen (platform/address-lookup.js; zonder vult het afrekenformulier niets automatisch in), addressGuard = de adrescontrole (zonder wordt een Nederlands adres niet gecontroleerd), db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront` en `shopOrdering`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard), itemImages = de afbeeldingen bij artikelen (item-images.js; zonder alleen de adressen van de webshopproducten), previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`), orders = de bestelopslag (web-orders.js; zonder geen bestellen), orderMail = de bevestigingsmail (web-orders-mail.js), orderInvoices = de facturen bij bestellingen (web-order-invoices.js; voor de factuur in de bestelhistorie), orderSlips = de pakbonnen van klanten bij dropshipping (order-slips.js; zonder geen uploaden), returns = de retouropslag (web-returns.js; zonder geen retourneren in het account), payments = het online betalen (web-payments.js; zonder alleen op rekening), vies = de controle van btw-nummers bij VIES (vies.js; zonder wordt verlegd zonder die controle), captcha = de onzichtbare captcha (beveiliging/captcha.js; zonder geen controle) en captchaGate(req, tenantId, actie, token) = de controle van een formulier met auditlog (server.js), onOrder(req, order) = aanroep na een geplaatste bestelling (auditlog) en onReturn(req, retour) = aanroep na een aangevraagde retour (auditlog) en onSlip(req, order, action) = aanroep na het uploaden of verwijderen van een pakbon (auditlog).
+ * @param {{ data?: object, addressLookup?: object, addressGuard?: object, db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, itemImages?: object, previewAllowed?: Function, orders?: object, orderMail?: object, orderInvoices?: object, returns?: object, payments?: object, vies?: object, onOrder?: Function, onReturn?: Function }} options data = de gegevenslaag met de catalogus (storefront-data.js; zonder een eigen met de standaard categorieboom), addressLookup = de opzoekdienst voor adressen (platform/address-lookup.js; zonder vult het afrekenformulier niets automatisch in), addressGuard = de adrescontrole (zonder wordt een Nederlands adres niet gecontroleerd), db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront` en `shopOrdering`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard), itemImages = de afbeeldingen bij artikelen (item-images.js; zonder alleen de adressen van de webshopproducten), previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`), orders = de bestelopslag (web-orders.js; zonder geen bestellen), orderMail = de bevestigingsmail (web-orders-mail.js), orderInvoices = de facturen bij bestellingen (web-order-invoices.js; voor de factuur in de bestelhistorie), orderSlips = de pakbonnen van klanten bij dropshipping (order-slips.js; zonder geen uploaden), returns = de retouropslag (web-returns.js; zonder geen retourneren in het account), guestOrders = de toegang van gasten tot hun bestelling (guest-orders.js; zonder geen bestellen als gast), payments = het online betalen (web-payments.js; zonder alleen op rekening), vies = de controle van btw-nummers bij VIES (vies.js; zonder wordt verlegd zonder die controle), captcha = de onzichtbare captcha (beveiliging/captcha.js; zonder geen controle) en captchaGate(req, tenantId, actie, token) = de controle van een formulier met auditlog (server.js), onOrder(req, order) = aanroep na een geplaatste bestelling (auditlog) en onReturn(req, retour) = aanroep na een aangevraagde retour (auditlog) en onSlip(req, order, action) = aanroep na het uploaden of verwijderen van een pakbon (auditlog) en onGuestAccount(req, order, user) = aanroep nadat een gast na zijn bestelling een account maakte en de bestelling eraan is gekoppeld (auditlog).
  * @returns {Function} Express-router, te monteren met app.use('/', router) (zie server.js).
  */
-function createStorefront({ addressLookup = null, addressGuard = null, db, tenantId, settingsFor, accounts = null, content = null, data = createStorefrontData(db), itemImages = null, previewAllowed = () => false, orders = null, orderMail = null, orderInvoices = null, orderSlips = null, returns = null, payments = null, vies = null, captcha = null, captchaGate = null, onOrder = () => {}, onReturn = () => {}, onSlip = () => {} }) {
+function createStorefront({ addressLookup = null, addressGuard = null, db, tenantId, settingsFor, accounts = null, content = null, data = createStorefrontData(db), itemImages = null, previewAllowed = () => false, orders = null, orderMail = null, orderInvoices = null, orderSlips = null, returns = null, guestOrders = null, payments = null, vies = null, captcha = null, captchaGate = null, onOrder = () => {}, onReturn = () => {}, onSlip = () => {}, onGuestAccount = () => {} }) {
   // Een async route die een fout gooit gaat naar de foutafhandeling in plaats van te blijven hangen.
   const router = catchAsync(express.Router());
   const limiter = createRateLimiter({ windowMs: 60 * 1000, max: 240, keyFn: clientKey });
@@ -516,6 +517,63 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
        * @returns {boolean} true als er geen bestelling meer bij mag.
        */
       const ordersLimited = (viewer) => orders.countSince(tenantId, viewer.id, new Date(Date.now() - 60 * 60 * 1000).toISOString()) >= ORDERS_PER_HOUR;
+      /** Hoogstens zoveel bestellingen als gast per e-mailadres per uur (tegen misbruik van andermans adres en het vasthouden van voorraad). */
+      const GUEST_ORDERS_PER_EMAIL_PER_HOUR = 3;
+      /** Hoogstens zoveel bestellingen als gast per bezoeker (IP-adres) per uur. */
+      const guestOrderLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10, keyFn: (req) => `gastbestelling:${clientKey(req)}` });
+      /**
+       * Past de limieten voor bestellen als gast toe: per e-mailadres (geteld in de database) en per bezoeker.
+       * @param {object} req Het verzoek.
+       * @param {object} res Het antwoord.
+       * @param {string} email Het ingevulde e-mailadres.
+       * @returns {boolean} true als er geen bestelling als gast meer bij mag.
+       */
+      const guestOrdersLimited = (req, res, email) => {
+        const address = String(email || '').trim().toLowerCase().slice(0, 200);
+        if (address && orders.countGuestSince(tenantId, address, new Date(Date.now() - 60 * 60 * 1000).toISOString()) >= GUEST_ORDERS_PER_EMAIL_PER_HOUR) return true;
+        let refused = false;
+        guestOrderLimiter(req, { setHeader: (name, value) => res.setHeader(name, value), status: () => ({ json: () => { refused = true; } }) }, () => {});
+        return refused;
+      };
+      /**
+       * Of een bezoeker zonder account mag afrekenen (online betalen werkt en de beheerder heeft bestellen als gast niet uitgezet).
+       * @returns {boolean} true als bestellen als gast kan.
+       */
+      const guestCheckoutOn = () => Boolean(guestOrders) && Boolean(payments) && payments.guestCheckoutAllowed(tenantId);
+      /** Het lege profiel van een gast op het afrekenformulier: geen naam, geen e-mailadres, een particulier. */
+      const GUEST_VIEWER = Object.freeze({ id: null, displayName: '', email: '', customerGroup: '', wholesale: false, wholesaleDiscount: 0, profile: null, isGuest: true });
+      /**
+       * Wie een bestelling mag zien: het ingelogde account waar hij bij hoort, of een gast met een geldig toegangstoken in de cookie
+       * (ook als bestellen als gast intussen is uitgezet: bestaande gastbestellingen blijven bereikbaar).
+       * @param {object} req Het verzoek.
+       * @param {string} orderId Id uit de URL.
+       * @returns {?{ order: object, viewer: ?object, guest: boolean }} De bestelling en hoe de bezoeker er bij kwam, of null.
+       */
+      const orderAccessOf = (req, orderId) => {
+        const viewer = accounts.viewer(req);
+        const own = viewer ? orders.getForUser(tenantId, viewer.id, orderId) : null;
+        if (own) return { order: own, viewer, guest: false };
+        if (guestOrders && guestOrders.grantedToken(tenantId, req, orderId)) {
+          const order = orders.get(tenantId, orderId);
+          if (order && order.guest) return { order, viewer, guest: true };
+        }
+        return null;
+      };
+      /**
+       * Stuurt het antwoord voor een bestelling waar de bezoeker geen toegang toe heeft: bij een gastbestelling een neutrale pagina
+       * zonder gegevens (de klant betaalde bijvoorbeeld in een andere browser), zonder inlog naar de inlogpagina, anders niet gevonden.
+       * @param {object} req Het verzoek.
+       * @param {object} res Het antwoord.
+       * @param {string} orderId Id uit de URL.
+       * @param {string} loginPath Relatief pad naar de inlogpagina vanaf deze pagina.
+       * @param {string} rootPath Relatief pad naar de startpagina vanaf deze pagina.
+       * @returns {void}
+       */
+      const orderAccessDenied = (req, res, orderId, loginPath, rootPath) => {
+        if (guestOrders && orders.guestAccessOf(tenantId, orderId)) return sendWithGroups(req, res, 200, (groups) => guestNoAccessPage(groups));
+        if (!accounts.viewer(req)) return res.redirect(302, loginPath);
+        return sendWithGroups(req, res, 404, (groups) => notFoundPage(rootPath, groups));
+      };
       /**
        * Antwoord als bestellen uit staat: de pagina bestaat dan niet.
        * @param {object} req Het verzoek.
@@ -714,7 +772,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
        * @param {{ customerGroup?: string }} viewer De ingelogde klant.
        * @returns {string[]} 'online' en/of 'rekening'.
        */
-      const paymentOptionsOf = (viewer) => (payments ? payments.optionsFor(tenantId, viewer) : ['rekening']);
+      const paymentOptionsOf = (viewer) => (viewer && viewer.isGuest ? ['online'] : payments ? payments.optionsFor(tenantId, viewer) : ['rekening']);
       /**
        * Bepaalt het land en de verzendmethode die bij het afrekenen getoond worden.
        * @param {object} cart De geprijsde winkelwagen.
@@ -754,21 +812,28 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
         if (!cart.lines.length || !cart.ok) return res.redirect(302, '../winkelwagen/');
         const viewer = withBusinessProfile(accounts.viewer(req));
-        if (!viewer) return sendWithGroups(req, res, 200, (groups) => checkoutLoginPage(groups, cart));
+        if (!viewer) {
+          // Zonder account: kiezen (inloggen, account maken of als gast bestellen) of, na die keuze, het afrekenformulier voor een gast.
+          if (guestCheckoutOn() && req.query.gast === '1') return sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer: GUEST_VIEWER, guest: true, paymentOptions: ['online'], ...checkoutChoice(cart, req.query || {}, null) }, groups));
+          return sendWithGroups(req, res, 200, (groups) => checkoutLoginPage(groups, cart, { guestAllowed: guestCheckoutOn() }));
+        }
         sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), ...checkoutChoice(cart, { vatNumber: viewer.profile ? viewer.profile.vatNumber : '', ...(req.query || {}) }, viewer) }, groups));
       });
       router.post('/afrekenen', form, async (req, res, next) => {
         if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
         if (!orderingOn()) return orderingOff(req, res);
-        const viewer = withBusinessProfile(accounts.viewer(req));
-        if (!viewer) return res.redirect(303, './');
         const body = req.body || {};
+        const account = withBusinessProfile(accounts.viewer(req));
+        // Zonder account alleen als gast (verborgen veld `guest` van het gastformulier) en alleen als dat aan staat.
+        const guestMode = !account && guestCheckoutOn() && body.guest === 'ja';
+        if (!account && !guestMode) return res.redirect(303, './');
+        const viewer = account || GUEST_VIEWER;
         // Land wijzigen: alleen de pagina opnieuw tonen met de kosten voor dat land, zonder te bestellen.
         if (body.action === 'update') {
           res.setHeader('Cache-Control', 'no-store');
           const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
           if (!cart.lines.length || !cart.ok) return res.redirect(303, '../winkelwagen/');
-          return sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), values: body, ...checkoutChoice(cart, body, viewer) }, groups));
+          return sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, guest: guestMode, paymentOptions: paymentOptionsOf(viewer), values: body, ...checkoutChoice(cart, body, viewer) }, groups));
         }
         // Hoort het getoonde totaal niet bij de actuele invoer (btw-nummer, land, methode) of ontbreekt het? Dan eerst opnieuw tonen, zonder te bestellen.
         {
@@ -779,19 +844,19 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
             const current = choice.summary ? choice.summary.totals.total : null;
             if (current !== null && (!/^\d+(\.\d+)?$/.test(shown) || Math.abs(Number(shown) - current) > 0.005)) {
               res.setHeader('Cache-Control', 'no-store');
-              return sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), error: 'Het totaal is bijgewerkt voor je invoer. Controleer het bedrag en plaats je bestelling opnieuw.', values: body, ...choice }, groups));
+              return sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, guest: guestMode, paymentOptions: paymentOptionsOf(viewer), error: 'Het totaal is bijgewerkt voor je invoer. Controleer het bedrag en plaats je bestelling opnieuw.', values: body, ...choice }, groups));
             }
           }
         }
         if (attemptsLimited(req, res)) return res.status(429).type('text').send('Te veel bestelpogingen vanaf dit adres. Probeer het later opnieuw.');
-        if (ordersLimited(viewer)) return res.status(429).type('text').send('Je hebt het afgelopen uur al veel bestellingen geplaatst. Probeer het later opnieuw of neem contact met ons op.');
+        if (guestMode ? guestOrdersLimited(req, res, body.email) : ordersLimited(viewer)) return res.status(429).type('text').send('Je hebt het afgelopen uur al veel bestellingen geplaatst. Probeer het later opnieuw of neem contact met ons op.');
         // Onzichtbare captcha (alleen als hij aan staat): bij een weigering de afrekenpagina opnieuw met alles wat is ingevuld.
         const human = await humanCheck(req, 'checkout');
         if (!human.ok) {
           const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
           if (!cart.lines.length || !cart.ok) return res.redirect(303, '../winkelwagen/');
           res.setHeader('Cache-Control', 'no-store');
-          return sendWithGroups(req, res, human.status, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), error: human.message, values: body, ...checkoutChoice(cart, body, viewer) }, groups));
+          return sendWithGroups(req, res, human.status, (groups) => checkoutPage({ cart, viewer, guest: guestMode, paymentOptions: paymentOptionsOf(viewer), error: human.message, values: body, ...checkoutChoice(cart, body, viewer) }, groups));
         }
         try {
           // Een Nederlands adres komt uit postcode + huisnummer (PDOK): straat en woonplaats uit de browser worden niet vertrouwd,
@@ -823,7 +888,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
                 res.setHeader('Cache-Control', 'no-store');
                 const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
                 const which = part.delivery ? 'het afleveradres' : 'je adres';
-                return sendWithGroups(req, res, resolved.status, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), error: `${resolved.message} Wordt ${which} niet gevonden (bijvoorbeeld nieuwbouw)? Vink dan onder het adres aan dat je het zelf invult.`, values: body, ...checkoutChoice(cart, body, viewer) }, groups));
+                return sendWithGroups(req, res, resolved.status, (groups) => checkoutPage({ cart, viewer, guest: guestMode, paymentOptions: paymentOptionsOf(viewer), error: `${resolved.message} Wordt ${which} niet gevonden (bijvoorbeeld nieuwbouw)? Vink dan onder het adres aan dat je het zelf invult.`, values: body, ...checkoutChoice(cart, body, viewer) }, groups));
               } else placed = { ...placed, [key('street')]: resolved.street, [key('postcode')]: resolved.postcode, [key('city')]: resolved.city };
             }
           }
@@ -840,17 +905,20 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
               viesResult = await vies.check(approvedVatNumber, Vat.validVatNumber(requester) ? requester : '');
               if (viesResult.status === 'ongeldig') {
                 res.setHeader('Cache-Control', 'no-store');
-                return sendWithGroups(req, res, 409, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), error: `Het btw-nummer ${approvedVatNumber} is volgens VIES (de btw-database van de EU) op dit moment niet geldig, dus de btw kan niet worden verlegd. Neem contact met ons op, of laat het btw-nummer leeg om met btw te bestellen.`, values: body, ...choice }, groups));
+                return sendWithGroups(req, res, 409, (groups) => checkoutPage({ cart, viewer, guest: guestMode, paymentOptions: paymentOptionsOf(viewer), error: `Het btw-nummer ${approvedVatNumber} is volgens VIES (de btw-database van de EU) op dit moment niet geldig, dus de btw kan niet worden verlegd. Neem contact met ons op, of laat het btw-nummer leeg om met btw te bestellen.`, values: body, ...choice }, groups));
               }
             }
           }
-          const out = orders.place(tenantId, { id: viewer.id, group: viewer.customerGroup, wholesale: wholesaleOf(viewer), vatNumber: approvedVatNumber, vies: viesResult, addressUnverified, deliveryUnverified }, placed, readCart(req), shippingConfig(), Number(body.expectedTotal), paymentOptionsOf(viewer), sanitizePayment(settingsFor(tenantId).get('shopPayment')));
+          // Een gast krijgt een toegangstoken voor zijn bestelling; de browser onthoudt het (cookie) en de mails bevatten de link.
+          const access = guestMode ? guestOrders.newAccess(tenantId) : null;
+          const out = orders.place(tenantId, { id: viewer.id, group: viewer.customerGroup, wholesale: wholesaleOf(viewer), vatNumber: approvedVatNumber, vies: viesResult, addressUnverified, deliveryUnverified, ...(access ? { guest: access } : {}) }, placed, readCart(req), shippingConfig(), Number(body.expectedTotal), paymentOptionsOf(viewer), sanitizePayment(settingsFor(tenantId).get('shopPayment')));
           if (out.cart) return res.redirect(303, '../winkelwagen/');
           if (out.error) {
             const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
-            return sendWithGroups(req, res, out.status, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), error: out.error, values: body, ...checkoutChoice(cart, body, viewer) }, groups));
+            return sendWithGroups(req, res, out.status, (groups) => checkoutPage({ cart, viewer, guest: guestMode, paymentOptions: paymentOptionsOf(viewer), error: out.error, values: body, ...checkoutChoice(cart, body, viewer) }, groups));
           }
           writeCart(req, res, []);
+          if (access) rememberGrant(req, res, out.order.id, access.token);
           // De bestelling staat al vast: een fout in audit of mail mag de klant niet naar een foutpagina sturen, en de ene stap niet de andere overslaan.
           try { onOrder(req, out.order); } catch (failure) { console.error(`Audit van bestelling ${out.order.number} mislukt: ${failure.message}`); }
           // Een online bestelling wordt pas bevestigd als hij betaald is (zie payments.onPaid); de klant gaat eerst naar de betaalpagina.
@@ -864,20 +932,30 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
           if (withSlash(req, res)) return;
           if (!orderingOn()) return orderingOff(req, res);
           res.setHeader('Cache-Control', 'no-store');
-          const viewer = accounts.viewer(req);
-          if (!viewer) return res.redirect(302, '../../inloggen/');
-          let order = orders.getForUser(tenantId, viewer.id, req.params.id);
-          if (!order) return sendWithGroups(req, res, 404, (groups) => notFoundPage('../../', groups));
+          // De persoonlijke link uit een mail: het token wordt tegen een cookie ingewisseld en de bezoeker gaat door naar het adres zonder token
+          // (zo staat het token niet in de adresbalk, de geschiedenis, de Referer of de meting van Google Analytics).
+          if (req.query.k !== undefined) {
+            res.setHeader('Referrer-Policy', 'no-referrer');
+            if (!guestOrders || !guestOrders.hasAccess(tenantId, req.params.id, req.query.k)) return sendWithGroups(req, res, 404, (groups) => guestLinkInvalidPage(groups));
+            rememberGrant(req, res, req.params.id, req.query.k);
+            return res.redirect(302, './');
+          }
+          const access = orderAccessOf(req, req.params.id);
+          if (!access) return orderAccessDenied(req, res, req.params.id, '../../inloggen/', '../../');
+          const { viewer, guest } = access;
+          let order = access.order;
           // Terug van de betaalpagina (of een open betaling): de uitkomst eerst bij Mollie opvragen, want de webhook kan nog onderweg zijn.
           if (payments && order.payment === 'online' && order.pay && order.pay.status === 'open' && order.pay.id) {
             try {
               const synced = await payments.sync(tenantId, order.id);
-              if (synced.order) order = orders.getForUser(tenantId, viewer.id, order.id) || order;
-                          } catch (failure) { console.error(`Betaling van bestelling ${order.number} opvragen mislukt: ${failure.message}`); }
+              if (synced.order) order = orders.get(tenantId, order.id) || order;
+            } catch (failure) { console.error(`Betaling van bestelling ${order.number} opvragen mislukt: ${failure.message}`); }
           }
           const invoice = orderInvoices ? orderInvoices.invoiceFor(tenantId, order.id) : null;
           const payError = req.query.betaalfout === '1' ? 'De betaalpagina is nu niet bereikbaar. Probeer het zo opnieuw met de knop hieronder.' : '';
-          sendWithGroups(req, res, 200, (groups) => orderPage(order, groups, { thanks: req.query.bedankt === '1' || (req.query.betaald === '1' && order.pay && order.pay.status === 'betaald'), invoice: invoice && invoice.status !== 'concept' ? invoice : null, returnsHtml: returnsHtmlOf(order), payError, autoPay: req.query.betalen === '1' }));
+          // Een gast zonder ingelogd account krijgt het aanbod om een account te maken, zolang de bestelling nog van niemand is.
+          const accountOffer = guest && !viewer && !order.userId && order.status !== 'geannuleerd' ? {} : null;
+          sendWithGroups(req, res, 200, (groups) => orderPage(order, groups, { thanks: req.query.bedankt === '1' || (req.query.betaald === '1' && order.pay && order.pay.status === 'betaald'), invoice: invoice && invoice.status !== 'concept' ? invoice : null, returnsHtml: returnsHtmlOf(order), payError, autoPay: req.query.betalen === '1', guest: guest && !order.userId, accountOffer, accountCreated: req.query.account === '1' }));
         } catch (error) { next(error); }
       });
       if (payments) {
@@ -901,10 +979,9 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
             if (withSlash(req, res)) return;
             if (!orderingOn()) return orderingOff(req, res);
             res.setHeader('Cache-Control', 'no-store');
-            const viewer = accounts.viewer(req);
-            if (!viewer) return res.redirect(302, '../../../inloggen/');
-            const order = orders.getForUser(tenantId, viewer.id, req.params.id);
-            if (!order) return sendWithGroups(req, res, 404, (groups) => notFoundPage('../../../', groups));
+            const access = orderAccessOf(req, req.params.id);
+            if (!access) return orderAccessDenied(req, res, req.params.id, '../../../inloggen/', '../../../');
+            const order = access.order;
             if (limitedBy(payLimiter, req, res)) return res.status(429).type('text').send('Te veel pogingen vanaf dit adres. Probeer het later opnieuw.');
             const out = await payments.start(tenantId, order);
             if (out.paid) return res.redirect(303, '../?betaald=1');
@@ -927,6 +1004,32 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
           res.status(200).end();
         });
       }
+      // Een gast maakt na zijn bestelling alsnog een account: alleen een wachtwoord kiezen (naam en e-mailadres komen van de bestelling) en
+      // de bestelling wordt aan het account gekoppeld. Het account is gewoon een nieuwe klant (particulier, e-mailadres nog te bevestigen).
+      router.post('/bestelling/:id/account', form, async (req, res, next) => {
+        try {
+          if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
+          if (!orderingOn()) return orderingOff(req, res);
+          res.setHeader('Cache-Control', 'no-store');
+          const access = orderAccessOf(req, req.params.id);
+          if (!access) return orderAccessDenied(req, res, req.params.id, '../../inloggen/', '../../');
+          const { order } = access;
+          if (!access.guest || access.viewer || order.userId) return res.redirect(303, './');
+          req.shopBaseUrl = publicBaseUrl(req);
+          const body = req.body || {};
+          const human = await humanCheck(req, 'register');
+          const out = human.ok ? await accounts.register(req, res, { displayName: order.customer.name, email: order.email, password: body.password, password2: body.password2, website: body.website }) : { error: human.message, status: human.status };
+          if (out.skipped) return res.redirect(303, '../../');
+          if (out.error) {
+            const invoice = orderInvoices ? orderInvoices.invoiceFor(tenantId, order.id) : null;
+            return sendWithGroups(req, res, out.status, (groups) => orderPage(order, groups, { invoice: invoice && invoice.status !== 'concept' ? invoice : null, returnsHtml: returnsHtmlOf(order), guest: true, accountOffer: { error: out.error } }));
+          }
+          if (orders.attachToUser(tenantId, order.id, out.user.id)) {
+            try { onGuestAccount(req, order, out.user); } catch (failure) { console.error(`Audit van gastaccount bij ${order.number} mislukt: ${failure.message}`); }
+          }
+          res.redirect(303, './?account=1');
+        } catch (error) { next(error); }
+      });
       /**
        * Het blok Retourneren van een bestelling (leeg als retourneren uit staat).
        * @param {object} order De bestelling van de ingelogde klant.
@@ -934,6 +1037,12 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
        * @returns {string} HTML van het blok.
        */
       const returnsHtmlOf = (order, formState = {}) => (returns ? returnsBlock({ items: returns.listForOrder(tenantId, order.id), eligibility: returns.eligibility(tenantId, order), ...formState }) : '');
+      /**
+       * Wie een retour aanvraagt of intrekt: het ingelogde account, of een gast met de toegang tot precies deze bestelling.
+       * @param {{ order: object, viewer: ?object, guest: boolean }} access De toegang tot de bestelling (orderAccessOf).
+       * @returns {object} De klant voor de retouropslag (web-returns.js).
+       */
+      const returnActorOf = (access) => (access.guest ? { guestOrderId: access.order.id, displayName: access.order.customer.name } : access.viewer);
       if (returns) {
         const returnLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, keyFn: (req) => `retour:${clientKey(req)}` });
         /**
@@ -952,19 +1061,19 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
           try {
             if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
             if (!orderingOn()) return orderingOff(req, res);
-            const viewer = accounts.viewer(req);
-            if (!viewer) return res.redirect(303, '../../inloggen/');
+            const access = orderAccessOf(req, req.params.id);
+            if (!access) return accounts.viewer(req) ? sendWithGroups(req, res, 404, (groups) => notFoundPage('../../', groups)) : res.redirect(303, '../../inloggen/');
             if (returnLimited(req, res)) return res.status(429).type('text').send('Te veel aanvragen vanaf dit adres. Probeer het later opnieuw.');
             res.setHeader('Cache-Control', 'no-store');
             const body = req.body || {};
-            const out = returns.request(tenantId, viewer, req.params.id, {
+            const out = returns.request(tenantId, returnActorOf(access), req.params.id, {
               reason: body.reason, note: body.note,
               lines: Object.keys(body).filter((key) => key.startsWith('qty:')).map((key) => ({ code: key.slice(4), qty: body[key] })),
             });
             if (out.error) {
-              const order = orders.getForUser(tenantId, viewer.id, req.params.id);
+              const order = orders.get(tenantId, req.params.id);
               if (!order) return sendWithGroups(req, res, 404, (groups) => notFoundPage('../../', groups));
-              return sendWithGroups(req, res, out.status || 400, (groups) => orderPage(order, groups, { returnsHtml: returnsHtmlOf(order, { values: body, error: out.error }) }));
+              return sendWithGroups(req, res, out.status || 400, (groups) => orderPage(order, groups, { guest: access.guest && !order.userId, returnsHtml: returnsHtmlOf(order, { values: body, error: out.error }) }));
             }
             try { onReturn(req, out.return); } catch (failure) { console.error(`Audit van retour ${out.return.number} mislukt: ${failure.message}`); }
             res.redirect(303, './');
@@ -975,11 +1084,12 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
           try {
             if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
             if (!orderingOn()) return orderingOff(req, res);
-            const viewer = accounts.viewer(req);
-            if (!viewer) return res.redirect(303, '../../../../inloggen/');
-            const found = returns.getForUser(tenantId, viewer.id, req.params.returnId);
+            const access = orderAccessOf(req, req.params.id);
+            if (!access) return accounts.viewer(req) ? sendWithGroups(req, res, 404, (groups) => notFoundPage('../../../../', groups)) : res.redirect(303, '../../../../inloggen/');
+            // De retour moet bij deze bestelling horen (waar de bezoeker toegang toe heeft); bij een account ook van dat account zelf.
+            const found = access.guest ? returns.get(tenantId, req.params.returnId) : returns.getForUser(tenantId, access.viewer.id, req.params.returnId);
             if (!found || found.orderId !== req.params.id) return sendWithGroups(req, res, 404, (groups) => notFoundPage('../../../../', groups));
-            const out = returns.withdraw(tenantId, viewer, found.id);
+            const out = returns.withdraw(tenantId, returnActorOf(access), found.id);
             if (out.error) return res.status(out.status || 400).type('text').send(out.error);
             res.redirect(303, '../../');
           } catch (error) { next(error); }
@@ -1060,10 +1170,9 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
       router.get('/bestelling/:id/factuur.pdf', (req, res) => {
         if (!orderingOn() || !orderInvoices) return orderingOff(req, res);
         res.setHeader('Cache-Control', 'no-store');
-        const viewer = accounts.viewer(req);
-        if (!viewer) return res.redirect(302, '../../inloggen/');
-        const order = orders.getForUser(tenantId, viewer.id, req.params.id);
-        const pdf = order ? orderInvoices.pdfFor(tenantId, order.id) : null;
+        const access = orderAccessOf(req, req.params.id);
+        if (!access && !accounts.viewer(req) && !(guestOrders && orders.guestAccessOf(tenantId, req.params.id))) return res.redirect(302, '../../inloggen/');
+        const pdf = access ? orderInvoices.pdfFor(tenantId, access.order.id) : null;
         if (!pdf) return res.status(404).type('text').send('Geen factuur gevonden.');
         res.setHeader('Content-Disposition', `attachment; filename="${pdf.name.replace(/[^A-Za-z0-9._-]/g, '_')}"`);
         res.type('application/pdf').send(pdf.body);

@@ -49,7 +49,7 @@ function showChosenShipping(radio) {
 async function refreshTotals(form) {
   const sequence = ++refreshSequence;
   const body = new URLSearchParams({ action: 'update' });
-  for (const name of ['country', 'shippingMethod', 'vatNumber']) {
+  for (const name of ['country', 'shippingMethod', 'vatNumber', 'guest']) {
     const field = form.querySelector(`[name="${name}"]`);
     if (field) body.set(name, field.value);
   }
