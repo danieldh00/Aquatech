@@ -172,6 +172,19 @@ function createMcpLookups(db, { today = () => new Date().toISOString().slice(0, 
   }
 
   /**
+   * Alle definitieve, onbetaalde facturen en creditnota's als losse regels (voor het Excel-rapport), op klant en datum.
+   * @param {string} tenantId De omgeving.
+   * @param {number} [limit] Hoeveel regels hoogstens.
+   * @returns {{ rows: object[], truncated: boolean }} De facturen zoals de AI ze ziet (invoiceView) en of er meer waren dan de limiet.
+   */
+  function openInvoiceRows(tenantId, limit = 5000) {
+    const day = today();
+    const rows = prepare(`SELECT number, status, kind, customer_name, invoice_date, due_date, total FROM invoices
+      WHERE tenant_id = ? AND status = 'definitief' ORDER BY customer_name, invoice_date, id LIMIT ?`).all(tenantId, limit + 1).map((row) => invoiceView(row, day));
+    return { rows: rows.slice(0, limit), truncated: rows.length > limit };
+  }
+
+  /**
    * Wat een klant nog moet betalen (definitieve, onbetaalde facturen in deze omgeving). De database telt alles op; de
    * tien oudste facturen komen mee als voorbeeld.
    * @param {string} tenantId De omgeving.
@@ -190,7 +203,7 @@ function createMcpLookups(db, { today = () => new Date().toISOString().slice(0, 
     };
   }
 
-  return { documentStatus, openInvoices, customerBalance, workOrderByNumber };
+  return { documentStatus, openInvoices, openInvoiceRows, customerBalance, workOrderByNumber };
 }
 
 module.exports = { createMcpLookups, DOCUMENT_KINDS, daysLate, numberCandidates };

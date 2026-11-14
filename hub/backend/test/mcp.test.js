@@ -206,13 +206,13 @@ test('de hele weg: toestaan, tools gebruiken en een concept-offerte met notities
   assert.match(page.headers.get('x-frame-options'), /DENY/);
 
   const connection = await connect(base, admin);
-  assert.strictEqual(connection.scope, 'klanten.lezen klanten.aanmaken artikelen.lezen offertes.concept werkorders.concept werkregistratie.boeken status.lezen facturen.lezen');
+  assert.strictEqual(connection.scope, 'klanten.lezen klanten.aanmaken artikelen.lezen offertes.concept werkorders.concept werkregistratie.boeken rapporten.excel status.lezen facturen.lezen');
   const init = await mcp(base, connection.accessToken, { method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } } });
   assert.strictEqual(init.body.result.protocolVersion, '2025-06-18');
   assert.ok(init.body.result.capabilities.tools);
   assert.strictEqual((await mcp(base, connection.accessToken, { method: 'notifications/initialized', id: undefined })).status, 202);
   const tools = (await mcp(base, connection.accessToken, { method: 'tools/list' })).body.result.tools.map((tool) => tool.name);
-  assert.deepStrictEqual(tools, ['zoek_klant', 'maak_klant', 'zoek_artikelen', 'klant_details', 'prijs_voor_klant', 'status_opvragen', 'openstaande_debiteuren', 'boek_uren', 'boek_materiaal', 'maak_concept_werkorder', 'maak_concept_offerte']);
+  assert.deepStrictEqual(tools, ['zoek_klant', 'maak_klant', 'zoek_artikelen', 'klant_details', 'prijs_voor_klant', 'status_opvragen', 'openstaande_debiteuren', 'boek_uren', 'boek_materiaal', 'maak_concept_werkorder', 'maak_rapport_excel', 'maak_concept_offerte']);
   assert.strictEqual((await mcp(base, connection.accessToken, { method: 'bestaat/niet' })).body.error.code, -32601);
 
   const articles = await callTool(base, connection.accessToken, 'zoek_artikelen', { zoekterm: 'sproeier pop-up' });
@@ -598,11 +598,11 @@ test('rechten volgen de rol op dit moment: een andere rol beperkt de AI direct t
    */
   const toolNames = async () => (await mcp(base, connection.accessToken, { method: 'tools/list' })).body.result.tools.map((tool) => tool.name);
   // Installateur: geen facturen, dus geen openstaande debiteuren.
-  assert.deepStrictEqual(await toolNames(), ['zoek_klant', 'maak_klant', 'zoek_artikelen', 'klant_details', 'prijs_voor_klant', 'status_opvragen', 'boek_uren', 'boek_materiaal', 'maak_concept_werkorder', 'maak_concept_offerte']);
+  assert.deepStrictEqual(await toolNames(), ['zoek_klant', 'maak_klant', 'zoek_artikelen', 'klant_details', 'prijs_voor_klant', 'status_opvragen', 'boek_uren', 'boek_materiaal', 'maak_concept_werkorder', 'maak_rapport_excel', 'maak_concept_offerte']);
   const userId = (await installer.get('/app/api/me')).body.user.id;
   // Planner: geen offertes en geen klanten in de app, dus ook niet via de AI (hetzelfde token).
   assert.strictEqual((await admin.patch(`/app/api/admin/users/${userId}`, { role: 'planner' })).status, 200);
-  assert.deepStrictEqual(await toolNames(), ['zoek_artikelen', 'status_opvragen', 'boek_uren', 'boek_materiaal', 'maak_concept_werkorder']);
+  assert.deepStrictEqual(await toolNames(), ['zoek_artikelen', 'status_opvragen', 'boek_uren', 'boek_materiaal', 'maak_concept_werkorder', 'maak_rapport_excel']);
   for (const [name, args] of [['zoek_klant', { zoekterm: 'Klant' }], ['maak_klant', { naam: 'Nieuw' }], ['maak_concept_offerte', { regels: [{ omschrijving: 'x', aantal: 1 }] }]]) {
     assert.strictEqual((await callTool(base, connection.accessToken, name, args)).isError, true, name);
   }
@@ -717,7 +717,7 @@ test('hulpfuncties: terugkeeradressen, scopes, PKCE, tokens en het zoeken van ar
   assert.strictEqual(daysLate('', '2026-01-11'), 0);
   assert.deepStrictEqual(numberCandidates(' of-2026-0001 '), ['of-2026-0001', 'OF-2026-0001']);
   assert.deepStrictEqual(numberCandidates('\u0000'), []);
-  assert.deepStrictEqual(parseScope(''), ['klanten.lezen', 'klanten.aanmaken', 'artikelen.lezen', 'offertes.concept', 'werkorders.concept', 'werkregistratie.boeken', 'status.lezen', 'facturen.lezen']);
+  assert.deepStrictEqual(parseScope(''), ['klanten.lezen', 'klanten.aanmaken', 'artikelen.lezen', 'offertes.concept', 'werkorders.concept', 'werkregistratie.boeken', 'rapporten.excel', 'status.lezen', 'facturen.lezen']);
   assert.strictEqual(parseScope('offertes.concept admin'), null);
   const verifier = 'a'.repeat(43);
   assert.ok(pkceMatches(verifier, crypto.createHash('sha256').update(verifier).digest('base64url')));
@@ -868,4 +868,123 @@ test('boek_uren en boek_materiaal: alleen op eigen naam, vraagt terug, voorraad 
   assert.strictEqual(locked.isError, true);
   assert.match(locked.structuredContent.fout, /afgerond/);
   assert.strictEqual((await callTool(base, boss.accessToken, 'boek_uren', { werkorderNummer: order.nummer, uren: 1 })).structuredContent.geboekt, true);
+});
+
+/**
+ * Leest een zip (zoals het .xlsx-bestand) via de bestandslijst achteraan.
+ * @param {Buffer} buffer De zip.
+ * @returns {Object<string, string>} De inhoud per bestandsnaam.
+ */
+function readZip(buffer) {
+  const zlib = require('node:zlib');
+  const end = buffer.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  const count = buffer.readUInt16LE(end + 10);
+  let position = buffer.readUInt32LE(end + 16);
+  const out = {};
+  for (let index = 0; index < count; index += 1) {
+    const size = buffer.readUInt32LE(position + 20);
+    const nameLength = buffer.readUInt16LE(position + 28);
+    const offset = buffer.readUInt32LE(position + 42);
+    const name = buffer.toString('utf8', position + 46, position + 46 + nameLength);
+    const dataStart = offset + 30 + buffer.readUInt16LE(offset + 26) + buffer.readUInt16LE(offset + 28);
+    out[name] = zlib.inflateRawSync(buffer.subarray(dataStart, dataStart + size)).toString('utf8');
+    position += 46 + nameLength + buffer.readUInt16LE(position + 30) + buffer.readUInt16LE(position + 32);
+  }
+  return out;
+}
+
+test('maak_rapport_excel: Excel-bestand met link voor alleen deze gebruiker, rechten volgen de app', async () => {
+  const { base, admin, installer, as } = await setup();
+  const boss = await connect(base, admin);
+  const worker = await connect(base, installer);
+  const customer = (await callTool(base, boss.accessToken, 'maak_klant', { naam: 'Piet Rapport', postcode: '8071 AB', huisnummer: '1' })).structuredContent;
+  const order = (await callTool(base, boss.accessToken, 'maak_concept_werkorder', { klantId: customer.id, titel: 'Rapport testen' })).structuredContent;
+  assert.strictEqual((await callTool(base, worker.accessToken, 'boek_uren', { werkorderNummer: order.nummer, uren: 3, notitie: '=1+1' })).isError, false);
+  assert.strictEqual((await callTool(base, boss.accessToken, 'boek_uren', { werkorderNummer: order.nummer, uren: 1.5 })).isError, false);
+  assert.strictEqual((await callTool(base, worker.accessToken, 'boek_materiaal', { werkorderNummer: order.nummer, artikelcode: 'PE-25', aantal: 4 })).isError, false);
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Amsterdam' });
+  /**
+   * Het pad van de downloadlink in een rapportuitkomst.
+   * @param {object} result De uitkomst van maak_rapport_excel.
+   * @returns {string} Het pad.
+   */
+  const link = (result) => new URL(result.structuredContent.downloadLink).pathname;
+
+  // De beheerder (recht planning) krijgt de regels van iedereen; de installateur heeft ook planning en ziet dus ook alle regels.
+  const report = await callTool(base, boss.accessToken, 'maak_rapport_excel', { soort: 'urenstaat', van: today.slice(0, 8) + '01', tot: today });
+  assert.strictEqual(report.isError, false, JSON.stringify(report));
+  assert.strictEqual(report.structuredContent.aantalUrenregels, 2);
+  assert.strictEqual(report.structuredContent.totaalUren, 4.5);
+  assert.match(report.structuredContent.bestand, /^urenstaat-.*\.xlsx$/);
+  const download = await admin.get(link(report));
+  assert.strictEqual(download.status, 200);
+  assert.match(download.type, /spreadsheetml\.sheet/);
+  assert.match(download.headers.get('content-disposition'), /attachment; filename="urenstaat-.*\.xlsx"/);
+  assert.strictEqual(download.headers.get('cache-control'), 'private, no-store');
+  const files = readZip(download.raw);
+  assert.ok(files['xl/workbook.xml'].includes('name="Uren"') && files['xl/workbook.xml'].includes('name="Materiaal"'));
+  assert.ok(files['xl/worksheets/sheet1.xml'].includes(order.nummer));
+  assert.ok(files['xl/worksheets/sheet1.xml'].includes("'=1+1"), 'een notitie die op een formule lijkt wordt tekst');
+  assert.ok(files['xl/worksheets/sheet2.xml'].includes('PE-25'));
+  // Een rol zonder recht planning ziet alleen de eigen regels.
+  assert.strictEqual((await admin.post('/app/api/admin/roles', { label: 'Alleen uitvoeren', rights: ['werkorders'] })).status, 201);
+  const workerId = (await installer.get('/app/api/me')).body.user.id;
+  assert.strictEqual((await admin.patch(`/app/api/admin/users/${workerId}`, { role: 'alleen-uitvoeren' })).status, 200);
+  const own = await callTool(base, worker.accessToken, 'maak_rapport_excel', { soort: 'urenstaat' });
+  assert.strictEqual(own.structuredContent.aantalUrenregels, 1);
+  assert.strictEqual(own.structuredContent.alleenEigenRegels, true);
+  // De link is alleen voor de gebruiker die het rapport vroeg: een ander account, een andere organisatie en niet ingelogd krijgen niets.
+  assert.strictEqual((await admin.get(link(own))).status, 404);
+  assert.strictEqual((await installer.get(link(own))).status, 200);
+  assert.strictEqual((await createClient(base).get(link(own))).status, 401);
+  assert.strictEqual((await (await as('vreemd', 'ander')).get(link(own))).status, 404);
+  assert.strictEqual((await installer.get('/app/api/mcp-download/verzonnen')).status, 404);
+  // Ongeldige invoer en rechten per soort.
+  for (const bad of [{ soort: 'iets' }, { soort: 'urenstaat', van: '2026-13-01', tot: today }, { soort: 'urenstaat', van: today, tot: '2020-01-01' }, { soort: 'urenstaat', van: '2020-01-01', tot: today }]) {
+    assert.strictEqual((await callTool(base, boss.accessToken, 'maak_rapport_excel', bad)).isError, true, JSON.stringify(bad));
+  }
+  assert.strictEqual((await callTool(base, worker.accessToken, 'maak_rapport_excel', { soort: 'openstaande_facturen' })).isError, true);
+  assert.strictEqual((await callTool(base, worker.accessToken, 'maak_rapport_excel', { soort: 'voorraadlijst' })).isError, true);
+  const openInvoices = await callTool(base, boss.accessToken, 'maak_rapport_excel', { soort: 'openstaande_facturen' });
+  assert.strictEqual(openInvoices.isError, false, JSON.stringify(openInvoices));
+  assert.strictEqual(openInvoices.structuredContent.aantalFacturen, 0);
+  const stock = await callTool(base, boss.accessToken, 'maak_rapport_excel', { soort: 'voorraadlijst' });
+  assert.strictEqual(stock.isError, false, JSON.stringify(stock));
+  assert.ok(stock.structuredContent.aantalArtikelen >= 3);
+  const stockFile = readZip((await admin.get(link(stock))).raw);
+  assert.ok(stockFile['xl/worksheets/sheet1.xml'].includes('PE-buis 25 mm'));
+  // Zonder de scope is de tool er niet.
+  const narrow = await connect(base, admin, { scope: 'klanten.lezen' });
+  assert.match((await callTool(base, narrow.accessToken, 'maak_rapport_excel', { soort: 'voorraadlijst' })).structuredContent.fout, /toestemming/);
+});
+
+test('maak_rapport_excel: meldt afkappen en rekent de totalen over alle regels', async () => {
+  const { createMcpTools } = require('../src/mcp/mcp-tools');
+  const stored = [];
+  /**
+   * Nep-urenregels voor het rapport.
+   * @param {number} count Hoeveel regels.
+   * @returns {object[]} De regels.
+   */
+  const rowsOf = (count) => Array.from({ length: count }, (_, index) => ({ workDate: '2026-11-01', user: { displayName: 'A' }, kind: 'werk', minutes: 60, breakMinutes: 0, note: `r${index}`, usedOn: '2026-11-01', qty: 1 }));
+  const tools = createMcpTools({
+    maxReportRows: 3, can: () => true, today: () => '2026-11-13', audit: () => {},
+    periodLog: (_req, range) => ({ hours: rowsOf(range.limit), materials: [], totals: { hourCount: 10, minutes: 600, materialCount: 0 } }),
+    openInvoiceRows: (_req, limit) => ({ rows: Array.from({ length: limit }, () => ({ klant: 'K', nummer: 'F1', soort: 'factuur', datum: '2026-11-01', vervaldatum: '2026-11-15', dagenTeLaat: 0, bedragInclBtw: 10 })), truncated: true }),
+    openInvoices: () => ({ totaalOpenstaand: 1234.5 }),
+    storeReport: (_req, fileName, buffer) => { stored.push(buffer); return { url: 'https://x/app/api/mcp-download/t', fileName: `${fileName}.xlsx`, expiresAt: Date.now() + 1000 }; },
+    articleChoices: () => [{ code: 'A', name: 'Een', salePrice: 1, vatRate: 21, available: 1, variants: [{ code: 'A1', name: 'v1', values: {}, salePrice: 1, available: 1 }, { code: 'A2', name: 'v2', values: {}, salePrice: 1, available: 1 }, { code: 'A3', name: 'v3', values: {}, salePrice: 1, available: 1 }, { code: 'A4', name: 'v4', values: {}, salePrice: 1, available: 1 }] }],
+  });
+  const req = { user: { id: 'u1' }, tenantId: 't1', mcpScopes: new Set(['rapporten.excel']) };
+  const hours = (await tools.call('maak_rapport_excel', { soort: 'urenstaat', van: '2026-11-01', tot: '2026-11-13' }, req)).structuredContent;
+  assert.strictEqual(hours.afgekapt, true);
+  assert.strictEqual(hours.aantalUrenregels, 10);
+  assert.strictEqual(hours.totaalUren, 10);
+  assert.strictEqual(readZip(stored[0])['xl/worksheets/sheet1.xml'].match(/<row /g).length, 4, 'kopregel plus drie regels');
+  const invoices = (await tools.call('maak_rapport_excel', { soort: 'openstaande_facturen' }, req)).structuredContent;
+  assert.strictEqual(invoices.afgekapt, true);
+  assert.strictEqual(invoices.totaalOpenstaand, 1234.5);
+  const stock = (await tools.call('maak_rapport_excel', { soort: 'voorraadlijst' }, req)).structuredContent;
+  assert.strictEqual(stock.afgekapt, true);
+  assert.strictEqual(readZip(stored[2])['xl/worksheets/sheet1.xml'].match(/<row /g).length, 4, 'ook varianten houden het plafond');
 });

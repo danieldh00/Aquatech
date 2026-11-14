@@ -88,6 +88,7 @@ const { registerOAuthRoutes } = require('./mcp/oauth-server');
 const { registerMcpRoutes } = require('./mcp/mcp-server');
 const { createMcpTools } = require('./mcp/mcp-tools');
 const { createMcpLookups } = require('./mcp/mcp-lookups');
+const { createDownloadStore, registerDownloadRoute } = require('./mcp/mcp-downloads');
 const { sanitizeContact } = require('./verkoop/customers');
 const crypto = require('crypto');
 
@@ -2415,6 +2416,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     },
   });
   const mcpLookups = createMcpLookups(database);
+  const mcpDownloads = createDownloadStore();
+  registerDownloadRoute(app, { downloads: mcpDownloads, requireUser, audit });
   const mcpCustomers = createCustomerStore(database);
   registerMcpRoutes(app, {
     grants: oauthGrants, userForGrant, connectorOn, familyOf: familyOfUser, originOf: oauth.originOf, resourceOf: oauth.resourceOf, version,
@@ -2472,6 +2475,25 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       },
       quoteUrl: (req, id) => `${oauth.originOf(req)}/app/offertes/?id=${encodeURIComponent(id)}`,
       appUrl: (req, page) => `${oauth.originOf(req)}/app/${page}`,
+      /**
+       * De uren en het materiaal over een periode (zoals de urenstaat in de app).
+       * @param {object} req Het verzoek.
+       * @param {{ from: string, to: string, userId: string|null, limit?: number }} range Periode, eventueel één medewerker en hoogstens zoveel regels per soort.
+       * @returns {{ hours: object[], materials: object[], totals: object }} De regels en de totalen over de hele periode.
+       */
+      periodLog: (req, range) => ({ ...workLogStore.period(req.tenantId, range), totals: workLogStore.periodTotals(req.tenantId, range) }),
+      openInvoiceRows: (req, limit) => mcpLookups.openInvoiceRows(req.tenantId, limit),
+      /**
+       * Zet een Excel-rapport klaar voor download door deze gebruiker (15 minuten, alleen ingelogd).
+       * @param {object} req Het verzoek.
+       * @param {string} fileName De bestandsnaam.
+       * @param {Buffer} buffer Het .xlsx-bestand.
+       * @returns {{ url: string, fileName: string, expiresAt: number }|{ error: string }} De link, of de reden (te_groot of vol).
+       */
+      storeReport: (req, fileName, buffer) => {
+        const stored = mcpDownloads.put(req.tenantId, req.user.id, fileName, buffer);
+        return stored.error ? stored : { url: `${oauth.originOf(req)}/app/api/mcp-download/${stored.token}`, fileName: stored.fileName, expiresAt: stored.expiresAt };
+      },
       /**
        * Maakt een werkorder zonder offerte (status Nieuw, niet ingepland, geen uitvoerder) en reserveert het materiaal.
        * @param {object} req Het verzoek.
