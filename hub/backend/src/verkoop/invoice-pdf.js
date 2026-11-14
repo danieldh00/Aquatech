@@ -3,25 +3,13 @@
 // met logo en bedrijfsgegevens, klant en factuurgegevens, regels, totalen,
 // betaaltekst en een voetregel met KvK, btw en IBAN. Kleuren uit het
 // kleurthema van de organisatie.
-const fs = require('fs');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
-const { createPdf, wrap, textWidth } = require('./pdf');
+const { createPdf, textWidth } = require('./pdf');
+const { sanitizeDocumentLayout, paletteOf, drawHeader, drawFooter } = require('./document-layout');
 
 const Core = require(path.join(FRONTEND_DIR, 'facturen', 'invoice-core.js'));
 const DocText = require(path.join(FRONTEND_DIR, 'shared', 'doc-text.js'));
-
-let logoCache = null;
-/**
- * Het standaardlogo (wit op navy), één keer van schijf gelezen.
- * @returns {Buffer} De PNG, of een lege buffer als het bestand ontbreekt.
- */
-const defaultLogo = () => {
-  if (!logoCache) {
-    try { logoCache = fs.readFileSync(path.join(FRONTEND_DIR, 'shared', 'logo-white.png')); } catch { logoCache = Buffer.alloc(0); }
-  }
-  return logoCache;
-};
 
 const EUR = { nl: new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }), en: new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'EUR' }) };
 /**
@@ -66,13 +54,14 @@ function invoiceFileName(invoice) {
 /**
  * Maakt de factuur als PDF.
  * @param {object} invoice De factuur zoals invoices.get() hem geeft (met data).
- * @param {object} [options] profile (bedrijfsprofiel), settings (factuurinstellingen), colors ({ navy, green, greenSoft, teal }) en logo (PNG-buffer).
+ * @param {object} [options] profile (bedrijfsprofiel), settings (factuurinstellingen), colors ({ navy, green, greenSoft, teal }) en layout (documentopmaak van de organisatie, zie document-layout.js).
  * @returns {Buffer} De PDF.
  */
-function invoicePdf(invoice, { profile = {}, settings = null, colors = {}, logo = null } = {}) {
+function invoicePdf(invoice, { profile = {}, settings = null, colors = {}, layout = null } = {}) {
   const company = profile || {};
   const invoicing = settings && settings.categories ? settings : Core.sanitizeSettings(settings);
-  const palette = { navy: '#172f5e', green: '#19924f', greenSoft: '#e6f4ec', teal: '#2cb0c0', text: '#1d2733', muted: '#6b7785', line: '#d0d6de', ...colors };
+  const documentLayout = sanitizeDocumentLayout(layout);
+  const palette = paletteOf(documentLayout, colors);
   const details = invoice.data;
   const totals = Core.totals(details, invoicing);
   const credit = invoice.kind === 'credit';
@@ -91,7 +80,8 @@ function invoicePdf(invoice, { profile = {}, settings = null, colors = {}, logo 
    */
   const money = (value) => eur(value, lang);
   const kind = translate(credit ? 'invoice.credit' : 'invoice.title');
-  const pdf = createPdf({ title: `${kind} ${invoice.number || translate('invoice.draft')}`, author: company.companyName || '' });
+  const pdf = createPdf({ title: `${kind} ${invoice.number || translate('invoice.draft')}`, author: company.companyName || '', font: documentLayout.font });
+  const { wrap } = pdf;
   const pageWidth = pdf.A4.width;
   const pageHeight = pdf.A4.height;
   const leftEdge = 42;
@@ -101,29 +91,13 @@ function invoicePdf(invoice, { profile = {}, settings = null, colors = {}, logo 
 
   // ---------- Kop ----------
   /**
-   * Tekent de kop van een pagina: groot met adres op de eerste pagina, smal met het factuurnummer op de vervolgpagina's.
+   * Begint een pagina met de kop uit de documentopmaak: groot met adres op de eerste pagina, smal met het factuurnummer op de vervolgpagina's.
    * @param {boolean} first Of het de eerste pagina is.
    */
   function header(first) {
     pdf.addPage();
-    const headerHeight = first ? 92 : 52;
-    pdf.rect(0, 0, pageWidth, headerHeight, { fill: palette.navy });
-    const logoH = first ? 40 : 26;
-    if (!pdf.image(logo || defaultLogo(), leftEdge, (headerHeight - logoH) / 2, logoH * (321 / 66), logoH)) {
-      pdf.text(company.companyName, leftEdge, headerHeight / 2 - 8, { size: 16, bold: true, color: '#ffffff' });
-    }
-    if (first) {
-      const lines = [...String(company.address || '').split(/\r?\n/), [company.phone, company.email].filter(Boolean).join(' · '), company.website].map((x) => String(x || '').trim()).filter(Boolean);
-      let lineY = 16;
-      pdf.text(company.companyName, rightEdge, lineY, { size: 10, bold: true, color: '#ffffff', align: 'right' });
-      for (const addressLine of lines.slice(0, 5)) {
-        lineY += 12.5;
-        pdf.text(addressLine, rightEdge, lineY, { size: 8.5, color: '#ffffff', align: 'right' });
-      }
-    } else {
-      pdf.text(`${kind} ${invoice.number || `(${translate('invoice.draft')})`} (${translate('invoice.continued')})`, rightEdge, 20, { size: 10, bold: true, color: '#ffffff', align: 'right' });
-    }
-    top = headerHeight + 24;
+    const continuedTitle = `${kind} ${invoice.number || `(${translate('invoice.draft')})`} (${translate('invoice.continued')})`;
+    top = drawHeader(pdf, documentLayout, { palette, company, first, continuedTitle }) + 24;
   }
   header(true);
 
@@ -236,13 +210,11 @@ function invoicePdf(invoice, { profile = {}, settings = null, colors = {}, logo 
   if (invoicing.footer) paragraph(invoicing.footer, 8, palette.muted);
 
   // ---------- Voet op elke pagina ----------
-  const foot = [company.companyName, company.kvk ? `KvK ${company.kvk}` : '', company.vatNumber ? `${translate('col.vat')} ${company.vatNumber}` : '', company.iban ? `IBAN ${company.iban}` : ''].filter(Boolean).join(' · ');
+  const companyLine = [company.companyName, company.kvk ? `KvK ${company.kvk}` : '', company.vatNumber ? `${translate('col.vat')} ${company.vatNumber}` : '', company.iban ? `IBAN ${company.iban}` : ''].filter(Boolean).join(' · ');
   const count = pdf.pageCount;
   for (let i = 0; i < count; i++) {
     pdf.setPage(i);
-    pdf.line(leftEdge, pageHeight - 46, rightEdge, pageHeight - 46, { color: palette.teal, width: 1.2 });
-    pdf.text(foot, leftEdge, pageHeight - 38, { size: 7.5, color: palette.muted });
-    if (count > 1) pdf.text(translate('invoice.page', { page: i + 1, count }), rightEdge, pageHeight - 38, { size: 7.5, color: palette.muted, align: 'right' });
+    drawFooter(pdf, documentLayout, { palette, companyLine, pageLabel: count > 1 ? translate('invoice.page', { page: i + 1, count }) : '' });
   }
   return pdf.toBuffer();
 }

@@ -1,5 +1,5 @@
 // Kleine PDF-schrijver zonder afhankelijkheden: A4-pagina's met tekst in de
-// standaardletters Helvetica en Helvetica-Bold (WinAnsi, dus ook é, ë en €),
+// standaardletters Helvetica (sans) of Times (serif), gewoon en vet (WinAnsi, dus ook é, ë en €),
 // vlakken, lijnen en een PNG-afbeelding (het logo). Genoeg voor een factuur
 // als bijlage bij een e-mail; geen PDF-bibliotheek nodig (geen native
 // modules, zie CLAUDE.md). Coördinaten in punten, (0,0) linksboven.
@@ -16,6 +16,22 @@ const W_BOLD = [278, 333, 474, 556, 556, 889, 722, 238, 333, 333, 389, 584, 278,
   556, 556, 333, 333, 584, 584, 584, 611, 975, 722, 722, 722, 722, 667, 611, 778, 722, 278, 556, 722, 611, 833, 722, 778, 667, 778, 722,
   667, 611, 722, 667, 944, 667, 667, 611, 333, 278, 333, 584, 556, 333, 556, 611, 556, 611, 556, 333, 611, 611, 278, 278, 556, 278, 889,
   611, 611, 611, 611, 389, 556, 333, 611, 556, 778, 556, 556, 500, 389, 280, 389, 584];
+
+// Tekenbreedtes van Times-Roman en Times-Bold (tekens 32..126, AFM-bestanden).
+const T_REGULAR = [250, 333, 408, 500, 500, 833, 778, 180, 333, 333, 500, 564, 250, 333, 250, 278, 500, 500, 500, 500, 500, 500, 500, 500,
+  500, 500, 278, 278, 564, 564, 564, 444, 921, 722, 667, 667, 722, 611, 556, 722, 722, 333, 389, 722, 611, 889, 722, 722, 556, 722, 667,
+  556, 611, 722, 722, 944, 722, 722, 611, 333, 278, 333, 469, 500, 333, 444, 500, 444, 500, 444, 333, 500, 500, 278, 278, 500, 278, 778,
+  500, 500, 500, 500, 333, 389, 278, 500, 500, 722, 500, 500, 444, 480, 200, 480, 541];
+const T_BOLD = [250, 333, 555, 500, 500, 1000, 833, 278, 333, 333, 500, 570, 250, 333, 250, 278, 500, 500, 500, 500, 500, 500, 500, 500,
+  500, 500, 333, 333, 570, 570, 570, 500, 930, 722, 667, 722, 722, 667, 611, 778, 778, 389, 500, 778, 667, 944, 722, 778, 611, 778, 722,
+  556, 667, 722, 722, 1000, 722, 722, 667, 333, 278, 333, 581, 500, 333, 500, 556, 444, 556, 444, 333, 500, 556, 278, 333, 556, 278, 833,
+  556, 500, 556, 556, 444, 389, 333, 556, 500, 722, 500, 500, 444, 394, 220, 394, 520];
+
+/** Lettertypen die een document kan gebruiken: de standaardletters van elke PDF-lezer (geen lettertype insluiten). */
+const FONTS = {
+  sans: { regular: W_REGULAR, bold: W_BOLD, baseRegular: 'Helvetica', baseBold: 'Helvetica-Bold' },
+  serif: { regular: T_REGULAR, bold: T_BOLD, baseRegular: 'Times-Roman', baseBold: 'Times-Bold' },
+};
 
 // Unicode -> WinAnsi voor 0x80..0x9F; 0xA0..0xFF is gelijk aan Latin-1.
 const WIN = { 0x20ac: 0x80, 0x201a: 0x82, 0x201e: 0x84, 0x2026: 0x85, 0x2018: 0x91, 0x2019: 0x92, 0x201c: 0x93, 0x201d: 0x94,
@@ -50,11 +66,13 @@ for (let charCode = 0xc0; charCode <= 0xff; charCode++) {
 /**
  * Breedte van een teken in duizendsten van de lettergrootte.
  * @param {number} code WinAnsi-code.
- * @param {boolean} bold Vet (Helvetica-Bold).
+ * @param {boolean} bold Vet.
+ * @param {string} [family] Lettertype ('sans' of 'serif').
  * @returns {number} De breedte.
  */
-function charWidth(code, bold) {
-  const widths = bold ? W_BOLD : W_REGULAR;
+function charWidth(code, bold, family = 'sans') {
+  const font = FONTS[family] || FONTS.sans;
+  const widths = bold ? font.bold : font.regular;
   if (code >= 32 && code <= 126) return widths[code - 32];
   if (BASE[code]) return widths[BASE[code] - 32];
   if (code === 0x80 || code === 0x96) return 556;
@@ -68,10 +86,11 @@ function charWidth(code, bold) {
  * @param {string} text De tekst.
  * @param {number} size Lettergrootte in punten.
  * @param {boolean} [bold] Vet.
+ * @param {string} [family] Lettertype ('sans' of 'serif').
  * @returns {number} De breedte in punten.
  */
-function textWidth(text, size, bold = false) {
-  return (encode(text).reduce((total, code) => total + charWidth(code, bold), 0) * size) / 1000;
+function textWidth(text, size, bold = false, family = 'sans') {
+  return (encode(text).reduce((total, code) => total + charWidth(code, bold, family), 0) * size) / 1000;
 }
 
 /**
@@ -81,16 +100,17 @@ function textWidth(text, size, bold = false) {
  * @param {number} width Beschikbare breedte in punten.
  * @param {number} size Lettergrootte in punten.
  * @param {boolean} bold Vet.
+ * @param {string} family Lettertype.
  * @returns {string[]} De stukken; elk past (behalve een los teken dat breder is dan de regel).
  */
-function breakWord(word, width, size, bold) {
+function breakWord(word, width, size, bold, family) {
   const pieces = [];
   let piece = '';
   let pieceWidth = 0;
   // Per grafeemcluster (letter + combinerende tekens), zodat een accent niet
   // los van zijn letter op de volgende regel belandt.
   for (const [character] of word.matchAll(/\P{M}\p{M}*|\p{M}+/gu)) {
-    const characterWidth = textWidth(character, size, bold);
+    const characterWidth = textWidth(character, size, bold, family);
     if (piece && pieceWidth + characterWidth > width) {
       pieces.push(piece);
       piece = '';
@@ -109,21 +129,22 @@ function breakWord(word, width, size, bold) {
  * @param {number} width Beschikbare breedte in punten.
  * @param {number} size Lettergrootte in punten.
  * @param {boolean} [bold] Vet.
+ * @param {string} [family] Lettertype ('sans' of 'serif').
  * @returns {string[]} De regels.
  */
-function wrap(text, width, size, bold = false) {
+function wrap(text, width, size, bold = false, family = 'sans') {
   const lines = [];
   for (const para of String(text == null ? '' : text).split(/\r?\n/)) {
     let line = '';
     for (const word of para.split(/\s+/).filter(Boolean)) {
       const next = line ? `${line} ${word}` : word;
-      if (textWidth(next, size, bold) <= width) {
+      if (textWidth(next, size, bold, family) <= width) {
         line = next;
         continue;
       }
       if (line) lines.push(line);
       // Een woord dat zelf te lang is, hard afbreken; het laatste stuk begint de nieuwe regel.
-      const pieces = textWidth(word, size, bold) > width ? breakWord(word, width, size, bold) : [word];
+      const pieces = textWidth(word, size, bold, family) > width ? breakWord(word, width, size, bold, family) : [word];
       lines.push(...pieces.slice(0, -1));
       line = pieces[pieces.length - 1];
     }
@@ -180,8 +201,9 @@ function pngImage(buffer) {
   if (depth !== 8 || interlace || (type !== 2 && type !== 6) || !width || !height || width * height > 4e6) return null;
   const bytesPerPixel = type === 6 ? 4 : 3;
   let raw;
-  try { raw = zlib.inflateSync(Buffer.concat(idat)); } catch { return null; }
   const stride = width * bytesPerPixel;
+  // Uitpakken nooit groter dan de kop belooft: een PNG-bom (kleine IDAT die tot gigabytes uitpakt) geeft zo null.
+  try { raw = zlib.inflateSync(Buffer.concat(idat), { maxOutputLength: (stride + 1) * height }); } catch { return null; }
   if (raw.length < (stride + 1) * height) return null;
   const pixels = Buffer.alloc(stride * height);
   for (let y = 0; y < height; y++) {
@@ -214,11 +236,12 @@ function pngImage(buffer) {
 
 /**
  * Maakt een PDF-document: pagina's toevoegen, tekenen, en met toBuffer() de PDF.
- * @param {{ title?: string, author?: string, pageSize?: { width: number, height: number } }} [info] Titel en auteur in de
- *   documenteigenschappen; pageSize = paginaformaat in punten (standaard A4, bijv. een etiket).
- * @returns {object} addPage, setPage, text, rect, line, image, toBuffer, pageCount, A4 en size.
+ * @param {{ title?: string, author?: string, pageSize?: { width: number, height: number }, font?: string }} [info] Titel en auteur in de
+ *   documenteigenschappen; pageSize = paginaformaat in punten (standaard A4, bijv. een etiket); font = 'sans' (Helvetica) of 'serif' (Times).
+ * @returns {object} addPage, setPage, text, rect, line, image, toBuffer, pageCount, A4, size, textWidth en wrap (die meten in het gekozen lettertype).
  */
-function createPdf({ title = '', author = '', pageSize = null } = {}) {
+function createPdf({ title = '', author = '', pageSize = null, font = 'sans' } = {}) {
+  const family = FONTS[font] ? font : 'sans';
   const pageBox = pageSize && pageSize.width > 0 && pageSize.height > 0 ? { width: pageSize.width, height: pageSize.height } : A4;
   const pages = [];
   const images = [];
@@ -251,7 +274,7 @@ function createPdf({ title = '', author = '', pageSize = null } = {}) {
     const codes = encode(content);
     if (!codes.length) return;
     let startX = x;
-    const width = textWidth(content, size, bold);
+    const width = textWidth(content, size, bold, family);
     if (align === 'right') startX = x - width;
     else if (align === 'center') startX = x - width / 2;
     page.ops.push(`BT /${bold ? 'F2' : 'F1'} ${pdfNumber(size)} Tf ${rgb(color)} rg ${pdfNumber(startX)} ${pdfNumber(y(top + size * 0.8))} Td (${escText(codes)}) Tj ET`);
@@ -317,8 +340,8 @@ function createPdf({ title = '', author = '', pageSize = null } = {}) {
     const add = (body) => { objs.push(body); return objs.length; };
     const catalog = add(null);
     const pagesObj = add(null);
-    const fontRegular = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
-    const fontBold = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
+    const fontRegular = add(`<< /Type /Font /Subtype /Type1 /BaseFont /${FONTS[family].baseRegular} /Encoding /WinAnsiEncoding >>`);
+    const fontBold = add(`<< /Type /Font /Subtype /Type1 /BaseFont /${FONTS[family].baseBold} /Encoding /WinAnsiEncoding >>`);
     const imageRefs = [];
     for (const img of images) {
       let smask = '';
@@ -363,7 +386,31 @@ function createPdf({ title = '', author = '', pageSize = null } = {}) {
     page = pages[index];
   }
 
-  return { addPage, setPage, text, rect, line, image, toBuffer, get pageCount() { return pages.length; }, A4, size: pageBox };
+  return {
+    addPage, setPage, text, rect, line, image, toBuffer, A4, size: pageBox,
+    /**
+     * Aantal pagina's tot nu toe.
+     * @returns {number} Het aantal.
+     */
+    get pageCount() { return pages.length; },
+    /**
+     * Breedte van een tekst in het lettertype van dit document.
+     * @param {string} content De tekst.
+     * @param {number} size Lettergrootte in punten.
+     * @param {boolean} [bold] Vet.
+     * @returns {number} De breedte in punten.
+     */
+    textWidth: (content, size, bold = false) => textWidth(content, size, bold, family),
+    /**
+     * Regelafbreking in het lettertype van dit document.
+     * @param {string} content De tekst.
+     * @param {number} width Beschikbare breedte in punten.
+     * @param {number} size Lettergrootte in punten.
+     * @param {boolean} [bold] Vet.
+     * @returns {string[]} De regels.
+     */
+    wrap: (content, width, size, bold = false) => wrap(content, width, size, bold, family),
+  };
 }
 
-module.exports = { createPdf, textWidth, wrap, encode, pngImage, A4 };
+module.exports = { createPdf, textWidth, wrap, encode, pngImage, A4, FONTS };

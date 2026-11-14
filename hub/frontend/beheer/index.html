@@ -527,6 +527,79 @@
           <div id="th-err" class="err" role="alert"></div>
         </form>
       </section>
+      <section id="tab-documentopmaak" class="tabpane" hidden>
+        <p class="muted small">Bepaal hoe de PDF-documenten van deze organisatie eruitzien: de factuur (ook als bijlage bij de mail) en de pakbon. Kies je logo, de kop, de kleuren, het lettertype en de voettekst; het voorbeeld rechts past zich aan. Kleuren die je hier leeg laat, volgen het kleurthema.</p>
+        <div class="do-layout">
+          <form id="do-form" class="card-form settings" novalidate>
+            <div class="form-grid">
+              <label class="field">Logo
+                <select name="logoMode">
+                  <option value="default">Standaardlogo (wit, op een gekleurde balk)</option>
+                  <option value="custom">Eigen logo</option>
+                  <option value="none">Geen logo, alleen de bedrijfsnaam</option>
+                </select>
+              </label>
+              <label class="field">Positie van het logo
+                <select name="logoPosition"><option value="left">Links</option><option value="right">Rechts</option></select>
+                <span class="hint">De bedrijfsgegevens staan aan de andere kant.</span>
+              </label>
+              <div class="field full" id="do-logo-field" hidden>
+                <span>Eigen logo</span>
+                <div class="do-logo-row">
+                  <span class="do-logo-box" id="do-logo-box"><img id="do-logo-img" alt="Logo" hidden><span id="do-logo-none" class="muted small">Nog geen logo gekozen</span></span>
+                  <input type="file" id="do-logo-file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden>
+                  <button class="btn" type="button" id="do-logo-pick">Logo kiezen</button>
+                </div>
+                <span class="hint">PNG, JPG of SVG; wordt verkleind opgeslagen. Op een gekleurde balk past een wit of transparant logo het best.</span>
+              </div>
+              <label class="field">Hoogte van het logo
+                <input type="range" name="logoHeight" min="20" max="80" step="2">
+                <span class="hint" id="do-logo-height-text"></span>
+              </label>
+              <label class="field">Kop
+                <select name="headerStyle"><option value="band">Gekleurde balk</option><option value="plain">Wit met een lijn</option></select>
+              </label>
+              <div class="field">
+                <span>Kopkleur</span>
+                <span class="th-pick"><input type="color" data-color="headerColor"><input type="text" data-hex="headerColor" maxlength="7" spellcheck="false" autocomplete="off" placeholder="uit het thema"></span>
+                <span class="hint">Kop, titels en tabelkoppen. Leeg = kleur van het thema.</span>
+              </div>
+              <div class="field">
+                <span>Accentkleur</span>
+                <span class="th-pick"><input type="color" data-color="accentColor"><input type="text" data-hex="accentColor" maxlength="7" spellcheck="false" autocomplete="off" placeholder="uit het thema"></span>
+                <span class="hint">De lijn boven de voettekst. Leeg = kleur van het thema.</span>
+              </div>
+              <label class="field">Lettertype
+                <select name="font"><option value="sans">Schreefloos (Helvetica)</option><option value="serif">Met schreef (Times)</option></select>
+                <span class="hint">Standaardletters die elke PDF-lezer heeft.</span>
+              </label>
+              <label class="field chk"><input type="checkbox" name="showCompanyInHeader"> <span>Bedrijfsgegevens in de kop</span></label>
+              <label class="field chk"><input type="checkbox" name="footerCompanyInfo"> <span>KvK, btw-nummer en IBAN in de voet</span></label>
+              <label class="field chk"><input type="checkbox" name="pageNumbers"> <span>Paginanummers</span></label>
+              <label class="field full">Eigen voettekst
+                <textarea name="footerText" rows="2" maxlength="200" placeholder="Bijvoorbeeld: Alle leveringen volgens onze algemene voorwaarden."></textarea>
+                <span class="hint">Maximaal twee regels, onder de lijn op elke pagina.</span>
+              </label>
+            </div>
+            <div class="row actions">
+              <button class="btn primary" type="submit" id="do-save">Opslaan</button>
+              <button class="btn" type="button" id="do-reset">Standaardopmaak terugzetten</button>
+            </div>
+            <div id="do-err" class="err" role="alert"></div>
+          </form>
+          <div class="card-form do-preview">
+            <div class="row do-preview-head">
+              <h3>Voorbeeld</h3>
+              <div class="do-kinds" role="tablist" aria-label="Soort document">
+                <button class="btn small" type="button" data-kind="invoice" aria-pressed="true">Factuur</button>
+                <button class="btn small" type="button" data-kind="packing" aria-pressed="false">Pakbon</button>
+              </div>
+            </div>
+            <div class="do-canvas-wrap"><canvas id="do-canvas" aria-label="Voorbeeld van het document"></canvas></div>
+            <p class="muted small" id="do-preview-note">Het voorbeeld gebruikt je bedrijfsgegevens en voorbeeldregels; er wordt niets opgeslagen.</p>
+          </div>
+        </div>
+      </section>
       <section id="tab-updates" class="tabpane" hidden>
         <p class="muted small">Installeer een nieuwe versie van de software wanneer het jou uitkomt. Tijdens de update staat de site ongeveer een minuut in onderhoudsmodus: bekijken kan, opslaan even niet. Start de nieuwe versie niet goed, dan gaat de server vanzelf terug naar de huidige versie.</p>
         <div id="up-none" class="card" hidden>
@@ -718,6 +791,7 @@
   <script src="rollen.js"></script>
   <script src="aikosten.js"></script>
   <script src="kleuren.js"></script>
+  <script src="documentopmaak.js"></script>
   <script src="updates.js"></script>
   <script src="bewaking.js"></script>
   <script src="drive-backup.js"></script>

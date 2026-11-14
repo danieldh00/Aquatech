@@ -2,28 +2,16 @@
 // zodat er in één ronde gepickt kan worden) en de lijst Te picken (bestellingen met status Nieuw die klaarstaan:
 // bij online betalen alleen de betaalde). Eén bestelling of meer in één PDF ("Alles afdrukken"). Het afdrukken wordt
 // vastgelegd bij de bestelling (`data.packingSlip`). Routes onder /api/admin/web-orders (recht beheer).
-const fs = require('fs');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
-const { createPdf, wrap } = require('../verkoop/pdf');
+const { createPdf } = require('../verkoop/pdf');
+const { sanitizeDocumentLayout, paletteOf, drawHeader, drawFooter } = require('../verkoop/document-layout');
 const { assemblePdf } = require('./order-slips');
 
 const DocText = require(path.join(FRONTEND_DIR, 'shared', 'doc-text.js'));
 
 /** Hoogstens zoveel pakbonnen in één PDF. */
 const MAX_SLIPS = 50;
-
-let logoCache = null;
-/**
- * Het standaardlogo (wit op navy), één keer van schijf gelezen.
- * @returns {Buffer} De PNG, of een lege buffer als het bestand ontbreekt.
- */
-function defaultLogo() {
-  if (!logoCache) {
-    try { logoCache = fs.readFileSync(path.join(FRONTEND_DIR, 'shared', 'logo-white.png')); } catch { logoCache = Buffer.alloc(0); }
-  }
-  return logoCache;
-}
 
 /**
  * Zet een ISO-datum om naar de schrijfwijze van de documenttaal.
@@ -106,7 +94,7 @@ function slipFileName(orders) {
 /**
  * Maakt één PDF met een pakbon per bestelling (elke bestelling begint op een nieuwe pagina).
  * @param {object[]} orders De bestellingen (shapeFull van web-orders).
- * @param {{ profile?: object, colors?: object, logo?: Buffer|null, locations?: Map<string, string> }} [options] Bedrijfsprofiel, kleuren van het thema, logo (PNG) en de magazijnlocatie per artikel-id.
+ * @param {{ profile?: object, colors?: object, layout?: object|null, locations?: Map<string, string> }} [options] Bedrijfsprofiel, kleuren van het thema, de documentopmaak van de organisatie en de magazijnlocatie per artikel-id.
  * @returns {Buffer} De PDF.
  */
 function packingSlipsPdf(orders, options = {}) {
@@ -116,13 +104,15 @@ function packingSlipsPdf(orders, options = {}) {
 /**
  * Zoals packingSlipsPdf, maar met erbij welke pagina's bij welke bestelling horen (om er pakbonnen van klanten tussen te kunnen zetten).
  * @param {object[]} orders De bestellingen (shapeFull van web-orders).
- * @param {{ profile?: object, colors?: object, logo?: Buffer|null, locations?: Map<string, string> }} [options] Bedrijfsprofiel, kleuren van het thema, logo (PNG) en de magazijnlocatie per artikel-id.
+ * @param {{ profile?: object, colors?: object, layout?: object|null, locations?: Map<string, string> }} [options] Bedrijfsprofiel, kleuren van het thema, de documentopmaak van de organisatie en de magazijnlocatie per artikel-id.
  * @returns {{ buffer: Buffer, ranges: { orderId: string, first: number, last: number }[] }} De PDF en per bestelling de eerste en laatste pagina (vanaf 0).
  */
-function packingSlipsPdfWithRanges(orders, { profile = {}, colors = {}, logo = null, locations = new Map() } = {}) {
+function packingSlipsPdfWithRanges(orders, { profile = {}, colors = {}, layout = null, locations = new Map() } = {}) {
   const company = profile || {};
-  const palette = { navy: '#172f5e', green: '#19924f', greenSoft: '#e6f4ec', teal: '#2cb0c0', text: '#1d2733', muted: '#6b7785', line: '#d0d6de', ...colors };
-  const pdf = createPdf({ title: DocText.text('nl', 'packing.title'), author: company.companyName || '' });
+  const documentLayout = sanitizeDocumentLayout(layout);
+  const palette = paletteOf(documentLayout, colors);
+  const pdf = createPdf({ title: DocText.text('nl', 'packing.title'), author: company.companyName || '', font: documentLayout.font });
+  const { wrap } = pdf;
   const pageWidth = pdf.A4.width;
   const pageHeight = pdf.A4.height;
   const leftEdge = 42;
@@ -150,24 +140,8 @@ function packingSlipsPdfWithRanges(orders, { profile = {}, colors = {}, logo = n
      */
     const header = (first) => {
       pdf.addPage();
-      const headerHeight = first ? 92 : 52;
-      pdf.rect(0, 0, pageWidth, headerHeight, { fill: palette.navy });
-      const logoHeight = first ? 40 : 26;
-      if (!pdf.image(logo || defaultLogo(), leftEdge, (headerHeight - logoHeight) / 2, logoHeight * (321 / 66), logoHeight)) {
-        pdf.text(company.companyName, leftEdge, headerHeight / 2 - 8, { size: 16, bold: true, color: '#ffffff' });
-      }
-      if (first) {
-        const lines = [...String(company.address || '').split(/\r?\n/), [company.phone, company.email].filter(Boolean).join(' · '), company.website].map((entry) => String(entry || '').trim()).filter(Boolean);
-        let lineTop = 16;
-        pdf.text(company.companyName, rightEdge, lineTop, { size: 10, bold: true, color: '#ffffff', align: 'right' });
-        for (const addressLine of lines.slice(0, 5)) {
-          lineTop += 12.5;
-          pdf.text(addressLine, rightEdge, lineTop, { size: 8.5, color: '#ffffff', align: 'right' });
-        }
-      } else {
-        pdf.text(`${translate('packing.title')} ${order.number} (${translate('packing.continued')})`, rightEdge, 20, { size: 10, bold: true, color: '#ffffff', align: 'right' });
-      }
-      top = headerHeight + 24;
+      const continuedTitle = `${translate('packing.title')} ${order.number} (${translate('packing.continued')})`;
+      top = drawHeader(pdf, documentLayout, { palette, company, first, continuedTitle }) + 24;
     };
     header(true);
 
@@ -277,12 +251,10 @@ function packingSlipsPdfWithRanges(orders, { profile = {}, colors = {}, logo = n
     const lastPage = (index + 1 < slipStarts.length ? slipStarts[index + 1].firstPage : pdf.pageCount) - 1;
     ranges.push({ orderId: slip.order.id, first: slip.firstPage, last: lastPage });
     const count = lastPage - slip.firstPage + 1;
-    const foot = [company.companyName, company.kvk ? `KvK ${company.kvk}` : ''].filter(Boolean).join(' · ');
+    const companyLine = [company.companyName, company.kvk ? `KvK ${company.kvk}` : ''].filter(Boolean).join(' · ');
     for (let page = slip.firstPage; page <= lastPage; page++) {
       pdf.setPage(page);
-      pdf.line(leftEdge, pageHeight - 46, rightEdge, pageHeight - 46, { color: palette.teal, width: 1.2 });
-      pdf.text(foot, leftEdge, pageHeight - 38, { size: 7.5, color: palette.muted });
-      if (count > 1) pdf.text(DocText.text(slip.language, 'packing.page', { page: page - slip.firstPage + 1, count }), rightEdge, pageHeight - 38, { size: 7.5, color: palette.muted, align: 'right' });
+      drawFooter(pdf, documentLayout, { palette, companyLine, pageLabel: count > 1 ? DocText.text(slip.language, 'packing.page', { page: page - slip.firstPage + 1, count }) : '' });
     }
   });
   return { buffer: pdf.toBuffer(), ranges };
@@ -385,7 +357,7 @@ function createPackingSlips(db, { orders, slips, settingsFor, colorsOf = () => (
     if (missing.length) return { error: `De klant heeft nog geen pakbon geüpload voor dropshipping: ${missing.map((order) => order.number).join(', ')}.`, status: 409 };
     const settings = settingsFor(tenantId);
     const ours = found.filter((order) => !order.dropshipping);
-    const own = ours.length ? packingSlipsPdfWithRanges(ours, { profile: settings.get('quoteProfile'), colors: colorsOf(tenantId), locations: locationsOf(tenantId, ours) }) : null;
+    const own = ours.length ? packingSlipsPdfWithRanges(ours, { profile: settings.get('quoteProfile'), colors: colorsOf(tenantId), layout: settings.get('documentLayout'), locations: locationsOf(tenantId, ours) }) : null;
     let pdf = own ? own.buffer : null;
     if (dropshipped.length) {
       const rangeOf = new Map((own ? own.ranges : []).map((range) => [range.orderId, range]));

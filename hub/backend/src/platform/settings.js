@@ -13,6 +13,7 @@ const { sanitizeDriveBackup, sanitizeDriveState } = require('./drive-backup');
 const { sanitizeLabelTemplates } = require('../artikelen/labels');
 const { sanitizeCategoryDiscounts } = require('../webshop/category-discounts');
 const { sanitizePriceFactors } = require('../artikelen/price-factor');
+const { sanitizeDocumentLayout } = require('../verkoop/document-layout');
 const { sanitizeMonitoring } = require('./monitoring-notify');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
@@ -123,6 +124,8 @@ const FIELDS = {
   seasonReminders: { type: 'object', default: {}, sanitize: sanitizeSeasonReminders, liveOnly: true },
   // Sjablonen voor etiketten met streepjescode (Artikelen > Etiket afdrukken; artikelen/labels.js), per omgeving.
   labelTemplates: { type: 'object', default: {}, sanitize: sanitizeLabelTemplates },
+  // Opmaak van de PDF-documenten (verkoop/document-layout.js): logo, kop, kleuren, lettertype en voettekst; alleen via Beheer > Documentopmaak.
+  documentLayout: { type: 'object', default: {}, sanitize: sanitizeDocumentLayout, internal: true, notInView: true },
   // Kortingen per productcategorie voor zakelijke klanten (webshop/category-discounts.js); alleen via Beheer > Webshop > Zakelijke kortingen.
   categoryDiscounts: { type: 'object', default: {}, sanitize: sanitizeCategoryDiscounts, internal: true },
   // Automatische bestelvoorstellen (artikelen/purchase-orders.js, autoPropose): zakt een artikel onder de minimumvoorraad,
@@ -394,6 +397,8 @@ function createSettings({ db, tenantId, env = {}, vault = createVault() }) {
   function view() {
     const out = {};
     for (const [key, def] of Object.entries(FIELDS)) {
+      // Grote waarden die alleen hun eigen scherm nodig heeft (zoals het logo van de documentopmaak) horen niet bij elke instellingenlijst.
+      if (def.notInView) continue;
       const value = get(key);
       if (def.type === 'secret') {
         out[key] = { set: Boolean(value), source: source(key) };

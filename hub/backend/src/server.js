@@ -38,7 +38,9 @@ const { createShopContentStore, registerShopContentRoutes } = require('./webshop
 const { createStorefrontData } = require('./webshop/storefront-data');
 const webOrdersModule = require('./webshop/web-orders');
 const { createWebOrderStore, registerWebOrderRoutes } = webOrdersModule;
-const { createPackingSlips, registerPackingSlipRoutes } = require('./webshop/packing-slips');
+const { createPackingSlips, registerPackingSlipRoutes, packingSlipsPdf } = require('./webshop/packing-slips');
+const { registerDocumentLayoutRoutes } = require('./verkoop/document-layout');
+const { invoicePdf } = require('./verkoop/invoice-pdf');
 const { createOrderpick, registerOrderpickRoutes } = require('./webshop/orderpick');
 const { createGoodsReceipt, registerGoodsReceiptRoutes } = require('./artikelen/goods-receipt');
 const { createShippingLabels } = require('./webshop/shipping-labels');
@@ -607,6 +609,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use('/api/plan/analyze', express.json({ limit: '12mb' }));
   // Kleurtellingen van een herkend plan (zie recognitions.js).
   app.use('/api/plan/learn', express.json({ limit: '256kb' }));
+  // Documentopmaak: het logo komt als data-adres mee (hoogstens 300 kB, met de overhead van base64 dus ruim 400 kB).
+  app.use('/api/admin/document-layout', express.json({ limit: '600kb' }));
   // Tekening + eindplan voor het meetcorpus (alleen als de organisatie dat aanzet, zie /api/plan/corpus).
   app.use('/api/plan/corpus', express.json({ limit: '12mb' }));
   // Een plan bevat de achtergrondafbeelding (base64).
@@ -2215,13 +2219,19 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   stockStore.onDirty((tid) => shopSync.schedule(tid));
   const debtorStore = createDebtorStore(database);
   const invoiceStore = createInvoiceStore(database, { stock: stockStore, debtors: debtorStore });
+  /**
+   * De kleuren van het thema van een omgeving, voor de PDF-documenten (factuur, pakbon).
+   * @param {string} id Id van de omgeving.
+   * @returns {{ navy: string, green: string, greenSoft: string, teal: string }} De kleuren.
+   */
+  const documentColorsOf = (id) => {
+    const cssVars = Theme.vars(themeFor(id));
+    return { navy: cssVars['--at-navy'], green: cssVars['--at-green'], greenSoft: cssVars['--at-green-soft'], teal: cssVars['--at-teal'] };
+  };
   // Facturen per e-mail met PDF (invoice-mail.js) en webshopbestellingen als factuur (shop-orders.js).
   const invoiceSender = createInvoiceSender({
     invoices: invoiceStore, settingsFor: (id) => settingsFor(id), mailerFor, mailBody,
-    colorsOf: (id) => {
-      const cssVars = Theme.vars(themeFor(id));
-      return { navy: cssVars['--at-navy'], green: cssVars['--at-green'], greenSoft: cssVars['--at-green-soft'], teal: cssVars['--at-teal'] };
-    },
+    colorsOf: documentColorsOf,
   });
   const shopOrders = createShopOrders({
     db: database, invoices: invoiceStore, debtors: debtorStore, stock: stockStore, sender: invoiceSender,
@@ -2717,12 +2727,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const orderSlips = createOrderSlips(database, { vault, orders: webOrders });
   const packingSlips = createPackingSlips(database, {
     orders: webOrders, slips: orderSlips, settingsFor: (id) => settingsFor(id),
-    colorsOf: (id) => {
-      const cssVars = Theme.vars(themeFor(id));
-      return { navy: cssVars['--at-navy'], green: cssVars['--at-green'], greenSoft: cssVars['--at-green-soft'], teal: cssVars['--at-teal'] };
-    },
+    colorsOf: documentColorsOf,
   });
   registerPackingSlipRoutes(app, { slips: packingSlips, audit, requireJson });
+  // Opmaak van de PDF-documenten per organisatie: logo, kop, kleuren, lettertype, voettekst en een voorbeeld (verkoop/document-layout.js).
+  registerDocumentLayoutRoutes(app, { settingsOf: (req) => settingsFor(req.tenantId), colorsOf: documentColorsOf, invoicePdf, packingSlipsPdf, audit, requireJson });
   // Orderpick-app voor het magazijn (webshop/orderpick.js, recht orderpick); verzendlabels via een koppeling per vervoerder (DPD volgt).
   registerOrderpickRoutes(app, {
     orderpick: createOrderpick(database, { orders: webOrders, slips: packingSlips, labels: createShippingLabels({ providers: shippingLabelProviders }) }),

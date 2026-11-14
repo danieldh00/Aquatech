@@ -33,7 +33,7 @@ function createInvoiceSender({ invoices, settingsFor, mailerFor, colorsOf = () =
    */
   function pdfOf(tenantId, invoice) {
     const settings = settingsFor(tenantId);
-    return invoicePdf(invoice, { profile: settings.get('quoteProfile'), settings: invoicingOf(settings), colors: colorsOf(tenantId) });
+    return invoicePdf(invoice, { profile: settings.get('quoteProfile'), settings: invoicingOf(settings), colors: colorsOf(tenantId), layout: settings.get('documentLayout') });
   }
 
   /**
