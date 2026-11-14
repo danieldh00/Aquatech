@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.16.3',
+      date: '2026-11-14',
+      title: 'Rapporten als Excel via de AI-koppeling',
+      items: [
+        { text: 'Via Claude of ChatGPT kun je nu een urenstaat, de openstaande facturen of een voorraadlijst als Excel-bestand laten maken. Je krijgt een link die 15 minuten werkt, alleen voor jou en alleen als je in AquaTech bent ingelogd. Je moet de AI-koppeling opnieuw koppelen om dit te kunnen gebruiken.', for: ['werkorders'] },
+      ],
+    },
+    {
       version: '1.16.2',
       date: '2026-11-14',
       title: 'Uren en materiaal boeken via de AI-koppeling',
