@@ -175,7 +175,10 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
    * De sitesleutel van de onzichtbare captcha van de shop (instelling captcha met geheim en aan).
    * @returns {string} De sitesleutel, leeg als de captcha uit staat.
    */
-  const captchaKeyOf = () => (captcha && captcha.publicOf(tenantId) ? captcha.publicOf(tenantId).siteKey : '');
+  const captchaKeyOf = () => {
+    const open = captcha ? captcha.publicOf(tenantId) : null;
+    return open ? open.siteKey : '';
+  };
   /**
    * Controleert de onzichtbare captcha van een formulier van de shop (alleen als hij aan staat).
    * @param {object} req Het verzoek met het formulier in req.body.

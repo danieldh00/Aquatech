@@ -476,7 +476,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     detail: req.user?.impersonator ? { ...detail, impersonatie: req.user.impersonator.username } : detail, ip: remoteIp(req) });
   // Onzichtbare captcha op de openbare formulieren (beveiliging/captcha.js). Noodschakelaar: omgeving CAPTCHA_DISABLED=1 (bijv. als een
   // verkeerde sleutel het inloggen blokkeert). Meldingen van een onbereikbaar Google of een foute geheime sleutel gaan naar de bewaking.
-  const captchaDegraded = new Set();
+  const captchaDegraded = new Map();
   const captcha = createCaptcha({
     settingsFor: (id) => settingsFor(id), fetchImpl: captchaFetch, disabled: env.CAPTCHA_DISABLED === '1',
     /**
@@ -487,8 +487,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
      */
     report: (tenantId, event) => {
       const problem = event.type === 'unreachable' || event.type === 'misconfigured';
-      if (!problem && !(event.type === 'ok' && captchaDegraded.has(tenantId))) return;
-      if (problem) captchaDegraded.add(tenantId); else captchaDegraded.delete(tenantId);
+      // Alleen bij een overgang melden (storing begint of is voorbij), niet bij elke mislukte controle.
+      const known = captchaDegraded.get(tenantId);
+      if (problem ? known === event.type : !(event.type === 'ok' && known)) return;
+      if (problem) captchaDegraded.set(tenantId, event.type); else captchaDegraded.delete(tenantId);
       const message = event.type === 'misconfigured' ? 'Google weigert de geheime sleutel van reCAPTCHA. Controleer de sleutels in Beheer > Toegang & beveiliging > Onzichtbare captcha.'
         : 'Google reCAPTCHA is niet bereikbaar; de formulieren laten bezoekers nu door of blokkeren ze, volgens de instelling.';
       monitor.report(tenantId, 'captcha', { ok: !problem, severity: 'warning', title: 'Onzichtbare captcha (reCAPTCHA)', message }).catch(() => {});

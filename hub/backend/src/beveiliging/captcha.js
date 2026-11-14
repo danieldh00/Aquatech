@@ -101,8 +101,10 @@ function createCaptcha({ settingsFor, fetchImpl = globalThis.fetch, disabled = f
     if (disabled || !tenantId) return null;
     const settings = settingsFor(tenantId);
     const setting = sanitizeCaptcha(settings.get('captcha'));
+    // Staat de captcha uit, dan niet eens het geheim ontsleutelen (dit draait op elke pagina van de shop).
+    if (!setting.enabled || !setting.siteKey) return null;
     const secret = settings.get('captchaSecret');
-    if (!setting.enabled || !setting.siteKey || !secret) return null;
+    if (!secret) return null;
     return { siteKey: setting.siteKey, secret, minScore: setting.minScore, onUnreachable: setting.onUnreachable };
   }
 

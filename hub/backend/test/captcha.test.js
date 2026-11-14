@@ -167,8 +167,8 @@ test('instellingen: het geheim komt nooit terug, alleen een beheerder wijzigt, d
   assert.ok(!JSON.stringify(view).includes(SECRET), 'het geheim zit niet in de weergave');
   assert.ok(!JSON.stringify(view.captchaSecret).includes(SECRET.slice(-4)), 'ook geen hint met de laatste tekens');
   const klant = world.shoppers[0].client;
-  assert.notStrictEqual((await klant.put('/app/api/admin/settings', { captcha: { ...ACTIVE, enabled: false } })).status, 200);
-  assert.strictEqual((await klant.post('/app/api/admin/captcha/check', {})).status === 200, false);
+  assert.strictEqual((await klant.put('/app/api/admin/settings', { captcha: { ...ACTIVE, enabled: false } })).status, 403);
+  assert.strictEqual((await klant.post('/app/api/admin/captcha/check', {})).status, 403);
   assert.strictEqual((await world.admin.put('/app/api/admin/settings', { captcha: 'ja' })).status, 400);
   assert.strictEqual((await world.admin.put('/app/api/admin/settings', { captchaSecret: 'kort' })).status, 400);
   // Controleroute: opgeslagen geheim, een getypt geheim, een geweigerd geheim, niets ingesteld en Google onbereikbaar.
