@@ -1000,6 +1000,11 @@ Met de AI-koppeling maakt een medewerker vanuit Claude of ChatGPT (ook de app op
 | `prijs_voor_klant` | offerteprijs en webshopprijs voor deze klant (zakelijke prijs, staffel- en groothandelskorting) plus voorraad; vraagt ook toestemming *klanten.lezen* | `offertes` |
 | `status_opvragen` | status van een offerte, werkorder, factuur of webshopbestelling op nummer, met link | per soort: `offertes`, `werkorders`, `facturen`, `beheer` |
 | `openstaande_debiteuren` | definitieve, onbetaalde facturen per klant, grootste bedrag eerst, met het bedrag over de vervaldatum (max. 60× per uur) | `facturen` |
+| `maak_concept_werkorder`, `boek_uren`, `boek_materiaal` | concept-werkorder (niet ingepland), uren en materiaal op de eigen werkorder boeken | `werkorders` / `planning` |
+| `maak_rapport_excel` | urenstaat, openstaande facturen of voorraadlijst als Excel; downloadlink 15 minuten, alleen voor de gebruiker zelf | per soort |
+| `plan_maken` | beregeningsplan uit vlakken in meters (de AI leest de tekening zelf): sproeiers, zones en stuklijst, deterministisch; vraagt terug zonder druk en debiet; bijsturen met `planId` (max. 10 per uur) | `plannen` |
+| `plan_details` | samenvatting van een bewaard plan (max. 30 per uur) | `plannen` |
+| `plan_omzetten` | bewaard plan omzetten naar een concept-offerte (materiaal + arbeid + voorrijkosten) of een nieuwe werkorder (stappen en materiaal, reserveert voorraad); vraagt terug zonder klant; de offerte hangt alleen aan een goedgekeurd plan | `plannen` + `offertes` of `werkorders` |
 
 De leesfuncties `klant_details`, `prijs_voor_klant` en `status_opvragen` hebben samen een limiet van 300 per uur per gebruiker.
 

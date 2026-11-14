@@ -212,7 +212,7 @@ test('de hele weg: toestaan, tools gebruiken en een concept-offerte met notities
   assert.ok(init.body.result.capabilities.tools);
   assert.strictEqual((await mcp(base, connection.accessToken, { method: 'notifications/initialized', id: undefined })).status, 202);
   const tools = (await mcp(base, connection.accessToken, { method: 'tools/list' })).body.result.tools.map((tool) => tool.name);
-  assert.deepStrictEqual(tools, ['zoek_klant', 'maak_klant', 'zoek_artikelen', 'klant_details', 'prijs_voor_klant', 'status_opvragen', 'openstaande_debiteuren', 'boek_uren', 'boek_materiaal', 'maak_concept_werkorder', 'plan_maken', 'plan_details', 'maak_rapport_excel', 'maak_concept_offerte']);
+  assert.deepStrictEqual(tools, ['zoek_klant', 'maak_klant', 'zoek_artikelen', 'klant_details', 'prijs_voor_klant', 'status_opvragen', 'openstaande_debiteuren', 'boek_uren', 'boek_materiaal', 'maak_concept_werkorder', 'plan_maken', 'plan_details', 'plan_omzetten', 'maak_rapport_excel', 'maak_concept_offerte']);
   assert.strictEqual((await mcp(base, connection.accessToken, { method: 'bestaat/niet' })).body.error.code, -32601);
 
   const articles = await callTool(base, connection.accessToken, 'zoek_artikelen', { zoekterm: 'sproeier pop-up' });
@@ -598,13 +598,13 @@ test('rechten volgen de rol op dit moment: een andere rol beperkt de AI direct t
    */
   const toolNames = async () => (await mcp(base, connection.accessToken, { method: 'tools/list' })).body.result.tools.map((tool) => tool.name);
   // Installateur: geen facturen, dus geen openstaande debiteuren.
-  assert.deepStrictEqual(await toolNames(), ['zoek_klant', 'maak_klant', 'zoek_artikelen', 'klant_details', 'prijs_voor_klant', 'status_opvragen', 'boek_uren', 'boek_materiaal', 'maak_concept_werkorder', 'plan_maken', 'plan_details', 'maak_rapport_excel', 'maak_concept_offerte']);
+  assert.deepStrictEqual(await toolNames(), ['zoek_klant', 'maak_klant', 'zoek_artikelen', 'klant_details', 'prijs_voor_klant', 'status_opvragen', 'boek_uren', 'boek_materiaal', 'maak_concept_werkorder', 'plan_maken', 'plan_details', 'plan_omzetten', 'maak_rapport_excel', 'maak_concept_offerte']);
   const userId = (await installer.get('/app/api/me')).body.user.id;
   // Planner: geen offertes en geen klanten in de app, dus ook niet via de AI (hetzelfde token).
   assert.strictEqual((await admin.patch(`/app/api/admin/users/${userId}`, { role: 'planner' })).status, 200);
   assert.deepStrictEqual(await toolNames(), ['zoek_artikelen', 'status_opvragen', 'boek_uren', 'boek_materiaal', 'maak_concept_werkorder', 'maak_rapport_excel']);
   // Zonder het recht plannen zijn de plantools er niet, ook niet met hetzelfde token.
-  for (const name of ['plan_maken', 'plan_details']) assert.strictEqual((await callTool(base, connection.accessToken, name, { ...GARDEN, planId: 'x' })).isError, true, name);
+  for (const name of ['plan_maken', 'plan_details', 'plan_omzetten']) assert.strictEqual((await callTool(base, connection.accessToken, name, { ...GARDEN, planId: 'x' })).isError, true, name);
   for (const [name, args] of [['zoek_klant', { zoekterm: 'Klant' }], ['maak_klant', { naam: 'Nieuw' }], ['maak_concept_offerte', { regels: [{ omschrijving: 'x', aantal: 1 }] }]]) {
     assert.strictEqual((await callTool(base, connection.accessToken, name, args)).isError, true, name);
   }
@@ -1083,4 +1083,62 @@ test('plan_maken: weigert ongeldige invoer zonder iets te bewaren', async () => 
   // Zonder de scope is de tool er niet.
   const narrow = await connect(base, admin, { scope: 'klanten.lezen' });
   assert.match((await callTool(base, narrow.accessToken, 'plan_maken', { ...GARDEN })).structuredContent.fout, /toestemming/);
+});
+
+test('plan_omzetten: concept-offerte en werkorder uit een plan, vraagt terug zonder klant, koppelt alleen een goedgekeurd plan', async () => {
+  const { base, admin, installer, as } = await setup();
+  const boss = await connect(base, admin);
+  const worker = await connect(base, installer);
+  const customer = (await callTool(base, boss.accessToken, 'maak_klant', { naam: 'Piet Plan', postcode: '8071 AB', huisnummer: '1' })).structuredContent;
+  const plan = (await callTool(base, boss.accessToken, 'plan_maken', { ...GARDEN, klantNaam: 'Jansen' })).structuredContent;
+  assert.ok(plan.planId, JSON.stringify(plan));
+  // Zonder klant: terugvragen, niets aangemaakt.
+  const asked = await callTool(base, boss.accessToken, 'plan_omzetten', { planId: plan.planId, naar: 'offerte' });
+  assert.strictEqual(asked.isError, false, JSON.stringify(asked));
+  assert.strictEqual(asked.structuredContent.status, 'terugvragen');
+  assert.strictEqual((await admin.get('/app/api/quotes')).body.items.length, 0);
+  // Ongeldige invoer en onbekend plan.
+  assert.strictEqual((await callTool(base, boss.accessToken, 'plan_omzetten', { planId: plan.planId, naar: 'factuur', klantId: customer.id })).isError, true);
+  assert.strictEqual((await callTool(base, boss.accessToken, 'plan_omzetten', { planId: 'bestaat-niet', naar: 'offerte', klantId: customer.id })).isError, true);
+  // Offerte met klant: concept, plan niet goedgekeurd dus niet gekoppeld.
+  const quote = await callTool(base, boss.accessToken, 'plan_omzetten', { planId: plan.planId, naar: 'offerte', klantId: customer.id });
+  assert.strictEqual(quote.isError, false, JSON.stringify(quote));
+  assert.strictEqual(quote.structuredContent.status, 'concept');
+  assert.strictEqual(quote.structuredContent.aanPlanGekoppeld, false);
+  assert.ok(quote.structuredContent.regels > 0);
+  const saved = (await admin.get(`/app/api/quotes/${quote.structuredContent.offerteId}`)).body;
+  assert.strictEqual(saved.status, 'concept');
+  assert.strictEqual(saved.customerId, customer.id);
+  assert.ok(saved.data.lines.length > 0);
+  assert.ok(!saved.data.planId);
+  // Zonder klant maar bewust doorgaan: een offerte met alleen de tekst.
+  const loose = await callTool(base, boss.accessToken, 'plan_omzetten', { planId: plan.planId, naar: 'offerte', klant: { naam: 'Losse Klant' }, titel: 'Eigen titel' });
+  assert.strictEqual(loose.isError, false, JSON.stringify(loose));
+  assert.ok(loose.structuredContent.let_op);
+  // Werkorder: stappen uit de arbeid, niet ingepland.
+  const order = await callTool(base, boss.accessToken, 'plan_omzetten', { planId: plan.planId, naar: 'werkorder', klantId: customer.id });
+  assert.strictEqual(order.isError, false, JSON.stringify(order));
+  assert.ok(order.structuredContent.stappen > 0);
+  const workOrder = (await admin.get(`/app/api/workorders/${order.structuredContent.werkorderId}`)).body;
+  assert.ok(workOrder.id);
+  // Een andere organisatie en een rol zonder recht komen er niet in.
+  const stranger = await as('vreemd', 'ander');
+  assert.strictEqual((await stranger.put('/app/api/admin/settings', { aiConnector: true })).status, 200);
+  const strangerConnection = await connect(base, stranger);
+  assert.strictEqual((await callTool(base, strangerConnection.accessToken, 'plan_omzetten', { planId: plan.planId, naar: 'offerte', klant: { naam: 'X' } })).isError, true);
+  const userId = (await installer.get('/app/api/me')).body.user.id;
+  assert.strictEqual((await admin.post('/app/api/admin/roles', { label: 'Alleen plannen', rights: ['plannen'] })).status, 201);
+  assert.strictEqual((await admin.patch(`/app/api/admin/users/${userId}`, { role: 'alleen-plannen' })).status, 200);
+  for (const target of ['offerte', 'werkorder']) assert.strictEqual((await callTool(base, worker.accessToken, 'plan_omzetten', { planId: plan.planId, naar: target, klant: { naam: 'X' } })).isError, true, target);
+});
+
+test('plan_details: het 31e verzoek binnen een uur wordt geweigerd', async () => {
+  const { base, admin } = await setup();
+  const boss = await connect(base, admin);
+  const plan = (await callTool(base, boss.accessToken, 'plan_maken', { ...GARDEN })).structuredContent;
+  let refused = 0;
+  for (let call = 0; call < 31; call += 1) {
+    if ((await callTool(base, boss.accessToken, 'plan_details', { planId: plan.planId })).isError) refused += 1;
+  }
+  assert.strictEqual(refused, 1);
 });

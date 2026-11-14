@@ -14,7 +14,7 @@ const waiting = [];
 
 /**
  * Voert een functie van plan-builder.js uit in een werkthread.
- * @param {'buildPlan'|'summarizePlan'} method De functie.
+ * @param {'buildPlan'|'summarizePlan'|'quoteLinesFromPlan'} method De functie.
  * @param {Array} args De argumenten (gewone, kopieerbare waarden).
  * @returns {Promise<object>} De uitkomst van de functie; bij te lang rekenen of een fout { problems }.
  */
