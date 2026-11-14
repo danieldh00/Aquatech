@@ -201,8 +201,9 @@ function pngImage(buffer) {
   if (depth !== 8 || interlace || (type !== 2 && type !== 6) || !width || !height || width * height > 4e6) return null;
   const bytesPerPixel = type === 6 ? 4 : 3;
   let raw;
-  try { raw = zlib.inflateSync(Buffer.concat(idat)); } catch { return null; }
   const stride = width * bytesPerPixel;
+  // Uitpakken nooit groter dan de kop belooft: een PNG-bom (kleine IDAT die tot gigabytes uitpakt) geeft zo null.
+  try { raw = zlib.inflateSync(Buffer.concat(idat), { maxOutputLength: (stride + 1) * height }); } catch { return null; }
   if (raw.length < (stride + 1) * height) return null;
   const pixels = Buffer.alloc(stride * height);
   for (let y = 0; y < height; y++) {

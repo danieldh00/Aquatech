@@ -113,6 +113,21 @@ test('layoutProblem: logo, kleuren en contrast met duidelijke meldingen', () => 
   assert.match(layoutProblem({ logoMode: 'custom', logo: dataUrl(palette) }), /PDF/);
 });
 
+test('PNG-bom: een kleine PNG die veel groter uitpakt dan de kop belooft wordt geweigerd', () => {
+  const { pngImage } = require('../src/verkoop/pdf');
+  const png = makePng(8, 4);
+  const bomb = Buffer.from(png);
+  // Vervang de pixelgegevens door een veel grotere uitgepakte stroom (dezelfde kop: 8 x 4).
+  const header = png.subarray(0, 33);
+  const data = zlib.deflateSync(Buffer.alloc(50 * 1024 * 1024));
+  const chunkHead = Buffer.alloc(8);
+  chunkHead.writeUInt32BE(data.length, 0); chunkHead.write('IDAT', 4, 'latin1');
+  const bombPng = Buffer.concat([header, chunkHead, data, Buffer.alloc(4), png.subarray(png.length - 12)]);
+  assert.ok(pngImage(bomb), 'de gewone PNG werkt');
+  assert.strictEqual(pngImage(bombPng), null);
+  assert.match(layoutProblem({ logoMode: 'custom', logo: dataUrl(bombPng) }), /PDF|PNG/);
+});
+
 test('PDF-schrijver: lettertype met schreef meet en schrijft Times, en blijft binnen de regel', () => {
   assert.ok(textWidth('Voorbeeldtekst', 10, false, 'serif') < textWidth('Voorbeeldtekst', 10, false, 'sans'), 'Times is smaller dan Helvetica');
   assert.strictEqual(textWidth('Abc', 10, false, 'onbekend'), textWidth('Abc', 10, false, 'sans'), 'een onbekend lettertype valt terug op sans');
@@ -245,6 +260,7 @@ test('routes: lezen, opslaan, voorbeeld, rechten en scheiding tussen organisatie
   assert.strictEqual(packingPreview.status, 200);
   assert.strictEqual(packingPreview.raw.subarray(0, 5).toString('latin1'), '%PDF-');
   assert.strictEqual((await admin.post(`${url}/preview`, { layout: { headerColor: 'x' } })).status, 400);
+  assert.strictEqual((await admin.post(`${url}/preview`, { layout: DEFAULTS, kind: 'offerte' })).status, 400);
   assert.deepStrictEqual((await admin.get(url)).body.layout, before);
 
   // Standaard terugzetten.

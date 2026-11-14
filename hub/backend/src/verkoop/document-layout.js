@@ -6,6 +6,8 @@ const fs = require('fs');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const { pngImage } = require('./pdf');
+const { createRateLimiter } = require('../beveiliging/rate-limit');
+const { clientKey } = require('../beveiliging/auth');
 
 const Theme = require(path.join(FRONTEND_DIR, 'shared', 'theme.js'));
 const InvoiceCore = require(path.join(FRONTEND_DIR, 'facturen', 'invoice-core.js'));
@@ -284,6 +286,8 @@ function sampleOrder() {
  * @returns {void}
  */
 function registerDocumentLayoutRoutes(app, { settingsOf, colorsOf, invoicePdf, packingSlipsPdf, audit, requireJson }) {
+  // Opslaan en voorbeelden maken de PDF of controleren het logo op de eventloop: begrenzen per gebruiker.
+  const limiter = createRateLimiter({ windowMs: 60 * 1000, max: 30, keyFn: (req) => `documentopmaak:${req.tenantId}|${req.user ? req.user.id : clientKey(req)}` });
   /**
    * Het antwoord voor het beheerscherm.
    * @param {object} req Het verzoek.
@@ -297,7 +301,7 @@ function registerDocumentLayoutRoutes(app, { settingsOf, colorsOf, invoicePdf, p
 
   app.get('/api/admin/document-layout', (req, res) => { res.json(viewOf(req)); });
 
-  app.put('/api/admin/document-layout', requireJson, (req, res) => {
+  app.put('/api/admin/document-layout', requireJson, limiter, (req, res) => {
     const problem = layoutProblem(req.body && req.body.layout);
     if (problem) return res.status(400).json({ error: 'invalid_layout', message: problem });
     const clean = sanitizeDocumentLayout(req.body.layout);
@@ -307,7 +311,8 @@ function registerDocumentLayoutRoutes(app, { settingsOf, colorsOf, invoicePdf, p
   });
 
   // Voorbeeld-PDF met de opmaak uit het formulier (nog niet opgeslagen); schrijft niets.
-  app.post('/api/admin/document-layout/preview', requireJson, (req, res) => {
+  app.post('/api/admin/document-layout/preview', requireJson, limiter, (req, res) => {
+    if (req.body && req.body.kind !== undefined && !['invoice', 'packing'].includes(req.body.kind)) return res.status(400).json({ error: 'invalid_kind', message: 'Onbekend soort document.' });
     const problem = layoutProblem(req.body && req.body.layout);
     if (problem) return res.status(400).json({ error: 'invalid_layout', message: problem });
     const layout = sanitizeDocumentLayout(req.body.layout);
