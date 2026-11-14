@@ -451,7 +451,7 @@ ${offer.error ? `<p class="form-error" role="alert">${escapeHtml(offer.error)}</
 <form method="post" action="account" class="account-form">
 ${checkoutField({ name: 'password', label: 'Wachtwoord (minimaal 12 tekens)', value: '', autocomplete: 'new-password', type: 'password' })}
 ${checkoutField({ name: 'password2', label: 'Wachtwoord herhalen', value: '', autocomplete: 'new-password', type: 'password' })}
-<input class="trap" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
+<input class="trap" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
 ${captchaFields('register')}
 <button class="button secondary" type="submit">Account maken</button>
 </form></section>`;
