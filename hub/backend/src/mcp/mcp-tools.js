@@ -12,6 +12,7 @@
 // - boek_uren en boek_materiaal: uren en materiaalverbruik op een werkorder boeken, altijd op naam van de gebruiker zelf (zoals in de app).
 // - plan_maken en plan_details: een beregeningsplan maken uit vlakken in meters die de AI-app uit een tekening heeft gelezen (de app plaatst de
 //   sproeiers, deelt de zones in en rekent de stuklijst; opslaan als concept-plan in Beregeningsplanner) en een plan samenvatten. Zie beregening/plan-builder.js.
+// - plan_omzetten: een bewaard plan omzetten naar een CONCEPT-offerte (stuklijst met prijzen + arbeid) of een nieuwe werkorder (stappen + materiaal).
 // - maak_rapport_excel: een rapport (urenstaat, openstaande facturen, voorraadlijst) als Excel-bestand; de AI krijgt een link die alleen werkt
 //   voor deze gebruiker, ingelogd in AquaTech, 15 minuten lang (mcp-downloads.js). Nooit CSV.
 // Onduidelijk? De tools raden niet: zoeken met meerdere treffers geeft keuzeNodig, en maak_concept_offerte maakt niets aan zolang er
@@ -171,7 +172,7 @@ function findArticle(articles, code) {
  * Maakt de tools van de MCP-server.
  * @param {object} ctx { can(user, recht), searchCustomers(req, zoektekst), getCustomer(req, id), createCustomer(req, invoer),
  *   lookupAddress(invoer), verifyAddress(tekst), articleChoices(tenantId), quoteProfile(req), createDraft(req, data, customerId), quoteUrl(req, id),
- *   appUrl(req, pad), buildPlan(req, invoer), savePlan(req, planId, data), getPlan(req, planId), summarizePlan(req, data), periodLog(req, { from, to, userId, limit }), openInvoiceRows(req, limit), storeReport(req, bestandsnaam, buffer) (geeft { error } als het niet past), maxReportRows (voor tests), createWorkOrder(req, data), findWorkOrder(req, nummer), workLogOf(req, werkorderId), bookHours(req, werkorderId, invoer), bookMaterial(req, werkorderId, invoer), today(), customerOverview(req, klantId, gevraagd), defaultPaymentDays(req), customerBalance(req, klantId), priceCart(req, regels, klant),
+ *   appUrl(req, pad), buildPlan(req, invoer), savePlan(req, planId, data), getPlan(req, planId), summarizePlan(req, data), periodLog(req, { from, to, userId, limit }), openInvoiceRows(req, limit), storeReport(req, bestandsnaam, buffer) (geeft { error } als het niet past), maxReportRows (voor tests), createWorkOrder(req, data), planLines(req, planData, profiel), findWorkOrder(req, nummer), workLogOf(req, werkorderId), bookHours(req, werkorderId, invoer), bookMaterial(req, werkorderId, invoer), today(), customerOverview(req, klantId, gevraagd), defaultPaymentDays(req), customerBalance(req, klantId), priceCart(req, regels, klant),
  *   documentStatus(req, soort, nummer, opties), openInvoices(req, opties), audit(req, actie, detail) }.
  * @returns {{ list: Function, has: Function, call: Function }} De tools.
  */
@@ -845,6 +846,109 @@ function createMcpTools(ctx) {
         const summary = await ctx.summarizePlan(req, plan.data);
         if (summary.problems) return errorOf(`Dit plan kan niet samengevat worden: ${summary.problems.join(' ')}`, { problemen: summary.problems });
         return resultOf({ planId: plan.id, status: (plan.review && plan.review.status) || 'concept', link: ctx.appUrl(req, `beregening/?plan=${encodeURIComponent(plan.id)}`), ...summary });
+      },
+    },
+    plan_omzetten: {
+      scope: 'plannen.concept', rights: ['plannen'],
+      definition: {
+        title: 'Plan omzetten naar concept-offerte of werkorder',
+        description: 'Zet een bewaard beregeningsplan (uit plan_maken) om naar een CONCEPT-offerte (materiaal uit de stuklijst met de prijzen en het uurtarief van AquaTech, arbeid en voorrijkosten volgens het bedrijfsprofiel) '
+          + 'of naar een nieuwe werkorder (stappen met uren en het materiaal, dat reserveert voorraad). De gebruiker heeft het plan eerst gecontroleerd. Is iets onduidelijk (geen klant), dan maakt deze tool niets aan maar geeft status "terugvragen": '
+          + 'stel de vraag aan de gebruiker en roep opnieuw aan (of ookMetOpenPunten=true als de gebruiker bewust zonder klant door wil). Er wordt niets verstuurd; de medewerker controleert alles in AquaTech.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            planId: { type: 'string', minLength: 1, maxLength: 64, description: 'Id uit plan_maken.' },
+            naar: { type: 'string', enum: ['offerte', 'werkorder'] },
+            klantId: { type: 'string', maxLength: 64, description: 'Id uit zoek_klant of maak_klant (aanbevolen: dan staan naam en adres goed).' },
+            klant: {
+              type: 'object', description: 'Alleen als er geen klantId is: de klantgegevens uit het gesprek (zonder adres).',
+              properties: { naam: { type: 'string', maxLength: 200 }, email: { type: 'string', maxLength: 200 }, telefoon: { type: 'string', maxLength: 40 } },
+              additionalProperties: false,
+            },
+            titel: { type: 'string', maxLength: 200, description: 'Standaard de naam van het plan.' },
+            ookMetOpenPunten: { type: 'boolean', description: 'Alleen true nadat de gebruiker de vragen uit een eerder antwoord heeft beantwoord of bewust zonder klant door wil.' },
+          },
+          required: ['planId', 'naar'], additionalProperties: false,
+        },
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      },
+      /**
+       * Zet het plan om.
+       * @param {object} args De invoer.
+       * @param {object} req Het verzoek.
+       * @returns {Promise<object>} De uitkomst.
+       */
+      run: async (args, req) => {
+        const target = args.naar;
+        if (target !== 'offerte' && target !== 'werkorder') return errorOf('Kies naar "offerte" of "werkorder".');
+        if (target === 'offerte' && !(req.mcpScopes.has('offertes.concept') && ctx.can(req.user, 'offertes'))) return errorOf('Je mag via deze koppeling geen offertes maken (toestemming of recht ontbreekt).');
+        if (target === 'werkorder' && !(req.mcpScopes.has('werkorders.concept') && ctx.can(req.user, 'werkorders'))) return errorOf('Je mag via deze koppeling geen werkorders maken (toestemming of recht ontbreekt).');
+        if (!ctx.can(req.user, 'plannen')) return errorOf('Je mag in AquaTech geen plannen bekijken.');
+        if (!withinLimit(planReadsPerHour, req)) return errorOf(READS_LIMITED);
+        const plan = ctx.getPlan(req, cleanText(args.planId, 64));
+        if (!plan) return errorOf('Geen plan met dit id gevonden.');
+        let customer = { name: '', contact: '', address: '', email: '', phone: '' };
+        let customerId = null;
+        const wantedId = cleanText(args.klantId, 64);
+        if (wantedId) {
+          if (!ctx.can(req.user, 'klanten')) return errorOf('Je mag in AquaTech geen klantgegevens opzoeken. Geef de klant als tekst op (klant.naam) in plaats van klantId.');
+          const account = ctx.getCustomer(req, wantedId);
+          if (!account || account.disabled) return errorOf('Deze klant bestaat niet (meer). Zoek opnieuw met zoek_klant.');
+          customerId = account.id;
+          customer = { name: account.companyName || account.displayName, contact: account.companyName ? account.displayName : '', address: account.address || '', email: account.email || '', phone: account.phone || '' };
+        } else if (args.klant && typeof args.klant === 'object') {
+          customer = { ...customer, name: cleanText(args.klant.naam, 200), email: cleanText(args.klant.email, 200), phone: cleanText(args.klant.telefoon, 40) };
+        }
+        if (!customerId && !customer.name && args.ookMetOpenPunten !== true) {
+          return resultOf({ status: 'terugvragen', aangemaakt: false, vragen: [{ onderwerp: 'klant', vraag: `Voor welke klant is deze ${target}? Zoek hem met zoek_klant of maak hem aan met maak_klant.` }],
+            melding: 'Er is nog niets aangemaakt. Leg de vraag voor aan de gebruiker en roep opnieuw aan (of zet ookMetOpenPunten=true als de gebruiker bewust zonder klant door wil).' });
+        }
+        if (!withinLimit(plansPerHour, req)) return errorOf(`Te veel plannen dit uur via de AI-koppeling (hoogstens ${PLANS_PER_HOUR}). Probeer het later opnieuw.`);
+        const profile = ctx.quoteProfile(req);
+        const converted = await ctx.planLines(req, plan.data, profile);
+        if (converted.problems) return errorOf(`Dit plan kan niet omgezet worden: ${converted.problems.join(' ')}`, { problemen: converted.problems });
+        const lines = converted.lines || [];
+        if (!lines.length) return errorOf(`Het plan bevat geen materiaal of arbeid om om te zetten. ${(converted.warnings || []).join(' ')}`.trim());
+        const planTitle = cleanText(plan.title, 120);
+        const title = cleanText(args.titel, 200) || planTitle || (customer.name ? `Beregening ${customer.name}` : 'Beregening');
+        const warnings = converted.warnings || [];
+        const sourceNote = `Gemaakt via de AI-koppeling uit het plan "${planTitle || plan.id}": controleer regels en aantallen.`;
+        const planUrl = ctx.appUrl(req, `beregening/?plan=${encodeURIComponent(plan.id)}`);
+        if (target === 'offerte') {
+          if (!withinLimit(quotesPerHour, req) || !withinLimit(quotesPerDay, req)) return errorOf('Te veel offertes via de AI-koppeling in korte tijd. Probeer het later opnieuw.');
+          // Een offerte mag alleen aan een plan hangen dat is goedgekeurd (zoals in de app); anders staat de offerte los van het plan.
+          const approved = plan.review && plan.review.status === 'goedgekeurd';
+          const quote = ctx.createDraft(req, { title, intro: profile.intro || '', terms: profile.terms || '', customer, lines, internalNote: [sourceNote, ...warnings].join('\n'), ...(approved ? { planId: plan.id } : {}) }, customerId);
+          ctx.audit(req, 'offerte_concept_via_ai', { quoteId: quote.id, number: quote.number, regels: lines.length, planId: plan.id, via: 'plan' });
+          return resultOf({
+            offerteId: quote.id, nummer: quote.number, status: 'concept', link: ctx.quoteUrl(req, quote.id), planLink: planUrl, totaalExclBtw: quote.totalExcl, totaalInclBtw: quote.totalIncl,
+            regels: lines.length, samenvatting: converted.summary, aandachtspunten: warnings, aanPlanGekoppeld: Boolean(approved),
+            ...(customerId ? {} : { let_op: 'Niet gekoppeld aan een klant: het adres ontbreekt. Maak of zoek de klant en kies hem in de offerte.' }),
+            ...(approved ? {} : { let_op_plan: 'Het plan is nog niet goedgekeurd, dus de offerte is niet aan het plan gekoppeld. Laat het plan in de Beregeningsplanner goedkeuren als dat nodig is.' }),
+            melding: 'De offerte staat als concept klaar, met de materiaalprijzen en het uurtarief van AquaTech. Controleer hem in AquaTech en verstuur hem daar zelf.',
+          });
+        }
+        if (!withinLimit(workOrdersPerHour, req) || !withinLimit(workOrdersPerDay, req)) return errorOf('Te veel werkorders via de AI-koppeling in korte tijd. Probeer het later opnieuw.');
+        const articles = articlesOf(req.tenantId);
+        const steps = lines.filter((line) => line.section === 'arbeid').slice(0, MAX_ORDER_ITEMS).map((line) => ({ phase: 'uitvoering', title: cleanText(line.description, 300), hours: Number(line.qty) || 0 }));
+        const materials = [];
+        const skipped = [];
+        for (const line of lines.filter((entry) => entry.section === 'materiaal' && entry.code)) {
+          const match = findArticle(articles, line.code);
+          if (!match || (Array.isArray(match.article.variants) && match.article.variants.length)) { skipped.push(`${line.code} (${line.qty})`); continue; }
+          materials.push({ code: match.article.code, description: match.article.name || line.description, qty: line.qty, unit: match.article.unit || line.unit || 'st' });
+        }
+        const cappedMaterials = materials.slice(0, MAX_ORDER_ITEMS);
+        if (materials.length > MAX_ORDER_ITEMS) skipped.push(`${materials.length - MAX_ORDER_ITEMS} materiaalregels (te veel voor één werkorder)`);
+        const internalNote = [sourceNote, ...(!customer.name ? ['Geen klant gekoppeld.'] : []), ...(skipped.length ? [`Niet op de werkorder gezet: ${skipped.join(', ')}.`] : []), ...warnings].join('\n');
+        const workOrder = ctx.createWorkOrder(req, { title, customer, instructions: `Uitvoering beregeningsplan. Plan: ${planUrl}`, steps, materials: cappedMaterials, internalNote });
+        ctx.audit(req, 'werkorder_concept_via_ai', { workOrderId: workOrder.id, number: workOrder.number, stappen: steps.length, materiaal: cappedMaterials.length, planId: plan.id, via: 'plan' });
+        return resultOf({
+          werkorderId: workOrder.id, nummer: workOrder.number, status: 'nieuw', link: ctx.appUrl(req, `werkorders/?id=${encodeURIComponent(workOrder.id)}`), planLink: planUrl,
+          stappen: steps.length, materiaalregels: cappedMaterials.length, nietOpDeWerkorder: skipped, aandachtspunten: warnings,
+          melding: 'De werkorder staat als nieuw klaar (niet ingepland, geen uitvoerder) en het materiaal is gereserveerd. Controleer stappen en materiaal in AquaTech.',
+        });
       },
     },
     maak_rapport_excel: {

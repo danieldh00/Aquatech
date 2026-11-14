@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const { FRONTEND_DIR } = require('../paths');
+const QuoteCore = require(path.join(FRONTEND_DIR, 'offertes', 'quote-core.js'));
 
 const LIB_DIR = path.join(FRONTEND_DIR, 'beregening', 'js');
 const LIB_FILES = ['geometry.js', 'sprinklerlib.js', 'catalog.js', 'planner.js', 'hydraulics.js', 'bom.js', 'concept.js'];
@@ -241,4 +242,20 @@ function summarizePlan(planData, tenantData = {}) {
   });
 }
 
-module.exports = { buildPlan, summarizePlan, sanitizeInput, AREA_TYPES, ELEMENT_KINDS, LIMITS };
+/**
+ * Offerteregels uit een bewaard plan (materiaal uit de stuklijst met de prijzen van de organisatie, arbeid en voorrijkosten volgens het bedrijfsprofiel),
+ * met dezelfde kern als de knop in de offertemodule.
+ * @param {object} planData Het bewaarde plan.
+ * @param {{ catalog?: object|null, library?: object|null }} tenantData Assortiment, prijzen en eigen sproeiers van de organisatie.
+ * @param {object} profile Het bedrijfsprofiel (uurtarief, opslag, btw, voorrijkosten).
+ * @returns {{ lines: object[], summary: object, warnings: string[] }} De regels, een samenvatting en waarschuwingen.
+ */
+function quoteLinesFromPlan(planData, tenantData = {}, profile = {}) {
+  const lab = loadLab(tenantData);
+  const state = plain(planData);
+  for (const key of ['areas', 'elements', 'sprinklers', 'zones']) if (!Array.isArray(state[key])) state[key] = [];
+  state.areas = state.areas.filter((area) => area && Array.isArray(area.pts) && area.pts.length >= 3 && area.pts.every((point) => point && Number.isFinite(point.x) && Number.isFinite(point.y)));
+  return plain(QuoteCore.fromPlan(state, lab, profile));
+}
+
+module.exports = { buildPlan, summarizePlan, quoteLinesFromPlan, sanitizeInput, AREA_TYPES, ELEMENT_KINDS, LIMITS };

@@ -102,3 +102,14 @@ test('runPlanTask: een berekening die niet eens start (niet te kopiëren invoer)
   const fine = await runPlanTask('buildPlan', [{ druk: 3, debiet: 2, vlakken: [LAWN] }, {}]);
   assert.ok(fine.report.sproeiers.totaal >= 1);
 });
+
+test('quoteLinesFromPlan: geeft offerteregels en slaat kapotte vlakken over', () => {
+  const { quoteLinesFromPlan } = require('../src/beregening/plan-builder');
+  const built = buildPlan({ druk: 3.5, debiet: 2.2, vlakken: [LAWN, BED] });
+  const clean = quoteLinesFromPlan(built.state, {}, {});
+  assert.ok(clean.lines.length > 0);
+  assert.ok(clean.lines.some((line) => line.section === 'arbeid'));
+  const broken = quoteLinesFromPlan({ ...built.state, areas: [...built.state.areas, { pts: [{ x: 0 }] }, null] }, {}, {});
+  assert.strictEqual(broken.lines.length, clean.lines.length);
+  assert.ok(Array.isArray(broken.warnings));
+});

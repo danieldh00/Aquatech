@@ -2500,6 +2500,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
        * @returns {object|null} Het bewaarde plan, of null als het niet bestaat of niet van de gebruiker is.
        */
       savePlan: (req, planId, data) => store.savePlan({ ...req.user, tenant_id: req.tenantId }, planId, data, ipOf(req)),
+      planLines: (req, planData, profile) => runPlanTask('quoteLinesFromPlan', [{ ...planData, background: undefined }, planTenantData(req.tenantId), profile]),
       getPlan: (req, planId) => store.getPlan({ ...req.user, tenant_id: req.tenantId }, planId),
       summarizePlan: (req, data) => runPlanTask('summarizePlan', [{ ...data, background: undefined }, planTenantData(req.tenantId)]),
       /**
