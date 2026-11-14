@@ -133,6 +133,12 @@ test('check: een geheim dat Google weigert is een fout van ons, niet van de bezo
   assert.deepStrictEqual(events.map((event) => event.type), ['misconfigured']);
 });
 
+test('check: een door Google als misvormd afgewezen token (bad-request) wordt geweigerd en laat nooit door', async () => {
+  const { service } = serviceWith(undefined, { fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ success: false, 'error-codes': ['bad-request'] }) }) });
+  const outcome = await service.check('t', { token: 'misvormd', action: 'login' });
+  assert.deepStrictEqual([outcome.ok, outcome.reason], [false, 'failed']);
+});
+
 test('checkSecret: ok, invalid of unreachable, zonder iets te bewaren', async () => {
   const { service, fake } = serviceWith();
   assert.strictEqual(await service.checkSecret(SECRET), 'ok');

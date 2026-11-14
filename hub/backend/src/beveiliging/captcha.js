@@ -16,7 +16,7 @@ const VERIFY_TIMEOUT_MS = 4000;
 const ACTIONS = ['login', 'register', 'planner_signup', 'forgot_password', 'business_request', 'checkout', 'drawing_submit'];
 
 /** Google-foutcodes die aan onze kant liggen (verkeerde of ontbrekende geheime sleutel): geen schuld van de bezoeker. */
-const CONFIGURATION_ERRORS = ['missing-input-secret', 'invalid-input-secret', 'bad-request'];
+const CONFIGURATION_ERRORS = ['missing-input-secret', 'invalid-input-secret'];
 
 /**
  * Maakt van een ingevulde sitesleutel een schone waarde.
