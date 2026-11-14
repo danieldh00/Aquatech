@@ -216,10 +216,12 @@ function summarizePlan(planData, tenantData = {}) {
   const { Geo, Hydraulics, BOM } = lab;
   const state = plain(planData);
   for (const key of ['areas', 'elements', 'sprinklers', 'zones']) if (!Array.isArray(state[key])) state[key] = [];
-  state.areas = state.areas.filter((area) => area && Array.isArray(area.pts) && area.pts.length >= 3);
+  const storedAreas = state.areas.length;
+  state.areas = state.areas.filter((area) => area && Array.isArray(area.pts) && area.pts.length >= 3 && area.pts.every((point) => point && Number.isFinite(point.x) && Number.isFinite(point.y)));
   state.settings = { pressure: DEFAULT_PRESSURE, flow: DEFAULT_FLOW, level: 'expert', methods: { bed: 'dripline', hedge: 'dripline', planter: 'drippers' }, ...(state.settings || {}) };
   state.calc = null;
   const warnings = [];
+  if (state.areas.length < storedAreas) warnings.push(`${storedAreas - state.areas.length} vlak(ken) in dit plan hebben ongeldige hoekpunten en zijn overgeslagen; controleer het plan in de Beregeningsplanner.`);
   let rows = [];
   if (Hydraulics.hasIrrigation(state)) {
     if (!state.zones.length) Hydraulics.autoZones(state);

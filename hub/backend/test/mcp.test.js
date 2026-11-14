@@ -603,6 +603,8 @@ test('rechten volgen de rol op dit moment: een andere rol beperkt de AI direct t
   // Planner: geen offertes en geen klanten in de app, dus ook niet via de AI (hetzelfde token).
   assert.strictEqual((await admin.patch(`/app/api/admin/users/${userId}`, { role: 'planner' })).status, 200);
   assert.deepStrictEqual(await toolNames(), ['zoek_artikelen', 'status_opvragen', 'boek_uren', 'boek_materiaal', 'maak_concept_werkorder', 'maak_rapport_excel']);
+  // Zonder het recht plannen zijn de plantools er niet, ook niet met hetzelfde token.
+  for (const name of ['plan_maken', 'plan_details']) assert.strictEqual((await callTool(base, connection.accessToken, name, { ...GARDEN, planId: 'x' })).isError, true, name);
   for (const [name, args] of [['zoek_klant', { zoekterm: 'Klant' }], ['maak_klant', { naam: 'Nieuw' }], ['maak_concept_offerte', { regels: [{ omschrijving: 'x', aantal: 1 }] }]]) {
     assert.strictEqual((await callTool(base, connection.accessToken, name, args)).isError, true, name);
   }

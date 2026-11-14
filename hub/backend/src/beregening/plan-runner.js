@@ -13,9 +13,10 @@ const TIMEOUT_MS = 20000;
  */
 function runPlanTask(method, args) {
   return new Promise((resolve) => {
-    const failed = { problems: ['Het plan kon niet berekend worden (te groot of te veel rekentijd). Maak de vlakken kleiner of splits het plan.'] };
+    const tooLong = { problems: ['Het plan kon niet berekend worden: te groot of te veel rekentijd. Maak de vlakken kleiner of splits het plan.'] };
+    const failed = { problems: ['Het plan kon niet verwerkt worden: de gegevens in het plan kloppen niet.'] };
     const worker = new Worker(path.join(__dirname, 'plan-worker.js'), { workerData: { method, args }, resourceLimits: { maxOldGenerationSizeMb: 256 } });
-    const timer = setTimeout(() => { worker.terminate(); resolve(failed); }, TIMEOUT_MS);
+    const timer = setTimeout(() => { worker.terminate(); resolve(tooLong); }, TIMEOUT_MS);
     worker.once('message', (message) => { clearTimeout(timer); resolve(message && !message.failed ? message.result : failed); });
     worker.once('error', () => { clearTimeout(timer); resolve(failed); });
   });

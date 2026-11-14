@@ -841,7 +841,9 @@ function createMcpTools(ctx) {
         if (!withinLimit(readsPerHour, req)) return errorOf(READS_LIMITED);
         const plan = ctx.getPlan(req, cleanText(args.planId, 64));
         if (!plan) return errorOf('Geen plan met dit id gevonden.');
-        return resultOf({ planId: plan.id, status: (plan.review && plan.review.status) || 'concept', link: ctx.appUrl(req, `beregening/?plan=${encodeURIComponent(plan.id)}`), ...await ctx.summarizePlan(req, plan.data) });
+        const summary = await ctx.summarizePlan(req, plan.data);
+        if (summary.problems) return errorOf(`Dit plan kan niet samengevat worden: ${summary.problems.join(' ')}`, { problemen: summary.problems });
+        return resultOf({ planId: plan.id, status: (plan.review && plan.review.status) || 'concept', link: ctx.appUrl(req, `beregening/?plan=${encodeURIComponent(plan.id)}`), ...summary });
       },
     },
     maak_rapport_excel: {

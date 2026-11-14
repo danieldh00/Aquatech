@@ -76,6 +76,8 @@ test('buildPlan: de gazons samen hebben een grens, zodat de berekening begrensd 
 test('summarizePlan: een bewaard plan met een kapot vlak geeft geen uitzondering', () => {
   const summary = summarizePlan({ areas: [{ type: 'lawn', name: 'Kapot' }, null], sprinklers: 'x' });
   assert.deepStrictEqual(summary.vlakken, []);
+  assert.ok(summary.aandachtspunten.some((text) => /ongeldige hoekpunten/.test(text)));
+  assert.deepStrictEqual(summarizePlan({ areas: [{ type: 'lawn', name: 'x', pts: [null, null, null] }] }).vlakken, []);
 });
 
 test('runPlanTask: rekent in een werkthread en meldt een fout als een melding', async () => {
