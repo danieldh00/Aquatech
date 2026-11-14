@@ -2,6 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { buildPlan, summarizePlan, sanitizeInput, LIMITS } = require('../src/beregening/plan-builder');
+const { runPlanTask } = require('../src/beregening/plan-runner');
 
 const LAWN = { soort: 'lawn', naam: 'Gazon', punten: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 8 }, { x: 0, y: 8 }] };
 const BED = { soort: 'bed', naam: 'Border', punten: [{ x: 0, y: 8 }, { x: 10, y: 8 }, { x: 10, y: 9.5 }, { x: 0, y: 9.5 }] };
@@ -64,4 +65,24 @@ test('summarizePlan: geeft voor een bewaard plan dezelfde aantallen als bij het 
   assert.strictEqual(summary.sproeiers.totaal, built.report.sproeiers.totaal);
   assert.strictEqual(summary.totaalMateriaalExclBtw, built.report.totaalMateriaalExclBtw);
   assert.deepStrictEqual(summarizePlan({}).vlakken, []);
+});
+
+test('buildPlan: de gazons samen hebben een grens, zodat de berekening begrensd blijft', () => {
+  const lawns = Array.from({ length: 3 }, (_, index) => ({ soort: 'lawn', naam: `Gazon ${index}`, punten: [{ x: index * 60, y: 0 }, { x: index * 60 + 45, y: 0 }, { x: index * 60 + 45, y: 45 }, { x: index * 60, y: 45 }] }));
+  const built = buildPlan({ druk: 3, debiet: 2, vlakken: lawns });
+  assert.match(built.problems[0], /samen/);
+});
+
+test('summarizePlan: een bewaard plan met een kapot vlak geeft geen uitzondering', () => {
+  const summary = summarizePlan({ areas: [{ type: 'lawn', name: 'Kapot' }, null], sprinklers: 'x' });
+  assert.deepStrictEqual(summary.vlakken, []);
+});
+
+test('runPlanTask: rekent in een werkthread en meldt een fout als een melding', async () => {
+  const built = await runPlanTask('buildPlan', [{ druk: 3, debiet: 2, vlakken: [LAWN] }, {}]);
+  assert.ok(built.report.sproeiers.totaal >= 1);
+  const summary = await runPlanTask('summarizePlan', [built.state, {}]);
+  assert.strictEqual(summary.sproeiers.totaal, built.report.sproeiers.totaal);
+  const broken = await runPlanTask('bestaatNiet', []);
+  assert.ok(broken.problems.length);
 });

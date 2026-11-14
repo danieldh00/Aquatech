@@ -73,7 +73,7 @@ const { createPackagingStore, registerPackagingRoutes } = require('./artikelen/p
 const { createPurchaseOrderStore, registerPurchaseOrderRoutes } = require('./artikelen/purchase-orders');
 const { createNewsStore, registerNewsRoutes, unreadCount } = require('./platform/news');
 const { createSprinklerStore, registerSprinklerRoutes } = require('./beregening/sprinklers');
-const { buildPlan: buildSprinklerPlan, summarizePlan: summarizeSprinklerPlan } = require('./beregening/plan-builder');
+const { runPlanTask } = require('./beregening/plan-runner');
 const { registerDrawingRoutes, RETENTION_DAYS: DRAWING_RETENTION_DAYS } = require('./beregening/drawings');
 const { createAiUsageStore } = require('./platform/ai-usage');
 const { createErrorReport, catchAsync, withCause, errorCounter } = require('./platform/error-report');
@@ -2491,7 +2491,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
        */
       periodLog: (req, range) => ({ ...workLogStore.period(req.tenantId, range), totals: workLogStore.periodTotals(req.tenantId, range) }),
       openInvoiceRows: (req, limit) => mcpLookups.openInvoiceRows(req.tenantId, limit),
-      buildPlan: (req, input) => buildSprinklerPlan(input, planTenantData(req.tenantId)),
+      buildPlan: (req, input) => runPlanTask('buildPlan', [input, planTenantData(req.tenantId)]),
       /**
        * Bewaart een plan als concept van de gebruiker (nieuw, of een eigen bestaand plan bijwerken).
        * @param {object} req Het verzoek.
@@ -2500,8 +2500,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
        * @returns {object|null} Het bewaarde plan, of null als het niet bestaat of niet van de gebruiker is.
        */
       savePlan: (req, planId, data) => store.savePlan({ ...req.user, tenant_id: req.tenantId }, planId, data, ipOf(req)),
-      getPlan: (req, planId) => store.getPlan(req.user, planId),
-      summarizePlan: (req, data) => summarizeSprinklerPlan(data, planTenantData(req.tenantId)),
+      getPlan: (req, planId) => store.getPlan({ ...req.user, tenant_id: req.tenantId }, planId),
+      summarizePlan: (req, data) => runPlanTask('summarizePlan', [data, planTenantData(req.tenantId)]),
       /**
        * Zet een Excel-rapport klaar voor download door deze gebruiker (15 minuten, alleen ingelogd).
        * @param {object} req Het verzoek.

@@ -1053,6 +1053,11 @@ test('plan_maken en plan_details: bouwt een concept uit meters, vraagt terug bij
   // Een andere organisatie ziet het plan niet.
   const stranger = await as('vreemd', 'ander');
   assert.strictEqual((await stranger.get(`/app/api/plans/${plan.planId}`)).status, 404);
+  // Ook via de AI-koppeling: een plan-id van een andere organisatie bestaat daar niet.
+  assert.strictEqual((await stranger.put('/app/api/admin/settings', { aiConnector: true })).status, 200);
+  const strangerConnection = await connect(base, stranger);
+  assert.strictEqual((await callTool(base, strangerConnection.accessToken, 'plan_details', { planId: plan.planId })).isError, true);
+  assert.strictEqual((await callTool(base, strangerConnection.accessToken, 'plan_maken', { ...GARDEN, planId: plan.planId })).isError, true);
 });
 
 test('plan_maken: weigert ongeldige invoer zonder iets te bewaren', async () => {

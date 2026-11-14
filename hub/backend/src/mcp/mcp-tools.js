@@ -793,7 +793,7 @@ function createMcpTools(ctx) {
        * @param {object} req Het verzoek.
        * @returns {object} De uitkomst.
        */
-      run: (args, req) => {
+      run: async (args, req) => {
         if (!withinLimit(plansPerHour, req)) return errorOf(`Te veel plannen dit uur via de AI-koppeling (hoogstens ${PLANS_PER_HOUR}). Probeer het later opnieuw of werk in de Beregeningsplanner.`);
         let customerName = cleanText(args.klantNaam, 120);
         let address = cleanText(args.adres, 200);
@@ -811,7 +811,7 @@ function createMcpTools(ctx) {
           return resultOf({ status: 'terugvragen', aangemaakt: false, vragen: questions,
             melding: 'Er is nog geen plan gemaakt. Leg de vraag voor aan de gebruiker en roep opnieuw aan (met druk en debiet, of met ookMetAannames=true).' });
         }
-        const built = ctx.buildPlan(req, { ...args, klantNaam: customerName, adres: address });
+        const built = await ctx.buildPlan(req, { ...args, klantNaam: customerName, adres: address });
         if (built.problems) return errorOf(`Het plan kon niet gemaakt worden: ${built.problems.join(' ')}`, { problemen: built.problems });
         const planId = cleanText(args.planId, 64);
         const saved = ctx.savePlan(req, planId || null, built.state);
@@ -837,11 +837,11 @@ function createMcpTools(ctx) {
        * @param {object} req Het verzoek.
        * @returns {object} De uitkomst.
        */
-      run: (args, req) => {
+      run: async (args, req) => {
         if (!withinLimit(readsPerHour, req)) return errorOf(READS_LIMITED);
         const plan = ctx.getPlan(req, cleanText(args.planId, 64));
         if (!plan) return errorOf('Geen plan met dit id gevonden.');
-        return resultOf({ planId: plan.id, status: (plan.review && plan.review.status) || 'concept', link: ctx.appUrl(req, `beregening/?plan=${encodeURIComponent(plan.id)}`), ...ctx.summarizePlan(req, plan.data) });
+        return resultOf({ planId: plan.id, status: (plan.review && plan.review.status) || 'concept', link: ctx.appUrl(req, `beregening/?plan=${encodeURIComponent(plan.id)}`), ...await ctx.summarizePlan(req, plan.data) });
       },
     },
     maak_rapport_excel: {

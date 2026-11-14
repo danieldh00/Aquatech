@@ -20,7 +20,7 @@ const ELEMENT_KINDS = ['source', 'controller', 'valvebox', 'outlet'];
 /** Beregeningsmethodes per soort vlak die de bouwer toestaat. */
 const DRIP_METHODS = { bed: ['dripline', 'drippers', 'none'], hedge: ['dripline', 'drippers', 'none'], planter: ['drippers', 'dripline', 'none'] };
 /** Grenzen: genoeg voor elke woontuin, maar geen rekentijd die de server vastzet. */
-const LIMITS = { areas: 40, points: 60, coordinate: 500, minAreaM2: 0.5, lawnM2: 2500, lawns: 8, elements: 12 };
+const LIMITS = { areas: 40, points: 60, coordinate: 500, minAreaM2: 0.5, lawnM2: 2500, totalLawnM2: 5000, lawns: 8, elements: 12 };
 /** Standaardwaarden die als aanname worden gemeld als de gebruiker ze niet gaf. */
 const DEFAULT_PRESSURE = 3.5;
 const DEFAULT_FLOW = 2.0;
@@ -146,6 +146,8 @@ function buildPlan(input, tenantData = {}) {
     state.areas.push({ id: `a${index + 1}`, type: area.type, name: area.name, pts: area.pts });
   });
   if (problems.length) return { problems };
+  const totalLawn = state.areas.filter((area) => area.type === 'lawn').reduce((sum, area) => sum + Geo.area(area.pts), 0);
+  if (totalLawn > LIMITS.totalLawnM2) return { problems: [`De gazons samen zijn ${Math.round(totalLawn)} m²: te groot voor een automatisch ontwerp (maximaal ${LIMITS.totalLawnM2} m²). Splits het plan.`] };
   const lawnAreas = state.areas.filter((area) => area.type === 'lawn');
   state.elements = plain(Concept.defaultElements(state.areas, clean.elements));
   const placedTypes = [];
@@ -214,6 +216,7 @@ function summarizePlan(planData, tenantData = {}) {
   const { Geo, Hydraulics, BOM } = lab;
   const state = plain(planData);
   for (const key of ['areas', 'elements', 'sprinklers', 'zones']) if (!Array.isArray(state[key])) state[key] = [];
+  state.areas = state.areas.filter((area) => area && Array.isArray(area.pts) && area.pts.length >= 3);
   state.settings = { pressure: DEFAULT_PRESSURE, flow: DEFAULT_FLOW, level: 'expert', methods: { bed: 'dripline', hedge: 'dripline', planter: 'drippers' }, ...(state.settings || {}) };
   state.calc = null;
   const warnings = [];
