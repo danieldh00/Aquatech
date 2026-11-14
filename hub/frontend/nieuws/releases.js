@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.16.4',
+      date: '2026-11-14',
+      title: 'Beregeningsplan maken via de AI-koppeling',
+      items: [
+        { text: 'Geef Claude of ChatGPT een tekening of foto van de tuin: de AI leest de vlakken af en AquaTech maakt er een beregeningsplan van met sproeiers, zones en een stuklijst met jouw prijzen. Je krijgt een verslag met aandachtspunten om in de chat na te kijken en bij te sturen; het plan staat als concept in de Beregeningsplanner. Je moet de AI-koppeling opnieuw koppelen om dit te kunnen gebruiken.', for: ['plannen'] },
+      ],
+    },
+    {
       version: '1.16.3',
       date: '2026-11-14',
       title: 'Rapporten als Excel via de AI-koppeling',

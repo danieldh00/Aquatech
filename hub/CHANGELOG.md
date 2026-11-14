@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.4
+
+- MCP-tools `plan_maken` en `plan_details` met nieuwe scope `plannen.concept` (recht `plannen`). Nieuwe `beregening/plan-builder.js` laat de plannerkern in een sandbox draaien met assortiment, prijzen en eigen sproeiers van de omgeving; vlakken in meters in, plan als concept uit. Terugvragen bij ontbrekende druk en debiet, bijsturen via `planId`, alleen eigen plannen. Limiet 10 plannen per uur, audit `plan_via_ai`. `registerShopRoutes` geeft `catalogOf` terug.
+
 ## 1.16.3
 
 - MCP-tool `maak_rapport_excel` met nieuwe scope `rapporten.excel`: soorten `urenstaat` (periode hooguit 400 dagen; met recht `planning` iedereen, anders alleen eigen regels; bladen Uren en Materiaal), `openstaande_facturen` (recht `facturen`) en `voorraadlijst` (recht `voorraad`). Eigen kleine xlsx-schrijver zonder bibliotheek (`mcp/xlsx-writer.js`, cellen die op een formule lijken worden tekst). Het bestand wacht 15 minuten in het geheugen (`mcp/mcp-downloads.js`, maximaal 10 per gebruiker en 50 MB totaal) en wordt opgehaald via `GET /app/api/mcp-download/<token>` voor dezelfde gebruiker en omgeving (anders 404, niet ingelogd 401). Limiet 20 rapporten per uur, audit `rapport_via_ai` en `rapport_gedownload`.
