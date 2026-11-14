@@ -21,7 +21,17 @@ const waiting = [];
 function runPlanTask(method, args) {
   return new Promise((resolve) => {
     if (waiting.length >= MAX_WAITING) return resolve({ problems: ['Er worden nu veel plannen berekend. Probeer het over een minuut opnieuw.'] });
-    waiting.push(() => runNow(method, args).then((outcome) => { running--; next(); resolve(outcome); }));
+    waiting.push(async () => {
+      let outcome;
+      try {
+        outcome = await runNow(method, args);
+      } catch {
+        outcome = { problems: ['Het plan kon niet verwerkt worden: de gegevens in het plan kloppen niet.'] };
+      }
+      running--;
+      next();
+      resolve(outcome);
+    });
     next();
   });
 }

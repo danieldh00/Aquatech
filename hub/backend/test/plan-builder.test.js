@@ -93,3 +93,12 @@ test('runPlanTask: meer berekeningen dan er tegelijk mogen draaien wachten hun b
   const outcomes = await Promise.all(Array.from({ length: 6 }, () => runPlanTask('buildPlan', [{ druk: 3, debiet: 2, vlakken: [LAWN] }, {}])));
   assert.ok(outcomes.every((outcome) => outcome.report && outcome.report.sproeiers.totaal >= 1));
 });
+
+test('runPlanTask: een berekening die niet eens start (niet te kopiëren invoer) geeft een melding en houdt de wachtrij vrij', async () => {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const broken = await runPlanTask('buildPlan', [{ vlakken: () => 1 }, {}]);
+    assert.ok(broken.problems.length);
+  }
+  const fine = await runPlanTask('buildPlan', [{ druk: 3, debiet: 2, vlakken: [LAWN] }, {}]);
+  assert.ok(fine.report.sproeiers.totaal >= 1);
+});
