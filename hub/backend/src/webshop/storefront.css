@@ -489,3 +489,8 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
 .consent-actions .button { min-width: 120px; }
 .link-button { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-decoration: underline; cursor: pointer; }
 @media (max-width: 600px) { .consent-actions { width: 100%; } .consent-actions .button { flex: 1; } }
+
+/* Onzichtbare captcha (reCAPTCHA): het kenmerk van Google is verborgen, daarom staat de vermelding onder het formulier. */
+.grecaptcha-badge { visibility: hidden; }
+.captcha-note { font-size: 0.75rem; color: var(--at-muted, #5b6575); margin: 0 0 12px; }
+.captcha-note a { color: inherit; text-decoration: underline; }

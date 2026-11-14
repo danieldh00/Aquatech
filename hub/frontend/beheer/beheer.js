@@ -605,6 +605,7 @@
     $('#s-shipping').hidden = !state.storefrontAllowed;
     renderPayment(view);
     renderAnalytics(view);
+    renderCaptcha(view);
     codeState.className = `state ${code.set ? 'ok' : 'off'}`;
     $('[data-clear="anthropicApiKey"]').disabled = !key.set;
     $('[data-clear="accessCode"]').disabled = !code.set;
@@ -889,6 +890,28 @@
   }
 
   /**
+   * Vult het formulier Onzichtbare captcha met de opgeslagen instelling en toont of de captcha nu actief is.
+   * @param {object} view De instellingen zoals de server ze toont (captcha en captchaSecret).
+   * @returns {void}
+   */
+  function renderCaptcha(view) {
+    const form = $('#s-captcha');
+    const captcha = view.captcha?.value || {};
+    const secret = view.captchaSecret || {};
+    form.enabled.checked = Boolean(captcha.enabled);
+    form.siteKey.value = captcha.siteKey || '';
+    form.minScore.value = captcha.minScore == null ? 0.5 : captcha.minScore;
+    form.onUnreachable.value = captcha.onUnreachable === 'block' ? 'block' : 'allow';
+    const secretState = $('#s-captcha-secret-state');
+    secretState.textContent = secret.set ? 'Ingesteld.' : 'Niet ingesteld.';
+    secretState.className = `state ${secret.set ? 'ok' : 'off'}`;
+    const status = $('#s-captcha-state');
+    const active = Boolean(captcha.enabled && captcha.siteKey && secret.set);
+    status.textContent = active ? 'Actief: de openbare formulieren controleren bezoekers op de achtergrond.' : captcha.enabled ? 'Niet actief: vul een geldige sitesleutel en een geheime sleutel in.' : 'Uit: de formulieren werken zonder captcha.';
+    status.className = `state ${active ? 'ok' : 'off'}`;
+  }
+
+  /**
    * Vult het formulier Betalen met de opgeslagen instelling.
    * @param {object} view De instellingen zoals de server ze toont (shopPayment en mollieApiKey).
    * @returns {void}
@@ -1128,6 +1151,38 @@
       const patch = { shopPayment: { online: paymentForm.online.checked, publicUrl: paymentForm.publicUrl.value.trim(), onAccount: paymentForm.onAccount.value, holdHours: Number(paymentForm.holdHours.value), accountHoldDays: paymentForm.accountHoldDays.value.trim() === '' ? '' : Number(paymentForm.accountHoldDays.value) } };
       if (paymentForm.mollieApiKey.value.trim()) patch.mollieApiKey = paymentForm.mollieApiKey.value.trim();
       saveSettings(paymentForm, patch, 'Betalen opgeslagen');
+    };
+    const captchaForm = $('#s-captcha');
+    /**
+     * Slaat de captcha-instelling op. Een nieuw geheim wordt eerst bij Google gecontroleerd: een geweigerd geheim wordt niet bewaard,
+     * een onbereikbaar Google geeft een waarschuwing maar bewaart wel.
+     * @param {SubmitEvent} event het verzenden
+     */
+    captchaForm.onsubmit = async (event) => {
+      event.preventDefault();
+      const errorBox = $('.err', captchaForm);
+      errorBox.textContent = '';
+      const siteKey = captchaForm.siteKey.value.trim();
+      const secret = captchaForm.captchaSecret.value.trim();
+      if (siteKey && !/^6L[A-Za-z0-9_-]{38}$/.test(siteKey)) { errorBox.textContent = 'Dit is geen geldige sitesleutel van reCAPTCHA. Hij begint met 6L en is 40 tekens lang.'; return; }
+      if (captchaForm.enabled.checked && !siteKey) { errorBox.textContent = 'Vul een sitesleutel in om de captcha aan te zetten.'; return; }
+      const score = Number(String(captchaForm.minScore.value).replace(',', '.'));
+      if (!(score >= 0.1 && score <= 0.9)) { errorBox.textContent = 'De minimumscore ligt tussen 0,1 en 0,9.'; return; }
+      let warning = '';
+      if (captchaForm.enabled.checked || secret) {
+        try {
+          const checked = await api('captcha/check', { method: 'POST', body: secret ? { secret } : {} });
+          if (checked.result === 'invalid') { errorBox.textContent = 'Google herkent deze geheime sleutel niet. Controleer of je de geheime sleutel (niet de sitesleutel) van een reCAPTCHA v3-sleutel hebt gekopieerd.'; return; }
+          if (checked.result === 'not_set' && captchaForm.enabled.checked) { errorBox.textContent = 'Vul ook de geheime sleutel in om de captcha aan te zetten.'; return; }
+          if (checked.result === 'unreachable') warning = ' (Google was nu niet bereikbaar: de sleutel is niet gecontroleerd)';
+        } catch (error) {
+          errorBox.textContent = error.message;
+          return;
+        }
+      }
+      const patch = { captcha: { enabled: captchaForm.enabled.checked, siteKey, minScore: score, onUnreachable: captchaForm.onUnreachable.value } };
+      if (secret) patch.captchaSecret = secret;
+      saveSettings(captchaForm, patch, `Captcha opgeslagen${warning}`);
     };
     const analyticsForm = $('#s-analytics');
     /**

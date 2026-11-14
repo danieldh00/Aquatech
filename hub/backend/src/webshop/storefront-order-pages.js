@@ -2,7 +2,7 @@
 // afrekenen en de bevestiging van een bestelling. Server-side opgebouwd, zonder
 // scripts; alle adressen zijn relatief aan de pagina (/<pagina>/).
 
-const { layout, escapeHtml, formatPrice } = require('./storefront-pages');
+const { layout, escapeHtml, formatPrice, captchaFields } = require('./storefront-pages');
 const { deliverySameOf } = require('./web-orders');
 const Analytics = require('./shop-analytics');
 
@@ -177,7 +177,7 @@ function shippingChoice(quote, country, method, summaries = {}, business = false
   return `<h2>Verzending</h2>
 ${countryField}
 <div data-shipping-options>${list}</div>
-<button class="button secondary update-totals" type="submit" name="action" value="update" formnovalidate>Totaal bijwerken</button>`;
+<button class="button secondary update-totals" type="submit" name="action" value="update" formnovalidate data-captcha-skip>Totaal bijwerken</button>`;
 }
 
 /** Namen van de betaalmethoden van Mollie zoals de klant ze kent. */
@@ -279,6 +279,7 @@ ${addressBlock({ delivery: true, value })}
 ${dropshipChoice(value)}
 ${paymentChoice(paymentOptions, value.paymentMethod)}
 <label class="terms-check"><input type="checkbox" name="terms" value="ja" required${value.terms === 'ja' ? ' checked' : ''}><span>Ik ga akkoord met de <a href="${ROOT}pagina/algemene-voorwaarden/" target="_blank" rel="noopener">algemene voorwaarden</a> en heb de <a href="${ROOT}pagina/privacyverklaring/" target="_blank" rel="noopener">privacyverklaring</a> gelezen. Als consument heb je <a href="${ROOT}pagina/herroepingsrecht/" target="_blank" rel="noopener">herroepingsrecht</a>.</span></label>
+${captchaFields('checkout')}
 <button class="button" type="submit" name="action" value="place">${paymentOptions.length === 1 && paymentOptions[0] === 'online' ? 'Bestellen en betalen' : 'Bestelling plaatsen'}</button>
 </form>
 <aside class="checkout-summary"><h2>Je bestelling</h2><ul>${items}${shippingRow}</ul>

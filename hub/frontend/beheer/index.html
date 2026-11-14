@@ -217,6 +217,29 @@
           </div>
           <div class="err" role="alert"></div>
         </form>
+        <form id="s-captcha" class="card-form settings" novalidate>
+          <h3>Onzichtbare captcha</h3>
+          <p class="muted small">Beschermt de openbare formulieren (inloggen, registreren, wachtwoord vergeten, afrekenen, zakelijk aanvragen en tekening indienen) tegen robots met Google reCAPTCHA v3. Bezoekers merken niets, er is geen puzzel. Het script van Google wordt pas geladen als iemand een formulier gaat gebruiken. Zonder sleutels of met de schakelaar uit werken de formulieren zoals voorheen en staat er niets van Google in de pagina. De inlogpagina gebruikt de instelling van de hoofdorganisatie.</p>
+          <label class="chk"><input type="checkbox" name="enabled"> <span>Onzichtbare captcha gebruiken</span></label>
+          <label>Sitesleutel<input name="siteKey" placeholder="6L…" autocomplete="off" spellcheck="false" maxlength="40" pattern="6L[A-Za-z0-9_\-]{38}"></label>
+          <div class="field">
+            <span class="label">Geheime sleutel</span>
+            <span class="state" id="s-captcha-secret-state"></span>
+            <input name="captchaSecret" type="password" autocomplete="new-password" spellcheck="false" placeholder="Leeg = ongewijzigd">
+            <span class="muted small">Maak in de reCAPTCHA-beheerconsole (<code>google.com/recaptcha/admin</code>) een sleutel van het type <b>reCAPTCHA v3</b> aan en voeg je webadres toe aan de domeinen. De geheime sleutel wordt versleuteld opgeslagen en nooit teruggestuurd naar de browser.</span>
+          </div>
+          <label>Minimumscore (0,1 tot 0,9)<input name="minScore" type="number" min="0.1" max="0.9" step="0.1"></label>
+          <span class="muted small">Google geeft elke bezoeker een score tussen 0 (robot) en 1 (mens). Onder dit minimum wordt het formulier geweigerd. Begin met 0,5; zie je dat echte klanten worden geweigerd, ga dan omlaag.</span>
+          <label>Als Google niet bereikbaar is<select name="onUnreachable">
+            <option value="allow">Bezoekers doorlaten (de andere beveiligingen blijven gelden)</option>
+            <option value="block">Formulieren blokkeren tot Google weer werkt</option>
+          </select></label>
+          <span class="muted small">Een storing bij Google of een foute geheime sleutel komt als waarschuwing in Bewaking en meldingen. Kom je er door een verkeerde sleutel niet meer in, start de server dan met <code>CAPTCHA_DISABLED=1</code>. Vermeld Google reCAPTCHA ook in je privacyverklaring.</span>
+          <p class="state" id="s-captcha-state" role="status"></p>
+          <p><button class="btn primary" type="submit">Captcha opslaan</button></p>
+          <div class="err" role="alert"></div>
+        </form>
+
         <form id="s-security" class="card-form settings">
           <h3>Sessies en bewaartermijnen</h3>
           <p class="muted small">Een sessie (ingelogd toestel) vervalt na de ingestelde dagen zonder gebruik, en hoe dan ook na de maximale duur. IP-adressen in de historie en het auditlog worden na de bewaartermijn gewist (AVG); auditregels daarna verwijderd.</p>

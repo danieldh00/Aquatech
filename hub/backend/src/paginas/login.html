@@ -18,6 +18,9 @@
     input { width: 100%; padding: 10px 12px; font: inherit; border: 1px solid #dde3e8; border-radius: 6px; }
     button { width: 100%; margin-top: 14px; padding: 10px; font: inherit; font-weight: 600; color: #fff; background: var(--at-green, #19924f); border: 0; border-radius: 999px; cursor: pointer; }
     button:disabled { opacity: .6; }
+    .grecaptcha-badge { visibility: hidden; }
+    .captcha-note { font-size: 11px; color: #6b7a86; margin: 12px 0 0; }
+    .captcha-note a { color: inherit; }
     .err { color: #c62828; font-size: 14px; min-height: 20px; margin-top: 10px; }
     .draw { margin-top: 14px; padding-top: 16px; border-top: 1px solid #dde3e8; text-align: center; }
     .draw[hidden] { display: none; }
@@ -42,6 +45,7 @@
       <input id="totp" name="totp" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" maxlength="20" placeholder="6 cijfers of een herstelcode">
     </div>
     <button id="b" type="submit">Inloggen</button>
+    <p class="captcha-note" id="captcha-note" hidden>Deze site wordt beschermd door reCAPTCHA. Het <a href="https://policies.google.com/privacy" rel="noopener noreferrer" target="_blank">privacybeleid</a> en de <a href="https://policies.google.com/terms" rel="noopener noreferrer" target="_blank">servicevoorwaarden</a> van Google zijn van toepassing.</p>
     <div class="err" id="e" role="alert"></div>
     <div class="draw" id="draw" hidden>
       <p>Geen account? Teken zelf je tuin en laat de tekening controleren door een installateur.</p>
@@ -67,6 +71,31 @@
         document.getElementById('draw').hidden = !info.enabled;
       } catch (_) { document.getElementById('draw').hidden = true; }
     }
+    // Onzichtbare captcha: de server zet alleen de sitesleutel in de pagina als hij aan staat; het script van Google laadt pas als de bezoeker begint.
+    const captchaKey = (document.querySelector('meta[name="aquatech-captcha"]') || {}).content || '';
+    let captchaLoaded = null;
+    /**
+     * Laadt ons captcha-script (dat het script van Google laadt) één keer.
+     * @returns {Promise<void>} klaar zodra AquatechCaptcha bestaat
+     */
+    function loadCaptcha() {
+      if (!captchaKey) return Promise.resolve();
+      if (!captchaLoaded) {
+        captchaLoaded = new Promise((resolve, reject) => {
+          const tag = document.createElement('script');
+          tag.src = root + 'shared/captcha.js';
+          tag.onload = () => resolve();
+          tag.onerror = () => reject(new Error('captcha'));
+          document.head.appendChild(tag);
+        });
+        captchaLoaded.then(() => window.AquatechCaptcha.load(captchaKey)).catch(() => { captchaLoaded = null; });
+      }
+      return captchaLoaded;
+    }
+    if (captchaKey) {
+      document.getElementById('captcha-note').hidden = false;
+      document.getElementById('f').addEventListener('focusin', () => { loadCaptcha(); }, { once: true });
+    }
     org.addEventListener('input', () => { clearTimeout(drawTimer); drawTimer = setTimeout(checkDraw, 400); });
     checkDraw();
     document.getElementById('f').addEventListener('submit', async (ev) => {
@@ -74,11 +103,16 @@
       const b = document.getElementById('b'), e = document.getElementById('e');
       b.disabled = true; e.textContent = '';
       try {
+        // Vlak voor het inloggen een vers token (eenmalig, twee minuten geldig); lukt dat niet, dan melden we het in plaats van te blijven hangen.
+        let captchaToken = '';
+        if (captchaKey) {
+          try { await loadCaptcha(); captchaToken = await window.AquatechCaptcha.token(captchaKey, 'login'); } catch (_) { captchaToken = ''; }
+        }
         // Relatief tot de root van de app (de pagina kan op elk pad staan).
         const base = location.pathname.replace(/[^/]*$/, '').split('/').filter(Boolean).slice(1).map(() => '..').join('/');
         const res = await fetch((base ? base + '/' : '') + 'api/auth/login', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tenant: org.value.trim(), username: document.getElementById('user').value.trim(), password: document.getElementById('code').value, code: document.getElementById('code').value, totp: document.getElementById('totp').value.trim() }),
+          body: JSON.stringify({ tenant: org.value.trim(), username: document.getElementById('user').value.trim(), password: document.getElementById('code').value, code: document.getElementById('code').value, totp: document.getElementById('totp').value.trim(), captchaToken }),
         });
         // Op /login naar het dashboard, anders dezelfde pagina opnieuw laden.
         if (res.ok) {

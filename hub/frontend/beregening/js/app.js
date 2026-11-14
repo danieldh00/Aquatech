@@ -766,10 +766,16 @@
           if (original && !data.background) {
             this.toast('De achtergrond is te groot en wordt niet meegestuurd.', true);
           }
+          // Onzichtbare captcha van de organisatie (alleen als die aan staat): een vers token vlak voor het indienen.
+          let captchaToken = '';
+          const captchaKey = this.drawing && this.drawing.captcha ? this.drawing.captcha.siteKey : '';
+          if (captchaKey && window.AquatechCaptcha) {
+            try { captchaToken = await window.AquatechCaptcha.token(captchaKey, 'drawing_submit'); } catch (error) { captchaToken = ''; }
+          }
           res = await fetch('api/public/drawing', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              org: this.org, name: form.name.value, email: form.email.value, phone: form.phone.value, address: form.address.value,
+              org: this.org, captchaToken, name: form.name.value, email: form.email.value, phone: form.phone.value, address: form.address.value,
               question: form.question.value, consent: form.consent.checked, website: form.website.value, data,
             }),
           });

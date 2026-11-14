@@ -2,7 +2,7 @@
 // registreren en "mijn account". Hetzelfde account werkt in de planner en het
 // klantportaal. Alle adressen zijn relatief aan de pagina (/<pagina>/).
 
-const { layout, escapeHtml } = require('./storefront-pages');
+const { layout, escapeHtml, captchaFields } = require('./storefront-pages');
 
 /** Relatief pad van deze pagina's naar de shop-startpagina. */
 const ROOT = '../';
@@ -52,6 +52,7 @@ function loginPage({ error = '', login = '', next = '' } = {}, groups = []) {
 ${next ? `<input type="hidden" name="volgende" value="${escapeHtml(next)}">` : ''}
 ${field({ name: 'login', label: 'E-mailadres of gebruikersnaam', value: login, autocomplete: 'username' })}
 ${field({ name: 'password', label: 'Wachtwoord', type: 'password', autocomplete: 'current-password' })}
+${captchaFields('login')}
 <button class="button" type="submit">Inloggen</button>
 </form>`;
   return formPage({ title: 'Inloggen', heading: 'Inloggen', form, groups,
@@ -78,6 +79,7 @@ ${field({ name: 'password2', label: 'Wachtwoord herhalen', type: 'password', aut
 ${businessFields({ companyName, kvkNumber, vatNumber }, false)}
 </fieldset>
 <input class="trap" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
+${captchaFields('register')}
 <button class="button" type="submit">Account maken</button>
 </form>`;
   return formPage({ title: 'Registreren', heading: 'Account maken', form, groups,
@@ -135,6 +137,7 @@ function forgotPage({ error = '', email = '', sent = false } = {}, groups = []) 
 ${error ? `<p class="form-error" role="alert">${escapeHtml(error)}</p>` : ''}
 <form method="post" action="./" class="account-form">
 ${field({ name: 'email', label: 'E-mailadres', type: 'email', value: email, autocomplete: 'email' })}
+${captchaFields('forgot_password')}
 <button class="button" type="submit">Stuur de link</button>
 </form>`;
   return formPage({ title: 'Wachtwoord vergeten', heading: 'Wachtwoord vergeten', form, groups, aside: `Weet je het weer? <a href="${ROOT}inloggen/">Log in</a>.` });
@@ -218,6 +221,7 @@ ${field({ name: 'displayName', label: 'Naam', value: displayName, autocomplete: 
 ${field({ name: 'email', label: 'E-mailadres', type: 'email', value: email, autocomplete: 'email' })}
 ${field({ name: 'password', label: 'Wachtwoord', type: 'password', autocomplete: 'new-password', hint: 'Minimaal 12 tekens.' })}
 <input class="trap" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">
+${captchaFields('planner_signup')}
 <button class="button" type="submit">Account maken en naar de planner</button>
 </form>`;
   return formPage({ title: 'Planner', heading: 'Naar de planner', form, groups,

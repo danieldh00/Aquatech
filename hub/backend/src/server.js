@@ -5,6 +5,7 @@ const express = require('express');
 const { createAuth, remoteIp, clientKey, parseCookies } = require('./beveiliging/auth');
 const { createAccountTokens } = require('./platform/account-tokens');
 const { createRateLimiter } = require('./beveiliging/rate-limit');
+const { createCaptcha, cspWith: captchaCspWith } = require('./beveiliging/captcha');
 const { loadOrCreateSecret } = require('./beveiliging/session-secret');
 const { createPlanAnalyzer, AnalyzeError, PROMPT_VERSION } = require('./beregening/plan-analyzer');
 const { createRecognitionStore, sanitizeSamples, sanitizeFinalPlan, imageHash } = require('./beregening/recognitions');
@@ -170,7 +171,7 @@ const normalizeCode = (code) => String(code || '').toUpperCase().replace(/[^A-Z0
 const PUBLIC_FILES = new Set([
   '/openbaar/offerte.html', '/openbaar/offerte.js', '/openbaar/offerte.css',
   '/openbaar/afspraak.html', '/openbaar/afspraak.js', '/openbaar/afspraak.css', '/werkorders/workorder-core.js',
-  '/shared/brand.css', '/shared/theme.css', '/shared/theme.js', '/shared/logo-white.png',
+  '/shared/brand.css', '/shared/theme.css', '/shared/theme.js', '/shared/logo-white.png', '/shared/captcha.js',
   '/shared/doc-text.js', '/shared/doc-layout.js', '/shared/doc-layout.css', '/offertes/quote-core.js', '/offertes/quote-view.js', '/offertes/quote-view.css',
   // Installeerbare app en offline werken: geen gegevens, wel nodig voordat
   // (en nadat) iemand is ingelogd (manifest en service worker worden zonder
@@ -195,7 +196,7 @@ function isPublicAsset(req) {
 // alleen met ?tekenen (anders gewoon de inlogpagina), en de code ervan. Er
 // zit geen data in: zonder account blijft het plan in de browser tot het
 // wordt ingediend.
-const PLANNER_FILES = new Set(['/shared/common.js', '/shared/env.js', '/shared/sidebar.js', '/shared/sidebar.css', '/shared/schild-white.png', '/shared/icons/logo-icon.png', '/dashboard/modules.js']);
+const PLANNER_FILES = new Set(['/shared/captcha.js', '/shared/common.js', '/shared/env.js', '/shared/sidebar.js', '/shared/sidebar.css', '/shared/schild-white.png', '/shared/icons/logo-icon.png', '/dashboard/modules.js']);
 /**
  * De planner zonder inloggen (tekening indienen, zie drawings.js): de pagina
  * alleen met ?tekenen (anders gewoon de inlogpagina), en de code ervan. Er
@@ -328,10 +329,10 @@ function staticHeaders(version) {
 
 /**
  * Bouwt de Express-app met alle routes en opslag.
- * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, mailerFor, shopFetch, vismaFetch, mollieFetch, addressFetch, viesFetch, googleFetch (Google Drive), shippingLabelProviders (koppelingen voor verzendlabels per vervoerder) en wanIp (tests vervangen hiermee de buitenwereld).
+ * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, mailerFor, shopFetch, vismaFetch, mollieFetch, addressFetch, viesFetch, captchaFetch (reCAPTCHA), googleFetch (Google Drive), shippingLabelProviders (koppelingen voor verzendlabels per vervoerder) en wanIp (tests vervangen hiermee de buitenwereld).
  * @returns {object} De app; app.locals bevat settings, onderhoud en synchronisatie.
  */
-function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, createOrderReader = createDefaultOrderReader, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, googleFetch, shippingLabelProviders = {}, wanIp = createWanIp(), loginDelayMs = 1000 }) {
+function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, createOrderReader = createDefaultOrderReader, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, captchaFetch, googleFetch, shippingLabelProviders = {}, wanIp = createWanIp(), loginDelayMs = 1000 }) {
   const version = readVersion();
   const database = db || openDb();
   const store = createStore(database);
@@ -419,7 +420,13 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (!authHtml.has(file)) authHtml.set(file, fs.readFileSync(file, 'utf8'));
     // Zonder multitenancy geen organisatiecode op de inlogpagina (elementen met data-multi).
     const css = Theme.css(themeFor(tenantId)) + (file === LOGIN_PAGE && !multitenancyOn() ? '[data-multi]{display:none!important}' : '');
-    const html = authHtml.get(file);
+    let html = authHtml.get(file);
+    // Onzichtbare captcha: alleen op de inlogpagina en alleen als hij aan staat staat de sitesleutel in de pagina en de CSP is uitgebreid.
+    const captchaKey = file === LOGIN_PAGE ? captcha.publicOf(tenant.id) : null;
+    if (captchaKey) {
+      res.setHeader('Content-Security-Policy', captchaCspWith(CSP));
+      html = html.replace('</head>', `  <meta name="aquatech-captcha" content="${captchaKey.siteKey}">\n</head>`);
+    }
     res.type('html').send(css ? html.replace('</head>', `  <style>${css}</style>\n</head>`) : html);
   }
   const installCode = setupCode || env.SETUP_CODE || newSetupCode();
@@ -467,6 +474,40 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const audit = (req, action, detail = {}, userId, tenantId) => store.audit({ tenantId: tenantId || req.tenantId || tenant.id,
     userId: userId === undefined ? req.user?.id || null : userId, action,
     detail: req.user?.impersonator ? { ...detail, impersonatie: req.user.impersonator.username } : detail, ip: remoteIp(req) });
+  // Onzichtbare captcha op de openbare formulieren (beveiliging/captcha.js). Noodschakelaar: omgeving CAPTCHA_DISABLED=1 (bijv. als een
+  // verkeerde sleutel het inloggen blokkeert). Meldingen van een onbereikbaar Google of een foute geheime sleutel gaan naar de bewaking.
+  const captchaDegraded = new Set();
+  const captcha = createCaptcha({
+    settingsFor: (id) => settingsFor(id), fetchImpl: captchaFetch, disabled: env.CAPTCHA_DISABLED === '1',
+    /**
+     * Legt een uitkomst van de captcha vast voor de bewaking: een waarschuwing zolang Google niet werkt, en het herstel daarna.
+     * @param {string} tenantId De omgeving.
+     * @param {{ type: string }} event De gebeurtenis (zie createCaptcha).
+     * @returns {void}
+     */
+    report: (tenantId, event) => {
+      const problem = event.type === 'unreachable' || event.type === 'misconfigured';
+      if (!problem && !(event.type === 'ok' && captchaDegraded.has(tenantId))) return;
+      if (problem) captchaDegraded.add(tenantId); else captchaDegraded.delete(tenantId);
+      const message = event.type === 'misconfigured' ? 'Google weigert de geheime sleutel van reCAPTCHA. Controleer de sleutels in Beheer > Toegang & beveiliging > Onzichtbare captcha.'
+        : 'Google reCAPTCHA is niet bereikbaar; de formulieren laten bezoekers nu door of blokkeren ze, volgens de instelling.';
+      monitor.report(tenantId, 'captcha', { ok: !problem, severity: 'warning', title: 'Onzichtbare captcha (reCAPTCHA)', message }).catch(() => {});
+    } });
+  /**
+   * Controleert de captcha van een openbaar formulier en legt een weigering vast in het auditlog (zonder het token).
+   * @param {object} req Het verzoek.
+   * @param {string} tenantId De omgeving waarvan de captcha-instelling geldt.
+   * @param {string} action De actie van het formulier (zie ACTIONS in captcha.js).
+   * @param {*} token Het token uit het formulier.
+   * @returns {Promise<{ ok: boolean, status?: number, error?: string, message?: string }>} De uitkomst; bij een weigering ook de HTTP-status.
+   */
+  const captchaGate = async (req, tenantId, action, token) => {
+    const outcome = await captcha.check(tenantId, { token, action, remoteIp: remoteIp(req) });
+    if (outcome.ok) return outcome;
+    if (outcome.reason !== 'missing') audit(req, 'captcha_geweigerd', { action, reason: outcome.reason }, null, tenantId);
+    const unavailable = outcome.reason === 'unreachable' || outcome.reason === 'misconfigured';
+    return { ...outcome, status: unavailable ? 503 : 400, error: unavailable ? 'captcha_unavailable' : 'captcha_failed' };
+  };
   const impersonation = createImpersonation({ store, imp: createImpersonationStore(database), auth, audit, mainTenantId: tenant.id,
     /**
      * Mag dit account deze omgeving beheren (recht beheer en de omgeving hoort bij zijn organisatie)?
@@ -652,10 +693,22 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // AI-koppeling (mcp/mcp-server.js): een concept-offerte met tot 100 regels.
   app.use('/mcp', express.json({ limit: '256kb' }));
   app.use(express.json({ limit: '16kb' }));
+  /**
+   * Of dit verzoek de openbare planner voor het indienen van een tekening opent (`?tekenen`, zonder inloggen) bij een organisatie waar de
+   * onzichtbare captcha aan staat: alleen dan mag die pagina de scripts van reCAPTCHA laden.
+   * @param {object} req Het verzoek.
+   * @returns {boolean} true als de Content-Security-Policy erbij uitgebreid moet worden.
+   */
+  const publicPlannerCaptcha = (req) => {
+    if (req.method !== 'GET' || !Object.prototype.hasOwnProperty.call(req.query, 'tekenen') || !/\/beregening\/?(index\.html)?$/.test(req.path)) return false;
+    const slug = String(req.query.org ?? '').trim().toLowerCase().slice(0, 64);
+    const owner = store.getTenantBySlug(slug || 'default');
+    return Boolean(owner) && !auth.isAuthenticated(req) && Boolean(captcha.publicOf(owner.id));
+  };
   app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'same-origin');
-    res.setHeader('Content-Security-Policy', CSP);
+    res.setHeader('Content-Security-Policy', publicPlannerCaptcha(req) ? captchaCspWith(CSP) : CSP);
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
     res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
@@ -846,6 +899,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
 
   app.post('/api/auth/login', loginLimiter, wrap(async (req, res) => {
+    // Onzichtbare captcha vóór het controleren van het wachtwoord (zo telt een afgewezen robot niet mee voor de blokkering van een gebruiker).
+    const human = await captchaGate(req, tenant.id, 'login', req.body?.captchaToken);
+    if (!human.ok) return res.status(human.status).json({ error: human.error, message: human.message });
     const username = String(req.body?.username ?? '').trim().toLowerCase().slice(0, 60);
     if (username) {
       // De organisatiecode bepaalt de organisatie (leeg = hoofdtenant); dezelfde
@@ -1991,6 +2047,16 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.json(aiUsage.list(scope, req.query, { limit: req.query.limit, offset: req.query.offset }));
   });
 
+  // Onzichtbare captcha: controleert of Google een geheime sleutel kent (met een nepToken, er wordt niets bewaard). Zonder `secret` in de
+  // aanvraag geldt het opgeslagen geheim van deze omgeving. Begrensd, want elke aanroep gaat naar Google.
+  const captchaCheckLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, keyFn: (req) => `captcha-check:${req.user?.id || clientKey(req)}` });
+  app.post('/api/admin/captcha/check', requireJson, captchaCheckLimiter, wrap(async (req, res) => {
+    const typed = typeof req.body?.secret === 'string' ? req.body.secret.trim() : '';
+    const secret = typed || settingsFor(req.tenantId).get('captchaSecret');
+    if (!secret || secret.length > 100) return res.json({ result: 'not_set' });
+    res.json({ result: await captcha.checkSecret(secret) });
+  }));
+
   // WAN-IP van de server, voor een Exchange Online-connector op IP-basis
   // (Instellingen > E-mail). Voor alle tenants gelijk; een uur onthouden.
   app.get('/api/admin/wan-ip', async (req, res) => {
@@ -2274,7 +2340,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // ---------- Tekening indienen zonder inloggen, plan ter controle, goedkeuren.
   registerDrawingRoutes(app, {
     store, identify, requireUser, requirePlans, requireRight, requireJson, audit, remoteIp, tenantActive, publicLimiter, planLimiter, mailerFor,
-    settingsFor: (id) => settingsFor(id), canApprove: (user) => Roles.can(user, 'plannen.goedkeuren'),
+    settingsFor: (id) => settingsFor(id), canApprove: (user) => Roles.can(user, 'plannen.goedkeuren'), captcha, captchaGate,
   });
 
   // ---------- Offertes (module Offertes, zie quotes.js) ----------
@@ -3120,7 +3186,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   storefrontRouter = createStorefront({
     addressLookup, addressGuard, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore, data: storefrontData, itemImages: itemImageStore,
     orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, orderSlips, returns: webReturns, payments: webPayments,
-    vies,
+    vies, captcha, captchaGate,
     onOrder: (req, order) => audit(req, 'webshop_bestelling_geplaatst', { number: order.number, total: order.total }, order.userId, tenant.id),
     onReturn: (req, record) => audit(req, 'webshop_retour_aangevraagd', { number: record.number }, record.userId, tenant.id),
     onSlip: (req, order, action) => audit(req, `webshop_pakbon_${action}`, { number: order.number }, order.userId, tenant.id),
