@@ -50,6 +50,7 @@ test('buildPlan: grenzen en ongeldige invoer geven meldingen, geen uitzonderinge
     { vlakken: [{ soort: 'lawn', punten: [{ x: 'a', y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }] }] },
     { vlakken: Array.from({ length: LIMITS.lawns + 1 }, () => ({ soort: 'lawn', punten: square(5) })) },
     { vlakken: [LAWN], druk: 0 }, { vlakken: [LAWN], debiet: 100 }, { vlakken: [LAWN], sproeiertype: 'x' },
+    { vlakken: [LAWN], methodes: JSON.parse('{"constructor":"x","__proto__":"y"}') }, { vlakken: [LAWN], methodes: 'bed' },
   ]) {
     const built = buildPlan(input);
     assert.ok(Array.isArray(built.problems) && built.problems.length, JSON.stringify(input).slice(0, 80));

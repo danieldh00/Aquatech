@@ -108,8 +108,9 @@ function sanitizeInput(input) {
   if (pressure != null && !(pressure >= 0.5 && pressure <= 10)) problems.push('De waterdruk (bar) ligt tussen 0,5 en 10.');
   if (flow != null && !(flow >= 0.2 && flow <= 30)) problems.push('Het debiet (m³/u) ligt tussen 0,2 en 30.');
   const methods = { bed: 'dripline', hedge: 'dripline', planter: 'drippers' };
-  for (const [kind, method] of Object.entries(input.methodes || {})) {
-    if (!DRIP_METHODS[kind]) { problems.push(`Methode voor ${cleanText(kind, 20)}: kies bed, hedge of planter.`); continue; }
+  if (input.methodes != null && (typeof input.methodes !== 'object' || Array.isArray(input.methodes))) problems.push('Methodes: geef een object, bijvoorbeeld { bed: "drippers" }.');
+  for (const [kind, method] of Object.entries(input.methodes && typeof input.methodes === 'object' ? input.methodes : {})) {
+    if (!Object.hasOwn(DRIP_METHODS, kind)) { problems.push(`Methode voor ${cleanText(kind, 20)}: kies bed, hedge of planter.`); continue; }
     if (!DRIP_METHODS[kind].includes(method)) { problems.push(`Methode ${cleanText(method, 20)} voor ${kind}: kies uit ${DRIP_METHODS[kind].join(', ')}.`); continue; }
     methods[kind] = method;
   }
