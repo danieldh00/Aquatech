@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.16.5',
+      date: '2026-11-14',
+      title: 'Plan uit de AI-koppeling omzetten naar offerte of werkorder',
+      items: [
+        { text: 'Via Claude of ChatGPT kun je een gemaakt beregeningsplan nu direct omzetten naar een concept-offerte (materiaal, arbeid en voorrijkosten) of een nieuwe werkorder; je controleert alles daarna in AquaTech.', for: ['plannen', 'offertes', 'werkorders'] },
+      ],
+    },
+    {
       version: '1.16.4',
       date: '2026-11-14',
       title: 'Beregeningsplan maken via de AI-koppeling',

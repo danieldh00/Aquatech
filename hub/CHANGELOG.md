@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.16.5
+
+- MCP-tool `plan_omzetten` (scope `plannen.concept`, plus `offertes.concept` of `werkorders.concept`): `quoteLinesFromPlan` in `beregening/plan-builder.js` (werkthread) levert de offerteregels uit `QuoteCore.fromPlan`; de offerte is een concept en hangt alleen aan een goedgekeurd plan, de werkorder krijgt stappen uit de arbeidsregels en materiaal met een bestaande artikelcode. Vraagt terug zonder klant (`ookMetOpenPunten`). Audit `offerte_concept_via_ai`/`werkorder_concept_via_ai`.
+- Tests voor `plan_omzetten`, `quoteLinesFromPlan` en de limiet van `plan_details`; DOCS.md noemt nu alle MCP-tools.
+
 ## 1.16.4
 
 - MCP-tools `plan_maken` en `plan_details` met nieuwe scope `plannen.concept` (recht `plannen`). Nieuwe `beregening/plan-builder.js` laat de plannerkern in een sandbox draaien met assortiment, prijzen en eigen sproeiers van de omgeving; vlakken in meters in, plan als concept uit. Terugvragen bij ontbrekende druk en debiet, bijsturen via `planId`, alleen eigen plannen. Limiet 10 plannen per uur, audit `plan_via_ai`. `registerShopRoutes` geeft `catalogOf` terug.
