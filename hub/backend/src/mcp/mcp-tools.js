@@ -904,7 +904,6 @@ function createMcpTools(ctx) {
           return resultOf({ status: 'terugvragen', aangemaakt: false, vragen: [{ onderwerp: 'klant', vraag: `Voor welke klant is deze ${target}? Zoek hem met zoek_klant of maak hem aan met maak_klant.` }],
             melding: 'Er is nog niets aangemaakt. Leg de vraag voor aan de gebruiker en roep opnieuw aan (of zet ookMetOpenPunten=true als de gebruiker bewust zonder klant door wil).' });
         }
-        if (!withinLimit(plansPerHour, req)) return errorOf(`Te veel plannen dit uur via de AI-koppeling (hoogstens ${PLANS_PER_HOUR}). Probeer het later opnieuw.`);
         const profile = ctx.quoteProfile(req);
         const converted = await ctx.planLines(req, plan.data, profile);
         if (converted.problems) return errorOf(`Dit plan kan niet omgezet worden: ${converted.problems.join(' ')}`, { problemen: converted.problems });
@@ -931,10 +930,10 @@ function createMcpTools(ctx) {
         }
         if (!withinLimit(workOrdersPerHour, req) || !withinLimit(workOrdersPerDay, req)) return errorOf('Te veel werkorders via de AI-koppeling in korte tijd. Probeer het later opnieuw.');
         const articles = articlesOf(req.tenantId);
-        const steps = lines.filter((line) => line.section === 'arbeid').slice(0, MAX_ORDER_ITEMS).map((line) => ({ phase: 'uitvoering', title: cleanText(line.description, 300), hours: Number(line.qty) || 0 }));
+        const steps = lines.filter((line) => line.section === 'arbeid').filter((line) => Number(line.qty) > 0).slice(0, MAX_ORDER_ITEMS).map((line) => ({ phase: 'uitvoering', title: cleanText(line.description, 300), hours: Number(line.qty) }));
         const materials = [];
         const skipped = [];
-        for (const line of lines.filter((entry) => entry.section === 'materiaal' && entry.code)) {
+        for (const line of lines.filter((entry) => entry.section === 'materiaal' && entry.code && Number(entry.qty) > 0)) {
           const match = findArticle(articles, line.code);
           if (!match || (Array.isArray(match.article.variants) && match.article.variants.length)) { skipped.push(`${line.code} (${line.qty})`); continue; }
           materials.push({ code: match.article.code, description: match.article.name || line.description, qty: line.qty, unit: match.article.unit || line.unit || 'st' });
@@ -945,9 +944,9 @@ function createMcpTools(ctx) {
         const workOrder = ctx.createWorkOrder(req, { title, customer, instructions: `Uitvoering beregeningsplan. Plan: ${planUrl}`, steps, materials: cappedMaterials, internalNote });
         ctx.audit(req, 'werkorder_concept_via_ai', { workOrderId: workOrder.id, number: workOrder.number, stappen: steps.length, materiaal: cappedMaterials.length, planId: plan.id, via: 'plan' });
         return resultOf({
-          werkorderId: workOrder.id, nummer: workOrder.number, status: 'nieuw', link: ctx.appUrl(req, `werkorders/?id=${encodeURIComponent(workOrder.id)}`), planLink: planUrl,
+          werkorderId: workOrder.id, nummer: workOrder.number, status: workOrder.status, link: ctx.appUrl(req, `werkorders/?id=${encodeURIComponent(workOrder.id)}`), planLink: planUrl,
           stappen: steps.length, materiaalregels: cappedMaterials.length, nietOpDeWerkorder: skipped, aandachtspunten: warnings,
-          melding: 'De werkorder staat als nieuw klaar (niet ingepland, geen uitvoerder) en het materiaal is gereserveerd. Controleer stappen en materiaal in AquaTech.',
+          melding: 'De werkorder staat klaar (niet ingepland, geen uitvoerder) en het materiaal is gereserveerd. Controleer stappen en materiaal in AquaTech.',
         });
       },
     },
