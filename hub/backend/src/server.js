@@ -40,6 +40,7 @@ const webOrdersModule = require('./webshop/web-orders');
 const { createWebOrderStore, registerWebOrderRoutes } = webOrdersModule;
 const { createPackingSlips, registerPackingSlipRoutes } = require('./webshop/packing-slips');
 const { createOrderpick, registerOrderpickRoutes } = require('./webshop/orderpick');
+const { createGoodsReceipt, registerGoodsReceiptRoutes } = require('./artikelen/goods-receipt');
 const { createShippingLabels } = require('./webshop/shipping-labels');
 const { createOrderSlips } = require('./webshop/order-slips');
 const { createQuoteOrders, registerQuoteOrderRoutes } = require('./verkoop/quote-orders');
@@ -2727,6 +2728,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     orderpick: createOrderpick(database, { orders: webOrders, slips: packingSlips, labels: createShippingLabels({ providers: shippingLabelProviders }) }),
     requireRight, requireJson, audit,
     limiter: createRateLimiter({ windowMs: 60 * 1000, max: 60, keyFn: (req) => req.user?.id || clientKey(req) }),
+  });
+  // Goederenontvangst in dezelfde app (artikelen/goods-receipt.js, recht orderpick): een ontvangst boekt de voorraad en geeft backorders vrij.
+  registerGoodsReceiptRoutes(app, {
+    receipts: createGoodsReceipt(database, { purchaseOrders: purchaseOrderStore, release: (tenantId, itemIds) => webOrders.markBackorderReady(tenantId, itemIds) }),
+    requireJson, audit,
   });
   registerWebOrderRoutes(app, { orders: webOrders, requireJson, audit, invoices: webOrderInvoices, payments: webPayments, returns: webReturns });
   // Offerte omzetten naar bestelling (verkoop/quote-orders.js).

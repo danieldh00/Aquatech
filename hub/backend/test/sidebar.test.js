@@ -47,7 +47,7 @@ test('beheerder: de groepen staan in de afgesproken volgorde en niets gaat verlo
   assert.deepStrictEqual([...shown].sort(), [...expected].sort());
   assert.deepStrictEqual(idsOf(sections.find((section) => section.key === 'verkoop').items), ['offertes', 'webshop-bestellingen', 'klanten', 'klantdossier', 'facturen']);
   assert.deepStrictEqual(idsOf(sections.find((section) => section.key === 'planner').items), ['beregening', 'plannen', 'planning', 'werkorders', 'meldingen', 'uitbesteden']);
-  assert.deepStrictEqual(idsOf(sections.find((section) => section.key === 'magazijn').items), ['orderpick']);
+  assert.deepStrictEqual(idsOf(sections.find((section) => section.key === 'magazijn').items), ['orderpick', 'ontvangst']);
   assert.strictEqual(sections[0].items[0].id, '', 'Overzicht staat bovenaan');
 });
 

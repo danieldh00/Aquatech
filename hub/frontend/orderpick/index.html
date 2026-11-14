@@ -29,6 +29,10 @@
     <div id="op-denied" class="notice" hidden></div>
 
     <section id="op-list" hidden>
+      <div class="op-modes" role="tablist" aria-label="Wat wil je doen?">
+        <button type="button" class="op-mode active" data-mode="pick" role="tab" aria-selected="true">Picken</button>
+        <button type="button" class="op-mode" data-mode="receive" role="tab" aria-selected="false">Ontvangen</button>
+      </div>
       <div class="op-head">
         <h1>Te picken</h1>
         <button class="btn" id="op-refresh" type="button">Vernieuwen</button>
@@ -60,6 +64,42 @@
     </section>
 
     <section id="op-done" hidden></section>
+
+    <section id="rc-list" hidden>
+      <div class="op-modes" role="tablist" aria-label="Wat wil je doen?">
+        <button type="button" class="op-mode" data-mode="pick" role="tab" aria-selected="false">Picken</button>
+        <button type="button" class="op-mode active" data-mode="receive" role="tab" aria-selected="true">Ontvangen</button>
+      </div>
+      <div class="op-head">
+        <h1>Goederen ontvangen</h1>
+        <button class="btn" id="rc-refresh" type="button">Vernieuwen</button>
+      </div>
+      <div class="op-scanbar">
+        <input id="rc-lookup" type="text" placeholder="Scan het ordernummer of een artikel" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Ordernummer, leveranciersreferentie of artikel">
+        <button class="btn" id="rc-lookup-camera" type="button" hidden>Camera</button>
+      </div>
+      <p id="rc-list-note" class="muted"></p>
+      <div id="rc-orders" class="op-orders"></div>
+      <p id="rc-empty" class="muted" hidden>Er zijn geen bestelde inkooporders om te ontvangen.</p>
+    </section>
+
+    <section id="rc-order" hidden>
+      <div class="op-head">
+        <button class="btn" id="rc-back" type="button">← Terug</button>
+        <h1 id="rc-title"></h1>
+        <span id="rc-meta" class="muted"></span>
+      </div>
+      <div class="op-scanbar">
+        <input id="rc-scan" type="text" placeholder="Scan of typ de code en druk op Enter" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Code van het artikel">
+        <button class="btn" id="rc-camera" type="button" hidden>Camera</button>
+      </div>
+      <div id="rc-current" class="op-current"></div>
+      <div id="rc-finish" class="op-finish"></div>
+      <h2>Alle regels</h2>
+      <div id="rc-lines" class="op-lines"></div>
+    </section>
+
+    <section id="rc-done" hidden></section>
   </main>
 
   <div id="op-camera-view" class="op-camera" hidden>
@@ -77,5 +117,7 @@
   <script src="../shared/offline.js"></script>
   <script src="orderpick-core.js"></script>
   <script src="orderpick.js"></script>
+  <script src="receiving-core.js"></script>
+  <script src="receiving.js"></script>
 </body>
 </html>

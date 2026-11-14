@@ -52,7 +52,7 @@
     // Zonder verbinding gaat een pick in de wachtrij van de service worker (antwoord 202 { queued }); nooit met een samenvoegsleutel, elke pick staat op zichzelf.
     if (offlineLabel && window.AquatechOffline) Object.assign(headers, window.AquatechOffline.headers({ label: offlineLabel }));
     // Een sleutel per pick-aanroep: wordt die na een netwerkfout opnieuw verstuurd, dan wordt er niet dubbel gepickt.
-    if (path.endsWith('/pick') && window.crypto && crypto.randomUUID) headers['Idempotency-Key'] = crypto.randomUUID();
+    if (/\/(pick|receive)$/.test(path) && window.crypto && crypto.randomUUID) headers['Idempotency-Key'] = crypto.randomUUID();
     const response = await fetch(`../api/orderpick/${path}`, { method, cache: 'no-store', headers, body: body === undefined ? undefined : JSON.stringify(body) });
     if (!response.ok) {
       const out = await response.json().catch(() => ({}));
@@ -583,9 +583,10 @@
   // ---------- Camera ----------
   /**
    * Opent de camera en leest streepjescodes met de ingebouwde BarcodeDetector (alleen waar de browser die heeft).
+   * @param {Function} [onCode] Krijgt de gelezen code; standaard het scannen van een bestelling (de goederenontvangst geeft een eigen functie mee).
    * @returns {Promise<void>}
    */
-  async function startCamera() {
+  async function startCamera(onCode = handleScan) {
     if (!('BarcodeDetector' in window)) { toast('Deze browser kan niet scannen met de camera. Gebruik een scanner of typ de code.', true); return; }
     try {
       const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'itf', 'qr_code'] });
@@ -605,7 +606,7 @@
           lastCode = code;
           lastAt = Date.now();
           stopCamera();
-          handleScan(code);
+          onCode(code);
         } catch (_) { /* een mislukt beeld: volgende poging */ }
       }, 250);
     } catch (error) {
@@ -645,7 +646,7 @@
       event.target.value = '';
       handleScan(value);
     });
-    $('#op-camera').addEventListener('click', startCamera);
+    $('#op-camera').addEventListener('click', () => startCamera());
     $('#op-camera-close').addEventListener('click', stopCamera);
     $('#op-current').addEventListener('click', (event) => {
       const stepper = event.target.closest('[data-qty]');
@@ -698,7 +699,10 @@
       return;
     }
     state.owner = window.AquatechCommon.ownerOf(me) || 'onbekend';
+    Object.assign(window.OrderpickUi, { allowed: true, owner: state.owner, rights: me.rights || [] });
     bind();
+    // Goederenontvangst (receiving.js) neemt het scherm over met #ontvangst of ?ontvangst=<inkooporder>.
+    if (!id && (location.hash === '#ontvangst' || new URLSearchParams(location.search).has('ontvangst'))) return;
     if (id) {
       await openOrder(id);
       if (state.order) return;
@@ -708,5 +712,7 @@
     window.AquatechCommon.onReturn(() => { if (!$('#op-list').hidden) loadList().catch(() => {}); });
   }
 
-  init();
+  // De hulpmiddelen die receiving.js (goederenontvangst op dezelfde pagina) hergebruikt; `ready` is klaar zodra het eerste scherm staat.
+  window.OrderpickUi = { toast, vibrate, beep, esc, when, api, startCamera, stopCamera, showPickList: showList, allowed: false, owner: '' };
+  window.OrderpickUi.ready = init();
 })();

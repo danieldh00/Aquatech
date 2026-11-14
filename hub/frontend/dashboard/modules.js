@@ -103,6 +103,18 @@
       right: 'orderpick',
     },
     {
+      id: 'ontvangst',
+      navGroup: 'magazijn',
+      partOf: 'voorraad',
+      title: 'Goederenontvangst',
+      navTitle: 'Ontvangst',
+      description: 'Geleverde goederen van een inkooporder ontvangen: de order kiezen of het ordernummer scannen, de artikelen scannen, aantallen bevestigen (deelontvangst kan) en inboeken. Wachtende backorders staan daarna weer klaar om te picken.',
+      href: 'orderpick/#ontvangst',
+      icon: 'truck',
+      status: 'actief',
+      right: 'orderpick',
+    },
+    {
       id: 'klanten',
       navGroup: 'verkoop',
       title: 'Klanten',
@@ -142,7 +154,7 @@
       status: 'actief',
       right: 'voorraad',
       // Bestelvoorstellen: alleen de voorstel-routes vergrendeld, niet /api/purchase-orders zelf (die volgt het recht voorraad).
-      configuration: { sections: ['labels', 'bestelvoorstellen'], settings: ['labelTemplates', 'priceFactors', 'purchaseProposals'], routes: ['/api/stock/label-templates', '/api/stock/labels', '/api/stock/price-factors', '/api/purchase-orders/proposals'] },
+      configuration: { sections: ['labels', 'bestelvoorstellen'], settings: ['labelTemplates', 'priceFactors', 'purchaseProposals'], routes: ['/api/stock/label-templates', '/api/stock/labels', '/api/stock/price-factors', '/api/purchase-orders/proposals', '/api/orderpick/receipts'] },
     },
     {
       id: 'bestelvoorstel',

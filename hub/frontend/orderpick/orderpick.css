@@ -7,6 +7,11 @@
 .op .btn { min-height: 44px; padding: 8px 16px; font-size: 16px; }
 .op .btn.big { min-height: 56px; font-size: 18px; font-weight: 600; }
 
+.op-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 14px; padding: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.op-mode { min-height: 48px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 17px; font-weight: 600; color: var(--muted); cursor: pointer; }
+.op-mode.active { background: var(--at-navy); color: var(--at-surface); }
+.op-over { margin: 0 0 12px; color: var(--at-danger); font-size: 14px; font-weight: 600; }
+
 .op-orders { display: grid; gap: 10px; }
 .op-order { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; justify-content: space-between; text-align: left; width: 100%; box-sizing: border-box; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; font: inherit; color: var(--text); cursor: pointer; }
 .op-order:hover { border-color: var(--at-teal); }
