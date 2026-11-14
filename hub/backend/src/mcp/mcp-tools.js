@@ -187,6 +187,7 @@ function createMcpTools(ctx) {
   const readsPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, keyFn: (req) => `mcp-lezen:${req.tenantId}|${req.user.id}` });
   /** Hoeveel regels per tabblad een rapport krijgt (voor tests aan te passen). */
   const maxRows = ctx.maxReportRows || MAX_REPORT_ROWS;
+  const planReadsPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, keyFn: (req) => `mcp-plan-lezen:${req.tenantId}|${req.user.id}` });
   const plansPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: PLANS_PER_HOUR, keyFn: (req) => `mcp-plan:${req.tenantId}|${req.user.id}` });
   const reportsPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, keyFn: (req) => `mcp-rapport:${req.tenantId}|${req.user.id}` });
   const debtorListsPerHour = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: (req) => `mcp-debiteuren:${req.tenantId}|${req.user.id}` });
@@ -838,7 +839,7 @@ function createMcpTools(ctx) {
        * @returns {object} De uitkomst.
        */
       run: async (args, req) => {
-        if (!withinLimit(readsPerHour, req)) return errorOf(READS_LIMITED);
+        if (!withinLimit(planReadsPerHour, req)) return errorOf(READS_LIMITED);
         const plan = ctx.getPlan(req, cleanText(args.planId, 64));
         if (!plan) return errorOf('Geen plan met dit id gevonden.');
         const summary = await ctx.summarizePlan(req, plan.data);
