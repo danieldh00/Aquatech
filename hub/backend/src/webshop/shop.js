@@ -180,6 +180,7 @@ function createShopStore(db) {
  * (koppeling, status en nu ophalen; in server.js al achter requireAdmin).
  * @param {object} app De Express-app.
  * @param {object} ctx shop, requireUser, requireJson, settingsOf, tenantOf, audit, syncLimiter, fetchImpl, sync, salePrices en libraryCodes.
+ * @returns {{ catalogOf: Function }} De catalogusfunctie, voor wie de catalogus buiten de routes nodig heeft (AI-koppeling).
  */
 function registerShopRoutes(app, { shop, requireUser, requireJson, settingsOf, tenantOf, audit, syncLimiter, fetchImpl, sync = null, salePrices = () => ({}), libraryCodes = () => [] }) {
   /**
@@ -347,6 +348,7 @@ function registerShopRoutes(app, { shop, requireUser, requireJson, settingsOf, t
       respondShopError(res, error, next);
     }
   });
+  return { catalogOf };
 }
 
 module.exports = { createShopStore, registerShopRoutes, matchProducts, loadArticles };

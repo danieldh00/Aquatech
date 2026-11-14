@@ -206,13 +206,13 @@ test('de hele weg: toestaan, tools gebruiken en een concept-offerte met notities
   assert.match(page.headers.get('x-frame-options'), /DENY/);
 
   const connection = await connect(base, admin);
-  assert.strictEqual(connection.scope, 'klanten.lezen klanten.aanmaken artikelen.lezen offertes.concept werkorders.concept werkregistratie.boeken rapporten.excel status.lezen facturen.lezen');
+  assert.strictEqual(connection.scope, 'klanten.lezen klanten.aanmaken artikelen.lezen offertes.concept werkorders.concept werkregistratie.boeken plannen.concept rapporten.excel status.lezen facturen.lezen');
   const init = await mcp(base, connection.accessToken, { method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } } });
   assert.strictEqual(init.body.result.protocolVersion, '2025-06-18');
   assert.ok(init.body.result.capabilities.tools);
   assert.strictEqual((await mcp(base, connection.accessToken, { method: 'notifications/initialized', id: undefined })).status, 202);
   const tools = (await mcp(base, connection.accessToken, { method: 'tools/list' })).body.result.tools.map((tool) => tool.name);
-  assert.deepStrictEqual(tools, ['zoek_klant', 'maak_klant', 'zoek_artikelen', 'klant_details', 'prijs_voor_klant', 'status_opvragen', 'openstaande_debiteuren', 'boek_uren', 'boek_materiaal', 'maak_concept_werkorder', 'maak_rapport_excel', 'maak_concept_offerte']);
+  assert.deepStrictEqual(tools, ['zoek_klant', 'maak_klant', 'zoek_artikelen', 'klant_details', 'prijs_voor_klant', 'status_opvragen', 'openstaande_debiteuren', 'boek_uren', 'boek_materiaal', 'maak_concept_werkorder', 'plan_maken', 'plan_details', 'maak_rapport_excel', 'maak_concept_offerte']);
   assert.strictEqual((await mcp(base, connection.accessToken, { method: 'bestaat/niet' })).body.error.code, -32601);
 
   const articles = await callTool(base, connection.accessToken, 'zoek_artikelen', { zoekterm: 'sproeier pop-up' });
@@ -598,11 +598,13 @@ test('rechten volgen de rol op dit moment: een andere rol beperkt de AI direct t
    */
   const toolNames = async () => (await mcp(base, connection.accessToken, { method: 'tools/list' })).body.result.tools.map((tool) => tool.name);
   // Installateur: geen facturen, dus geen openstaande debiteuren.
-  assert.deepStrictEqual(await toolNames(), ['zoek_klant', 'maak_klant', 'zoek_artikelen', 'klant_details', 'prijs_voor_klant', 'status_opvragen', 'boek_uren', 'boek_materiaal', 'maak_concept_werkorder', 'maak_rapport_excel', 'maak_concept_offerte']);
+  assert.deepStrictEqual(await toolNames(), ['zoek_klant', 'maak_klant', 'zoek_artikelen', 'klant_details', 'prijs_voor_klant', 'status_opvragen', 'boek_uren', 'boek_materiaal', 'maak_concept_werkorder', 'plan_maken', 'plan_details', 'maak_rapport_excel', 'maak_concept_offerte']);
   const userId = (await installer.get('/app/api/me')).body.user.id;
   // Planner: geen offertes en geen klanten in de app, dus ook niet via de AI (hetzelfde token).
   assert.strictEqual((await admin.patch(`/app/api/admin/users/${userId}`, { role: 'planner' })).status, 200);
   assert.deepStrictEqual(await toolNames(), ['zoek_artikelen', 'status_opvragen', 'boek_uren', 'boek_materiaal', 'maak_concept_werkorder', 'maak_rapport_excel']);
+  // Zonder het recht plannen zijn de plantools er niet, ook niet met hetzelfde token.
+  for (const name of ['plan_maken', 'plan_details']) assert.strictEqual((await callTool(base, connection.accessToken, name, { ...GARDEN, planId: 'x' })).isError, true, name);
   for (const [name, args] of [['zoek_klant', { zoekterm: 'Klant' }], ['maak_klant', { naam: 'Nieuw' }], ['maak_concept_offerte', { regels: [{ omschrijving: 'x', aantal: 1 }] }]]) {
     assert.strictEqual((await callTool(base, connection.accessToken, name, args)).isError, true, name);
   }
@@ -717,7 +719,7 @@ test('hulpfuncties: terugkeeradressen, scopes, PKCE, tokens en het zoeken van ar
   assert.strictEqual(daysLate('', '2026-01-11'), 0);
   assert.deepStrictEqual(numberCandidates(' of-2026-0001 '), ['of-2026-0001', 'OF-2026-0001']);
   assert.deepStrictEqual(numberCandidates('\u0000'), []);
-  assert.deepStrictEqual(parseScope(''), ['klanten.lezen', 'klanten.aanmaken', 'artikelen.lezen', 'offertes.concept', 'werkorders.concept', 'werkregistratie.boeken', 'rapporten.excel', 'status.lezen', 'facturen.lezen']);
+  assert.deepStrictEqual(parseScope(''), ['klanten.lezen', 'klanten.aanmaken', 'artikelen.lezen', 'offertes.concept', 'werkorders.concept', 'werkregistratie.boeken', 'plannen.concept', 'rapporten.excel', 'status.lezen', 'facturen.lezen']);
   assert.strictEqual(parseScope('offertes.concept admin'), null);
   const verifier = 'a'.repeat(43);
   assert.ok(pkceMatches(verifier, crypto.createHash('sha256').update(verifier).digest('base64url')));
@@ -987,4 +989,98 @@ test('maak_rapport_excel: meldt afkappen en rekent de totalen over alle regels',
   const stock = (await tools.call('maak_rapport_excel', { soort: 'voorraadlijst' }, req)).structuredContent;
   assert.strictEqual(stock.afgekapt, true);
   assert.strictEqual(readZip(stored[2])['xl/worksheets/sheet1.xml'].match(/<row /g).length, 4, 'ook varianten houden het plafond');
+});
+
+/**
+ * Het aantal plannen in het antwoord van de planlijst.
+ * @param {object|object[]} body Het antwoord.
+ * @returns {number} Het aantal.
+ */
+const planCount = (body) => (Array.isArray(body) ? body : body.plans || []).length;
+
+/** Een eenvoudige tuin: gazon van 10 x 8 m, een border en een haag, in meters. */
+const GARDEN = {
+  naam: 'Tuin Jansen', druk: 3.5, debiet: 2.2,
+  vlakken: [
+    { soort: 'lawn', naam: 'Gazon', punten: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 8 }, { x: 0, y: 8 }] },
+    { soort: 'bed', naam: 'Border', punten: [{ x: 0, y: 8 }, { x: 10, y: 8 }, { x: 10, y: 9.5 }, { x: 0, y: 9.5 }] },
+  ],
+};
+
+test('plan_maken en plan_details: bouwt een concept uit meters, vraagt terug bij ontbrekende kraangegevens, bijsturen via planId', async () => {
+  const { base, admin, installer, as } = await setup();
+  const boss = await connect(base, admin);
+  const worker = await connect(base, installer);
+  // Zonder druk en debiet maakt de koppeling niets.
+  const asked = await callTool(base, boss.accessToken, 'plan_maken', { vlakken: GARDEN.vlakken });
+  assert.strictEqual(asked.isError, false, JSON.stringify(asked));
+  assert.strictEqual(asked.structuredContent.status, 'terugvragen');
+  assert.strictEqual(asked.structuredContent.aangemaakt, false);
+  assert.strictEqual(planCount((await admin.get('/app/api/plans')).body), 0);
+  // Met aannames mag het wel, en de aannames staan in het verslag.
+  const assumed = await callTool(base, boss.accessToken, 'plan_maken', { vlakken: GARDEN.vlakken, ookMetAannames: true });
+  assert.strictEqual(assumed.isError, false, JSON.stringify(assumed));
+  assert.ok(assumed.structuredContent.aannames.some((text) => /Waterdruk/.test(text)));
+  // Met alle gegevens: een concept met sproeiers, zones en stuklijst.
+  const made = await callTool(base, boss.accessToken, 'plan_maken', { ...GARDEN, klantNaam: 'Jansen' });
+  assert.strictEqual(made.isError, false, JSON.stringify(made));
+  const plan = made.structuredContent;
+  assert.strictEqual(plan.status, 'concept');
+  // Het eigen assortiment van deze omgeving heeft geen sproeiers: dat staat als aandachtspunt in het verslag, niet als stille uitkomst.
+  assert.strictEqual(plan.sproeiers.totaal, 0);
+  assert.ok(plan.aandachtspunten.some((text) => /geen sproeiers/.test(text)));
+  assert.ok(plan.stuklijst.some((row) => row.code === 'PE-25'));
+  assert.match(plan.link, /beregening\/\?plan=/);
+  assert.strictEqual(plan.vlakken.length, 2);
+  const saved = (await admin.get(`/app/api/plans/${plan.planId}`)).body;
+  assert.strictEqual(saved.title, 'Tuin Jansen');
+  assert.strictEqual(saved.data.areas.length, 2);
+  // Bijsturen: hetzelfde plan met een extra vlak bijwerken.
+  const extra = { soort: 'hedge', naam: 'Haag', punten: [{ x: 0, y: 10 }, { x: 10, y: 10 }, { x: 10, y: 10.6 }, { x: 0, y: 10.6 }] };
+  const updated = await callTool(base, boss.accessToken, 'plan_maken', { ...GARDEN, vlakken: [...GARDEN.vlakken, extra], planId: plan.planId });
+  assert.strictEqual(updated.structuredContent.bijgewerkt, true);
+  assert.strictEqual(updated.structuredContent.planId, plan.planId);
+  assert.strictEqual(updated.structuredContent.vlakken.length, 3);
+  // plan_details geeft dezelfde samenvatting terug.
+  const details = await callTool(base, boss.accessToken, 'plan_details', { planId: plan.planId });
+  assert.strictEqual(details.isError, false, JSON.stringify(details));
+  assert.strictEqual(details.structuredContent.vlakken.length, 3);
+  assert.strictEqual(details.structuredContent.sproeiers.totaal, updated.structuredContent.sproeiers.totaal);
+  // Een plan van een ander is er niet voor wie geen recht op alle plannen heeft; een andere organisatie evenmin.
+  assert.strictEqual((await admin.post('/app/api/admin/roles', { label: 'Alleen eigen plannen', rights: ['plannen'] })).status, 201);
+  assert.strictEqual((await admin.patch(`/app/api/admin/users/${(await installer.get('/app/api/me')).body.user.id}`, { role: 'alleen-eigen-plannen' })).status, 200);
+  assert.strictEqual((await callTool(base, worker.accessToken, 'plan_details', { planId: plan.planId })).isError, true);
+  assert.strictEqual((await callTool(base, boss.accessToken, 'plan_details', { planId: 'bestaat-niet' })).isError, true);
+  assert.strictEqual((await callTool(base, boss.accessToken, 'plan_maken', { ...GARDEN, planId: 'bestaat-niet' })).isError, true);
+  // Een andere organisatie ziet het plan niet.
+  const stranger = await as('vreemd', 'ander');
+  assert.strictEqual((await stranger.get(`/app/api/plans/${plan.planId}`)).status, 404);
+  // Ook via de AI-koppeling: een plan-id van een andere organisatie bestaat daar niet.
+  assert.strictEqual((await stranger.put('/app/api/admin/settings', { aiConnector: true })).status, 200);
+  const strangerConnection = await connect(base, stranger);
+  assert.strictEqual((await callTool(base, strangerConnection.accessToken, 'plan_details', { planId: plan.planId })).isError, true);
+  assert.strictEqual((await callTool(base, strangerConnection.accessToken, 'plan_maken', { ...GARDEN, planId: plan.planId })).isError, true);
+});
+
+test('plan_maken: weigert ongeldige invoer zonder iets te bewaren', async () => {
+  const { base, admin } = await setup();
+  const boss = await connect(base, admin);
+  const square = [{ x: 0, y: 0 }, { x: 5, y: 0 }, { x: 5, y: 5 }, { x: 0, y: 5 }];
+  const bad = [
+    { vlakken: [] },
+    { vlakken: [{ soort: 'tuin', naam: 'x', punten: square }] },
+    { vlakken: [{ soort: 'lawn', naam: 'x', punten: square.slice(0, 2) }] },
+    { vlakken: [{ soort: 'lawn', naam: 'x', punten: [{ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 2 }] }] },
+    { vlakken: [{ soort: 'lawn', naam: 'x', punten: [{ x: 0, y: 0 }, { x: 5000, y: 0 }, { x: 5000, y: 5000 }] }] },
+    { vlakken: [{ soort: 'lawn', naam: 'x', punten: [{ x: 0, y: 0 }, { x: 80, y: 0 }, { x: 80, y: 80 }, { x: 0, y: 80 }] }] },
+    { vlakken: [{ soort: 'lawn', naam: 'x', punten: square }], druk: 99, debiet: 2 },
+    { vlakken: [{ soort: 'lawn', naam: 'x', punten: square }], druk: 3, debiet: 2, sproeiertype: 'kanon' },
+    { vlakken: [{ soort: 'lawn', naam: 'x', punten: square }], druk: 3, debiet: 2, methodes: { lawn: 'dripline' } },
+    { vlakken: [{ soort: 'lawn', naam: 'x', punten: square }], druk: 3, debiet: 2, elementen: [{ soort: 'raket', x: 1, y: 1 }] },
+  ];
+  for (const args of bad) assert.strictEqual((await callTool(base, boss.accessToken, 'plan_maken', { druk: 3, debiet: 2, ...args })).isError, true, JSON.stringify(args));
+  assert.strictEqual(planCount((await admin.get('/app/api/plans')).body), 0);
+  // Zonder de scope is de tool er niet.
+  const narrow = await connect(base, admin, { scope: 'klanten.lezen' });
+  assert.match((await callTool(base, narrow.accessToken, 'plan_maken', { ...GARDEN })).structuredContent.fout, /toestemming/);
 });
