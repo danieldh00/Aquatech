@@ -12,6 +12,7 @@ const { preferencesOf } = require('../platform/store');
 const { requireVerifiedAddress } = require('../platform/address-lookup');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
 const { linkExpired } = require('../platform/public-links');
+const { sanitizeDocumentLayout } = require('./document-layout');
 
 /**
  * Kopie (bcc) van een verstuurde mail naar de afzender, als die dat in Mijn
@@ -711,7 +712,9 @@ function registerQuoteRoutes(app, ctx) {
     const settings = settingsOf(req);
     const profile = settings.get('quoteProfile');
     const internal = Roles.can(user, 'beheer') || Roles.can(user, 'nacalculatie');
-    res.json({ profile: internal ? profile : withoutInternal(profile), canEdit: Roles.can(user, 'beheer'), mail: Roles.can(user, 'offertes') && mailerFor(settings).configured() });
+    res.json({ profile: internal ? profile : withoutInternal(profile), canEdit: Roles.can(user, 'beheer'), mail: Roles.can(user, 'offertes') && mailerFor(settings).configured(),
+      // De opmaak van de afgedrukte documenten (logo, kop, kleuren, lettertype, voettekst), zie shared/doc-layout.js.
+      documentLayout: sanitizeDocumentLayout(settings.get('documentLayout')) });
   });
 
   app.put('/api/quote-profile', requireJson, requireAdmin, (req, res) => {
@@ -1055,7 +1058,8 @@ function registerQuoteRoutes(app, ctx) {
     if (!quoteRow) return;
     if (req.query.preview !== '1') quotes.markViewed(quoteRow);
     const settings = settingsForTenant(quoteRow.tenant_id);
-    res.json({ quote: quotes.publicView(quoteRow), profile: withoutInternal(settings.get('quoteProfile')), theme: themeOf(quoteRow.tenant_id) });
+    res.json({ quote: quotes.publicView(quoteRow), profile: withoutInternal(settings.get('quoteProfile')), theme: themeOf(quoteRow.tenant_id),
+      documentLayout: sanitizeDocumentLayout(settings.get('documentLayout')) });
   });
 
   app.post('/api/public/quote/respond', publicLimiter, requireJson, (req, res) => {

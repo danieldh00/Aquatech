@@ -1,0 +1,11 @@
+/* Opmaak van afgedrukte documenten (shared/doc-layout.js): witte kop, logo rechts, zonder bedrijfsgegevens, kleur- en
+   lettertypevariabelen. Wordt na de CSS van het document geladen. */
+.doc-layout { font-family: var(--doc-font, inherit); }
+.doc-layout .p-name, .doc-layout .d-name { font-size: 16pt; font-weight: 700; }
+.doc-plain .p-head, .doc-plain .d-head { background: transparent; color: var(--at-ink-strong, #1d2733); border-radius: 0; border-bottom: 2px solid var(--doc-primary, var(--at-navy, #172f5e)); }
+.doc-plain .d-head h1 { color: var(--doc-primary, var(--at-navy, #172f5e)); }
+.doc-plain .d-head .sub, .doc-plain .d-head .d-company { color: var(--at-muted); }
+.doc-logo-right .p-head, .doc-logo-right .d-head { flex-direction: row-reverse; }
+.doc-logo-right .p-head .p-company { text-align: left; }
+.doc-logo-right .d-head .d-company { text-align: left; }
+.doc-no-company .p-company, .doc-no-company .d-company { display: none; }

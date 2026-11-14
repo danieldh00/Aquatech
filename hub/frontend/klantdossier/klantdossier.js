@@ -54,9 +54,38 @@
   const QUOTE_STATUS = { concept: 'Concept', verzonden: 'Verzonden', akkoord: 'Akkoord', afgewezen: 'Afgewezen', verlopen: 'Verlopen' };
 
   // view: 'klanten' of 'locaties'; dossier = open klantdossier, location = open installatiedossier.
-  const state = { me: null, profile: null, view: 'klanten', items: [], locations: [], sort: { key: 'lastActivity', dir: -1 }, dossier: null, location: null };
+  const state = { me: null, profile: null, documentLayout: null, view: 'klanten', items: [], locations: [], sort: { key: 'lastActivity', dir: -1 }, dossier: null, location: null };
   // Telt elke navigatie; een lader die terugkomt na een nieuwere navigatie doet niets.
   let routeVersion = 0;
+
+  /**
+   * Het logo in de kop van een dossier, volgens de documentopmaak van de organisatie.
+   * @param {object} profile Bedrijfsprofiel.
+   * @returns {string} HTML van het logo of de bedrijfsnaam.
+   */
+  function dossierLogo(profile) {
+    const name = profile.companyName || 'AquaTech Service';
+    return window.AquatechDocLayout ? window.AquatechDocLayout.logoHtml(state.documentLayout, { defaultSrc: '../shared/logo-white.png', name }) : `<img src="../shared/logo-white.png" alt="${esc(name)}">`;
+  }
+
+  /**
+   * De voetregel van een dossier, volgens de documentopmaak van de organisatie.
+   * @param {object} profile Bedrijfsprofiel.
+   * @returns {string} HTML (tekst veilig gemaakt).
+   */
+  function dossierFoot(profile) {
+    const line = [profile.companyName, profile.website].filter(Boolean).join(' · ');
+    return window.AquatechDocLayout ? window.AquatechDocLayout.footerHtml(state.documentLayout, line) : esc(line);
+  }
+
+  /**
+   * Zet het dossier in de documentopmaak (kleuren, lettertype, kopstijl).
+   * @param {string} html Het dossier.
+   * @returns {string} HTML in de wikkel van de opmaak.
+   */
+  function withLayout(html) {
+    return window.AquatechDocLayout ? window.AquatechDocLayout.wrap(html, state.documentLayout) : html;
+  }
 
   /**
    * Toont een melding onderin beeld (3,5 s).
@@ -412,9 +441,9 @@
       <table class="mini"><thead><tr><th>Nummer</th><th>Soort</th><th>Onderwerp</th><th>Status</th><th>Gemeld</th></tr></thead><tbody>
       ${dossier.requests.map((request) => `<tr><td><a href="../meldingen/?id=${encodeURIComponent(request.id)}">${esc(request.number)}</a></td><td>${esc(request.kindLabel)}${request.urgent ? ' (spoed)' : ''}</td><td>${esc(request.subject)}</td><td>${esc(request.statusLabel)}</td><td>${esc(shortDate(request.createdAt))}</td></tr>`).join('')}
       </tbody></table></section>` : '';
-    $('#d-body').innerHTML = `
+    $('#d-body').innerHTML = withLayout(`
       <header class="d-head">
-        <img src="../shared/logo-white.png" alt="${esc(profile.companyName || 'AquaTech Service')}">
+        ${dossierLogo(profile)}
         <div class="d-title"><h1 tabindex="-1">Installatiedossier ${esc(dossier.address)}</h1><span class="sub">${done} van ${dossier.installations.length} installaties opgeleverd · ${dossier.requests.length} meldingen · ${photoCount} foto's · bijgewerkt ${esc(day(new Date().toISOString()))}</span></div>
         <div class="d-company">${esc(company)}</div>
       </header>
@@ -431,7 +460,7 @@
       ${dossier.quotes.length ? `<section class="card-form no-print"><h3>Offertes</h3><table class="mini grid"><thead><tr><th>Nummer</th><th>Omschrijving</th><th>Status</th><th class="num">Totaal incl. btw</th><th>Datum</th></tr></thead><tbody>
         ${dossier.quotes.map((quote) => `<tr><td><a href="../offertes/?id=${encodeURIComponent(quote.id)}">${esc(quote.number)}</a></td><td>${esc(quote.title)}</td><td>${esc(QUOTE_STATUS[quote.status] || quote.status)}</td><td class="num">${esc(eur(quote.totalIncl))}</td><td>${esc(shortDate(quote.createdAt))}</td></tr>`).join('')}
         </tbody></table></section>` : ''}
-      <p class="d-foot">${esc([profile.companyName, profile.website].filter(Boolean).join(' · '))}</p>`;
+      <p class="d-foot">${dossierFoot(profile)}</p>`);
   }
 
   /**
@@ -477,9 +506,9 @@
     const done = dossier.installations.filter((installationRecord) => installationRecord.status === 'gereed').length;
     const photoCount = dossier.installations.reduce((sum, installationRecord) => sum + installationRecord.photos.filter((photo) => internal || photo.customerVisible).length, 0);
     document.title = `Klantdossier ${customer.name || ''} – AquaTech Service`;
-    $('#d-body').innerHTML = `
+    $('#d-body').innerHTML = withLayout(`
       <header class="d-head">
-        <img src="../shared/logo-white.png" alt="${esc(profile.companyName || 'AquaTech Service')}">
+        ${dossierLogo(profile)}
         <div class="d-title"><h1>Klantdossier ${esc(customer.name)}</h1><span class="sub">${done} van ${dossier.installations.length} installaties opgeleverd · ${photoCount} foto's · bijgewerkt ${esc(day(new Date().toISOString()))}</span></div>
         <div class="d-company">${esc(company)}</div>
       </header>
@@ -498,7 +527,7 @@
       ${dossier.quotes.length ? `<section class="card-form no-print"><h3>Offertes</h3><table class="mini grid"><thead><tr><th>Nummer</th><th>Omschrijving</th><th>Status</th><th class="num">Totaal incl. btw</th><th>Datum</th></tr></thead><tbody>
         ${dossier.quotes.map((quote) => `<tr><td><a href="../offertes/?id=${encodeURIComponent(quote.id)}">${esc(quote.number)}</a></td><td>${esc(quote.title)}</td><td>${esc(QUOTE_STATUS[quote.status] || quote.status)}</td><td class="num">${esc(eur(quote.totalIncl))}</td><td>${esc(shortDate(quote.createdAt))}</td></tr>`).join('')}
         </tbody></table></section>` : ''}
-      <p class="d-foot">${esc([profile.companyName, profile.website].filter(Boolean).join(' · '))}</p>`;
+      <p class="d-foot">${dossierFoot(profile)}</p>`);
   }
 
   /**
@@ -588,6 +617,7 @@
     api('quote-profile').then((response) => {
       if (!response || !response.profile) return;
       state.profile = response.profile;
+      state.documentLayout = response.documentLayout || null;
       renderOpen();
     }).catch(() => {});
     let searchTimer;
