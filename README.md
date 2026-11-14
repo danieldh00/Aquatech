@@ -17,7 +17,7 @@ webserver in Docker (poort 3300) met PostgreSQL (een eigen container naast de ap
 | Klanten | Klantenlijst met zoeken en Excel-export, klant aanmaken (adres via postcode, met of zonder inlog, op verzoek een uitnodiging) en een klantkaart met offertes, werkorders en facturen. Een e-mailadres hoort bij hoogstens één actief account. Een zakelijke klant hoeft geen KvK-nummer te hebben; bij een door VIES geldig bevonden btw-nummer uit een ander EU-land is het adres vrij te typen. |
 | Meldingen, Klantportaal, Klantdossier | Storingen en onderhoud melden, opleverdossier en installatiedossier per locatie. |
 | Uitbesteden, Nieuws, Profiel | Werk tussen organisaties, berichten en versielogboek, eigen voorkeuren en tweestapsverificatie. |
-| Beheer, Hoofdbeheer | Instellingen, gebruikers en rollen, back-ups, updates installeren vanuit de app, testomgevingen; platform: organisaties, hoofdbeheerders, multitenancy. Kleuren en de Visma-koppeling zijn per organisatie. |
+| Beheer, Hoofdbeheer | Instellingen, gebruikers en rollen, back-ups, updates installeren vanuit de app, testomgevingen; platform: organisaties, hoofdbeheerders, multitenancy. Kleuren, de opmaak van factuur en pakbon (logo, kop, lettertype, voettekst, met voorbeeld) en de Visma-koppeling zijn per organisatie. |
 
 ### Beheer in het kort
 

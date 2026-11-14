@@ -308,3 +308,18 @@ dl.kv dd { margin: 0; }
 .mon-badge.bad { background: var(--at-danger); }
 .mon-platform h4 { margin: 4px 0 10px; font-size: 14px; }
 .mon-platform code { font-size: 12px; }
+
+/* Documentopmaak: formulier en voorbeeld naast elkaar, op een smal scherm onder elkaar. */
+.do-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 960px) { .do-layout { grid-template-columns: minmax(0, 1fr); } }
+.do-layout > .card-form { box-sizing: border-box; width: 100%; margin: 0; }
+.do-logo-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.do-logo-box { display: flex; align-items: center; justify-content: center; min-width: 160px; height: 64px; padding: 6px 10px; border: 1px dashed var(--line); border-radius: 6px; background: var(--at-navy); }
+.do-logo-box img { max-height: 52px; max-width: 220px; }
+.do-logo-box .muted { color: var(--at-surface); opacity: 0.8; }
+.do-preview-head { align-items: center; justify-content: space-between; gap: 8px; }
+.do-preview-head h3 { margin: 0; }
+.do-kinds { display: flex; gap: 6px; }
+.do-kinds .btn[aria-pressed="true"] { background: var(--at-navy); color: var(--at-surface); }
+.do-canvas-wrap { margin: 10px 0; border: 1px solid var(--line); border-radius: 6px; background: #fff; overflow: hidden; }
+.do-canvas-wrap canvas { display: block; width: 100%; height: auto; }

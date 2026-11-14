@@ -17,6 +17,7 @@
       { id: 'users', label: 'Gebruikers', pane: 'users', words: 'account wachtwoord toevoegen bekijken als klant gasten inloglink organisatiecode' },
       { id: 'roles', label: 'Rollen', pane: 'roles', words: 'rechten planner installateur klant' },
       { id: 'kleuren', label: 'Kleuren', pane: 'kleuren', words: 'thema huisstijl kleur contrast navy groen teal uiterlijk' },
+      { id: 'documentopmaak', label: 'Documentopmaak', pane: 'documentopmaak', words: 'pdf factuur pakbon logo kop voet voettekst lettertype huisstijl opmaak briefpapier paginanummer' },
     ] },
     { title: 'Webshop', sections: [
       { id: 'shopinhoud', label: 'Webshop-inhoud', pane: 'shopinhoud', words: 'winkel teksten pagina hero mededeling banner afbeeldingen merken contact over ons klantenservice bewerken publiceren concept menu' },
