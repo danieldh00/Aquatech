@@ -1,12 +1,49 @@
 name: CI
 
+# Zuinig draaien: een branch met een pull request draait alleen via de PR (geen dubbele run op push), een nieuwe push
+# annuleert de lopende run, en een PR die geen code raakt (alleen docs, changes/, tests-zonder-code) slaat de zware
+# jobs over. Een overgeslagen job (`if`) telt voor de verplichte checks als geslaagd; een `paths:`-filter op
+# workflowniveau zou de checks laten hangen en wordt daarom niet gebruikt.
 on:
   push:
-    branches: ["**"]
+    branches: [master]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # Bepaalt of de PR code raakt. Op master (push) en bij een mislukte vergelijking draait alles.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.scope.outputs.code }}
+    steps:
+      - name: Raakt deze wijziging code?
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -z "$NUMBER" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files=$(gh api "repos/$REPO/pulls/$NUMBER/files" --paginate --jq '.[].filename') || { echo "code=true" >> "$GITHUB_OUTPUT"; exit 0; }
+          echo "$files"
+          if echo "$files" | grep -Eq '^(hub/|deploy/|docker-compose\.yml|\.github/workflows/(ci|release)\.yml)'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+            echo "Geen code gewijzigd (alleen docs of changes/): tests en image-build overgeslagen."
+          fi
+
   test:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -26,6 +63,8 @@ jobs:
   # Dezelfde testsuite tegen PostgreSQL (zoals Supabase), plus de tests van
   # het schema en de overstap van SQLite.
   test-postgres:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
@@ -55,6 +94,8 @@ jobs:
   # Bouwt de image voor beide architecturen (amd64 = gewone server/VPS,
   # arm64 = Raspberry Pi e.d.) en start de container om te zien dat hij antwoordt.
   docker:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
