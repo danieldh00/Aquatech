@@ -60,7 +60,11 @@ Docker is niet beschikbaar in de cloud-sandbox. Er is geen aparte linter; `codes
 ## Deploy in het kort
 `release.yml` bouwt na een merge met fragment het image `ghcr.io/danieldh00/aquatech:<versie>` (+ `:latest`); op de server rolt een timer (`deploy/apps01/update.sh`, ~15 min, met rollback) het uit. Database: eigen PostgreSQL-container naast de app (`deploy/apps01/pve/db-local.sh`), Supabase alleen als terugval, SQLite voor lokaal/tests. Scripts voor de beheerder draaien **vanaf de Proxmox-host** (via `pct exec`/`qm guest exec`/ssh naar de gast). Tijdzone Europe/Amsterdam.
 
-## Zuinig werken
-- Lees alleen de bestanden die de opdracht noemt plus directe afhankelijkheden; geen brede greps over de hele repo, geen subagents tenzij dat de kwaliteit aantoonbaar verhoogt.
-- `CLAUDE.md` is groot: zoek er gericht in (grep op de term van je onderwerp, bijv. "Prijsfactor" of "Orderpick") in plaats van het hele bestand te lezen.
-- Eén item per PR; stop na de merge.
+## Zuinig werken (vaste werkwijze, besluit Daniël 2026-11-16)
+1. **Gerichte opdracht**: lees alleen de genoemde bestanden en hun directe afhankelijkheden; geen brede greps, geen subagents tenzij de kwaliteit aantoonbaar stijgt. `CLAUDE.md` is groot: zoek er gericht in (bijv. "Prijsfactor", "Orderpick") in plaats van het hele bestand te lezen.
+2. **Reviews alleen waar het telt**: label `geen-review` slaat de Claude-codereview over, alleen voor PR's met uitsluitend docs of tekst. De securityreview blijft altijd verplicht voor code die raakt aan auth, betalingen, data of tenant-scheiding. Een PR met dat label én codewijzigingen wordt alsnog gereviewd. (De workflow-aanpassing in `claude-review.yml` volgt in een aparte PR; tot dan geldt het label nog niet.)
+3. **Lokaal eerst alleen de geraakte tests** (`node --test test/<bestand>.test.js`), pas daarna pushen naar CI; dat scheelt rondes van push, falen en fixen.
+4. **Kleine PR's**: één afgebakend onderdeel per PR; grote items worden opgesplitst.
+5. **Na de merge direct stoppen**: geen extra samenvattingen of verificatierondes, tenzij Daniël erom vraagt.
+6. **Simpele klussen** (tekst, releasenotes, kleine fixes) mogen op een lichter model.
+7. Projectgeheugen compact houden: geen lijsten met afgeronde PR-nummers.
