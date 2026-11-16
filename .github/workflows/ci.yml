@@ -107,7 +107,12 @@ jobs:
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - name: Image bouwen (${{ matrix.platform }})
-        run: docker buildx build --platform ${{ matrix.platform }} --load -t hub:test hub
+        # Laaglaag-cache per platform (zoals release.yml): npm ci wordt alleen opnieuw gedaan als package*.json wijzigt.
+        run: >-
+          docker buildx build --platform ${{ matrix.platform }} --load -t hub:test
+          --cache-from type=gha,scope=ci-${{ matrix.platform }}
+          --cache-to type=gha,mode=max,scope=ci-${{ matrix.platform }}
+          hub
       - name: Smoketest
         run: |
           docker run -d --name hl --platform ${{ matrix.platform }} -p 3300:3300 -e ACCESS_CODE=ci hub:test
