@@ -1,5 +1,7 @@
 # AquaTech Hub — werkgeheugen
 
+> Korte ingang voor agents: zie `AGENTS.md` (kaart, commando's, kernregels). Dit bestand is het volledige werkgeheugen; bij tegenspraak geldt dit bestand.
+
 **Productnaam AquaTech Hub** (map `hub/`; GHCR-image blijft `ghcr.io/danieldh00/aquatech`; webshopklanten zien "AquaTech Shop"; bedrijfsnaam in documenten blijft AquaTech Service). De planner is de module *Beregeningsplanner* (`frontend/beregening/`, opslagsleutel `aquatech-beregeningsplanner-v1` blijft, anders raakt lokaal werk kwijt). PWA-schilcache heet `aquatech-hub-shell-<versie>` (oude `aquatech-shell-*` wordt opgeruimd; IndexedDB-wachtrij en datacache zijn niet hernoemd, zodat niets onverzonden verloren gaat).
 Webapp om tuinberegening te ontwerpen (in de lijn van de DVS Beregnungsplaner).
 Groeit uit tot een modulair ERP-achtig pakket: startpagina = **dashboard**
