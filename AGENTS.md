@@ -19,6 +19,8 @@ Webshop = `/` (hoofdmap), de app = `/app/` (dashboard, modules, `/app/api`). Dra
 | `changes/` | releasenotes-fragmenten (zie `changes/README.md`) |
 | `.github/workflows/` | `ci.yml`, `version.yml`, `release.yml`, `claude-review.yml` |
 
+Per onderdeel staat een korte `CLAUDE.md` met alleen de regels van die map (`hub/backend/src/{webshop,artikelen,verkoop,uitvoering,beregening,platform,mcp}/` en `hub/frontend/`); lees die van de map waarin je werkt in plaats van het grote root-`CLAUDE.md`.
+
 Nieuwe migratie: toevoegen in `MIGRATIONS` (db.js) **én** `PG_MIGRATIONS` (pgschema.js); controleer eerst het laatste vrije nummer (90+ is gereserveerd). Een nieuwe module: map onder `frontend/`, regel in `modules.js`, laadt `dashboard/modules.js` en daarna `shared/sidebar.js`.
 
 ## Commando's
