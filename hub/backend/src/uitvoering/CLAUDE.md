@@ -1,6 +1,6 @@
 # Uitvoering: werkorders, planning, portaal, foto's (backend/src/uitvoering)
 
-Alleen de regels voor deze map; het volledige geheugen staat in de root-`CLAUDE.md` (zoek op de term).
+Alleen de regels voor deze map; bij tegenspraak geldt de root-`CLAUDE.md`. het volledige geheugen staat in de root-`CLAUDE.md` (zoek op de term).
 
 - Een klant ziet alleen eigen gegevens (`quotes.customer_id` of `service_requests.customer_id`) en nooit uren, notities, instructies, kostprijs of interne velden; `customerWorkOrder` en `handoverOf` zijn whitelists.
 - Een schrijfactie die offline moet kunnen: kop via `AquatechOffline.headers`, 202 `{ queued }` afhandelen, server met `Idempotency-Key`/`ifBaseOf`, en in `QUEUEABLE`. Een nieuwe offline GET komt in `CACHEABLE`, een nieuwe offline pagina in `PRECACHE_PAGES`.

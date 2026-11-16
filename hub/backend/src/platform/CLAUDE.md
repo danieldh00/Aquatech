@@ -1,6 +1,6 @@
 # Platform, beveiliging en database (backend/src/platform, beveiliging, database)
 
-Alleen de regels voor deze mappen; het volledige geheugen staat in de root-`CLAUDE.md` (zoek op de term).
+Alleen de regels voor deze mappen; bij tegenspraak geldt de root-`CLAUDE.md`. het volledige geheugen staat in de root-`CLAUDE.md` (zoek op de term).
 
 - Elke query op een tabel met `tenant_id` filtert daarop (`tenant_id = req.tenantId`); id's uit de URL altijd samen met de tenant opzoeken. `test/tenant-filter.test.js` bewaakt dat. Code die bewust over organisaties heen werkt gebruikt `asSystem`/`pinSystem`.
 - SQL werkt in SQLite én PostgreSQL (`lower()`, geen `COLLATE NOCASE`, `?`-parameters, helpers in db.js). Geen `SELECT *`/`t.*`, geen N+1. `db.async` alleen voor losse queries, nooit een transactie.

@@ -1,6 +1,6 @@
 # Webshop (backend/src/webshop)
 
-Alleen de regels voor deze map; het volledige geheugen staat in de root-`CLAUDE.md` (zoek op de term, lees niet alles).
+Alleen de regels voor deze map; bij tegenspraak geldt de root-`CLAUDE.md`. het volledige geheugen staat in de root-`CLAUDE.md` (zoek op de term, lees niet alles).
 
 - Webshop = `/`, app = `/app/`. Links in mails en SEO altijd via `publicBaseUrl` (`shopPayment.publicUrl`), nooit uit de Host-kop. De shop is nog niet live: niet indexeerbaar maken; een nieuwe openbare pagina die in zoekresultaten hoort geeft een `canonicalPath` mee.
 - Prijzen: een zakelijke prijs altijd via `priceBusiness`/`priceCart`, nooit `business_price`/`sale_price` rechtstreeks. Groothandel = hoogste van staffel, klant en categoriekorting (niet opgeteld); particulier nooit categoriekorting. Bestelregels naar voorraad via `stockQtyOf`.

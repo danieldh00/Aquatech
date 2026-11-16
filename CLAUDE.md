@@ -822,6 +822,8 @@ bewaakt de eerste twee regels voor elk eigen `.js`-bestand (backend `src/`,
 - UI-teksten, commentaar, changelog en docs in het **Nederlands**.
 - Exports: **Excel (.xlsx), geen CSV**, tenzij expliciet anders gevraagd.
 - Geen modelnamen/-ID's in commits, PR's, code of docs.
+- **Webshop nog niet live**: niet laten indexeren (geen webadres in Beheer > Webshop > Betalen, geen vrijgave van robots/sitemap) tot Daniël go-live meldt; de vindbaarheidsfuncties (zie *Vindbaarheid*) blijven wel bestaan. Geen verborgen tekst voor bots (cloaking).
+- **AI-sleutels**: elke tenant gebruikt een eigen AI-sleutel; nooit het Claude-abonnement of een setup-token voor AI-functies in de app (de Claude-reviews in CI zijn de enige uitzondering).
 - Prijzen in `frontend/beregening/js/catalog.js` zijn indicatieve placeholders.
 - **Geen `SELECT *` of `t.*`** in de backend; `test/queries.test.js` controleert dat.
 - **Nooit `pkill -f`** in de cloud-sandbox; stop een testserver met

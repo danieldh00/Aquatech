@@ -1,6 +1,6 @@
 # Frontend (hub/frontend)
 
-Alleen de regels voor de frontend; het volledige geheugen staat in de root-`CLAUDE.md` (zoek op de term).
+Alleen de regels voor de frontend; bij tegenspraak geldt de root-`CLAUDE.md`. het volledige geheugen staat in de root-`CLAUDE.md` (zoek op de term).
 
 - Gewone `<script>`-tags (geen ES-modules), alle URL's relatief, geen CDN's (vendor lokaal in `<module>/vendor/`). Scripts/CSS met `?v=<versie>`.
 - Een module = map met eigen `index.html`; een nieuwe modulepagina laadt `dashboard/modules.js` en daarna `shared/sidebar.js`. Registreer de module in `dashboard/modules.js` (met `right`, eventueel `configuration`).

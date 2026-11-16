@@ -1,6 +1,6 @@
 # Artikelen, voorraad en inkoop (backend/src/artikelen)
 
-Alleen de regels voor deze map; het volledige geheugen staat in de root-`CLAUDE.md` (zoek op de term).
+Alleen de regels voor deze map; bij tegenspraak geldt de root-`CLAUDE.md`. het volledige geheugen staat in de root-`CLAUDE.md` (zoek op de term).
 
 - Voorraad wijzigen alleen via `stock.book` (FIFO-lagen), nooit `on_hand` rechtstreeks. Inkoopontvangst boeken via `purchaseOrders.receive`, nooit `stock.book` zelf.
 - Een opslagfunctie die een fout teruggeeft in plaats van gooit, mag binnen `transaction` niets half geschreven hebben: valideer eerst. `transaction` nest niet.

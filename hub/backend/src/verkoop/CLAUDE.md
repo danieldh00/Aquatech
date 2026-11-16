@@ -1,6 +1,6 @@
 # Verkoop: offertes, facturen, klanten, Visma (backend/src/verkoop)
 
-Alleen de regels voor deze map; het volledige geheugen staat in de root-`CLAUDE.md` (zoek op de term).
+Alleen de regels voor deze map; bij tegenspraak geldt de root-`CLAUDE.md`. het volledige geheugen staat in de root-`CLAUDE.md` (zoek op de term).
 
 - Elke PDF van de server tekent kop en voet met `drawHeader`/`drawFooter` en meet tekst met `pdf.wrap`/`pdf.textWidth` van het document; kleuren via `paletteOf`. Nooit eigen kopcode.
 - Een klantgericht kanaal van een offerte of werkorder toont `internalNote` nooit (`forCustomer` haalt hem weg). Korting tonen via `discountCaption`, nooit `discountPct` alleen.

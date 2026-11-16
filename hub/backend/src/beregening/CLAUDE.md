@@ -1,6 +1,6 @@
 # Beregening: planner-backend, herkenning, bibliotheek (backend/src/beregening)
 
-Alleen de regels voor deze map; de plannerkern staat in `hub/frontend/beregening/js/`; het volledige geheugen in de root-`CLAUDE.md` (zoek op de term).
+Alleen de regels voor deze map; bij tegenspraak geldt de root-`CLAUDE.md`. de plannerkern staat in `hub/frontend/beregening/js/`; het volledige geheugen in de root-`CLAUDE.md` (zoek op de term).
 
 - Plan herkennen: één AI-aanroep met vaste uitkomst per afbeelding+model+`PROMPT_VERSION`; kosten begrensd met `aiDailyLimit`/`aiHourlyPerIp`. Elke tenant gebruikt een eigen AI-sleutel; nooit een Claude-abonnement voor AI in de app. Tests bootsen de API na.
 - Andere vakjesindeling bij het leren: `FEATURE_VERSION` ophogen in `localrecog.js` én `recognitions.js`.
