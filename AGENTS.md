@@ -70,3 +70,4 @@ Docker is niet beschikbaar in de cloud-sandbox. Er is geen aparte linter; `codes
 5. **Na de merge direct stoppen**: geen extra samenvattingen of verificatierondes, tenzij Daniël erom vraagt.
 6. **Simpele klussen** (tekst, releasenotes, kleine fixes) mogen op een lichter model.
 7. Projectgeheugen compact houden: geen lijsten met afgeronde PR-nummers.
+8. **Verkenners voor zoeken en testen** (`.claude/agents/`, model Haiku): breed zoeken in de repo (`map`), aanroepen vinden (`callers`) en tests draaien (`tests`) gaan via deze subagents, zodat de hoofdsessie klein blijft. De hoofdsessie schrijft de code; kwaliteitsoordelen en de uiteindelijke beslissing blijven daar. Gerichte opzoekingen van één bestand doe je gewoon zelf.
