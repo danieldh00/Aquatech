@@ -42,7 +42,8 @@ function normalize(text) {
 }
 
 /**
- * Een grove stam van een woord: een meervoud op -en of -s valt weg (sproeiers → sproeier, kranen → kran). Afwijkende vormen vangt de synoniemenlijst op.
+ * Een grove stam van een woord: een meervoud op -en of -s valt weg (sproeiers → sproeier, kranen → kran). Afwijkende vormen vangt
+ * stemsOf op.
  * @param {string} word Een genormaliseerd woord.
  * @returns {string} De stam.
  */
@@ -50,6 +51,23 @@ function stemOf(word) {
   if (word.length > 5 && word.endsWith('en')) return word.slice(0, -2);
   if (word.length > 4 && word.endsWith('s')) return word.slice(0, -1);
   return word;
+}
+
+/**
+ * Alle enkelvoudsvormen die bij een meervoud kunnen horen: de grove stam, met een verdubbelde slotmedeklinker weer enkel
+ * (kleppen → klepp → klep), met een verdubbelde klinker (kranen → kran → kraan) en met z of v als s of f (buizen → buis).
+ * @param {string} word Een genormaliseerd woord.
+ * @returns {string[]} De mogelijke enkelvoudsvormen, zonder het woord zelf en zonder te korte vormen.
+ */
+function stemsOf(word) {
+  const stem = stemOf(word);
+  if (stem === word) return [];
+  const forms = new Set([stem]);
+  if (stem.length > 3 && stem.at(-1) === stem.at(-2) && !/[aeiou]/.test(stem.at(-1))) forms.add(stem.slice(0, -1));
+  if (/[^aeiou][aeiou][^aeiou]$/.test(stem)) forms.add(`${stem.slice(0, -2)}${stem.at(-2)}${stem.slice(-2)}`);
+  if (stem.endsWith('z')) forms.add(`${stem.slice(0, -1)}s`);
+  if (stem.endsWith('v')) forms.add(`${stem.slice(0, -1)}f`);
+  return [...forms].filter((form) => form.length >= 3);
 }
 
 /**
@@ -119,10 +137,12 @@ function wordScore(word, candidate, wide) {
   if (candidate.tokens.some((token) => token.startsWith(word))) return 30;
   if (candidate.haystack.includes(word)) return 20;
   if (!wide) return 0;
-  const stem = stemOf(word);
-  if (stem !== word && candidate.haystack.includes(stem)) return 18;
-  for (const related of SYNONYMS.get(stem) || SYNONYMS.get(word) || []) {
-    if (candidate.haystack.includes(related)) return 14;
+  const forms = stemsOf(word);
+  if (forms.some((form) => candidate.haystack.includes(form))) return 18;
+  for (const form of [word, ...forms]) {
+    for (const related of SYNONYMS.get(form) || []) {
+      if (candidate.haystack.includes(related)) return 14;
+    }
   }
   const limit = typoLimit(word.length);
   if (limit > 0 && candidate.tokens.some((token) => withinDistance(word, token, limit) || (token.length > word.length && withinDistance(word, token.slice(0, word.length), limit)))) return 8;
@@ -210,4 +230,4 @@ function searchProducts(products, query, { onlyInStock = false, limit = MAX_RESU
   return { products: found.slice(0, limit).map((entry) => entry.product), widened };
 }
 
-module.exports = { searchProducts, normalize, withinDistance, stemOf, MAX_RESULTS };
+module.exports = { searchProducts, normalize, withinDistance, stemOf, stemsOf, MAX_RESULTS };

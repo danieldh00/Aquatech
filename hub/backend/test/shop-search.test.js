@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { setup } = require('./helpers/webshop-world');
-const { searchProducts, normalize, withinDistance, stemOf } = require('../src/webshop/search');
+const { searchProducts, normalize, withinDistance, stemOf, stemsOf } = require('../src/webshop/search');
 
 const CATALOG = [
   { code: 'MP2000', name: 'Hunter MP2000 sproeier', categoryName: 'Sproeiers', inStock: true },
@@ -11,6 +11,7 @@ const CATALOG = [
   { code: 'KLEP1', name: 'Magneetklep 24V', categoryName: 'Kleppen', inStock: true },
   { code: 'REGEN', name: 'Regensensor draadloos', categoryName: 'Sensoren', inStock: true },
   { code: 'KOP', name: 'Koppeling 32 mm', categoryName: 'Koppelingen', inStock: true, variants: [{ code: 'KOP-25', label: '25 mm', inStock: false }, { code: 'KOP-32', label: '32 mm', inStock: true }] },
+  { code: 'KOGEL', name: 'Kogelkraan 1 inch', categoryName: 'Afsluiters', inStock: true },
   { code: 'MPX', name: 'Onderdeel voor mp2000', categoryName: 'Overig', inStock: true },
 ];
 
@@ -111,4 +112,14 @@ test('zoekpagina: code, tikfout en melding bij ruimer zoeken', async () => {
   let limited = false;
   for (let attempt = 0; attempt < 45 && !limited; attempt += 1) limited = (await client.request('GET', `/zoeken/?q=term${attempt}`)).status === 429;
   assert.ok(limited, 'na 40 zoekopdrachten per minuut volgt 429');
+});
+
+test('meervouden met verdubbelde medeklinker of klinker en z of v', () => {
+  assert.deepStrictEqual(stemsOf('kleppen'), ['klepp', 'klep']);
+  assert.ok(stemsOf('kranen').includes('kraan'));
+  assert.ok(stemsOf('buizen').includes('buis'));
+  assert.ok(stemsOf('schroeven').includes('schroef'));
+  assert.deepStrictEqual(stemsOf('pomp'), []);
+  assert.deepStrictEqual(codesOf('magneetkleppen'), ['KLEP1']);
+  assert.deepStrictEqual(codesOf('kranen'), ['KOGEL']);
 });
