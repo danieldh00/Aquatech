@@ -864,7 +864,7 @@ function lookupsOf(catalog) {
  * Zoekt de artikelen voor een artikelblok: eigen artikelcodes (een variantcode geeft het hoofdartikel) of een categorie met haar subcategorieën.
  * @param {object} block Het artikelblok (mode, codes, category, limit).
  * @param {object} catalog De catalogus (zie buildCatalog).
- * @returns {object[]} De artikelen (maximaal block.limit, alleen bestaande en niet-dubbele).
+ * @returns {object[]} De artikelen (uit een categorie maximaal block.limit; bij eigen codes alle bestaande, zonder dubbelen).
  */
 function productsOfBlock(block, catalog) {
   const { byCode, childrenOf } = lookupsOf(catalog);
@@ -878,7 +878,8 @@ function productsOfBlock(block, catalog) {
     }
     return catalog.products.filter((product) => slugs.has(product.categorySlug)).slice(0, block.limit);
   }
-  return [...new Set(block.codes.map((code) => byCode.get(code)).filter(Boolean))].slice(0, block.limit);
+  // Bij eigen codes telt het aantal codes (maximaal 12, al begrensd bij het opslaan); `limit` geldt alleen voor een categorie.
+  return [...new Set(block.codes.map((code) => byCode.get(code)).filter(Boolean))];
 }
 
 /**

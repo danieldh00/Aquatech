@@ -132,6 +132,7 @@ test('pagina met blokken: concept, voorbeeld, publiceren, FAQPage, sitemap en ll
   assert.match(page.text, /<h2>Welkom<\/h2>/);
   assert.match(page.text, /<details><summary>Hoe lang is de levertijd\?<\/summary><p>1 tot 3 dagen\.<\/p><p>Bij pallets langer\.<\/p><\/details>/);
   assert.match(page.text, /Sproeier Pro/);
+  assert.strictEqual((page.text.match(/class="product-card"/g) || []).length, 1, 'alleen bestaande codes');
   assert.doesNotMatch(page.text, /bestaat-niet/);
   assert.match(page.text, /<aside class="cms-cta"><h2>Advies nodig\?<\/h2><p>Bel ons\.<\/p><a class="button" href="..\/..\/pagina\/contact\/">Contact<\/a><\/aside>/);
   const faq = jsonLdOf(page.text).find((item) => item['@type'] === 'FAQPage');
@@ -193,4 +194,12 @@ test('afbeeldingsblok en XSS: alt en bijschrift worden ontsnapt, onbekende afbee
   assert.doesNotMatch(html, /<script>x/);
   assert.match(html, /<figcaption>&lt;b&gt;Tuin&lt;\/b&gt;<\/figcaption>/);
   assert.doesNotMatch(html, /javascript:/);
+});
+
+test('artikelblok met eigen codes toont alle codes, ook meer dan de standaardlimiet', async () => {
+  const { admin, anonymous } = await setupShop();
+  for (let number = 1; number <= 8; number += 1) await admin.post('/app/api/stock/items', { code: `X-${number}`, name: `Artikel ${number}`, onHand: 5, salePrice: 2 });
+  await admin.put('/app/api/admin/shop-content/pages/acht', { title: 'Acht', blocks: [{ type: 'products', mode: 'codes', codes: ['X-1', 'X-2', 'X-3', 'X-4', 'X-5', 'X-6', 'X-7', 'X-8'] }] });
+  await admin.post('/app/api/admin/shop-content/pages/acht/publish', {});
+  assert.strictEqual(((await anonymous.get('/pagina/acht/')).text.match(/class="product-card"/g) || []).length, 8);
 });
