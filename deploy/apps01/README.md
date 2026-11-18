@@ -64,6 +64,32 @@ Een specifieke versie terugzetten: `AQUATECH_TAG=<versie>` in `.env`,
 `sudo docker compose up -d aquatech`, en `<nieuwere versie>` in
 `.failed-version` zetten zodat de timer die niet direct weer uitrolt.
 
+## Vaste servertaken vanaf de Proxmox-host
+
+Eén script voor het dagelijkse beheer, te draaien als root op de Proxmox-host (het zoekt `apps01` zoals `db-local.sh`:
+LXC via `pct exec`, VM of gewone host via ssh; er wordt niets op de server geïnstalleerd en er gaan geen geheimen over de
+verbinding of in de uitvoer).
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/danieldh00/Aquatech/master/deploy/apps01/pve/servertaken.sh -o /tmp/servertaken.sh
+bash /tmp/servertaken.sh status          # alleen lezen, met samenvatting
+bash /tmp/servertaken.sh logs 48         # alle [traag]/[stilstand]-regels van de laatste 48 uur
+bash /tmp/servertaken.sh migraties       # database achter? dan back-up + app herstarten (de app migreert bij het starten)
+bash /tmp/servertaken.sh update          # nu updaten naar :latest (zelfde pad als de timer, met terugval)
+```
+
+| Opdracht | Wat het doet | Herstart de app? |
+|---|---|---|
+| `status` (standaard) | containers (status, health, herstarts), `/api/health` en versie, beschikbare update en laatste uitrol, update-timer, databaseversie tegenover wat de app verwacht, schijf en geheugen, leeftijd van de laatste database- en app-back-up, aantal en laatste `[traag]`/`[stilstand]`-regels; eindigt met een samenvatting (afsluitcode 1 bij een fout) | nee |
+| `logs [uren]` | alle `[traag]`- en `[stilstand]`-regels (standaard 24 uur) | nee |
+| `migraties` | toont databaseversie en verwachte versie; alleen als de database achterloopt: back-up, `docker compose restart aquatech`, wachten op healthy, versie opnieuw controleren | ja, na bevestiging |
+| `update` | haalt `:latest` op en toont draaiend/beschikbaar; alleen bij een nieuwere versie: `aquatech-update.service` starten (onderhoudsmodus, back-up, wisselen, healthcheck, terugval). Staat automatisch bijwerken uit, dan een aanvraag zoals de app die doet (`update/request/request.json`, alleen voor de versie op `:latest`, nooit een eerder mislukte zonder melding) | ja, na bevestiging |
+
+Opties: `--yes` (of `YES=1`) slaat de bevestigingsvraag over (voor automatisering); `APPS01_NAME`, `APPS01_CTID`,
+`APPS01_VMID`, `APPS01_SSH`, `APP_DIR` en `LOG_SINCE` (standaard `24h`) als bij `db-local.sh`. Zonder verbinding of
+zonder terminal én zonder `--yes` breekt het af zonder iets te wijzigen. Het script is idempotent: opnieuw draaien bij
+een bijgewerkte server doet niets.
+
 ## Eigen PostgreSQL (in plaats van Supabase)
 
 De database draait als container `aquatech-postgres` naast de app (PostgreSQL 17, volume `pgdata/`, alleen bereikbaar
