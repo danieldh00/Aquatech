@@ -1151,6 +1151,13 @@ const PG_MIGRATIONS = [
   ALTER TABLE stock_items ADD COLUMN seo_description ${TEXT_TYPE} NOT NULL DEFAULT '';
   ALTER TABLE stock_items ADD COLUMN brand ${TEXT_TYPE} NOT NULL DEFAULT '';
   `,
+  // 74: levermethode en levertijd per artikel en leverancier (zie db.js).
+  `
+  ALTER TABLE stock_items ADD COLUMN delivery_rules ${TEXT_TYPE} NOT NULL DEFAULT '[]';
+  ALTER TABLE stock_items ADD COLUMN lead_days_min BIGINT;
+  ALTER TABLE stock_items ADD COLUMN lead_days_max BIGINT;
+  ALTER TABLE item_suppliers ADD COLUMN lead_days BIGINT;
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

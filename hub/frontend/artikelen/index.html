@@ -430,6 +430,11 @@
             <label title="Het merk staat in de gestructureerde gegevens van de productpagina (voor zoekmachines). Een variant neemt het merk van het hoofdartikel over zolang hij er zelf geen heeft.">Merk<input name="brand" maxlength="60" autocomplete="off"></label>
             <label title="De titel in zoekresultaten. Leeg = de naam van het artikel met de naam van de shop. Maximaal 70 tekens.">Titel voor zoekmachines<input name="seoTitle" maxlength="70" autocomplete="off" placeholder="Leeg = naam – Aquatechshop.nl"></label>
           </div>
+          <div class="row">
+            <label title="Welke bezorgmethodes bij welk aantal (in de basiseenheid) mogen, als methode:van-tot, gescheiden door komma's. Bijvoorbeeld dpd:1-99, pallet:100- (vanaf 100 alleen pallet). Leeg = de regels van de categorie, anders geen beperking. Ophalen kan altijd. Een gemengde bestelling gaat met de zwaarste methode mee.">Toegestane levermethodes<input name="deliveryRules" maxlength="300" autocomplete="off" placeholder="Leeg = geen beperking, bijv. dpd:1-99, pallet:100-"></label>
+            <label title="Eigen levertijd van dit artikel in dagen (de soort dagen volgt de gekozen methode). Leeg = de standaard van de methode, of bij niet op voorraad de verwachte inkoop of de levertijd van de leverancier.">Levertijd van (dagen)<input name="leadMin" type="number" min="0" max="365" step="1" inputmode="numeric" placeholder="standaard"></label>
+            <label>Levertijd tot (dagen)<input name="leadMax" type="number" min="0" max="365" step="1" inputmode="numeric" placeholder="= van"></label>
+          </div>
           <label title="De tekst onder de titel in zoekresultaten. Leeg = het begin van de omschrijving. Maximaal 160 tekens.">Omschrijving voor zoekmachines<textarea name="seoDescription" rows="2" maxlength="160"></textarea></label>
           <p class="muted small" id="d-details-shop" hidden><span></span> <button class="btn small" type="button" id="d-details-copy">Overnemen uit webshop</button></p>
           <div class="row">

@@ -106,6 +106,23 @@
    */
   const specificationsText = (specifications) => (specifications || []).map((entry) => `${entry.name}: ${entry.value}`).join('\n');
   /**
+   * Zet de regels van een artikel om naar de invoertekst, bijvoorbeeld "dpd:1-99, pallet:100-".
+   * @param {{ method: string, minQty: number, maxQty: ?number }[]} rules De regels.
+   * @returns {string} De tekst (leeg zonder regels).
+   */
+  const rulesText = (rules) => (rules || []).map((rule) => `${rule.method}:${rule.minQty}-${rule.maxQty == null ? '' : rule.maxQty}`).join(', ');
+
+  /**
+   * Leest de invoertekst met levermethoderegels.
+   * @param {string} text De tekst, bijvoorbeeld "dpd:1-99, pallet:100-".
+   * @returns {{ method: string, minQty: string, maxQty: string }[]} De regels; een regel die niet te lezen is geeft een lege methode, zodat de server hem met een melding weigert.
+   */
+  const parseRules = (text) => String(text).split(',').map((part) => part.trim()).filter(Boolean).map((part) => {
+    const match = /^([a-z]+)\s*:\s*(\d*)\s*-?\s*(\d*)$/i.exec(part);
+    return match ? { method: match[1].toLowerCase(), minQty: match[2], maxQty: match[3] } : { method: '', minQty: '', maxQty: '' };
+  });
+
+  /**
    * Vult omschrijving en specificaties in het artikelformulier en toont wat de oude webshop heeft (12): zolang het
    * artikel zelf niets heeft, toont de shop die tekst; met de knop neem je hem over om aan te passen.
    * @param {HTMLFormElement} formElement Het formulier.
@@ -118,6 +135,9 @@
     formElement.brand.value = item.brand || '';
     formElement.seoTitle.value = item.seoTitle || '';
     formElement.seoDescription.value = item.seoDescription || '';
+    formElement.deliveryRules.value = rulesText(item.deliveryRules);
+    formElement.leadMin.value = item.leadDays ? item.leadDays.min : '';
+    formElement.leadMax.value = item.leadDays ? item.leadDays.max : '';
     const hasShop = Boolean(item.shopDescription) || Boolean((item.shopSpecifications || []).length);
     const note = $('#d-details-shop');
     note.hidden = !hasShop;
@@ -1102,6 +1122,7 @@
           priceMode: editForm.priceMode.value, priceFactor: num(editForm.priceFactor.value),
           description: editForm.description.value, specifications: editForm.specifications.value,
           brand: editForm.brand.value, seoTitle: editForm.seoTitle.value, seoDescription: editForm.seoDescription.value,
+          deliveryRules: parseRules(editForm.deliveryRules.value), leadDays: { min: editForm.leadMin.value, max: editForm.leadMax.value },
         } }) };
         toast('Opgeslagen');
         await loadUnits().catch((error) => toast(error.message, true));

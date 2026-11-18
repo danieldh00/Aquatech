@@ -757,7 +757,7 @@ function detailsSection(details) {
  * @param {{ packagingsFor?: Function, packCode?: string }} [packaging] packagingsFor(artikelcode) = de verpakkingen die de bezoeker mag kiezen (zie storefront.js) en packCode = de gekozen verpakking (leeg = per stuk).
  * @returns {string} De HTML-pagina.
  */
-function productPage(product, groups, chosenCode = '', details = new Map(), { packagingsFor = () => [], packCode = '' } = {}) {
+function productPage(product, groups, chosenCode = '', details = new Map(), { packagingsFor = () => [], packCode = '', leadTextFor = () => '' } = {}) {
   const root = '../../';
   const variants = product.variants || [];
   const chosen = variants.length ? (variants.find((variant) => variant.code === chosenCode) || variants.find((variant) => variant.inStock) || variants[0]) : null;
@@ -790,6 +790,7 @@ function productPage(product, groups, chosenCode = '', details = new Map(), { pa
     ${packagingPicker}
     <p class="price">${escapeHtml(formatPrice(pack ? pack.price : shownPrice(shown)))} <small>${activeShop.business ? `excl. ${shown.vatRate}% btw · per ${escapeHtml(pack ? `${pack.name} (${pack.factor} ${product.unit})` : product.unit)}<br><span class="price-incl">incl. btw ${escapeHtml(formatPrice(pack ? pack.priceIncl : shown.priceBusinessIncl))}</span>` : `incl. ${shown.vatRate}% btw · per ${escapeHtml(pack ? `${pack.name} (${pack.factor} ${product.unit})` : product.unit)}`}</small></p>
     <p class="stock ${(pack ? pack.inStock : shown.inStock) ? 'in' : 'out'}">${(pack ? pack.inStock : shown.inStock) ? 'Op voorraad' : 'Niet op voorraad'}</p>
+    ${leadTextFor(shown.code, pack ? pack.inStock : shown.inStock) ? `<p class="lead-time">${escapeHtml(leadTextFor(shown.code, pack ? pack.inStock : shown.inStock))}</p>` : ''}
     ${activeShop.ordering ? orderForm(root, pack ? pack.cartCode : shown.code, pack ? pack.inStock : shown.inStock, 'product-order', viewedItem) : '<button class="button" type="button" disabled>In winkelwagen</button>\n    <p class="note">Online bestellen volgt binnenkort.</p>'}
     ${parentLink}
   </div>

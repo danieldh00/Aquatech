@@ -227,7 +227,7 @@ test('sanitizeShipping: pallet en eigen transport staan uit, afhalen heet standa
   assert.strictEqual(partial.pickup.label, 'Afhalen in Nunspeet');
   assert.strictEqual(partial.dpd.enabled, true);
   assert.strictEqual(partial.pallet.label, 'Pallet Nunspeet');
-  assert.deepStrictEqual(partial.pallet.zones, [{ country: 'NL', name: 'Nederland', freeFrom: 0, tiers: [{ upToGrams: 500000, price: 95 }] }]);
+  assert.deepStrictEqual(partial.pallet.zones, [{ country: 'NL', name: 'Nederland', freeFrom: 0, tiers: [{ upToGrams: 500000, price: 95 }], qtyTiers: [] }]);
   assert.strictEqual(partial.eigen.enabled, false, 'alleen echt true zet een methode aan');
   // Het standaardgewicht staat op het hoogste niveau en valt terug op de oude plek bij DPD.
   assert.strictEqual(Shipping.sanitizeShipping({ defaultWeightGrams: 250, pickup: {} }).defaultWeightGrams, 250);

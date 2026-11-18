@@ -1393,6 +1393,14 @@ const MIGRATIONS = [
   ALTER TABLE stock_items ADD COLUMN seo_description TEXT NOT NULL DEFAULT '';
   ALTER TABLE stock_items ADD COLUMN brand TEXT NOT NULL DEFAULT '';
   `,
+  // 74: levermethode en levertijd (webshop/delivery-rules.js, delivery-times.js): toegestane methodes per artikel als JSON-lijst
+  // (leeg = geen beperking), een eigen levertijd per artikel (dagen, leeg = afleiden) en de levertijd van een leverancier per artikel.
+  `
+  ALTER TABLE stock_items ADD COLUMN delivery_rules TEXT NOT NULL DEFAULT '[]';
+  ALTER TABLE stock_items ADD COLUMN lead_days_min INTEGER;
+  ALTER TABLE stock_items ADD COLUMN lead_days_max INTEGER;
+  ALTER TABLE item_suppliers ADD COLUMN lead_days INTEGER;
+  `,
 ];
 
 /**
