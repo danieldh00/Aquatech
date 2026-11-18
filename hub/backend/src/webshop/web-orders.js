@@ -16,6 +16,8 @@ const { withCause } = require('../platform/error-report');
 const Shipping = require('./shipping');
 const Vat = require('./vat');
 const Wholesale = require('./wholesale');
+const DeliveryRules = require('./delivery-rules');
+const DeliveryTimes = require('./delivery-times');
 const { createFulfilment, remainingOf } = require('./fulfilment');
 const { visibleFor: packagingVisibleFor } = require('../artikelen/packagings');
 
@@ -209,10 +211,10 @@ function sanitizeCheckout(raw, { method = 'dpd', country = 'NL', billingCountry 
 /**
  * Maakt de opslag voor bestellingen van de eigen webshop.
  * @param {object} db De database.
- * @param {{ stock: object, categoryDiscountsOf?: Function }} deps De voorraadopslag (reserveren en afboeken) en categoryDiscountsOf(tenantId) = per artikelcode de categoriekorting (%) voor zakelijke klanten (zonder: geen).
+ * @param {{ stock: object, categoryDiscountsOf?: Function, deliveryRulesOf?: Function }} deps De voorraadopslag (reserveren en afboeken), categoryDiscountsOf(tenantId) = per artikelcode de categoriekorting (%) voor zakelijke klanten (zonder: geen) en deliveryRulesOf(tenantId) = per artikelcode de levermethoderegels van de categorie (zonder: geen).
  * @returns {{ priceCart: Function, shippingQuote: Function, orderTotals: Function, place: Function, get: Function, getForUser: Function, listForUser: Function, list: Function, setStatus: Function, setTracking: Function, updateData: Function, changePay: Function, unpaidOnline: Function, listToPick: Function, getMany: Function, pickable: Function, markPackingSlipsPrinted: Function, onShipped: Function, onCancelled: Function, onTracking: Function }} De functies.
  */
-function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() }) {
+function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(), deliveryRulesOf = () => new Map() }) {
   const shippedHooks = [];
   // Haken die na een deellevering draaien (er blijft nog iets op backorder).
   const partialHooks = [];
@@ -250,7 +252,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
     const codes = [...unique.keys()].slice(0, MAX_LINES);
     // Een artikelcode die zelf een @ bevat blijft werken: de volledige code gaat voor, anders wordt gesplitst in artikel en verpakking.
     const baseCodes = [...new Set(codes.flatMap((code) => [code, splitCartCode(code).baseCode]))];
-    const rows = baseCodes.length ? prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.stock_managed, i.sale_price, i.business_price, i.vat_rate, i.weight_grams, i.variant_values, i.order_pack_size, i.order_min_qty, i.price_tiers, i.unit_content, p.name AS parent_name,
+    const rows = baseCodes.length ? prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.stock_managed, i.sale_price, i.business_price, i.vat_rate, i.weight_grams, i.variant_values, i.order_pack_size, i.order_min_qty, i.price_tiers, i.unit_content, i.delivery_rules, i.lead_days_min, i.lead_days_max, p.delivery_rules AS parent_delivery_rules, p.name AS parent_name,
         (SELECT sp.in_stock FROM shop_products sp WHERE sp.tenant_id = i.tenant_id AND sp.id = i.shop_product_id) AS shop_in_stock,
         COALESCE((SELECT SUM(r.qty) FROM stock_reservations r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id), 0) AS reserved
       FROM stock_items i
@@ -270,6 +272,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
       WHERE tenant_id = ? AND active = 1 AND item_id IN (${packagedIds.map(() => '?').join(', ')})`).all(tenantId, ...packagedIds) : [];
     const packagingOf = new Map(packagingRows.map((row) => [`${row.item_id}|${row.code}`, row]));
     const lines = [];
+    const lineRows = [];
     const missing = [];
     for (const cartCode of codes) {
       const { baseCode, packCode } = resolve(cartCode);
@@ -308,6 +311,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
         : Math.round((Number(row.on_hand) - Number(row.reserved)) * 1000) / 1000;
       // Beschikbaar in de eenheid van de regel: bij een verpakking het aantal hele dozen of pallets.
       const available = packaging ? Math.floor(availableBase / factor) : availableBase;
+      lineRows.push(row);
       lines.push({
         itemId: row.id, code: cartCode, baseCode: row.code, name: packaging ? `${itemName} – ${packaging.name} (${factor} ${row.unit || 'st'})` : itemName, unit: packaging ? packaging.name : row.unit || 'st', qty, available, availableBase, managed: !unmanaged,
         unitExcl, vatRate, unitIncl, lineTotal: business ? round2(lineExcl * (1 + vatRate / 100)) : round2(unitIncl * qty), enough: available >= qty,
@@ -325,7 +329,16 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
       delete line.availableBase;
       delete line.managed;
     }
-    return { lines, missing, totals: totalsOf(lines), ok: lines.length > 0 && !missing.length && lines.every((line) => line.enough && !line.packProblem), pricesExcl: business };
+    // Levermethoderegels (artikel > hoofdartikel > categorie) en de eigen levertijd per regel, in de volgorde van de regels; blijft buiten de bestelregels.
+    const categoryRules = lines.length ? deliveryRulesOf(tenantId) : new Map();
+    const delivery = {
+      blocked: DeliveryRules.blockedMethods(lines.map((line, index) => ({
+        name: line.itemName || line.name, qty: stockQtyOf(line),
+        rules: DeliveryRules.effectiveRules(lineRows[index].delivery_rules, lineRows[index].parent_delivery_rules, categoryRules.get(lineRows[index].code)),
+      }))),
+      overrides: lineRows.map((row) => (row.lead_days_min == null ? null : DeliveryTimes.sanitizeLead({ min: row.lead_days_min, max: row.lead_days_max }))),
+    };
+    return { lines, missing, delivery, totals: totalsOf(lines), ok: lines.length > 0 && !missing.length && lines.every((line) => line.enough && !line.packProblem), pricesExcl: business };
   }
 
   /**
@@ -430,7 +443,15 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
    */
   function shippingQuote(cart, config, country) {
     const weightGrams = Shipping.weightOf(cart.lines, config);
-    return { weightGrams, countries: Shipping.countriesOf(config), options: Shipping.optionsFor(config, { country, weightGrams, subtotal: cart.totals.total }) };
+    const delivery = cart.delivery || { blocked: {}, overrides: [] };
+    const options = Shipping.optionsFor(config, { country, weightGrams, subtotal: cart.totals.total, quantity: Shipping.quantityOf(cart.lines), blocked: delivery.blocked });
+    // Indicatieve levertijd per methode: de langzaamste regel (alles in de wagen is op voorraad; een eigen levertijd van een artikel gaat voor).
+    for (const option of options) {
+      const lead = DeliveryTimes.slowestOf(cart.lines.map((line, index) => DeliveryTimes.leadFor({ override: delivery.overrides[index] || null, inStock: true, methodLead: option.leadDays, dayType: option.dayType })));
+      option.lead = lead;
+      option.leadText = DeliveryTimes.leadText(lead);
+    }
+    return { weightGrams, countries: Shipping.countriesOf(config), options };
   }
 
   /**
@@ -518,7 +539,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
             : { street: fields.deliveryStreet, postcode: fields.deliveryPostcode, city: fields.deliveryCity, country, ...(user.deliveryUnverified ? { unverified: true } : {}) },
         ...(method === 'ophalen' ? {} : { billingAddress: { street: fields.street, postcode: fields.postcode, city: fields.city, country: billingCountry, ...(user.addressUnverified ? { unverified: true } : {}) } }),
         deliverySame: method === 'ophalen' ? true : fields.deliverySame,
-        shipping: { method, label: option.label, price: calculated.shipping.price, priceExcl: calculated.shipping.priceExcl, free: option.free && method !== 'ophalen', vatRate: calculated.shipping.vatRate, weightGrams: quote.weightGrams, tracking: null },
+        shipping: { method, label: option.label, price: calculated.shipping.price, priceExcl: calculated.shipping.priceExcl, free: option.free && method !== 'ophalen', vatRate: calculated.shipping.vatRate, weightGrams: quote.weightGrams, tracking: null, eta: { text: option.leadText, min: option.lead ? option.lead.min : null, max: option.lead ? option.lead.max : null, dayType: option.lead ? option.lead.dayType : null, indicative: true } },
         customerGroup: group, vat: group === 'zakelijk' ? { number: fields.vatNumber, shifted: calculated.shifted, ...(calculated.shifted && user.vies ? { vies: user.vies } : {}) } : null,
         note: fields.note, totals, payment: online ? 'online' : 'op rekening', consent: { terms: true, at: timestamp },
         ...(dropshipping.value ? { dropshipping: dropshipping.value } : {}),

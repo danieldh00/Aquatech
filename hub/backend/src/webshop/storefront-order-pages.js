@@ -146,6 +146,16 @@ function vatNoteText(business, shifted, otherNumber = false) {
 }
 
 /**
+ * De korte levertijd bij een verzendoptie in de keuzelijst.
+ * @param {{ leadText: string, lead: ?object }} option De optie (web-orders.js, shippingQuote).
+ * @returns {string} Bijvoorbeeld "levertijd ca. 1-2 dagen", "direct" of "levertijd op aanvraag".
+ */
+function leadPhrase(option) {
+  if (!option.lead) return 'levertijd op aanvraag';
+  return option.lead.max === 0 ? 'direct' : `levertijd ca. ${option.leadText}`;
+}
+
+/**
  * De keuze van de verzendmethode: een land (bij meer dan één) en een keuzelijst met per methode de kosten. Methodes die voor dit land of
  * gewicht niet kunnen staan er uitgeschakeld in; hun reden staat eronder. De gekozen methode krijgt zijn toelichting onder de lijst.
  * @param {{ countries: object[], options: object[] }} quote De verzendopties (web-orders.js, shippingQuote).
@@ -164,7 +174,7 @@ function shippingChoice(quote, country, method, summaries = {}, business = false
     const businessPrice = option.available && business && summaries[option.method] ? summaries[option.method].shipping.priceExcl : undefined;
     const displayPrice = businessPrice !== undefined ? businessPrice : option.price;
     const price = !option.available ? '' : option.free && option.method !== 'ophalen' ? 'Gratis' : displayPrice > 0 ? formatPrice(displayPrice) : 'Gratis';
-    const text = `${option.label}${option.available ? ` – ${price}` : ' (niet beschikbaar)'}`;
+    const text = `${option.label}${option.available ? ` – ${price}${option.leadText ? ` · ${leadPhrase(option)}` : ''}` : ' (niet beschikbaar)'}`;
     return `<option value="${escapeHtml(option.method)}"${option.method === method ? ' selected' : ''}${option.available ? '' : ' disabled'} data-method-note="${escapeHtml(option.available ? option.note : '')}"${summaryData(option, summaries[option.method], business)}>${escapeHtml(text)}</option>`;
   });
   const chosen = quote.options.find((option) => option.method === method && option.available);
@@ -172,7 +182,7 @@ function shippingChoice(quote, country, method, summaries = {}, business = false
   const reasons = unavailable.map((option) => `<br><small>${escapeHtml(option.label)}: ${escapeHtml(option.reason)}</small>`).join('');
   const list = entries.length
     ? `<label class="form-field"><span>Verzendmethode</span><select name="shippingMethod" required>${entries.join('')}</select></label>
-<p class="note" data-ship-note${chosen && chosen.note ? '' : ' hidden'}>${chosen ? escapeHtml(chosen.note) : ''}</p>${reasons ? `<p class="note">${reasons.slice(4)}</p>` : ''}`
+<p class="note" data-ship-note${chosen && chosen.note ? '' : ' hidden'}>${chosen ? escapeHtml(chosen.note) : ''}</p><p class="note"><small>Levertijden zijn indicatief; we zijn afhankelijk van externe partijen.</small></p>${reasons ? `<p class="note">${reasons.slice(4)}</p>` : ''}`
     : '<p class="note">Er is op dit moment geen verzendmethode beschikbaar.</p>';
   return `<h2>Verzending</h2>
 ${countryField}

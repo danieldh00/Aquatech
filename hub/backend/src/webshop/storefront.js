@@ -25,6 +25,7 @@ const Wholesale = require('./wholesale');
 const { returnsBlock } = require('./storefront-return-pages');
 const { legalDefaults, LEGAL_SLUGS, LEGAL_TITLES } = require('./legal-pages');
 const Shipping = require('./shipping');
+const DeliveryTimes = require('./delivery-times');
 const Vat = require('./vat');
 const { validPaymentId, cleanPublicUrl, sanitizePayment } = require('./mollie');
 const Analytics = require('./shop-analytics');
@@ -1327,7 +1328,23 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
       });
     };
     const packCode = typeof req.query.p === 'string' ? req.query.p.slice(0, 40) : '';
-    sendPage(req, res, 200, () => productPage(product, catalog.groups, chosenCode || (variant ? variant.code : ''), details, { packagingsFor, packCode }));
+    // De indicatieve levertijd bij een artikel: met de eerste bezorgmethode die aan staat (anders afhalen), zie delivery-times.js.
+    const leadInfo = data.leadInfoOf ? data.leadInfoOf(tenantId, [product.code, ...(product.variants || []).map((entry) => entry.code)]) : new Map();
+    const shipping = Shipping.sanitizeShipping(settingsFor(tenantId).get('shopShipping'));
+    const leadMethod = Shipping.CARRIERS.map((carrier) => shipping[carrier]).find((carrier) => carrier.enabled && carrier.zones.some((zone) => zone.tiers.length || (zone.qtyTiers || []).length)) || (shipping.pickup.enabled ? shipping.pickup : null);
+    /**
+     * De tekst met de levertijd van een artikel.
+     * @param {string} itemCode Artikelcode.
+     * @param {boolean} inStock Of het artikel (of de gekozen verpakking) op voorraad is.
+     * @returns {string} Bijvoorbeeld "Levertijd ca. 1-2 dagen" of "Levertijd op aanvraag"; leeg als er geen bezorgmethode aan staat.
+     */
+    const leadTextFor = (itemCode, inStock) => {
+      if (!leadMethod) return '';
+      const info = leadInfo.get(itemCode) || { override: null, supplierLeadDays: null, expectedDate: '' };
+      const lead = DeliveryTimes.leadFor({ override: info.override, inStock, methodLead: leadMethod.leadDays, dayType: leadMethod.dayType, expectedDate: info.expectedDate, supplierLeadDays: info.supplierLeadDays });
+      return lead ? (lead.max === 0 ? 'Direct beschikbaar' : `Levertijd ca. ${DeliveryTimes.leadText(lead)}`) : DeliveryTimes.UNKNOWN_TEXT;
+    };
+    sendPage(req, res, 200, () => productPage(product, catalog.groups, chosenCode || (variant ? variant.code : ''), details, { packagingsFor, packCode, leadTextFor }));
   });
 
   router.use((req, res) => {

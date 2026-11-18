@@ -15,6 +15,7 @@ const { sanitizeVisma, sanitizeVismaApp } = require('../verkoop/visma');
 const { sanitizeDriveBackup, sanitizeDriveState } = require('./drive-backup');
 const { sanitizeLabelTemplates } = require('../artikelen/labels');
 const { sanitizeCategoryDiscounts } = require('../webshop/category-discounts');
+const { sanitizeCategoryRules } = require('../webshop/delivery-rules');
 const { sanitizePriceFactors } = require('../artikelen/price-factor');
 const { sanitizeDocumentLayout } = require('../verkoop/document-layout');
 const { sanitizeMonitoring } = require('./monitoring-notify');
@@ -139,6 +140,8 @@ const FIELDS = {
   documentLayout: { type: 'object', default: {}, sanitize: sanitizeDocumentLayout, internal: true, notInView: true },
   // Kortingen per productcategorie voor zakelijke klanten (webshop/category-discounts.js); alleen via Beheer > Webshop > Zakelijke kortingen.
   categoryDiscounts: { type: 'object', default: {}, sanitize: sanitizeCategoryDiscounts, internal: true },
+  // Toegestane bezorgmethodes per productcategorie (webshop/delivery-rules.js); alleen via /api/admin/delivery-rules.
+  deliveryRules: { type: 'object', default: {}, sanitize: sanitizeCategoryRules, internal: true },
   // Automatische bestelvoorstellen (artikelen/purchase-orders.js, autoPropose): zakt een artikel onder de minimumvoorraad,
   // dan houdt een uurlijkse taak per voorkeursleverancier een concept-inkooporder bij die de beheerder goedkeurt. Per
   // omgeving, standaard aan (Beheer > Modules > Artikelen: bestelvoorstellen). Bewust geen liveOnly: de taak maakt alleen

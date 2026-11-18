@@ -5,6 +5,8 @@
 // en de opties voor een winkelwagen worden hier berekend. Alle prijzen zijn
 // incl. btw; web-orders.js rekent de btw uit (tarief `vatRate`).
 
+const { sanitizeLead, sanitizeDayType } = require('./delivery-times');
+
 /** Btw-tarief waarmee verzendkosten worden berekend. */
 const SHIPPING_VAT_RATE = 21;
 /** Hoogstens zoveel landen en zoveel weegklassen per land. */
@@ -29,18 +31,23 @@ const CARRIER_LABELS = { dpd: 'Bezorging door DPD', pallet: 'Bezorging per palle
 
 /** Indicatieve startwaarden (aan te passen in Beheer): DPD binnen Nederland; pallet en eigen transport staan uit tot er tarieven zijn. */
 const DEFAULT_CONFIG = {
-  pickup: { enabled: true, label: DEFAULT_PICKUP_LABEL, note: '' },
+  pickup: { enabled: true, label: DEFAULT_PICKUP_LABEL, note: '', leadDays: { min: 0, max: 0 }, dayType: 'calendar' },
   defaultWeightGrams: DEFAULT_WEIGHT_GRAMS,
   dpd: {
     enabled: true,
-    label: CARRIER_LABELS.dpd,
+    label: CARRIER_LABELS.dpd, leadDays: { min: 1, max: 2 }, dayType: 'calendar',
     zones: [{
       country: 'NL', name: 'Nederland', freeFrom: 150,
       tiers: [{ upToGrams: 2000, price: 6.95 }, { upToGrams: 5000, price: 8.95 }, { upToGrams: 10000, price: 11.95 }, { upToGrams: 23000, price: 15.95 }],
     }],
   },
-  pallet: { enabled: false, label: CARRIER_LABELS.pallet, zones: [] },
-  eigen: { enabled: false, label: CARRIER_LABELS.eigen, zones: [] },
+  pallet: { enabled: false, label: CARRIER_LABELS.pallet, zones: [], leadDays: { min: 3, max: 5 }, dayType: 'working' },
+  eigen: { enabled: false, label: CARRIER_LABELS.eigen, zones: [], leadDays: { min: 5, max: 10 }, dayType: 'working' },
+};
+
+/** Standaard levertijd en soort dagen per methode, voor een instelling zonder die velden. */
+const DEFAULT_LEADS = {
+  pickup: DEFAULT_CONFIG.pickup, dpd: DEFAULT_CONFIG.dpd, pallet: DEFAULT_CONFIG.pallet, eigen: DEFAULT_CONFIG.eigen,
 };
 
 /**
@@ -75,11 +82,28 @@ function sanitizeTiers(raw) {
 }
 
 /**
- * Saneert de tarieven per land van één bezorgmethode.
- * @param {*} raw De invoer ([{ country, name, freeFrom, tiers }]).
- * @returns {{ country: string, name: string, freeFrom: number, tiers: object[] }[]} De landen (hoogstens MAX_ZONES, elk land één keer).
+ * Saneert de aantalstaffel van een land (alleen pallet en eigen transport): oplopend op aantal, hoogstens MAX_TIERS.
+ * @param {*} raw De invoer ([{ upToQty, price }]); het aantal is in de basiseenheid van de artikelen.
+ * @returns {{ upToQty: number, price: number }[]} De klassen, of een lege lijst.
  */
-function sanitizeZones(raw) {
+function sanitizeQtyTiers(raw) {
+  const tiers = [];
+  for (const entry of (Array.isArray(raw) ? raw : []).slice(0, MAX_TIERS)) {
+    const upToQty = Math.round(Number(entry && entry.upToQty));
+    const price = round2(entry && entry.price);
+    if (!Number.isFinite(upToQty) || upToQty < 1 || upToQty > 1000000 || !(Number(entry && entry.price) >= 0) || price > 10000) continue;
+    tiers.push({ upToQty, price });
+  }
+  return tiers.sort((left, right) => left.upToQty - right.upToQty).filter((tier, index, list) => index === 0 || tier.upToQty !== list[index - 1].upToQty);
+}
+
+/**
+ * Saneert de tarieven per land van één bezorgmethode.
+ * @param {*} raw De invoer ([{ country, name, freeFrom, tiers, qtyTiers }]).
+ * @param {boolean} [withQtyTiers] true bij pallet en eigen transport: dan telt ook de aantalstaffel `qtyTiers` (die gaat voor de weegklassen).
+ * @returns {{ country: string, name: string, freeFrom: number, tiers: object[], qtyTiers: object[] }[]} De landen (hoogstens MAX_ZONES, elk land één keer).
+ */
+function sanitizeZones(raw, withQtyTiers = false) {
   const zones = [];
   for (const entry of (Array.isArray(raw) ? raw : []).slice(0, MAX_ZONES)) {
     const country = text(entry && entry.country, 2).toUpperCase();
@@ -88,10 +112,23 @@ function sanitizeZones(raw) {
     zones.push({
       country, name: text(entry.name, 60) || COUNTRY_NAMES[country] || country,
       freeFrom: Number.isFinite(freeFrom) && freeFrom > 0 && freeFrom <= 100000 ? round2(freeFrom) : 0,
-      tiers: sanitizeTiers(entry.tiers),
+      tiers: sanitizeTiers(entry.tiers), ...(withQtyTiers ? { qtyTiers: sanitizeQtyTiers(entry.qtyTiers) } : {}),
     });
   }
   return zones;
+}
+
+/**
+ * De levertijd en de soort dagen van een methode uit de invoer. Een ontbrekend veld geeft de standaard; een bewust leeg veld (null of lege min) betekent "levertijd onbekend".
+ * @param {object} input De instelling van de methode.
+ * @param {string} method De methode (pickup, dpd, pallet of eigen).
+ * @returns {{ leadDays: ?{ min: number, max: number }, dayType: string }} Het bereik (null = onbekend) en 'calendar' of 'working'.
+ */
+function leadOf(input, method) {
+  const standard = DEFAULT_LEADS[method];
+  const given = input.leadDays;
+  const leadDays = given === undefined ? standard.leadDays : (given === null || given.min === '' || given.min == null ? null : (sanitizeLead(given) || standard.leadDays));
+  return { leadDays, dayType: sanitizeDayType(input.dayType, standard.dayType) };
 }
 
 /**
@@ -107,14 +144,14 @@ function sanitizeShipping(raw) {
   const weightInput = input.defaultWeightGrams !== undefined ? input.defaultWeightGrams : dpdInput.defaultWeightGrams;
   const defaultWeight = Math.round(Number(weightInput));
   const config = {
-    pickup: { enabled: pickupInput.enabled !== false, label: text(pickupInput.label, 60) || DEFAULT_PICKUP_LABEL, note: text(pickupInput.note, 300) },
+    pickup: { enabled: pickupInput.enabled !== false, label: text(pickupInput.label, 60) || DEFAULT_PICKUP_LABEL, note: text(pickupInput.note, 300), ...leadOf(pickupInput, 'pickup') },
     defaultWeightGrams: Number.isFinite(defaultWeight) && defaultWeight >= 0 && defaultWeight <= 100000 ? defaultWeight : DEFAULT_WEIGHT_GRAMS,
   };
   for (const carrier of CARRIERS) {
     const carrierInput = input[carrier] && typeof input[carrier] === 'object' ? input[carrier] : {};
     // DPD staat standaard aan; pallet en eigen transport alleen als de beheerder ze aanzet.
     const enabled = carrier === 'dpd' ? carrierInput.enabled !== false : carrierInput.enabled === true;
-    config[carrier] = { enabled, label: text(carrierInput.label, 60) || CARRIER_LABELS[carrier], zones: sanitizeZones(carrierInput.zones) };
+    config[carrier] = { enabled, label: text(carrierInput.label, 60) || CARRIER_LABELS[carrier], zones: sanitizeZones(carrierInput.zones, carrier !== 'dpd'), ...leadOf(carrierInput, carrier) };
   }
   return config;
 }
@@ -130,6 +167,15 @@ function weightOf(lines, config) {
 }
 
 /**
+ * Het totale aantal artikelen van een winkelwagen in de basiseenheid (een verpakking telt als haar factor).
+ * @param {{ qty: number, stockPer?: number }[]} lines De regels.
+ * @returns {number} Het aantal.
+ */
+function quantityOf(lines) {
+  return lines.reduce((sum, line) => sum + line.qty * (line.stockPer || 1), 0);
+}
+
+/**
  * De landen waarnaar bezorgd kan worden.
  * @param {object} config De instelling.
  * @returns {{ code: string, name: string }[]} De landen met minstens één weegklasse bij een methode die aan staat (leeg als er alleen afhalen is); elk land één keer.
@@ -139,7 +185,7 @@ function countriesOf(config) {
   for (const carrier of CARRIERS) {
     if (!config[carrier].enabled) continue;
     for (const zone of config[carrier].zones) {
-      if (zone.tiers.length && !countries.some((entry) => entry.code === zone.country)) countries.push({ code: zone.country, name: zone.name });
+      if ((zone.tiers.length || (zone.qtyTiers || []).length) && !countries.some((entry) => entry.code === zone.country)) countries.push({ code: zone.country, name: zone.name });
     }
   }
   return countries;
@@ -149,16 +195,19 @@ function countriesOf(config) {
  * De optie van één bezorgmethode voor een winkelwagen en een land.
  * @param {string} carrier De methode (dpd, pallet of eigen).
  * @param {object} config De instelling.
- * @param {{ country: string, weightGrams: number, subtotal: number }} basket Het land, het gewicht en het bedrag van de artikelen incl. btw.
+ * @param {{ country: string, weightGrams: number, subtotal: number, quantity?: number, blocked?: Object<string, string> }} basket Het land, het gewicht, het bedrag van de artikelen incl. btw, het aantal (basiseenheid) en de methodes die de artikelregels uitsluiten (methode → reden).
  * @returns {object} De optie (zie optionsFor).
  */
-function carrierOption(carrier, config, { country, weightGrams, subtotal }) {
-  const zone = config[carrier].zones.find((entry) => entry.country === country && entry.tiers.length);
-  const option = { method: carrier, label: config[carrier].label, price: 0, free: false, available: false, reason: '', note: '' };
-  if (!zone) option.reason = 'Bezorging naar dit land is niet mogelijk.';
+function carrierOption(carrier, config, { country, weightGrams, subtotal, quantity = 0, blocked = {} }) {
+  const zone = config[carrier].zones.find((entry) => entry.country === country && (entry.tiers.length || (entry.qtyTiers || []).length));
+  const option = { method: carrier, label: config[carrier].label, price: 0, free: false, available: false, reason: '', note: '', leadDays: config[carrier].leadDays, dayType: config[carrier].dayType };
+  if (blocked[carrier]) option.reason = blocked[carrier];
+  else if (!zone) option.reason = 'Bezorging naar dit land is niet mogelijk.';
   else {
-    const tier = zone.tiers.find((entry) => weightGrams <= entry.upToGrams);
-    if (!tier) option.reason = `Deze bestelling is te zwaar voor deze methode (${config[carrier].label}).`;
+    // Een aantalstaffel (pallet, eigen transport) gaat voor de weegklassen.
+    const byQuantity = (zone.qtyTiers || []).length > 0;
+    const tier = byQuantity ? zone.qtyTiers.find((entry) => quantity <= entry.upToQty) : zone.tiers.find((entry) => weightGrams <= entry.upToGrams);
+    if (!tier) option.reason = byQuantity ? `Dit aantal valt buiten de tarieven van deze methode (${config[carrier].label}).` : `Deze bestelling is te zwaar voor deze methode (${config[carrier].label}).`;
     else {
       option.available = true;
       option.free = zone.freeFrom > 0 && subtotal >= zone.freeFrom;
@@ -172,12 +221,12 @@ function carrierOption(carrier, config, { country, weightGrams, subtotal }) {
 /**
  * De verzendopties voor een winkelwagen en een land, in de volgorde van de keuzelijst: bezorgmethodes die aan staan, afhalen als laatste.
  * @param {object} config De instelling.
- * @param {{ country: string, weightGrams: number, subtotal: number }} basket Het land, het gewicht (gram) en het bedrag van de artikelen incl. btw.
- * @returns {{ method: string, label: string, price: number, free: boolean, available: boolean, reason: string, note: string }[]} De opties.
+ * @param {{ country: string, weightGrams: number, subtotal: number, quantity?: number, blocked?: Object<string, string> }} basket Het land, het gewicht (gram), het bedrag van de artikelen incl. btw, het aantal en de uitgesloten methodes (delivery-rules.js, blockedMethods).
+ * @returns {{ method: string, label: string, price: number, free: boolean, available: boolean, reason: string, note: string, leadDays: ?object, dayType: string }[]} De opties.
  */
 function optionsFor(config, basket) {
   const options = CARRIERS.filter((carrier) => config[carrier].enabled).map((carrier) => carrierOption(carrier, config, basket));
-  if (config.pickup.enabled) options.push({ method: 'ophalen', label: config.pickup.label, price: 0, free: true, available: true, reason: '', note: config.pickup.note });
+  if (config.pickup.enabled) options.push({ method: 'ophalen', label: config.pickup.label, price: 0, free: true, available: true, reason: '', note: config.pickup.note, leadDays: config.pickup.leadDays, dayType: config.pickup.dayType });
   return options;
 }
 
@@ -216,4 +265,4 @@ function trackingOf(raw) {
   return { code, url: `https://tracking.dpd.de/status/nl_NL/parcel/${encodeURIComponent(code)}` };
 }
 
-module.exports = { sanitizeShipping, weightOf, countriesOf, optionsFor, defaultMethod, METHODS, CARRIERS, validPostcode, trackingOf, SHIPPING_VAT_RATE, DEFAULT_CONFIG, COUNTRY_NAMES };
+module.exports = { sanitizeShipping, weightOf, quantityOf, countriesOf, optionsFor, defaultMethod, METHODS, CARRIERS, validPostcode, trackingOf, SHIPPING_VAT_RATE, DEFAULT_CONFIG, COUNTRY_NAMES };

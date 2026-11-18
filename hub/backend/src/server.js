@@ -70,7 +70,8 @@ const { createSeasonReminderStore, createSeasonReminderRunner } = require('./uit
 const { createStockStore, registerStockRoutes } = require('./artikelen/stock');
 const { createItemImageStore, registerItemImageRoutes } = require('./artikelen/item-images');
 const { registerLabelRoutes } = require('./artikelen/labels');
-const { sanitizeCategoryDiscounts, registerCategoryDiscountRoutes } = require('./webshop/category-discounts');
+const { sanitizeCategoryDiscounts, registerCategoryDiscountRoutes, flatten: flattenCategories } = require('./webshop/category-discounts');
+const { sanitizeCategoryRules, registerDeliveryRuleRoutes, resolverFor: resolveDeliveryRules } = require('./webshop/delivery-rules');
 const { createSupplierStore, registerSupplierRoutes } = require('./artikelen/suppliers');
 const { createPriceFactorStore, registerPriceFactorRoutes } = require('./artikelen/price-factor');
 const { createOrderReader: createDefaultOrderReader } = require('./artikelen/order-reader');
@@ -2767,7 +2768,32 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    * @returns {Map<string, number>} Het kortingspercentage per artikelcode.
    */
   const categoryDiscountsOf = (tenantId) => (sanitizeCategoryDiscounts(settingsFor(tenantId).get('categoryDiscounts')).rules.length ? storefrontData.catalogOf(tenantId).discountByCode : new Map());
-  const webOrders = createWebOrderStore(database, { stock: stockStore, categoryDiscountsOf });
+  // Levermethoderegels per categorie (Beheer > Webshop > Levermethodes, zie delivery-rules.js): per artikelcode de regels van zijn diepste categorie met regels, onthouden zolang de catalogus en de instelling gelijk blijven.
+  const deliveryRulesCache = new Map();
+  /**
+   * De levermethoderegels van de categorie per artikelcode.
+   * @param {string} tenantId De omgeving.
+   * @returns {Map<string, object[]>} De regels per artikelcode (leeg zonder regels per categorie).
+   */
+  const deliveryRulesOf = (tenantId) => {
+    const clean = sanitizeCategoryRules(settingsFor(tenantId).get('deliveryRules'));
+    if (!clean.categories.length) return new Map();
+    const catalog = storefrontData.catalogOf(tenantId);
+    const key = JSON.stringify(clean);
+    const cached = deliveryRulesCache.get(tenantId);
+    if (cached && cached.catalog === catalog && cached.key === key) return cached.rules;
+    const resolve = resolveDeliveryRules(flattenCategories(shopContentStore.publicContent(tenantId).tree), clean);
+    const rules = new Map();
+    for (const product of [...catalog.products, ...catalog.variantProducts]) {
+      const found = resolve(product.treeSlug || product.categorySlug);
+      if (found.length) rules.set(product.code, found);
+    }
+    deliveryRulesCache.set(tenantId, { catalog, key, rules });
+    return rules;
+  };
+  const webOrders = createWebOrderStore(database, { stock: stockStore, categoryDiscountsOf, deliveryRulesOf });
+  app.use('/api/admin/delivery-rules', express.json({ limit: '32kb' }));
+  registerDeliveryRuleRoutes(app, { settingsOf: (req) => settingsFor(req.tenantId), flatTreeOf: (tenantId) => flattenCategories(shopContentStore.publicContent(tenantId).tree), audit, requireJson });
   // Kortingen per productcategorie voor zakelijke klanten (Beheer > Webshop > Zakelijke kortingen, zie category-discounts.js).
   app.use('/api/admin/category-discounts', express.json({ limit: '32kb' }));
   registerCategoryDiscountRoutes(app, { settingsOf: (req) => settingsFor(req.tenantId), treeOf: (tenantId) => shopContentStore.publicContent(tenantId).tree, audit, requireJson });

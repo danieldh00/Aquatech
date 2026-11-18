@@ -418,7 +418,11 @@
             <label class="field">Naam van de afhaaloptie<input name="pickupLabel" maxlength="60" placeholder="Afhalen in Nunspeet"></label>
             <label class="field span-2">Toelichting bij afhalen (adres, openingstijden)<input name="pickupNote" maxlength="300"></label>
             <label class="field">Gewicht per artikel zonder ingevuld gewicht (gram)<input name="defaultWeightGrams" type="number" min="0" max="100000" step="1"></label>
+            <label class="field">Levertijd afhalen van (dagen)<input name="pickupLeadMin" type="number" min="0" max="365" step="1" placeholder="leeg = op aanvraag"></label>
+            <label class="field">Levertijd afhalen tot (dagen)<input name="pickupLeadMax" type="number" min="0" max="365" step="1"></label>
+            <label class="field">Soort dagen bij afhalen<select name="pickupDayType"><option value="calendar">Kalenderdagen</option><option value="working">Werkdagen</option></select></label>
           </div>
+          <p class="muted small">Levertijden zijn indicatief en worden getoond bij het product en bij het afrekenen. Een artikel kan een eigen levertijd hebben; zonder levertijd staat er "Levertijd op aanvraag". Bij pallet en eigen transport kun je naast weegklassen een <i>aantalstaffel</i> invullen (t/m aantal=prijs, bijvoorbeeld <code>50=45; 200=80</code>); die gaat dan voor de weegklassen.</p>
           <p class="muted small">Per bezorgmethode één regel per land: landcode, naam, gratis vanaf (leeg of 0 = nooit) en de weegklassen als <i>t/m gram=prijs</i>, gescheiden door een puntkomma (bijvoorbeeld <code>2000=6,95; 5000=8,95</code>). Zwaarder dan de hoogste klasse = niet te bezorgen met die methode. Het gewicht per artikel vul je in bij <i>Artikelen</i>.</p>
           <div id="s-shipping-carriers"></div>
           <div class="form-actions"><button class="btn primary" type="submit">Verzending opslaan</button></div>
@@ -525,6 +529,19 @@
             <button class="btn primary" type="submit">Kortingen opslaan</button>
           </div>
           <div id="kd-err" class="err" role="alert"></div>
+        </form>
+      </section>
+      <section id="tab-shopleveren" class="tabpane" hidden>
+        <p class="muted small">Bepaal per productcategorie welke bezorgmethodes mogen, met een aantalgrens in de basiseenheid. Schrijf de regels als <code>methode:van-tot</code>, gescheiden door komma's: <code>dpd:1-99, pallet:100-</code> betekent tot 99 stuks DPD en vanaf 100 alleen pallet (een leeg "tot" = geen bovengrens). Methodes zijn <code>dpd</code>, <code>eigen</code> en <code>pallet</code>; afhalen kan altijd. Een subcategorie met eigen regels gaat voor haar hoofdcategorie; regels bij het artikel zelf gaan voor de categorie. Een bestelling met artikelen die verschillende methodes vragen gaat met de zwaarste methode (pallet) mee. De tarieven en levertijden per methode staan bij Instellingen &gt; Verzending.</p>
+        <form id="dr-form" class="card-form settings" novalidate>
+          <h3>Regels per categorie</h3>
+          <div id="dr-list"></div>
+          <p class="muted small" id="dr-empty" hidden>Nog geen regels: alle methodes zijn toegestaan.</p>
+          <div class="row actions">
+            <button class="btn" type="button" id="dr-add">Categorie toevoegen</button>
+            <button class="btn primary" type="submit">Regels opslaan</button>
+          </div>
+          <div id="dr-err" class="err" role="alert"></div>
         </form>
       </section>
       <section id="tab-shopinhoud" class="tabpane" hidden>
@@ -830,6 +847,7 @@
   <script src="webshop-menu.js"></script>
   <script src="webshop-inhoud.js"></script>
   <script src="kortingen.js"></script>
+  <script src="levermethodes.js"></script>
   <script src="sproeiers.js"></script>
   <script src="rollen.js"></script>
   <script src="aikosten.js"></script>

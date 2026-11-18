@@ -440,6 +440,8 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
   const detailsCache = new Map();
   // Verpakkingen per productpagina (zelfde bewaartijd en begrenzing).
   const packagingCache = new Map();
+  // Levertijdgegevens per productpagina (zelfde bewaartijd en begrenzing).
+  const leadCache = new Map();
   // Lopende opvragingen van warm per omgeving (één tegelijk).
   const warming = new Map();
   // Telt elke clearCache: een opvraging die begon vóór het wissen, vult de cache daarna niet met oude gegevens.
@@ -534,10 +536,37 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
       return packagings;
     },
     /**
+     * De gegevens waaruit de levertijd van een artikel volgt als de standaard van de bezorgmethode niet geldt: de eigen levertijd van het
+     * artikel, de levertijd van de voorkeursleverancier en de vroegste verwachte datum van een openstaande inkooporder. Eén query per
+     * productpagina, daarna uit het geheugen.
+     * @param {string} tenantId De omgeving.
+     * @param {string[]} codes Artikelcodes (het artikel of zijn varianten).
+     * @returns {Map<string, { override: ?{ min: number, max: number }, supplierLeadDays: ?number, expectedDate: string }>} Per artikelcode (een artikel zonder gegevens ontbreekt niet: de waarden zijn dan leeg).
+     */
+    leadInfoOf(tenantId, codes) {
+      const wanted = [...new Set(codes.map(String))].slice(0, 500);
+      if (!wanted.length) return new Map();
+      const cacheKey = `${tenantId}|${wanted.join('|')}`;
+      const hit = leadCache.get(cacheKey);
+      if (hit && hit.until > Date.now()) return hit.info;
+      const rows = db.prepare(`SELECT i.code, i.lead_days_min, i.lead_days_max,
+          (SELECT l.lead_days FROM item_suppliers l WHERE l.tenant_id = i.tenant_id AND l.item_id = i.id AND l.lead_days IS NOT NULL ORDER BY l.preferred DESC, l.lead_days LIMIT 1) AS supplier_lead_days,
+          (SELECT MIN(p.expected_date) FROM purchase_order_lines l JOIN purchase_orders p ON p.tenant_id = l.tenant_id AND p.id = l.order_id
+            WHERE l.tenant_id = i.tenant_id AND l.item_id = i.id AND p.status IN ('besteld', 'deels_ontvangen') AND l.received_qty < l.qty AND p.expected_date <> '') AS expected_date
+        FROM stock_items i WHERE i.tenant_id = ? AND i.code IN (${wanted.map(() => '?').join(',')})`).all(tenantId, ...wanted);
+      const info = new Map(rows.map((row) => [row.code, {
+        override: row.lead_days_min == null ? null : { min: Number(row.lead_days_min), max: Number(row.lead_days_max) },
+        supplierLeadDays: row.supplier_lead_days == null ? null : Number(row.supplier_lead_days), expectedDate: String(row.expected_date || ''),
+      }]));
+      if (leadCache.size >= DETAILS_CACHE_MAX) leadCache.delete(leadCache.keys().next().value);
+      leadCache.set(cacheKey, { info, until: Date.now() + CACHE_MS });
+      return info;
+    },
+    /**
      * Wist de cache (tests).
      * @returns {void}
      */
-    clearCache() { generation++; cache.clear(); detailsCache.clear(); packagingCache.clear(); },
+    clearCache() { generation++; cache.clear(); detailsCache.clear(); packagingCache.clear(); leadCache.clear(); },
   };
 
   /**

@@ -74,7 +74,7 @@ function sanitizeSupplier(input, { partial = false } = {}) {
 
 /**
  * Controleert en schoont de leveranciersregels van één artikel.
- * @param {*} entries De invoer: [{ supplierId, supplierSku, costPrice, orderQty, preferred }].
+ * @param {*} entries De invoer: [{ supplierId, supplierSku, costPrice, orderQty, leadDays, preferred }].
  * @returns {{ value?: object[], error?: string, field?: string }} De schone regels, of een fout.
  */
 function sanitizeItemSuppliers(entries) {
@@ -99,7 +99,13 @@ function sanitizeItemSuppliers(entries) {
       if (!Number.isFinite(orderQty) || orderQty <= 0 || orderQty > MAX_ORDER_QTY) return { error: 'De bestelhoeveelheid moet groter zijn dan 0.', field: 'orderQty' };
       orderQty = round3(orderQty);
     }
-    value.push({ supplierId, supplierSku: cleanText(entry.supplierSku, 80), costPrice, orderQty, preferred: Boolean(entry.preferred) });
+    // Levertijd van de leverancier in kalenderdagen (leeg = onbekend); dient voor de levertijd in de webshop als het artikel niet op voorraad is.
+    let leadDays = null;
+    if (entry.leadDays !== undefined && entry.leadDays !== null && entry.leadDays !== '') {
+      leadDays = Number(entry.leadDays);
+      if (!Number.isInteger(leadDays) || leadDays < 0 || leadDays > 365) return { error: 'De levertijd van de leverancier is een heel aantal dagen van 0 tot en met 365.', field: 'leadDays' };
+    }
+    value.push({ supplierId, supplierSku: cleanText(entry.supplierSku, 80), costPrice, orderQty, leadDays, preferred: Boolean(entry.preferred) });
   }
   // Hoogstens één voorkeur: de eerste die is aangevinkt; zonder voorkeur is de eerste leverancier het.
   const firstPreferred = value.findIndex((entry) => entry.preferred);
@@ -254,12 +260,12 @@ function createSupplierStore(db) {
   function forItem(tenantId, itemId) {
     const item = prepare('SELECT id FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, String(itemId || ''));
     if (!item) return null;
-    const rows = prepare(`SELECT l.supplier_id, l.supplier_sku, l.cost_price, l.order_qty, l.preferred, s.name AS supplier_name, s.archived AS supplier_archived
+    const rows = prepare(`SELECT l.supplier_id, l.supplier_sku, l.cost_price, l.order_qty, l.lead_days, l.preferred, s.name AS supplier_name, s.archived AS supplier_archived
       FROM item_suppliers l JOIN suppliers s ON s.tenant_id = l.tenant_id AND s.id = l.supplier_id
       WHERE l.tenant_id = ? AND l.item_id = ?`).all(tenantId, item.id);
     return rows.map((row) => ({
       supplierId: row.supplier_id, supplierName: row.supplier_name, supplierArchived: Boolean(Number(row.supplier_archived)), supplierSku: row.supplier_sku,
-      costPrice: row.cost_price == null ? null : Number(row.cost_price), orderQty: Number(row.order_qty), preferred: Boolean(Number(row.preferred)),
+      costPrice: row.cost_price == null ? null : Number(row.cost_price), orderQty: Number(row.order_qty), leadDays: row.lead_days == null ? null : Number(row.lead_days), preferred: Boolean(Number(row.preferred)),
     })).sort((left, right) => Number(right.preferred) - Number(left.preferred) || left.supplierName.localeCompare(right.supplierName, 'nl'));
   }
 
@@ -289,8 +295,8 @@ function createSupplierStore(db) {
       prepare('DELETE FROM item_suppliers WHERE tenant_id = ? AND item_id = ?').run(tenantId, item.id);
       const timestamp = currentTimestamp();
       for (const entry of checked.value) {
-        prepare('INSERT INTO item_suppliers (id, tenant_id, item_id, supplier_id, supplier_sku, cost_price, order_qty, preferred, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-          .run(crypto.randomUUID(), tenantId, item.id, entry.supplierId, entry.supplierSku, entry.costPrice, entry.orderQty, entry.preferred ? 1 : 0, timestamp);
+        prepare('INSERT INTO item_suppliers (id, tenant_id, item_id, supplier_id, supplier_sku, cost_price, order_qty, lead_days, preferred, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .run(crypto.randomUUID(), tenantId, item.id, entry.supplierId, entry.supplierSku, entry.costPrice, entry.orderQty, entry.leadDays, entry.preferred ? 1 : 0, timestamp);
       }
       return { suppliers: forItem(tenantId, item.id) };
     });
