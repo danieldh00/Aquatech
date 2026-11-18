@@ -83,6 +83,10 @@ async function refreshTotals(form) {
     if (sameChoice) {
       sameChoice.checked = true;
       showChosenShipping(sameChoice);
+    } else {
+      // De eerdere keuze bestaat in dit land niet meer: de server koos een geldige methode vooraf; neem die over in het overzicht.
+      const fallback = chosenShipping(form);
+      if (fallback) showChosenShipping(fallback);
     }
   } catch (error) {
     // Geen verbinding: de pagina blijft staan en bij het bestellen controleert de server het totaal alsnog.
