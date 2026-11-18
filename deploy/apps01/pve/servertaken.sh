@@ -266,9 +266,15 @@ remote_update_run() {
         echo "FOUT: $APP_DIR/update/request bestaat niet; draai eerst setup-app-update.sh (dan krijgt de map de juiste eigenaar)." >&2; return 1
       fi
       log "Automatisch bijwerken staat uit of wacht: aanvraag voor $available klaarzetten"
+      # Veilig schrijven: het tijdelijke bestand staat in de root-eigen statusmap (de app kan daar niets neerzetten) en
+      # gaat met een rename naar de aanvraagmap; een symlink request.json van de app wordt zo vervangen, nooit gevolgd.
+      local request_tmp
+      request_tmp="$(mktemp "$APP_DIR/update/status/.tmp.XXXXXX")"
       printf '{"id":"%s","version":"%s","requestedAt":"%s","by":"servertaken","byName":"servertaken.sh"}\n' \
-        "$(cat /proc/sys/kernel/random/uuid)" "$available" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$APP_DIR/update/request/request.json"
-      chown --reference="$APP_DIR/update/request" "$APP_DIR/update/request/request.json"
+        "$(cat /proc/sys/kernel/random/uuid)" "$available" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$request_tmp"
+      chown --reference="$APP_DIR/update/request" -- "$request_tmp"
+      chmod 644 -- "$request_tmp"
+      mv -T -f -- "$request_tmp" "$APP_DIR/update/request/request.json"
       systemctl start aquatech-update.service || true
     fi
   fi
