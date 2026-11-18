@@ -2,6 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const express = require('express');
 
+const { warmShop } = require('./webshop/warm-up');
 const { createAuth, remoteIp, clientKey, parseCookies } = require('./beveiliging/auth');
 const { createAccountTokens } = require('./platform/account-tokens');
 const { createRateLimiter } = require('./beveiliging/rate-limit');
@@ -3693,6 +3694,12 @@ if (require.main === module) {
 
   const server = app.listen(port, () => {
     console.log(`Aquatech ${readVersion()} luistert op poort ${port}`);
+    // Na het starten de belangrijkste shoppagina's alvast opvragen, zodat de eerste bezoeker niet op een koude cache wacht.
+    if (process.env.WARM_UP !== '0') {
+      setTimeout(() => warmShop({ baseUrl: `http://127.0.0.1:${port}`, log: (message) => console.warn(message) })
+        .then((visited) => { if (visited.length) console.log(`Webshop opgewarmd: ${visited.length} pagina's`); })
+        .catch((error) => console.warn('Opwarmen van de webshop mislukt:', error.message)), 2000).unref();
+    }
   });
   // Netjes stoppen bij `docker stop` (SIGTERM) in plaats van na 10 s geforceerd.
   for (const sig of ['SIGTERM', 'SIGINT']) {
