@@ -277,7 +277,7 @@ SQL
   # De app maakt zijn verbindingen pas bij het eerste verzoek: tot 30 seconden wachten, dan pas oordelen.
   local connections=0 waited=0
   while (( waited < 30 )); do
-    connections="$(local_psql postgres -c "SELECT count(*) FROM pg_stat_activity WHERE application_name = 'aquatech' AND usename = 'aquatech'")"
+    connections="$(local_psql postgres -c "SELECT count(*) FROM pg_stat_activity WHERE application_name = 'aquatech' AND usename = 'aquatech'" || echo 0)"
     [[ "$connections" -ge 1 ]] && break
     sleep 3; waited=$((waited + 3))
   done
