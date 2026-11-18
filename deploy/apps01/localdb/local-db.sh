@@ -269,7 +269,8 @@ SQL
   SWITCHED=1
   local services; services="$(dc_now config --services 2>&1 || true)"
   grep -qx postgres <<<"$services" || die "docker compose ziet COMPOSE_FILE in .env niet; omgezet terug. docker compose meldt: $(head -c 400 <<<"$services" | tr '\n' ' ') | sleutels in .env: $(sed 's/=.*//' .env | tr '\n' ' ')| bestanden: $(ls compose*.yml 2>&1 | tr '\n' ' ')"
-  dc_now up -d aquatech
+  # --force-recreate: docker compose ziet een ander geheimenbestand (database-url) niet als wijziging en zou de oude container met de oude verbinding laten staan.
+  dc_now up -d --force-recreate aquatech
   wait_health app_health 180 || { dc_now logs --tail 40 aquatech || true; die "De app werd niet healthy op de eigen database; terug naar Supabase."; }
   local logs; logs="$(dc_now logs --no-log-prefix aquatech 2>&1 || true)"
   grep -q 'Database: PostgreSQL' <<<"$logs" || die "De app meldt geen PostgreSQL; terug naar Supabase."
@@ -323,7 +324,7 @@ on_migrate_exit() {
     echo "FOUT: migratie afgebroken (code $code). Terugdraaien naar Supabase..." >&2
     if (( SWITCHED )) && [[ -n "$ENV_BACKUP" && -f "$ENV_BACKUP" ]]; then cp -a "$ENV_BACKUP" .env; fi
     if (( APP_STOPPED )) || (( SWITCHED )); then
-      COMPOSE_FILE="compose.yml" docker compose up -d aquatech || echo "Starten van de app lukte niet: controleer 'docker compose logs aquatech'." >&2
+      COMPOSE_FILE="compose.yml" docker compose up -d --force-recreate aquatech || echo "Starten van de app lukte niet: controleer 'docker compose logs aquatech'." >&2
     fi
     echo "De app draait weer op Supabase (gegevens ongewijzigd). Opnieuw proberen kan: db-local.sh migrate" >&2
   fi
@@ -370,7 +371,7 @@ cmd_rollback() {
   fi
   cp -a .env "$ENV_BACKUP"
   env_unset COMPOSE_FILE
-  dc_supabase up -d aquatech
+  dc_supabase up -d --force-recreate aquatech
   wait_health app_health 180 || { dc_supabase logs --tail 40 aquatech || true; die "De app werd niet healthy op Supabase."; }
   grep -q 'Database: PostgreSQL' <<<"$(dc_supabase logs --no-log-prefix aquatech 2>&1 || true)" || die "De app meldt geen PostgreSQL."
   trap - EXIT
