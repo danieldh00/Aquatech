@@ -1,6 +1,6 @@
 /* Mijn profiel: kaarten met formulieren. Basis uit dashboard.css en beheer.css. */
 .profile { max-width: 860px; }
-.profile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; align-items: stretch; }
+.profile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 16px; align-items: stretch; }
 .profile-grid[hidden] { display: none; }
 .pcard { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; min-width: 0; }
 /* Elke kaart is een kolom met overal dezelfde tussenruimte; knoppen staan onderaan, kaarten in een rij zijn even hoog. */

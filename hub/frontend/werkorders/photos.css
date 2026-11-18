@@ -8,7 +8,7 @@
 .ph-empty { color: var(--muted); font-size: 14px; margin: 4px 0; }
 
 .ph-group { margin: 12px 0 4px; font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
-.ph-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+.ph-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 160px), 1fr)); gap: 10px; }
 .ph-tile { position: relative; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff; display: flex; flex-direction: column; }
 .ph-tile .ph-img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #e6eaef; cursor: zoom-in; border: 0; padding: 0; }
 .ph-tile .ph-img img { width: 100%; height: 100%; object-fit: cover; display: block; }

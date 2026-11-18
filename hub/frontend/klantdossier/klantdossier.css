@@ -11,7 +11,7 @@
 .d-head .sub { color: #c9d4e3; font-size: 13px; }
 .d-head .d-company { text-align: right; font-size: 12px; color: #c9d4e3; white-space: pre-line; }
 
-.d-cust { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 6px 18px; font-size: 14px; }
+.d-cust { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 6px 18px; font-size: 14px; }
 .d-cust .lbl { display: block; font-size: 12px; color: var(--muted); }
 
 .inst { border-left: 4px solid var(--at-green, #19924f); }
@@ -19,7 +19,7 @@
 .inst-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; margin-bottom: 8px; }
 .inst-head h2 { margin: 0; font-size: 18px; text-transform: none; letter-spacing: 0; color: var(--primary-dark); }
 .inst-head .spacer { flex: 1; }
-.inst-info { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 6px 18px; font-size: 14px; margin-bottom: 10px; }
+.inst-info { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 6px 18px; font-size: 14px; margin-bottom: 10px; }
 .inst-info .lbl { display: block; font-size: 12px; color: var(--muted); }
 .inst h3 { font-size: 14px; margin: 14px 0 6px; }
 .inst .notes { white-space: pre-line; background: #fafbfc; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: 14px; }

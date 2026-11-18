@@ -746,6 +746,7 @@
     renderCosts();
     window.ArtikelenSuppliers.showItem(item).catch((error) => toast(error.message, true));
     window.ArtikelenPackagings.showItem(item).catch((error) => toast(error.message, true));
+    window.ArtikelenTexts.showItem(item).catch((error) => toast(error.message, true));
     $('#d-res').innerHTML = item.reservations.length ? `<thead><tr><th>Werkorder</th><th>Status</th><th>Gepland</th><th class="num">Gereserveerd</th></tr></thead>
       <tbody>${item.reservations.map((reservation) => `<tr><td class="wrap">${woLink(reservation.workOrder)}<span class="sub">${esc(reservation.workOrder.title)}</span></td>
         <td><span class="pill wo-${esc(reservation.workOrder.status)}">${esc((WorkOrderCore && WorkOrderCore.STATUSES[reservation.workOrder.status]) || reservation.workOrder.status)}</span></td>
@@ -987,10 +988,10 @@
    * @param {string} id id van het artikel
    * @param {boolean} push true om het adres (?id=) in de geschiedenis te zetten
    * @param {Promise<object>|null} pending het al lopende verzoek om het artikel (of null)
-   * @param {{ focus?: boolean }} [options] focus: de focus naar de titel van het artikel (na een toetsenbord- of linkactie)
+   * @param {{ focus?: boolean, keepScroll?: boolean }} [options] focus: de focus naar de titel van het artikel (na een toetsenbord- of linkactie); keepScroll: niet naar boven scrollen (verversen na een actie)
    * @returns {Promise<void>}
    */
-  async function openItem(id, push = false, pending = null, { focus = false } = {}) {
+  async function openItem(id, push = false, pending = null, { focus = false, keepScroll = false } = {}) {
     try {
       state.item = await (pending || api(`stock/items/${encodeURIComponent(id)}`));
     } catch (error) {
@@ -1002,9 +1003,17 @@
     $('#v-list').hidden = true;
     $('#v-item').hidden = false;
     renderItem();
-    window.scrollTo(0, 0);
+    if (!keepScroll) window.scrollTo(0, 0);
     const heading = focus ? $('#d-title') : null;
     if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
+  }
+
+  /**
+   * Haalt het geopende artikel opnieuw op en tekent het zonder te scrollen (na het plaatsen van een producttekst).
+   * @returns {Promise<void>}
+   */
+  async function reloadItem() {
+    if (state.item) await openItem(state.item.id, false, null, { keepScroll: true });
   }
 
   /** Toont het overzicht in plaats van het artikel. */
@@ -1558,7 +1567,7 @@
       pricingForm.addEventListener('change', () => syncPricing(pricingForm));
       pricingForm.addEventListener('reset', () => setTimeout(() => syncPricing(pricingForm)));
     }
-    window.ArtikelenTexts.setup({ api, toast, esc });
+    window.ArtikelenTexts.setup({ api, toast, esc, openItem: (id) => openItem(id, true), reloadItem: () => reloadItem() });
     window.ArtikelenPriceFactor.setup({ api, toast, esc, nl, eur, workbook, save, stamp });
     window.ArtikelenOrders.setup({ api, toast, esc, nl, eur, getItems: () => state.items, workbook, save, stamp, afterProposal: () => loadReorder().catch((error) => toast(error.message, true)) });
     window.ArtikelenProposals.setup({

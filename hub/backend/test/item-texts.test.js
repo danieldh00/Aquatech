@@ -129,6 +129,7 @@ test('producttekst: genereren, fouten en afwijkingen, aanpassen en goedkeuren', 
     assert.deepStrictEqual(run.body.results.map((result) => [result.status, result.code || '']), [['ok', ''], ['ok', ''], ['error', 'api_error'], ['error', 'not_found']]);
     assert.strictEqual(calls.count, 3);
     const goodDetail = (await baas.get(`/app/api/stock/item-texts/${good.id}`)).body;
+    assert.deepStrictEqual(Object.keys(goodDetail.ai).sort(), ['batchSize', 'configured', 'enabled', 'remainingToday'], 'het artikelscherm krijgt de AI-status mee');
     assert.strictEqual(goodDetail.draft.description, 'Buis 25 mm, geleverd per meter.');
     assert.deepStrictEqual(goodDetail.draft.warnings.map((warning) => warning.kind), ['thin']);
     const badDetail = (await baas.get(`/app/api/stock/item-texts/${bad.id}`)).body;

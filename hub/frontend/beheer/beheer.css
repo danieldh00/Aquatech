@@ -25,7 +25,13 @@ a.brand.home { color: inherit; text-decoration: none; }
 .filters input[type=search] { flex: 1 1 260px; }
 input, select { font: inherit; font-family: var(--at-font); padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
 
-.tablewrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; box-sizing: border-box; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+/* Gedeeld tabelpatroon voor smalle schermen: een tabel scrolt horizontaal binnen zijn eigen .tablewrap en duwt de kaart nooit breder.
+   Een rasterkolom of flexkind krimpt standaard niet onder de breedte van zijn inhoud (min-width: auto); daarom mogen kaarten,
+   panelen en rasterkinderen hier wel krimpen. Losse kleine tabellen (.mini) scrollen zelf. */
+.card, .card-form, .tabpane, .cols > *, .card-grid > *, .form-grid > *, .do-layout > *, .row > * { min-width: 0; }
+.card-form, .card { max-width: 100%; box-sizing: border-box; }
+table.mini { display: block; max-width: 100%; overflow-x: auto; }
 table.grid { width: 100%; border-collapse: collapse; font-size: 14px; }
 table.grid th, table.grid td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; white-space: nowrap; }
 table.grid th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); background: #fafbfc; }
@@ -116,7 +122,7 @@ table.grid.matrix td.na { color: var(--line); }
 .card-form.settings [hidden] { display: none !important; }
 
 /* AI-kosten */
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 6px 0 14px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 10px; margin: 6px 0 14px; }
 .stat { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
 .stat b { display: block; font-size: 22px; color: var(--primary-dark); }
 .stat span { color: var(--muted); font-size: 13px; }
@@ -191,7 +197,7 @@ dl.kv dd { margin: 0; }
 .sc-pick { padding: 0; border: 2px solid transparent; background: none; cursor: pointer; border-radius: 6px; }
 .sc-pick:hover, .sc-pick:focus-visible { border-color: var(--primary); }
 .sc-pick img { display: block; width: 80px; height: 60px; object-fit: cover; border-radius: 4px; }
-.sc-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.sc-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr)); gap: 12px; }
 .sc-gallery figure { margin: 0; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--panel); }
 .sc-gallery img { display: block; width: 100%; height: 120px; object-fit: cover; background: var(--panel); }
 .sc-gallery figcaption { padding: 8px 10px; font-size: 13px; overflow-wrap: anywhere; }
@@ -330,11 +336,11 @@ dl.kv dd { margin: 0; }
 .pb-block { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px 14px; background: var(--bg, #fff); min-width: 0; }
 .pb-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
 .pb-tools { display: flex; gap: 6px; flex-wrap: wrap; }
-.pb-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 14px; align-items: start; }
+.pb-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 10px 14px; align-items: start; }
 .pb-fields label { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .pb-fields textarea, .pb-fields input:not([type=checkbox]), .pb-fields select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; max-width: 100%; box-sizing: border-box; }
 .pb-fields .pb-faq, .pb-fields > div, .pb-fields > p { grid-column: 1 / -1; }
-.pb-faq { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 14px; padding: 8px 0; border-top: 1px dashed var(--line); }
+.pb-faq { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 8px 14px; padding: 8px 0; border-top: 1px dashed var(--line); }
 .pb-faq .btn { justify-self: start; }
 .pb-block .sc-editor { min-height: 140px; }
 .pb-add { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 14px; }

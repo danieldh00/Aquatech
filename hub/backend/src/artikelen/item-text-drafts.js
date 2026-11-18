@@ -287,21 +287,34 @@ function registerItemTextRoutes(app, ctx) {
     return ids.length ? ids : null;
   };
 
+  /**
+   * De AI-status voor het scherm: aan of uit, sleutel aanwezig, hoeveel verzoeken er vandaag nog mogen en de portiegrootte.
+   * @param {object} req Het verzoek.
+   * @returns {{ enabled: boolean, configured: boolean, remainingToday: number, batchSize: number }} De status.
+   */
+  const aiStateOf = (req) => {
+    const settings = settingsFor(tenantOf(req));
+    return {
+      enabled: Boolean(settings.get('aiEnabled')),
+      configured: currentItemTextWriter(tenantOf(req)).available,
+      remainingToday: Math.max(0, settings.get('aiDailyLimit') - dailyFor(tenantOf(req)).count),
+      batchSize: GENERATE_BATCH,
+    };
+  };
+
   app.get('/api/stock/item-texts', requireStock, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    const settings = settingsFor(tenantOf(req));
-    const writer = currentItemTextWriter(tenantOf(req));
     const filter = ['alle', 'ontbreekt', 'concept', 'zonderconcept'].includes(req.query.filter) ? req.query.filter : 'alle';
     res.json({
       ...drafts.list(tenantOf(req), { search: String(req.query.q || '').slice(0, 80), filter, category: String(req.query.category || '').slice(0, 120) }),
-      ai: { enabled: Boolean(settings.get('aiEnabled')), configured: writer.available, remainingToday: Math.max(0, settings.get('aiDailyLimit') - dailyFor(tenantOf(req)).count), batchSize: GENERATE_BATCH },
+      ai: aiStateOf(req),
     });
   });
 
   app.get('/api/stock/item-texts/:itemId', requireStock, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     const found = drafts.get(tenantOf(req), req.params.itemId);
-    return found ? res.json(found) : notFound(res);
+    return found ? res.json({ ...found, ai: aiStateOf(req) }) : notFound(res);
   });
 
   app.post('/api/stock/item-texts/generate', requireJson, requireStock, limiter, async (req, res, next) => {
