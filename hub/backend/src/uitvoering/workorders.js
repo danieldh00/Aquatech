@@ -7,6 +7,7 @@
 // openbare link (openbaar/afspraak.html#t=<token>, zoals de digitale offerte)
 // ziet hij wanneer de klus gepland staat en bevestigt hij die of vraagt hij
 // een ander moment.
+const { mailStyleOf } = require('../platform/mail-layout');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const crypto = require('crypto');
@@ -891,7 +892,7 @@ function registerWorkOrderRoutes(app, ctx) {
       await mailer.send({
         to: list, replyTo: profile.email, bcc: copyTo(req.user),
         subject: String(subject || `Uw afspraak met ${profile.companyName}`).slice(0, 300),
-        ...mailBody(profile, text.split(/\n{2,}/), { label: 'Afspraak bekijken en bevestigen', href: workOrder.share.url }),
+        ...mailBody(profile, text.split(/\n{2,}/), { label: 'Afspraak bekijken en bevestigen', href: workOrder.share.url }, mailStyleOf(settings)),
       });
     } catch (error) {
       console.warn(`Afspraak ${workOrder.number} niet verstuurd: ${error.code || ''} ${error.message}`);
@@ -978,7 +979,7 @@ function registerWorkOrderRoutes(app, ctx) {
     const lines = latest.answer === 'bevestigd'
       ? [`${who} heeft de afspraak voor werkorder ${row.number} bevestigd: ${when}.`]
       : [`${who} vraagt een ander moment voor werkorder ${row.number} (nu gepland: ${when}).`, `Toelichting: ${latest.reason}`];
-    mailer.send({ to: profile.email, subject: latest.answer === 'bevestigd' ? `Afspraak ${row.number} bevestigd` : `Afspraak ${row.number}: ander moment gevraagd`, ...mailBody(profile, lines, null) })
+    mailer.send({ to: profile.email, subject: latest.answer === 'bevestigd' ? `Afspraak ${row.number} bevestigd` : `Afspraak ${row.number}: ander moment gevraagd`, ...mailBody(profile, lines, null, mailStyleOf(settings)) })
       .catch((error) => console.warn(`Bericht over afspraak ${row.number} niet verstuurd: ${error.message}`));
   }
 

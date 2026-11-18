@@ -9,6 +9,7 @@
 // zonder EXIF (photos.inspectImage) versleuteld opgeslagen (vault.sealBytes,
 // AAD = tenant + melding-foto-id). Bij het omzetten gaan ze als foto's "voor"
 // mee naar de werkorder.
+const { mailStyleOf } = require('../platform/mail-layout');
 const crypto = require('crypto');
 const { transaction } = require('../database/db');
 const { createMailer, validEmail } = require('../platform/mailer');
@@ -475,7 +476,7 @@ function registerServiceRequestRoutes(app, ctx) {
     const mailer = mailerFor(settings);
     const profile = settings.get('quoteProfile') || {};
     if (!mailer.configured() || !validEmail(to)) return;
-    mailer.send({ to, subject, ...mailBody(profile, lines, null) })
+    mailer.send({ to, subject, ...mailBody(profile, lines, null, mailStyleOf(settings)) })
       .catch((error) => console.warn(`Bericht over ${what} niet verstuurd: ${error.message}`));
   }
   /**

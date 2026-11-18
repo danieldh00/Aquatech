@@ -326,6 +326,7 @@ dl.kv dd { margin: 0; }
 .do-preview-head h3 { margin: 0; }
 .do-kinds { display: flex; gap: 6px; }
 .do-kinds .btn[aria-pressed="true"] { background: var(--at-navy); color: var(--at-surface); }
+.ml-frame { display: block; width: 100%; max-width: 600px; height: 560px; margin: 10px auto; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
 .do-canvas-wrap { margin: 10px 0; border: 1px solid var(--line); border-radius: 6px; background: #fff; overflow: hidden; }
 .do-canvas-wrap canvas { display: block; width: 100%; height: auto; }
 

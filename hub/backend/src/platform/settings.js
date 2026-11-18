@@ -18,6 +18,7 @@ const { sanitizeCategoryDiscounts } = require('../webshop/category-discounts');
 const { sanitizeCategoryRules } = require('../webshop/delivery-rules');
 const { sanitizePriceFactors } = require('../artikelen/price-factor');
 const { sanitizeDocumentLayout } = require('../verkoop/document-layout');
+const { sanitizeMailLayout } = require('./mail-layout');
 const { sanitizeMonitoring } = require('./monitoring-notify');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
@@ -137,6 +138,7 @@ const FIELDS = {
   // Sjablonen voor etiketten met streepjescode (Artikelen > Etiket afdrukken; artikelen/labels.js), per omgeving.
   labelTemplates: { type: 'object', default: {}, sanitize: sanitizeLabelTemplates },
   // Opmaak van de PDF-documenten (verkoop/document-layout.js): logo, kop, kleuren, lettertype en voettekst; alleen via Beheer > Documentopmaak.
+  mailLayout: { type: 'object', default: {}, sanitize: sanitizeMailLayout, internal: true, notInView: true },
   documentLayout: { type: 'object', default: {}, sanitize: sanitizeDocumentLayout, internal: true, notInView: true },
   // Kortingen per productcategorie voor zakelijke klanten (webshop/category-discounts.js); alleen via Beheer > Webshop > Zakelijke kortingen.
   categoryDiscounts: { type: 'object', default: {}, sanitize: sanitizeCategoryDiscounts, internal: true },
@@ -424,7 +426,7 @@ function createSettings({ db, tenantId, env = {}, vault = createVault() }) {
     return out;
   }
 
-  return { get, rejectedStart, update, view, FIELDS };
+  return { get, rejectedStart, update, view, FIELDS, tenantId };
 }
 
 module.exports = { createSettings, SettingsError, FIELDS, LIVE_ONLY_KEYS, valueForTest, sanitizePurchaseProposals, sanitizeMonitoring };

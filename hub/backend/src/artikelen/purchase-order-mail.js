@@ -1,8 +1,9 @@
 // Een inkooporder per e-mail naar de leverancier sturen, alleen na een klik van een medewerker (nooit automatisch): het concept
 // van ontvanger, onderwerp en tekst voor het scherm, en het versturen met de inkooporder als PDF in de bijlage. Wat er gebeurde
 // (wanneer, naar wie, of het mislukte) komt op de order zelf (purchaseOrders.markMail). De opmaak van de mail is die van de andere
-// zakelijke mails (mailBody); een instelbare mailopmaak volgt later.
+// zakelijke mails (Beheer > Mail-opmaak, type inkooporder).
 const { validEmail, mailFailure } = require('../platform/mailer');
+const { mailStyleOf, composeFor } = require('../platform/mail-layout');
 const { purchaseOrderPdf, purchaseOrderFileName } = require('./purchase-order-pdf');
 
 /** Statussen waarin een order naar de leverancier mag: pas na Bestellen, en niet meer als hij af of geannuleerd is. */
@@ -90,20 +91,18 @@ function createPurchaseOrderMailer({ purchaseOrders, suppliers, settingsFor, mai
     const settings = settingsFor(tenantId);
     const profile = settings.get('quoteProfile') || {};
     const contact = singleLine(supplier.contactName, 80);
-    const paragraphs = [
-      `Beste ${contact || 'heer/mevrouw'},`,
-      `Hierbij ontvangt u onze inkooporder ${order.number}${order.supplierReference ? ` (uw referentie ${singleLine(order.supplierReference, 60)})` : ''}. De order staat als PDF in de bijlage.`,
-      'Wilt u de order bevestigen met de verwachte levertijd? Bij vragen kunt u op deze mail antwoorden.',
-      'Met vriendelijke groet,',
-    ];
+    const composed = composeFor(settings, 'inkooporder', {
+      contact: contact || 'heer/mevrouw', nummer: order.number, bedrijf: profile.companyName || 'AquaTech',
+      referentie: order.supplierReference ? ` (uw referentie ${singleLine(order.supplierReference, 60)})` : '',
+    });
     let problem = '';
     if (!SENDABLE_STATUSES.includes(order.status)) problem = order.status === 'concept' ? 'Zet de order eerst op besteld (knop Bestellen); daarna kun je hem naar de leverancier sturen.' : 'Alleen een bestelde order is naar de leverancier te sturen.';
     else if (!mailerFor(settings).configured()) problem = 'Er is geen mailserver ingesteld (Beheer → Integraties → E-mail).';
     else if (!validEmail(supplier.email)) problem = `Bij leverancier ${supplier.name} staat geen geldig e-mailadres; vul het hieronder in of bij Leveranciers.`;
     return {
       to: validEmail(supplier.email) ? supplier.email : '',
-      subject: singleLine(`Inkooporder ${order.number} van ${profile.companyName || 'AquaTech'}`, MAX_SUBJECT),
-      message: paragraphs.join('\n\n'),
+      subject: singleLine(composed.subject, MAX_SUBJECT),
+      message: composed.paragraphs.join('\n\n'),
       fileName: purchaseOrderFileName(order),
       // Een ontbrekend leveranciersadres is geen blokkade: het scherm laat de medewerker een adres invullen.
       canSend: SENDABLE_STATUSES.includes(order.status) && mailerFor(settings).configured(),
@@ -143,7 +142,7 @@ function createPurchaseOrderMailer({ purchaseOrders, suppliers, settingsFor, mai
           to: addresses,
           replyTo: validEmail(profile.email) ? profile.email : undefined,
           subject: singleLine(subject, MAX_SUBJECT) || defaults.subject,
-          ...mailBody(profile, text.split(/\n{2,}/)),
+          ...mailBody(profile, text.split(/\n{2,}/), undefined, mailStyleOf(settings)),
           attachments: [{ filename: purchaseOrderFileName(order), content: pdfOf(tenantId, order, supplier), contentType: 'application/pdf' }],
         });
       } catch (error) {

@@ -43,6 +43,7 @@ const webOrdersModule = require('./webshop/web-orders');
 const { createWebOrderStore, registerWebOrderRoutes } = webOrdersModule;
 const { createPackingSlips, registerPackingSlipRoutes, packingSlipsPdf } = require('./webshop/packing-slips');
 const { registerDocumentLayoutRoutes } = require('./verkoop/document-layout');
+const { registerMailLayoutRoutes, configure: configureMailLayout } = require('./platform/mail-layout');
 const { invoicePdf } = require('./verkoop/invoice-pdf');
 const { createOrderpick, registerOrderpickRoutes } = require('./webshop/orderpick');
 const { createGoodsReceipt, registerGoodsReceiptRoutes } = require('./artikelen/goods-receipt');
@@ -686,6 +687,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use('/api/plan/learn', express.json({ limit: '256kb' }));
   // Documentopmaak: het logo komt als data-adres mee (hoogstens 300 kB, met de overhead van base64 dus ruim 400 kB).
   app.use('/api/admin/document-layout', express.json({ limit: '600kb' }));
+  app.use('/api/admin/mail-layout', express.json({ limit: '600kb' }));
   // Tekening + eindplan voor het meetcorpus (alleen als de organisatie dat aanzet, zie /api/plan/corpus).
   app.use('/api/plan/corpus', express.json({ limit: '12mb' }));
   // Een plan bevat de achtergrondafbeelding (base64).
@@ -2961,6 +2963,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
   registerPackingSlipRoutes(app, { slips: packingSlips, audit, requireJson });
   // Opmaak van de PDF-documenten per organisatie: logo, kop, kleuren, lettertype, voettekst en een voorbeeld (verkoop/document-layout.js).
+  // Opmaak en teksten van de e-mails per organisatie (platform/mail-layout.js): kleuren van het thema als terugval.
+  configureMailLayout({ colorsOf: documentColorsOf });
+  registerMailLayoutRoutes(app, { settingsOf: (req) => settingsFor(req.tenantId), mailerFor, audit, requireJson });
   registerDocumentLayoutRoutes(app, { settingsOf: (req) => settingsFor(req.tenantId), colorsOf: documentColorsOf, invoicePdf, packingSlipsPdf, audit, requireJson });
   // Orderpick-app voor het magazijn (webshop/orderpick.js, recht orderpick); verzendlabels via een koppeling per vervoerder (DPD volgt).
   registerOrderpickRoutes(app, {

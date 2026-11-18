@@ -16,6 +16,7 @@
 // Aanbieden kan aan één organisatie of aan iedereen die opdrachten ontvangt
 // (wie het eerst accepteert, krijgt hem). Een live-omgeving werkt alleen met
 // live-omgevingen, een testomgeving alleen met testomgevingen.
+const { mailStyleOf } = require('../platform/mail-layout');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const crypto = require('crypto');
@@ -454,7 +455,7 @@ function registerOutsourcingRoutes(app, ctx) {
     if (!to.length) return;
     // Elke organisatie een eigen bericht (geen adressen van anderen zichtbaar).
     for (const address of to) {
-      mailer.send({ to: address, replyTo: profile.email, subject, ...mailBody(profile, lines, null) })
+      mailer.send({ to: address, replyTo: profile.email, subject, ...mailBody(profile, lines, null, mailStyleOf(settings)) })
         .catch((error) => console.warn(`Bericht over uitbesteden niet verstuurd: ${error.message}`));
     }
   }

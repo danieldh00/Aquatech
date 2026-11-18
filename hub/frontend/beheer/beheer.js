@@ -1632,6 +1632,7 @@
     if (section.pane === 'aikosten') window.BeheerAiKosten.load();
     if (section.pane === 'kleuren') window.BeheerKleuren.load();
     if (section.pane === 'documentopmaak') window.BeheerDocumentopmaak.load();
+    if (section.pane === 'mailopmaak') window.BeheerMailopmaak.load();
     if (section.pane === 'updates') window.BeheerUpdates.load(); else window.BeheerUpdates.stop();
     if (section.pane === 'bewaking') window.BeheerBewaking.load(); else window.BeheerBewaking.stop();
     if (section.pane === 'audit') loadAudit();
@@ -1697,6 +1698,7 @@
     window.BeheerAiKosten.init({ toast });
     window.BeheerKleuren.init({ toast });
     window.BeheerDocumentopmaak.init({ toast });
+    window.BeheerMailopmaak.init({ toast });
     /** Sluit het detailvenster. */
     $('#detail-close').onclick = () => { $('#detail').hidden = true; };
     /**

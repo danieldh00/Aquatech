@@ -1,6 +1,7 @@
 // Offerte aanvragen vanuit de winkelwagen van een zakelijke klant: bij een grote winkelwagen kan de klant eerst een offerte vragen in
 // plaats van af te rekenen. Dat maakt een concept in Offertes (nooit verstuurd, een medewerker controleert en verstuurt het zelf) en
 // meldt het aan het bedrijf. De prijzen en btw komen uit dezelfde berekening als de winkelwagen (priceCart), dus nooit uit de browser.
+const { mailStyleOf } = require('../platform/mail-layout');
 const crypto = require('node:crypto');
 const { validEmail, mailFailure } = require('../platform/mailer');
 
@@ -85,7 +86,7 @@ function createQuoteRequests({ createDraft, findRecent, settingsFor, mailerFor, 
     const mailer = mailerFor(settings);
     if (mailer.configured() && validEmail(quoteProfile.email)) {
       try {
-        const mail = mailBody(quoteProfile, ['Een zakelijke klant vroeg via de webshop een offerte aan.', `Klant: ${customer.name}${company ? ` (${company})` : ''}\nE-mail: ${customer.email}\nOfferte: ${quote.number} (concept, ${cart.lines.length} ${cart.lines.length === 1 ? 'regel' : 'regels'}, ${cartExcl(cart).toFixed(2).replace('.', ',')} euro excl. btw)\n\nControleer de offerte in Offertes en verstuur hem zelf.`]);
+        const mail = mailBody(quoteProfile, ['Een zakelijke klant vroeg via de webshop een offerte aan.', `Klant: ${customer.name}${company ? ` (${company})` : ''}\nE-mail: ${customer.email}\nOfferte: ${quote.number} (concept, ${cart.lines.length} ${cart.lines.length === 1 ? 'regel' : 'regels'}, ${cartExcl(cart).toFixed(2).replace('.', ',')} euro excl. btw)\n\nControleer de offerte in Offertes en verstuur hem zelf.`], undefined, mailStyleOf(settings));
         await mailer.send({ to: quoteProfile.email, subject: `Offerteaanvraag via de webshop: ${company || customer.name}`, text: mail.text, html: mail.html, replyTo: validEmail(customer.email) ? customer.email : undefined });
         mailed = true;
       } catch (error) {
