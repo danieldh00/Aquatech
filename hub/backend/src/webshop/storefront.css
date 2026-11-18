@@ -575,3 +575,11 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
 .search-suggest li[aria-selected="true"] a, .search-suggest li a:hover, .search-suggest li a:focus { background: var(--at-shop-bg, rgba(0, 0, 0, 0.05)); }
 .search-suggest-name { font-weight: 600; overflow-wrap: anywhere; }
 .search-suggest small { color: var(--at-muted, inherit); }
+
+/* Plannerpromotie op de startpagina en in beregeningscategorieën. */
+.planner-promo { margin: 16px 0; background: var(--at-shop-navy); color: var(--at-white); }
+.planner-promo-inner { display: flex; align-items: center; justify-content: space-between; gap: 16px 24px; flex-wrap: wrap; padding: 22px 16px; }
+.planner-promo h2 { margin: 0 0 4px; color: var(--at-white); font-size: 1.4rem; }
+.planner-promo p { margin: 0; }
+.browse-main .planner-promo { margin: 0 0 16px; border-radius: 8px; }
+.browse-main .planner-promo-inner { padding: 16px; }

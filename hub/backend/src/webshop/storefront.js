@@ -176,7 +176,9 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     const staff = Boolean(viewer) && viewer.isStaff;
     if (business || (staff && !preview)) res.setHeader('Cache-Control', 'private, no-store');
     const html = renderWith(contentOf(req), render, { indexing, baseUrl: preview ? '' : publicBaseUrl(req), analytics: preview ? '' : analyticsIdOf(), captcha: preview ? '' : captchaKeyOf(), ordering, cartCount: ordering ? (req.pendingCart || readCart(req)).reduce((total, line) => total + line.qty, 0) : 0, business, staff, wholesale: ordering && business && viewer.wholesale, businessForm: Boolean(orderMail && orderMail.businessRequestReady && orderMail.businessRequestReady(tenantId)), businessSent: ['ja', 'fout'].includes(req.query.aanvraag) ? req.query.aanvraag : '' });
-    const withPlanner = html.replace(/<!--planner:([^>]*)-->/g, (_, root) => (plannerOn() ? `<li class="nav-planner"><a href="${root}planner/">Planner</a></li>` : ''));
+    const plannerWith = html.replace(/<!--planner:([^>]*)-->/g, (_, root) => (plannerOn() ? `<li class="nav-planner"><a href="${root}planner/">Planner</a></li>` : ''));
+    // De plannerpromotie (startpagina en beregeningscategorieën) verschijnt alleen als de planner aan staat.
+    const withPlanner = plannerWith.replace(/<!--planner-promo:([^>]*)-->/g, (_, root) => (plannerOn() ? `<section class="planner-promo"><div class="wrap planner-promo-inner"><div><h2>Ontwerp je beregening gratis</h2><p>Teken je tuin in onze planner en bestel de complete materiaallijst in één keer.</p></div><a class="button" href="${root}planner/">Naar de planner</a></div></section>` : ''));
     // In een voorbeeld blijven de menu- en categorielinks in het concept, ook voor categorieën die er alleen in staan.
     // Ook het zoekformulier houdt de voorbeeldstatus vast (verborgen veld), anders valt een zoekopdracht terug op de gepubliceerde boom.
     const inPreview = withPlanner
