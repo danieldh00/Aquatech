@@ -58,6 +58,7 @@ const { createWebPayments } = require('./webshop/web-payments');
 const { createWebReturnStore, registerWebReturnRoutes } = require('./webshop/web-returns');
 const { createWebSalesStore, registerWebSalesRoutes } = require('./webshop/web-sales');
 const { createSearchMisses, registerSearchMissRoutes } = require('./webshop/search-misses');
+const { createFunnel, registerFunnelRoutes } = require('./webshop/funnel');
 const { createReturnMailer } = require('./webshop/web-returns-mail');
 const { createShopOrders } = require('./webshop/shop-orders');
 const { createDebtorStore, registerDebtorRoutes } = require('./verkoop/debtors');
@@ -2833,6 +2834,15 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const stockAlerts = createStockAlerts(database);
   // Zoektermen zonder resultaat (webshop/search-misses.js): voor het overzicht in Beheer.
   const searchMisses = createSearchMisses(database);
+  // Eigen koopfunneltelling (webshop/funnel.js): tellers in het geheugen, elke minuut naar de database.
+  const funnel = createFunnel(database);
+  setInterval(() => { try { funnel.flush(); } catch (error) { console.error('Funneltelling wegschrijven mislukt:', error.message); } }, 60 * 1000).unref();
+  /**
+   * Wist funneltellingen van meer dan 400 dagen oud (elk uur).
+   * @returns {number} Het aantal gewiste rijen.
+   */
+  app.locals.funnelPurge = () => funnel.purgeOld(tenant.id);
+  app.locals.funnel = funnel;
   // Offerte aanvragen vanuit de winkelwagen van een zakelijke klant (webshop/quote-requests.js): maakt een conceptofferte in Offertes.
   const quoteRequests = createQuoteRequests({
     /**
@@ -2902,6 +2912,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     await webOrderInvoices.mailIfFinalized(tenantId, outcome);
   });
   webPayments.onPaid((tenantId, order) => webOrderMail.sendPlaced(tenantId, order));
+  webPayments.onPaid((tenantId) => { funnel.count(tenantId, 'paid'); });
   /**
    * Laat onbetaalde online webshopbestellingen vervallen die langer wachten dan de bewaartijd (elk uur).
    * @returns {Promise<{ expired: number }>} Het aantal vervallen bestellingen.
@@ -2970,6 +2981,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Margerapportage van de webshop: omzet, inkoop (FIFO-voorraadlagen) en marge (web-sales.js).
   registerWebSalesRoutes(app, { sales: createWebSalesStore(database, { stock: stockStore }) });
   registerSearchMissRoutes(app, { misses: searchMisses });
+  registerFunnelRoutes(app, { funnel });
   registerShopContentRoutes(app, { content: shopContentStore, requireJson, audit, mainTenantId: tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
     unplacedOf: (tenantId) => storefrontData.catalogOf(tenantId, { preview: true }).categories.filter((category) => category.loose).map((category) => ({ name: category.name, count: category.count, groupSlug: category.groupSlug })) });
   // Openbare vlaggen voor het dashboard en de modules (geen geheimen).
@@ -3319,7 +3331,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, loginGuard, twoFactor, tokens: accountTokens, mailerFor, settingsFor: (id) => settingsFor(id), mailBody });
   storefrontRouter = createStorefront({
     addressLookup, addressGuard, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore, data: storefrontData, itemImages: itemImageStore,
-    orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, orderSlips, returns: webReturns, guestOrders, stockAlerts, searchMisses, quoteRequests, payments: webPayments,
+    orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, orderSlips, returns: webReturns, guestOrders, stockAlerts, searchMisses, funnel, quoteRequests, payments: webPayments,
     vies, captcha, captchaGate,
     onOrder: (req, order) => audit(req, 'webshop_bestelling_geplaatst', { number: order.number, total: order.total, ...(order.guest ? { gast: true } : {}) }, order.userId, tenant.id),
     onQuoteRequest: (req, quote, viewer, mailed) => audit(req, 'webshop_offerte_aangevraagd', { number: quote.number, mailed: Boolean(mailed) }, viewer.id, tenant.id),
@@ -3619,6 +3631,8 @@ if (require.main === module) {
     slowLog.trackTask('voorraadmeldingen', () => app.locals.stockAlertsRun())
       .then((out) => { if (out.sent || out.purged) console.log(`Voorraadmeldingen: ${out.sent} verstuurd, ${out.purged} verlopen`); })
       .catch((error) => console.error('Voorraadmeldingen mislukt:', error.message));
+    slowLog.trackTask('oude funneltellingen', async () => app.locals.funnelPurge())
+      .catch((error) => console.error('Oude funneltellingen wissen mislukt:', error.message));
     slowLog.trackTask('oude zoektermen', async () => app.locals.searchMissesPurge())
       .catch((error) => console.error('Oude zoektermen wissen mislukt:', error.message));
     slowLog.trackTask('seizoensherinneringen', () => app.locals.seasonRemindersAll())

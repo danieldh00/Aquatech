@@ -1450,6 +1450,17 @@ const MIGRATIONS = [
   );
   CREATE INDEX shop_search_misses_last ON shop_search_misses (tenant_id, last_at);
   `,
+  // 78: eigen koopfunneltelling van de webshop (webshop/funnel.js): per omgeving, dag en stap een teller. Alleen aantallen, nooit wie het
+  // was; na 400 dagen gewist.
+  `
+  CREATE TABLE shop_funnel_days (
+    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+    day       TEXT NOT NULL,
+    step      TEXT NOT NULL,
+    hits      INTEGER NOT NULL,
+    PRIMARY KEY (tenant_id, day, step)
+  );
+  `,
 ];
 
 /**

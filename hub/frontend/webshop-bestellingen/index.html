@@ -32,13 +32,14 @@
         <h1>Webshopbestellingen</h1>
         <p class="muted">Bestellingen, retouren en de rapportage van de eigen webshop (startpagina /).</p>
       </section>
-      <nav class="tabs" role="tablist" aria-label="Bestellingen, te picken, backorders, retouren, rapportage en zoektermen">
+      <nav class="tabs" role="tablist" aria-label="Bestellingen, te picken, backorders, retouren, rapportage, funnel en zoektermen">
         <button class="tab active" data-tab="bestellingen" role="tab" id="t-bestellingen" aria-selected="true" aria-controls="tab-bestellingen">Bestellingen</button>
         <button class="tab" data-tab="te-picken" role="tab" id="t-te-picken" tabindex="-1" aria-selected="false" aria-controls="tab-te-picken">Te picken</button>
         <button class="tab" data-tab="backorders" role="tab" id="t-backorders" tabindex="-1" aria-selected="false" aria-controls="tab-backorders">Backorders</button>
         <button class="tab" data-tab="retouren" role="tab" id="t-retouren" tabindex="-1" aria-selected="false" aria-controls="tab-retouren">Retouren</button>
         <button class="tab" data-tab="rapportage" role="tab" id="t-rapportage" tabindex="-1" aria-selected="false" aria-controls="tab-rapportage">Rapportage</button>
         <button class="tab" data-tab="zoektermen" role="tab" id="t-zoektermen" tabindex="-1" aria-selected="false" aria-controls="tab-zoektermen">Zoektermen</button>
+        <button class="tab" data-tab="funnel" role="tab" id="t-funnel" tabindex="-1" aria-selected="false" aria-controls="tab-funnel">Funnel</button>
       </nav>
       <section id="tab-bestellingen" class="tabpane" role="tabpanel" aria-labelledby="t-bestellingen">
         <div class="filters">
@@ -86,6 +87,21 @@
         </div>
         <p class="muted small">Wat bezoekers in de webshop zochten zonder iets te vinden, de meest gezochte eerst. Handig om te zien welk artikel ontbreekt of welk woord een synoniem nodig heeft. Alleen de term wordt bewaard (nooit wie zocht), en na 90 dagen zonder nieuwe zoekopdracht verdwijnt hij.</p>
         <div class="tablewrap"><table class="grid" id="zt-table"></table></div>
+      </section>
+      <section id="tab-funnel" class="tabpane" role="tabpanel" aria-labelledby="t-funnel" hidden>
+        <div class="filters">
+          <select id="fn-days" aria-label="Periode">
+            <option value="7">Laatste 7 dagen</option>
+            <option value="30" selected>Laatste 30 dagen</option>
+            <option value="90">Laatste 90 dagen</option>
+            <option value="365">Laatste 12 maanden</option>
+          </select>
+          <button id="fn-export" class="btn primary" disabled>Exporteer naar Excel</button>
+          <span id="fn-count" class="muted small"></span>
+        </div>
+        <p class="muted small">Hoe ver bezoekers van de webshop komen: van productpagina tot bestelling. Het zijn aantallen paginaweergaven en acties, geen unieke bezoekers, dus de percentages zijn indicatief. Medewerkers, voorbeelden en robots tellen niet mee en er wordt nooit bewaard wie het was.</p>
+        <div class="tablewrap"><table class="grid" id="fn-table"></table></div>
+        <div class="tablewrap"><table class="grid" id="fn-extra"></table></div>
       </section>
       <section id="tab-rapportage" class="tabpane" role="tabpanel" aria-labelledby="t-rapportage" hidden>
         <div class="filters">
@@ -150,6 +166,7 @@
   <script src="retouren.js"></script>
   <script src="rapportage.js"></script>
   <script src="zoektermen.js"></script>
+  <script src="funnel.js"></script>
   <script src="webshop-bestellingen.js"></script>
 </body>
 </html>
