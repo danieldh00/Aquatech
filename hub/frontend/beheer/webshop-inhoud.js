@@ -33,7 +33,7 @@
   const when = (iso) => (iso ? new Date(iso).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' }) : '–');
 
   /** De toestand van het scherm: de gegevens van de server, het open tabblad en de pagina die wordt bewerkt. */
-  const state = { view: null, tab: 'site', editing: null };
+  const state = { view: null, tab: 'site', editing: null, lastEditor: null };
   /** Toont een melding; wordt door init vervangen door die van Beheer. */
   let toast = () => {};
 
@@ -293,6 +293,130 @@
    */
   const bodyForServer = (html) => html.replace(/src="[^"]*\/api\/admin\/shop-content\/images\/([0-9a-f-]{36})"/g, (_, id) => `src="media:${id}"`);
 
+  /** Namen van de blokken in de pagina-editor. */
+  const BLOCK_LABELS = { text: 'Tekst', image: 'Afbeelding', products: 'Artikelen', faq: 'Veelgestelde vragen', cta: 'Knop met tekst' };
+
+  /**
+   * Een leeg blok van een soort, als startpunt in de editor.
+   * @param {string} type 'text', 'image', 'products', 'faq' of 'cta'.
+   * @returns {object} Het nieuwe blok.
+   */
+  function newBlock(type) {
+    if (type === 'image') return { type, image: '', alt: '', caption: '', link: '' };
+    if (type === 'products') return { type, title: '', mode: 'codes', codes: [], category: '', limit: 6 };
+    if (type === 'faq') return { type, title: '', items: [{ question: '', answer: '' }] };
+    if (type === 'cta') return { type, title: '', text: '', button: '', link: '' };
+    return { type: 'text', html: '' };
+  }
+
+  /**
+   * Alle categorieën uit de menuboom (concept, anders gepubliceerd, anders standaard) als platte lijst met inspringing.
+   * @returns {{ slug: string, label: string }[]} De categorieën.
+   */
+  function categoryChoices() {
+    const { menu, defaults } = state.view;
+    const roots = (menu.draft || menu.published || defaults.menu).roots || [];
+    const list = [];
+    /**
+     * Zet een categorie en haar subcategorieën in de lijst.
+     * @param {object} node De categorie.
+     * @param {number} depth Diepte (0 = hoofdcategorie).
+     * @returns {void}
+     */
+    const walk = (node, depth) => {
+      if (node.slug) list.push({ slug: node.slug, label: `${'– '.repeat(depth)}${node.name}` });
+      (node.children || []).forEach((child) => walk(child, depth + 1));
+    };
+    roots.forEach((root) => walk(root, 0));
+    return list;
+  }
+
+  /**
+   * Tekent de velden van één blok in de pagina-editor.
+   * @param {object} block Het blok.
+   * @param {number} index Plek in de lijst.
+   * @param {number} count Aantal blokken.
+   * @returns {string} HTML van het blok.
+   */
+  function blockEditor(block, index, count) {
+    const head = `<div class="pb-head"><b>${esc(BLOCK_LABELS[block.type])}</b><span class="pb-tools">
+      <button type="button" class="btn small" data-move="up" ${index === 0 ? 'disabled' : ''} aria-label="Omhoog">↑</button>
+      <button type="button" class="btn small" data-move="down" ${index === count - 1 ? 'disabled' : ''} aria-label="Omlaag">↓</button>
+      <button type="button" class="btn small danger" data-remove-block="1" aria-label="Blok verwijderen">Verwijderen</button></span></div>`;
+    let body = '';
+    if (block.type === 'text') {
+      body = `<div class="sc-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Tekst">${bodyForEditor(block.html)}</div>`;
+    } else if (block.type === 'image') {
+      body = `<div class="pb-fields"><label>Afbeelding${imagePicker('image', block.image, { optional: true, inList: true })}</label>
+        ${textField('Beschrijving (voor slechtzienden en zoekmachines)', 'alt', block.alt, { max: 160, inList: true })}
+        ${textField('Bijschrift (zichtbaar onder de afbeelding)', 'caption', block.caption, { max: 200, inList: true })}
+        ${textField('Link (leeg = geen)', 'link', block.link, { max: 300, inList: true, hint: 'Een pad in de shop (bijv. groep/beregening/) of een https-adres.' })}</div>`;
+    } else if (block.type === 'products') {
+      const choices = categoryChoices();
+      body = `<div class="pb-fields">${textField('Kop (leeg = geen)', 'title', block.title, { max: 120, inList: true })}
+        <label>Welke artikelen<select data-k="mode"><option value="codes"${block.mode === 'codes' ? ' selected' : ''}>Eigen keuze (artikelcodes)</option><option value="category"${block.mode === 'category' ? ' selected' : ''}>Uit een categorie</option></select></label>
+        ${block.mode === 'codes'
+    ? textField('Artikelcodes (gescheiden door komma\'s, maximaal 12)', 'codes', (block.codes || []).join(', '), { max: 400, inList: true })
+    : `<label>Categorie<select data-k="category"><option value="">Kies een categorie…</option>${choices.map((choice) => `<option value="${esc(choice.slug)}"${choice.slug === block.category ? ' selected' : ''}>${esc(choice.label)}</option>`).join('')}</select></label>
+        <label>Aantal artikelen<input type="number" data-k="limit" min="3" max="12" value="${esc(block.limit)}"></label>`}</div>`;
+    } else if (block.type === 'faq') {
+      body = `<div class="pb-fields">${textField('Kop (leeg = geen)', 'title', block.title, { max: 120, inList: true })}
+        ${block.items.map((item, itemIndex) => `<div class="pb-faq" data-item="${itemIndex}">
+          ${textField('Vraag', 'question', item.question, { max: 200, inList: true })}
+          <label>Antwoord<textarea data-k="answer" rows="3" maxlength="2000">${esc(item.answer)}</textarea></label>
+          <button type="button" class="btn small danger" data-remove-faq="${itemIndex}">Vraag verwijderen</button></div>`).join('')}
+        <div><button type="button" class="btn small" data-add-faq="1">Vraag toevoegen</button></div>
+        <p class="hint">De vragen komen ook als gestructureerde gegevens (FAQPage) in de pagina, zodat zoekmachines ze kunnen tonen.</p></div>`;
+    } else {
+      body = `<div class="pb-fields">${textField('Titel', 'title', block.title, { max: 120, inList: true })}
+        ${textField('Tekst', 'text', block.text, { max: 400, long: true, inList: true })}
+        ${textField('Tekst op de knop', 'button', block.button, { max: 60, inList: true })}
+        ${textField('Link van de knop', 'link', block.link, { max: 300, inList: true, hint: 'Een pad in de shop (bijv. pagina/contact/) of een https-adres. Zonder link geen knop.' })}</div>`;
+    }
+    return `<section class="pb-block" data-type="${block.type}" data-index="${index}">${head}${body}</section>`;
+  }
+
+  /**
+   * Leest de blokken van de open pagina uit het formulier.
+   * @returns {object[]} De blokken zoals ze nu in de editor staan.
+   */
+  function collectBlocks() {
+    return [...document.querySelectorAll('#sc-page .pb-block')].map((element) => {
+      const type = element.dataset.type;
+      /**
+       * De waarde van een veld in een deel van het blok.
+       * @param {ParentNode} scope Waarbinnen gezocht wordt.
+       * @param {string} key Naam van het veld (data-k).
+       * @returns {string} De waarde (leeg als het veld er niet is).
+       */
+      const valueOf = (scope, key) => { const field = scope.querySelector(`[data-k="${key}"]`); return field ? field.value : ''; };
+      if (type === 'text') return { type, html: bodyForServer($('.sc-editor', element).innerHTML) };
+      if (type === 'image') return { type, image: valueOf(element, 'image'), alt: valueOf(element, 'alt'), caption: valueOf(element, 'caption'), link: valueOf(element, 'link') };
+      if (type === 'products') return { type, title: valueOf(element, 'title'), mode: valueOf(element, 'mode'), codes: valueOf(element, 'codes'), category: valueOf(element, 'category'), limit: Number(valueOf(element, 'limit')) || 6 };
+      if (type === 'faq') return { type, title: valueOf(element, 'title'), items: [...element.querySelectorAll('.pb-faq')].map((item) => ({ question: valueOf(item, 'question'), answer: valueOf(item, 'answer') })) };
+      return { type, title: valueOf(element, 'title'), text: valueOf(element, 'text'), button: valueOf(element, 'button'), link: valueOf(element, 'link') };
+    });
+  }
+
+  /**
+   * Zet alles wat nu in het paginaformulier staat (naam, velden en blokken) in de toestand, zodat opnieuw tekenen niets kwijtraakt.
+   * @returns {void}
+   */
+  function syncBlocks() {
+    if (!state.editing || !$('#sc-page')) return;
+    state.editing.slug = $('[data-slug]', $('#sc-page')).value.trim().toLowerCase();
+    state.editing.fields = collectPage();
+  }
+
+  /**
+   * Het tekstvak waar de laatste keer in is getypt (voor de opmaakknoppen).
+   * @returns {HTMLElement|null} Het tekstvak, of null als er geen tekstblok is.
+   */
+  function activeEditor() {
+    const focused = document.activeElement && document.activeElement.closest && document.activeElement.closest('.sc-editor');
+    return focused || (state.lastEditor && document.contains(state.lastEditor) ? state.lastEditor : $('#sc-page .sc-editor'));
+  }
+
   /**
    * Tekent het scherm voor het bewerken van één pagina, met de tekst-editor.
    * @returns {string} HTML van het formulier.
@@ -317,9 +441,12 @@
         ${checkField('In het menu', 'menu', fields.menu)}${checkField('In de voet', 'footer', fields.footer)}
         <label>Volgorde<input type="number" data-f="order" min="0" max="999" value="${esc(fields.order)}"></label>
       </div>
-      <div class="sc-toolbar-rich" role="toolbar" aria-label="Opmaak">${toolbar}</div>
+      <h3 class="pb-title">Inhoud van de pagina</h3>
+      <p class="muted small">Bouw de pagina uit blokken. Met de pijltjes verander je de volgorde; het voorbeeld toont de pagina zoals bezoekers hem straks zien.</p>
+      <div class="sc-toolbar-rich" role="toolbar" aria-label="Opmaak van het tekstblok waar je in typt">${toolbar}</div>
       <div id="sc-images" class="sc-image-pick" hidden></div>
-      <div id="sc-editor" class="sc-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Tekst van de pagina">${bodyForEditor(fields.body)}</div>
+      <div class="pb-list">${fields.blocks.map((block, index) => blockEditor(block, index, fields.blocks.length)).join('') || '<p class="muted">Nog geen blokken. Voeg hieronder een blok toe.</p>'}</div>
+      <div class="row pb-add" role="group" aria-label="Blok toevoegen">${Object.entries(BLOCK_LABELS).map(([type, label]) => `<button type="button" class="btn small" data-add-block="${type}">+ ${esc(label)}</button>`).join('')}</div>
       ${actionButtons(part)}
     </form>`;
   }
@@ -397,14 +524,14 @@
 
   /**
    * De velden van de pagina die wordt bewerkt, zoals ze nu in het formulier staan.
-   * @returns {object} title, description, seoTitle, body, menu, footer en order.
+   * @returns {object} title, description, seoTitle, blocks, menu, footer en order.
    */
   function collectPage() {
     const form = $('#sc-page');
     const fields = {};
     form.querySelectorAll('[data-f]').forEach((field) => { fields[field.dataset.f] = field.type === 'checkbox' ? field.checked : field.value; });
     fields.order = Number(fields.order);
-    fields.body = bodyForServer($('#sc-editor').innerHTML);
+    fields.blocks = collectBlocks();
     return fields;
   }
 
@@ -467,9 +594,9 @@
   /**
    * De velden van een pagina voor de editor, met standaardwaarden voor ontbrekende velden.
    * @param {object} [page] De opgeslagen pagina.
-   * @returns {object} title, description, seoTitle, body, menu, footer en order.
+   * @returns {object} title, description, seoTitle, blocks (een pagina met alleen een tekst krijgt één tekstblok), menu, footer en order.
    */
-  const pageFields = (page = {}) => ({ title: page.title || '', description: page.description || '', seoTitle: page.seoTitle || '', body: page.body || '', menu: page.menu === true, footer: page.footer !== false, order: page.order ?? 100 });
+  const pageFields = (page = {}) => ({ title: page.title || '', description: page.description || '', seoTitle: page.seoTitle || '', blocks: Array.isArray(page.blocks) ? page.blocks : (page.body ? [{ type: 'text', html: page.body }] : []), menu: page.menu === true, footer: page.footer !== false, order: page.order ?? 100 });
 
   /**
    * Verkleint een afbeelding indien nodig (groot bestand of grote zijden) en geeft hem als data-URL.
@@ -535,7 +662,8 @@
    * @returns {void}
    */
   function formatText(command) {
-    const editor = $('#sc-editor');
+    const editor = activeEditor();
+    if (!editor) { toast('Voeg eerst een tekstblok toe.', true); return; }
     editor.focus();
     const blocks = { h2: 'h2', h3: 'h3', p: 'p', blockquote: 'blockquote' };
     if (blocks[command]) document.execCommand('formatBlock', false, blocks[command]);
@@ -563,7 +691,8 @@
    * @returns {void}
    */
   function insertImage(id) {
-    const editor = $('#sc-editor');
+    const editor = activeEditor();
+    if (!editor) return;
     editor.focus();
     document.execCommand('insertImage', false, `${IMAGE_URL}${id}`);
     const box = $('#sc-images');
@@ -602,6 +731,27 @@
         render();
       } else if (data.act) await runAction(data.act);
       else if (data.cmd) formatText(data.cmd);
+      else if (data.addBlock) { syncBlocks(); state.editing.fields.blocks.push(newBlock(data.addBlock)); render(); }
+      else if (data.move) {
+        syncBlocks();
+        const { blocks } = state.editing.fields;
+        const index = Number(target.closest('.pb-block').dataset.index);
+        const other = data.move === 'up' ? index - 1 : index + 1;
+        if (other >= 0 && other < blocks.length) [blocks[index], blocks[other]] = [blocks[other], blocks[index]];
+        render();
+      } else if (data.removeBlock) {
+        syncBlocks();
+        state.editing.fields.blocks.splice(Number(target.closest('.pb-block').dataset.index), 1);
+        render();
+      } else if (data.addFaq) {
+        syncBlocks();
+        state.editing.fields.blocks[Number(target.closest('.pb-block').dataset.index)].items.push({ question: '', answer: '' });
+        render();
+      } else if (data.removeFaq) {
+        syncBlocks();
+        state.editing.fields.blocks[Number(target.closest('.pb-block').dataset.index)].items.splice(Number(data.removeFaq), 1);
+        render();
+      }
       else if (data.insert) insertImage(data.insert);
       else if (data.new) openPage(data.new === '1' ? '' : data.new, { isNew: true });
       else if (data.edit) openPage(data.edit);
@@ -639,7 +789,7 @@
           const select = target.closest('.sc-picker').querySelector('select');
           select.append(new Option(image.name, `media:${image.id}`));
           select.value = `media:${image.id}`;
-          state.view.site = { ...state.view.site, draft: collectSite() };
+          if (state.editing) syncBlocks(); else state.view.site = { ...state.view.site, draft: collectSite() };
         }
         render();
       }
@@ -654,6 +804,7 @@
    * @returns {void}
    */
   function onChange(event) {
+    if (event.target.matches('.pb-block select[data-k="mode"]')) { syncBlocks(); render(); return; }
     const select = event.target.closest('select[data-image]');
     if (!select) return;
     const thumb = $('.sc-thumb', select.parentElement);
@@ -667,7 +818,7 @@
    * @returns {void}
    */
   function onPaste(event) {
-    if (!event.target.closest('#sc-editor')) return;
+    if (!event.target.closest('.sc-editor')) return;
     event.preventDefault();
     document.execCommand('insertText', false, event.clipboardData.getData('text/plain'));
   }
@@ -683,6 +834,7 @@
     root.addEventListener('click', onClick);
     root.addEventListener('change', onChange);
     root.addEventListener('paste', onPaste);
+    root.addEventListener('focusin', (event) => { const editor = event.target.closest && event.target.closest('.sc-editor'); if (editor) state.lastEditor = editor; });
   }
 
   window.BeheerWebshopInhoud = { init, load };

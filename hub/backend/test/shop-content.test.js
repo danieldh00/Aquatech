@@ -161,7 +161,7 @@ test('vaste pagina: concept, publiceren, menu, voet en Over ons overschrijven', 
   const saved = await admin.put('/app/api/admin/shop-content/pages/verzending-retour', { title: 'Verzending & retour', description: 'Hoe wij leveren', body, menu: true, footer: true, order: 5 });
   assert.strictEqual(saved.status, 200);
   assert.strictEqual(saved.body.pages.length, 1);
-  assert.ok(!saved.body.pages[0].draft.body.includes('script'));
+  assert.ok(!JSON.stringify(saved.body.pages[0].draft.blocks).includes('script'));
   assert.strictEqual((await anonymous.get('/pagina/verzending-retour/')).status, 404, 'concept is niet openbaar');
   assert.match((await admin.get('/pagina/verzending-retour/?voorbeeld=1')).text, /Binnen 2 werkdagen/);
   assert.doesNotMatch((await anonymous.get('/')).text, /Verzending &amp; retour/);

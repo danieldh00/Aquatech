@@ -326,6 +326,22 @@ a.shop-action.shop-admin:hover { background: var(--at-shop-navy); }
 .cms-page blockquote { margin: 1em 0; padding: 4px 16px; border-left: 4px solid var(--at-shop-teal); color: var(--at-muted); }
 .cms-page a { color: var(--at-shop-green-dark); text-decoration: underline; }
 @media (max-width: 520px) { .cms-page { padding: 16px; } }
+.cms-page > * + * { margin-top: 20px; }
+.cms-page .cms-text > :last-child { margin-bottom: 0; }
+.cms-image { margin: 0; text-align: center; }
+.cms-image a { display: inline-block; }
+.cms-image figcaption { margin-top: 6px; color: var(--at-muted); font-size: 0.9rem; }
+.cms-products h2 { margin-top: 0; }
+.cms-products a, .cms-cta a.button { text-decoration: none; }
+.cms-faq h2 { margin-top: 0; }
+.cms-faq details { border: 1px solid var(--at-line); border-radius: 8px; padding: 10px 14px; margin: 0 0 8px; }
+.cms-faq summary { cursor: pointer; font-weight: 600; color: var(--at-shop-navy); }
+.cms-faq details[open] summary { margin-bottom: 8px; }
+.cms-faq details p { margin: 0 0 0.8em; }
+.cms-cta { background: var(--at-shop-green-soft); border-radius: 10px; padding: 18px 20px; text-align: center; }
+.cms-cta h2 { margin: 0 0 6px; }
+.cms-cta p { margin: 0 0 12px; }
+.cms-cta .button { display: inline-block; }
 
 /* Productkaart: hoofdartikelen met varianten hebben een keuzelijst, alle kaarten een aantal en winkelwagenknop. */
 .product-card .product-name { text-decoration: none; }

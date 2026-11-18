@@ -270,7 +270,7 @@ function sitemapEntriesOf({ catalog, pages }) {
 
 /**
  * llms.txt: een korte samenvatting in Markdown voor AI-zoekers, met wie we zijn en waar de belangrijkste pagina's staan.
- * @param {{ shopName: string, baseUrl: string, site: object, groups: object[], pages: { slug: string, title: string }[] }} input site = inhoud uit Beheer (contact, footer), groups = hoofdcategorieën uit de catalogus, pages = vaste pagina's.
+ * @param {{ shopName: string, baseUrl: string, site: object, groups: object[], pages: { slug: string, title: string, description?: string }[] }} input site = inhoud uit Beheer (contact, footer), groups = hoofdcategorieën uit de catalogus, pages = vaste pagina's (met eventueel een korte omschrijving).
  * @returns {string} De inhoud van llms.txt.
  */
 function llmsTxt({ shopName, baseUrl, site, groups, pages }) {
@@ -280,7 +280,7 @@ function llmsTxt({ shopName, baseUrl, site, groups, pages }) {
     contact.address && `Adres: ${contact.address}`, contact.phone && `Telefoon: ${contact.phone}`, contact.email && `E-mail: ${contact.email}`, contact.kvk && `KvK: ${contact.kvk}`,
   ].filter(Boolean).map((line) => `- ${line}`);
   const categories = groups.map((group) => `- [${group.name}](${absoluteUrl(baseUrl, `groep/${group.slug}/`)}): ${group.count} ${group.count === 1 ? 'product' : 'producten'}${group.intro ? `. ${String(group.intro).replace(/<\/(p|li|h[1-6])>/gi, ' ').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 160)}` : ''}`);
-  const information = pages.map((page) => `- [${page.title}](${absoluteUrl(baseUrl, page.slug === 'over-ons' ? 'over-ons/' : `pagina/${page.slug}/`)})`);
+  const information = pages.map((page) => `- [${page.title}](${absoluteUrl(baseUrl, page.slug === 'over-ons' ? 'over-ons/' : `pagina/${page.slug}/`)})${page.description ? `: ${String(page.description).replace(/\s+/g, ' ').trim()}` : ''}`);
   return `# ${shopName}\n\n> ${about}\n\n## Bedrijf\n\n${details.join('\n')}\n\n## Productgroepen\n\n${categories.join('\n')}\n\n## Informatie\n\n${information.join('\n')}\n\n## Voor machines\n\n- [Sitemap](${absoluteUrl(baseUrl, 'sitemap.xml')})\n- [Productfeed](${absoluteUrl(baseUrl, 'productfeed.xml')})\n`;
 }
 

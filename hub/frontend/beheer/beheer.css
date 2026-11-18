@@ -323,3 +323,18 @@ dl.kv dd { margin: 0; }
 .do-kinds .btn[aria-pressed="true"] { background: var(--at-navy); color: var(--at-surface); }
 .do-canvas-wrap { margin: 10px 0; border: 1px solid var(--line); border-radius: 6px; background: #fff; overflow: hidden; }
 .do-canvas-wrap canvas { display: block; width: 100%; height: auto; }
+
+/* Pagina-editor met blokken (webshop-inhoud.js). */
+.pb-title { margin: 18px 0 4px; }
+.pb-list { display: flex; flex-direction: column; gap: 12px; margin: 8px 0; }
+.pb-block { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px 14px; background: var(--bg, #fff); min-width: 0; }
+.pb-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.pb-tools { display: flex; gap: 6px; flex-wrap: wrap; }
+.pb-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 14px; align-items: start; }
+.pb-fields label { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.pb-fields textarea, .pb-fields input:not([type=checkbox]), .pb-fields select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; max-width: 100%; box-sizing: border-box; }
+.pb-fields .pb-faq, .pb-fields > div, .pb-fields > p { grid-column: 1 / -1; }
+.pb-faq { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 14px; padding: 8px 0; border-top: 1px dashed var(--line); }
+.pb-faq .btn { justify-self: start; }
+.pb-block .sc-editor { min-height: 140px; }
+.pb-add { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 14px; }
