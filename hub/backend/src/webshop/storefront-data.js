@@ -197,7 +197,7 @@ function arrangeCategories(products, variantProducts, tree) {
     const ownCount = ownCounts.get(node.slug) || 0;
     const count = ownCount + children.reduce((total, child) => total + child.count, 0);
     if (!count) return null;
-    const entry = { slug: node.slug, name: node.name, count, ownCount, groupSlug, parentSlug, depth, intro: node.intro || '', image: node.image || '', hidden: Boolean(node.hidden), loose: false, children };
+    const entry = { slug: node.slug, name: node.name, count, ownCount, groupSlug, parentSlug, depth, intro: node.intro || '', seoTitle: node.seoTitle || '', seoDescription: node.seoDescription || '', image: node.image || '', hidden: Boolean(node.hidden), loose: false, children };
     entries.push(entry);
     return entry;
   };
@@ -208,7 +208,7 @@ function arrangeCategories(products, variantProducts, tree) {
     topOf.set(root.group, (root.children || []).map((child) => build(child, 1, root.group, '')).filter(Boolean));
   }
   for (const category of flat.values()) {
-    const entry = { slug: category.slug, name: category.name, count: category.count, ownCount: category.count, groupSlug: category.groupSlug, parentSlug: '', depth: 1, intro: '', image: '', hidden: false, loose: true, children: [] };
+    const entry = { slug: category.slug, name: category.name, count: category.count, ownCount: category.count, groupSlug: category.groupSlug, parentSlug: '', depth: 1, intro: '', seoTitle: '', seoDescription: '', image: '', hidden: false, loose: true, children: [] };
     entries.push(entry);
     topOf.set(category.groupSlug, [...(topOf.get(category.groupSlug) || []), entry]);
   }
@@ -218,7 +218,7 @@ function arrangeCategories(products, variantProducts, tree) {
     const loose = (topOf.get(group.slug) || []).filter((category) => category.loose).sort((left, right) => left.name.localeCompare(right.name, 'nl'));
     const members = [...inTree, ...loose];
     const root = rootOf.get(group.slug);
-    return { slug: group.slug, name: root && root.name || group.name, categories: members, count: members.reduce((total, category) => total + category.count, 0), intro: root && root.intro || '', image: root && root.image || '' };
+    return { slug: group.slug, name: root && root.name || group.name, categories: members, count: members.reduce((total, category) => total + category.count, 0), intro: root && root.intro || '', seoTitle: root && root.seoTitle || '', seoDescription: root && root.seoDescription || '', image: root && root.image || '' };
   }).filter((group) => group.categories.length);
   return { categoryList: entries.sort((left, right) => left.name.localeCompare(right.name, 'nl')), groups };
 }
@@ -548,7 +548,7 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
    */
   function readDetails(tenantId, wanted) {
     const filter = wanted ? ` AND (i.code IN (${wanted.map(() => '?').join(',')}) OR i.id IN (SELECT v.parent_id FROM stock_items v WHERE v.tenant_id = ? AND v.code IN (${wanted.map(() => '?').join(',')})))` : '';
-    const rows = db.prepare(`SELECT i.id, i.code, i.parent_id, i.description, i.specifications, p.description AS shop_description, p.attributes AS shop_attributes
+    const rows = db.prepare(`SELECT i.id, i.code, i.parent_id, i.description, i.specifications, i.seo_title, i.seo_description, i.brand, i.ean, p.description AS shop_description, p.attributes AS shop_attributes
       FROM stock_items i LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
       WHERE i.tenant_id = ? AND i.archived = 0${filter}`).all(tenantId, ...(wanted ? [...wanted, tenantId, ...wanted] : []));
     const parents = new Map(rows.filter((row) => !row.parent_id).map((row) => [row.id, ItemDetails.shownDetails(row)]));

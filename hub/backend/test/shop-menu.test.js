@@ -158,6 +158,40 @@ test('menuboom: concept is alleen een voorbeeld, publiceren zet hem live, hernoe
   assert.ok(back.includes('Eindkappen') && !back.includes('Kapjes'), 'vorige versie terug');
 });
 
+test('categorie en groep: eigen titel en omschrijving voor zoekmachines, anders de automatische; te lang wordt afgekapt', async () => {
+  const { admin, anonymous } = await setup();
+  const tree = renamed('eindkap-tyleen', 'Eindkappen');
+  /**
+   * Zet zoekmachineteksten op de categorie en op haar kop.
+   * @param {object} node De knoop.
+   * @returns {void}
+   */
+  const visit = (node) => {
+    if (node.slug === 'eindkap-tyleen') { node.seoTitle = '  Eindkappen <b>kopen</b> '; node.seoDescription = 'Eindkappen voor tyleen, direct uit voorraad.'; }
+    (node.children || []).forEach(visit);
+  };
+  tree.forEach(visit);
+  /**
+   * Of de knoop de categorie eindkap-tyleen bevat.
+   * @param {object} node De knoop.
+   * @returns {boolean} true als hij haar zelf is of haar bevat.
+   */
+  const holds = (node) => node.slug === 'eindkap-tyleen' || (node.children || []).some(holds);
+  const heading = tree.find(holds);
+  heading.seoTitle = 'k'.repeat(200);
+  assert.strictEqual((await admin.put('/app/api/admin/shop-content/menu', { roots: tree })).status, 200);
+  assert.strictEqual((await admin.post('/app/api/admin/shop-content/menu/publish', {})).status, 200);
+  await admin.put('/app/api/admin/settings', { shopPayment: { publicUrl: 'https://winkel.example/' }, shopSeo: { indexing: true } });
+  const page = (await anonymous.get('/categorie/eindkap-tyleen/')).text;
+  assert.match(page, /<title>Eindkappen kopen<\/title>/);
+  assert.match(page, /<meta name="description" content="Eindkappen voor tyleen, direct uit voorraad\.">/);
+  assert.match(page, /<meta property="og:title" content="Eindkappen kopen">/);
+  const group = (await anonymous.get(`/groep/${heading.group}/`)).text;
+  assert.match(group, new RegExp(`<title>k{70}</title>`));
+  const other = (await anonymous.get('/categorie/overig-fea111/')).text;
+  assert.doesNotMatch(other, /Eindkappen kopen/, 'andere categorieën houden de automatische titel');
+});
+
 test('menuboom: concept weggooien en rechten', async () => {
   const { admin, customer, anonymous } = await setup();
   assert.strictEqual((await admin.put('/app/api/admin/shop-content/menu', { roots: renamed('eindkap-tyleen', 'Eindkappen') })).status, 200);

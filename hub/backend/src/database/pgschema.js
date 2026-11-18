@@ -1145,6 +1145,12 @@ const PG_MIGRATIONS = [
   CREATE UNIQUE INDEX monitor_incidents_open ON monitor_incidents (tenant_id, check_key) WHERE state = 'open';
   CREATE INDEX monitor_incidents_recent ON monitor_incidents (tenant_id, state, last_at);
   `,
+  // 73: zoekmachineteksten en merk per artikel (zie db.js).
+  `
+  ALTER TABLE stock_items ADD COLUMN seo_title ${TEXT_TYPE} NOT NULL DEFAULT '';
+  ALTER TABLE stock_items ADD COLUMN seo_description ${TEXT_TYPE} NOT NULL DEFAULT '';
+  ALTER TABLE stock_items ADD COLUMN brand ${TEXT_TYPE} NOT NULL DEFAULT '';
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

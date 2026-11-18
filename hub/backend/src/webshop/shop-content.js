@@ -17,6 +17,7 @@ const { createImageCache } = require('../platform/image-cache');
 const { legalDefaults } = require('./legal-pages');
 const { GROUP_SLUGS, GROUP_NAMES, slugify } = require('./storefront-data');
 const { DEFAULT_TREE } = require('./category-tree');
+const { sanitizeSeoTitle, sanitizeSeoDescription } = require('../artikelen/item-details');
 
 /** Bestanden in assets/ die als standaardafbeelding gekozen mogen worden. */
 const ASSET_NAMES = new Set(fs.readdirSync(path.join(__dirname, 'assets')).filter((name) => /\.(png|jpe?g|webp)$/i.test(name)));
@@ -282,6 +283,10 @@ function normalizeTree(input, base = DEFAULT_TREE, options = {}) {
     if (/^[a-z0-9_-]{1,60}$/.test(wanted) && !used.has(wanted)) { node.slug = wanted; used.add(wanted); } else needSlug.push(node);
     const intro = cleanText(item.intro, 2000);
     if (intro) node.intro = intro;
+    const seoTitle = sanitizeSeoTitle(item.seoTitle);
+    if (seoTitle) node.seoTitle = seoTitle;
+    const seoDescription = sanitizeSeoDescription(item.seoDescription);
+    if (seoDescription) node.seoDescription = seoDescription;
     const image = imageRef(item.image, '');
     if (image) node.image = image;
     if (item.hidden === true) node.hidden = true;
@@ -398,7 +403,7 @@ function sanitizeHtml(html) {
 /**
  * Maakt van de ingevoerde velden van een pagina een geldige pagina.
  * @param {string} slug De naam in het adres (a-z, 0-9, streepjes).
- * @param {*} input De ingevoerde velden (title, description, body, menu, footer, order).
+ * @param {*} input De ingevoerde velden (title, description, seoTitle, body, menu, footer, order).
  * @returns {{ page?: object, error?: string, message?: string }} De pagina, of een fout.
  */
 function normalizePage(slug, input) {
@@ -410,7 +415,7 @@ function normalizePage(slug, input) {
   const body = sanitizeHtml(given.body);
   if (body.length > MAX_HTML) return { error: 'too_long', message: 'De tekst is te lang.' };
   const order = Number.isFinite(Number(given.order)) ? Math.max(0, Math.min(999, Math.round(Number(given.order)))) : 100;
-  return { page: { slug, title, description: cleanText(given.description, 200), body, menu: given.menu === true, footer: given.footer !== false, order } };
+  return { page: { slug, title, description: cleanText(given.description, 200), seoTitle: sanitizeSeoTitle(given.seoTitle), body, menu: given.menu === true, footer: given.footer !== false, order } };
 }
 
 // ---------- Opslag ----------

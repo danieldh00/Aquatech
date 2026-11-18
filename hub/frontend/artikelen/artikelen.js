@@ -115,6 +115,9 @@
   const renderDetails = (formElement, item) => {
     formElement.description.value = item.description || '';
     formElement.specifications.value = specificationsText(item.specifications);
+    formElement.brand.value = item.brand || '';
+    formElement.seoTitle.value = item.seoTitle || '';
+    formElement.seoDescription.value = item.seoDescription || '';
     const hasShop = Boolean(item.shopDescription) || Boolean((item.shopSpecifications || []).length);
     const note = $('#d-details-shop');
     note.hidden = !hasShop;
@@ -1098,6 +1101,7 @@
           packSize: num(editForm.packSize.value), orderMinQty: num(editForm.orderMinQty.value), priceTiers: parseTiers(editForm.priceTiers.value), unitContent: num(editForm.unitContent.value), ean: editForm.ean.value,
           priceMode: editForm.priceMode.value, priceFactor: num(editForm.priceFactor.value),
           description: editForm.description.value, specifications: editForm.specifications.value,
+          brand: editForm.brand.value, seoTitle: editForm.seoTitle.value, seoDescription: editForm.seoDescription.value,
         } }) };
         toast('Opgeslagen');
         await loadUnits().catch((error) => toast(error.message, true));

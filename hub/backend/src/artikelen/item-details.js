@@ -6,6 +6,12 @@
 
 /** Hoogstens zoveel tekens omschrijving. */
 const MAX_DESCRIPTION = 5000;
+/** Hoogstens zoveel tekens in een eigen zoekmachinetitel (langere titels worden in zoekresultaten afgekapt). */
+const MAX_SEO_TITLE = 70;
+/** Hoogstens zoveel tekens in een eigen zoekmachineomschrijving. */
+const MAX_SEO_DESCRIPTION = 160;
+/** Hoogstens zoveel tekens in een merknaam. */
+const MAX_BRAND = 60;
 /** Hoogstens zoveel specificaties per artikel. */
 const MAX_SPECIFICATIONS = 30;
 
@@ -23,6 +29,37 @@ function sanitizeDescription(raw) {
     .trim()
     .slice(0, MAX_DESCRIPTION);
 }
+
+/**
+ * Schoont een korte tekst voor zoekmachines of een merk op: één regel, geen stuurtekens, geen tags, enkele spaties.
+ * @param {*} raw De invoer.
+ * @param {number} maxLength Hoogstens zoveel tekens.
+ * @returns {string} De tekst (leeg als er niets bruikbaars staat).
+ */
+function sanitizeShortText(raw, maxLength) {
+  return String(raw ?? '').replace(/<[^>]*>/g, ' ').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, maxLength);
+}
+
+/**
+ * Schoont een eigen zoekmachinetitel op.
+ * @param {*} raw De invoer.
+ * @returns {string} De titel (hoogstens MAX_SEO_TITLE tekens, leeg = automatisch).
+ */
+function sanitizeSeoTitle(raw) { return sanitizeShortText(raw, MAX_SEO_TITLE); }
+
+/**
+ * Schoont een eigen zoekmachineomschrijving op.
+ * @param {*} raw De invoer.
+ * @returns {string} De omschrijving (hoogstens MAX_SEO_DESCRIPTION tekens, leeg = automatisch).
+ */
+function sanitizeSeoDescription(raw) { return sanitizeShortText(raw, MAX_SEO_DESCRIPTION); }
+
+/**
+ * Schoont een merknaam op.
+ * @param {*} raw De invoer.
+ * @returns {string} Het merk (hoogstens MAX_BRAND tekens).
+ */
+function sanitizeBrand(raw) { return sanitizeShortText(raw, MAX_BRAND); }
 
 /**
  * Schoont specificaties op. Neemt een lijst [{ name, value }] of tekst met per regel "Naam: waarde".
@@ -112,17 +149,22 @@ function specificationsFromShop(attributesJson) {
  * webshopproduct, anders die van het hoofdartikel (bij een variant).
  * @param {{ description?: string, specifications?: string, shop_description?: string, shop_attributes?: string }} row De rij van het artikel (met de kolommen van het webshopproduct).
  * @param {{ description: string, specifications: object[] }|null} [parent] Wat het hoofdartikel toont (bij een variant).
- * @returns {{ description: string, specifications: { name: string, value: string }[] }} De omschrijving en specificaties.
+ * @returns {{ description: string, specifications: { name: string, value: string }[], seoTitle: string, seoDescription: string, brand: string, ean: string }} De omschrijving, specificaties, eigen zoekmachineteksten en merk (bij een variant die van het hoofdartikel zolang de variant er zelf geen heeft) en de eigen EAN.
  */
 function shownDetails(row, parent = null) {
   const own = sanitizeDescription(row.description);
   const shop = sanitizeDescription(row.shop_description);
   const ownSpecs = specificationsOf(row.specifications);
+  const parentSeo = parent || { seoTitle: '', seoDescription: '', brand: '' };
   const shopSpecs = specificationsFromShop(row.shop_attributes);
   return {
     description: own || shop || (parent ? parent.description : ''),
     specifications: ownSpecs.length ? ownSpecs : shopSpecs.length ? shopSpecs : parent ? parent.specifications : [],
+    seoTitle: sanitizeSeoTitle(row.seo_title) || parentSeo.seoTitle || '',
+    seoDescription: sanitizeSeoDescription(row.seo_description) || parentSeo.seoDescription || '',
+    brand: sanitizeBrand(row.brand) || parentSeo.brand || '',
+    ean: String(row.ean || ''),
   };
 }
 
-module.exports = { sanitizeDescription, sanitizeSpecifications, specificationsOf, plainTextFromHtml, specificationsFromShop, shownDetails, MAX_DESCRIPTION, MAX_SPECIFICATIONS };
+module.exports = { sanitizeSeoTitle, sanitizeSeoDescription, sanitizeBrand, sanitizeShortText, MAX_SEO_TITLE, MAX_SEO_DESCRIPTION, MAX_BRAND, sanitizeDescription, sanitizeSpecifications, specificationsOf, plainTextFromHtml, specificationsFromShop, shownDetails, MAX_DESCRIPTION, MAX_SPECIFICATIONS };

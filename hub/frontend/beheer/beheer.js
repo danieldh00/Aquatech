@@ -605,6 +605,7 @@
     $('#s-shipping').hidden = !state.storefrontAllowed;
     renderPayment(view);
     renderAnalytics(view);
+    renderSeo(view);
     renderCaptcha(view);
     codeState.className = `state ${code.set ? 'ok' : 'off'}`;
     $('[data-clear="anthropicApiKey"]').disabled = !key.set;
@@ -887,6 +888,22 @@
     const active = Boolean(analytics.enabled && analytics.measurementId);
     status.textContent = active ? `Actief: de webshop meet met ${analytics.measurementId}, na toestemming van de bezoeker.` : analytics.enabled ? 'Niet actief: vul een geldig meet-ID in.' : 'Uit: de webshop laadt niets van Google.';
     status.className = `state ${active ? 'ok' : 'off'}`;
+  }
+
+  /**
+   * Vult het formulier Zoekmachines met de opgeslagen instelling en toont of de webshop voor zoekmachines open staat.
+   * @param {object} view De instellingen zoals de server ze toont (shopSeo en shopPayment).
+   * @returns {void}
+   */
+  function renderSeo(view) {
+    const form = $('#s-seo');
+    form.hidden = !state.storefrontAllowed;
+    const open = Boolean(view.shopSeo?.value?.indexing);
+    const hasUrl = Boolean(view.shopPayment?.value?.publicUrl);
+    form.indexing.checked = open;
+    const status = $('#s-seo-state');
+    status.textContent = open && hasUrl ? 'Open: zoekmachines mogen de webshop opnemen.' : open ? 'Nog dicht: vul eerst het webadres van de webshop in (bij Betalen).' : 'Dicht: de webshop staat op noindex en robots.txt blokkeert alles.';
+    status.className = `state ${open && hasUrl ? 'ok' : 'off'}`;
   }
 
   /**
@@ -1196,6 +1213,15 @@
       if (measurementId && !/^G-[A-Z0-9]{4,14}$/.test(measurementId)) { $('.err', analyticsForm).textContent = 'Dit is geen geldig meet-ID. Het begint met G- en heeft 4 tot 14 letters of cijfers.'; return; }
       if (analyticsForm.enabled.checked && !measurementId) { $('.err', analyticsForm).textContent = 'Vul een meet-ID in om Google Analytics aan te zetten.'; return; }
       saveSettings(analyticsForm, { shopAnalytics: { enabled: analyticsForm.enabled.checked, measurementId } }, 'Google Analytics opgeslagen');
+    };
+    const seoForm = $('#s-seo');
+    /**
+     * Slaat de vrijgave voor zoekmachines op.
+     * @param {SubmitEvent} event het verzenden
+     */
+    seoForm.onsubmit = (event) => {
+      event.preventDefault();
+      saveSettings(seoForm, { shopSeo: { indexing: seoForm.indexing.checked } }, 'Zoekmachines opgeslagen');
     };
     const shippingForm = $('#s-shipping');
     /**

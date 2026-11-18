@@ -123,9 +123,10 @@ test('productfeed: prijs, voorraad en afbeelding; varianten apart; zonder foto n
 
 /**
  * Hoofdtenant met beheerder, aangezette shop en twee artikelen.
+ * @param {{ open?: boolean }} [options] open = de shop is vrijgegeven voor zoekmachines (standaard ja).
  * @returns {Promise<{ anonymous: object, admin: object, base: string, db: object, main: string }>} Een client zonder en een met inlog, het adres, de database en de hoofdtenant.
  */
-async function setupShop() {
+async function setupShop({ open = true } = {}) {
   const db = openDb();
   const store = createStore(db);
   const main = store.ensureTenant().id;
@@ -135,7 +136,7 @@ async function setupShop() {
   const admin = await createLogin(base, { password: PW })('baas');
   await admin.post('/app/api/stock/items', { code: 'SPR-1', name: 'Sproeier Pro', onHand: 5, salePrice: 10 });
   await admin.post('/app/api/stock/items', { code: 'BUIS-25', name: 'PE buis 25 mm', onHand: 0, salePrice: 1.5 });
-  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true, shopPayment: { online: false, publicUrl: `${base}/` } })).status, 200);
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true, shopPayment: { online: false, publicUrl: `${base}/` }, shopSeo: { indexing: open } })).status, 200);
   return { anonymous: createClient(base), admin, base, db, main };
 }
 
@@ -183,6 +184,107 @@ test('shop: robots.txt, sitemap.xml, llms.txt en productfeed.xml zijn openbaar e
   const feed = await anonymous.get('/productfeed.xml');
   assert.strictEqual(feed.status, 200);
   assert.match(feed.text, /<rss version="2\.0"/);
+});
+
+test('shop dicht voor zoekmachines (standaard): noindex overal, robots blokkeert alles, geen sitemap, feeds, canonical of JSON-LD', async () => {
+  const { anonymous, admin, base } = await setupShop({ open: false });
+  for (const urlPath of ['/', '/product/sproeier-pro-spr-1/']) {
+    const page = await anonymous.get(urlPath);
+    assert.strictEqual(page.status, 200);
+    assert.match(page.text, /<meta name="robots" content="noindex, follow">/, urlPath);
+    assert.match(page.headers.get('x-robots-tag'), /noindex/, urlPath);
+    assert.doesNotMatch(page.text, /rel="canonical"|og:title|application\/ld\+json/, urlPath);
+  }
+  const robots = await anonymous.get('/robots.txt');
+  assert.strictEqual(robots.text, 'User-agent: *\nDisallow: /\n');
+  for (const urlPath of ['/sitemap.xml', '/llms.txt', '/productfeed.xml']) assert.strictEqual((await anonymous.get(urlPath)).status, 404, urlPath);
+  // Ook met een webadres blijft het dicht zolang de schakelaar uit staat; aanzetten zonder webadres opent niets.
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { shopSeo: { indexing: true }, shopPayment: { online: false, publicUrl: '' } })).status, 200);
+  assert.strictEqual((await anonymous.get('/sitemap.xml')).status, 404);
+  assert.match((await anonymous.get('/')).text, /noindex/);
+  assert.strictEqual((await fetch(`${base}/robots.txt`)).status, 200);
+  // Open met webadres: alles beschikbaar, geen noindex-kop.
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { shopPayment: { online: false, publicUrl: `${base}/` } })).status, 200);
+  const open = await anonymous.get('/');
+  assert.strictEqual(open.headers.get('x-robots-tag'), null);
+  assert.doesNotMatch(open.text, /name="robots"/);
+  assert.strictEqual((await anonymous.get('/sitemap.xml')).status, 200);
+});
+
+test('instelling shopSeo: alleen een echte true opent; rommel blijft dicht; niet in een testomgeving', () => {
+  assert.deepStrictEqual(Seo.sanitizeSeoSettings(undefined), { indexing: false });
+  assert.deepStrictEqual(Seo.sanitizeSeoSettings({ indexing: 'ja' }), { indexing: false });
+  assert.deepStrictEqual(Seo.sanitizeSeoSettings([true]), { indexing: false });
+  assert.deepStrictEqual(Seo.sanitizeSeoSettings({ indexing: true }), { indexing: true });
+  assert.strictEqual(Seo.indexingOn({ indexing: true }, ''), false);
+  assert.strictEqual(Seo.indexingOn({ indexing: false }, BASE), false);
+  assert.strictEqual(Seo.indexingOn({ indexing: true }, BASE), true);
+  assert.strictEqual(Seo.pageTitleOf('  Eigen  ', 'Auto'), 'Eigen');
+  assert.strictEqual(Seo.pageTitleOf('', 'Auto'), 'Auto');
+});
+
+test('product-JSON-LD: merk en EAN alleen als ze bestaan; een prijsbereik krijgt geen EAN; ongeldige EAN valt weg', () => {
+  const single = Seo.productJsonLd({ product: PRODUCT, baseUrl: BASE, canonicalPath: 'product/x/', shopName: 'Shop', description: 'd', brand: 'Rain Bird', ean: '4006381333931' });
+  assert.deepStrictEqual(single.brand, { '@type': 'Brand', name: 'Rain Bird' });
+  assert.strictEqual(single.gtin13, '4006381333931');
+  assert.strictEqual(single.offers.price, '12.10', 'consumentenprijs incl. btw');
+  const short = Seo.productJsonLd({ product: PRODUCT, baseUrl: BASE, canonicalPath: 'product/x/', shopName: 'Shop', description: 'd', ean: '96385074' });
+  assert.strictEqual(short.gtin8, '96385074');
+  assert.ok(!('brand' in short));
+  const bad = Seo.productJsonLd({ product: PRODUCT, baseUrl: BASE, canonicalPath: 'product/x/', shopName: 'Shop', description: 'd', ean: '12345' });
+  assert.ok(!('gtin13' in bad) && !('gtin8' in bad));
+  const range = Seo.productJsonLd({ product: { ...PRODUCT, variants: [{ code: 'A', priceIncl: 1, inStock: true }, { code: 'B', priceIncl: 2, inStock: false }] }, baseUrl: BASE, canonicalPath: 'product/x/', shopName: 'Shop', description: 'd', ean: '4006381333931' });
+  assert.ok(!('gtin13' in range));
+});
+
+test('artikel: eigen zoekmachinetitel, -omschrijving en merk komen in de pagina en de JSON-LD; leeg = automatisch; variant erft van het hoofdartikel', async () => {
+  const { anonymous, admin } = await setupShop();
+  const items = (await admin.get('/app/api/stock')).body.items;
+  const sproeier = items.find((item) => item.code === 'SPR-1');
+  // Een artikel zonder eigen teksten (de pagina's worden 30 seconden onthouden, dus een ander artikel dan hieronder).
+  const automatic = await anonymous.get('/product/pe-buis-25-mm-buis-25/');
+  assert.match(automatic.text, /<title>PE buis 25 mm – Aquatechshop\.nl<\/title>/);
+  assert.ok(!('brand' in jsonLdOf(automatic.text).find((item) => item['@type'] === 'Product')));
+  const saved = await admin.put(`/app/api/stock/items/${sproeier.id}`, { seoTitle: '  Sproeier Pro kopen <b>bij</b> ons ', seoDescription: 'Koop de Sproeier Pro met gratis advies.', brand: 'Hunter', ean: '4006381333931' });
+  assert.strictEqual(saved.status, 200);
+  const detail = (await admin.get(`/app/api/stock/items/${sproeier.id}`)).body;
+  assert.strictEqual(detail.seoTitle, 'Sproeier Pro kopen bij ons');
+  assert.strictEqual(detail.brand, 'Hunter');
+  const page = await anonymous.get('/product/sproeier-pro-spr-1/');
+  assert.match(page.text, /<title>Sproeier Pro kopen bij ons<\/title>/);
+  assert.match(page.text, /<meta name="description" content="Koop de Sproeier Pro met gratis advies\.">/);
+  assert.match(page.text, /<meta property="og:title" content="Sproeier Pro kopen bij ons">/);
+  const productData = jsonLdOf(page.text).find((item) => item['@type'] === 'Product');
+  assert.deepStrictEqual(productData.brand, { '@type': 'Brand', name: 'Hunter' });
+  assert.strictEqual(productData.gtin13, '4006381333931');
+  const created = await admin.post('/app/api/stock/items', { code: 'NIEUW-1', name: 'Nieuw artikel', onHand: 1, salePrice: 5, seoTitle: 'Nieuw titel', brand: 'Merk X' });
+  assert.strictEqual(created.status, 201);
+  const createdDetail = (await admin.get(`/app/api/stock/items/${created.body.id}`)).body;
+  assert.deepStrictEqual([createdDetail.seoTitle, createdDetail.brand], ['Nieuw titel', 'Merk X'], 'ook bij aanmaken');
+  // Te lange invoer wordt afgekapt; leeg maken geeft weer de automatische tekst.
+  await admin.put(`/app/api/stock/items/${sproeier.id}`, { seoTitle: 'x'.repeat(200), seoDescription: 'y'.repeat(400) });
+  const long = (await admin.get(`/app/api/stock/items/${sproeier.id}`)).body;
+  assert.strictEqual(long.seoTitle.length, 70);
+  assert.strictEqual(long.seoDescription.length, 160);
+  await admin.put(`/app/api/stock/items/${sproeier.id}`, { seoTitle: '', seoDescription: '', brand: '' });
+  const cleared = (await admin.get(`/app/api/stock/items/${sproeier.id}`)).body;
+  assert.deepStrictEqual([cleared.seoTitle, cleared.seoDescription, cleared.brand], ['', '', '']);
+});
+
+test('pagina: eigen titel voor zoekmachines, anders de paginatitel; te lang wordt afgekapt', async () => {
+  const { anonymous, admin } = await setupShop();
+  assert.strictEqual((await admin.put('/app/api/admin/shop-content/pages/verzending', { title: 'Verzending', description: 'Zo leveren wij.', seoTitle: '  Verzending en levertijd <i>tuinberegening</i> ', body: '<p>Tekst</p>' })).status, 200);
+  assert.strictEqual((await admin.post('/app/api/admin/shop-content/pages/verzending/publish', {})).status, 200);
+  const page = await anonymous.get('/pagina/verzending/');
+  assert.match(page.text, /<title>Verzending en levertijd tuinberegening<\/title>/);
+  assert.match(page.text, /<meta name="description" content="Zo leveren wij\.">/);
+  assert.match(page.text, /<meta property="og:title" content="Verzending en levertijd tuinberegening">/);
+  await admin.put('/app/api/admin/shop-content/pages/verzending', { title: 'Verzending', seoTitle: 'z'.repeat(300), body: '<p>Tekst</p>' });
+  await admin.post('/app/api/admin/shop-content/pages/verzending/publish', {});
+  assert.match((await anonymous.get('/pagina/verzending/')).text, new RegExp(`<title>z{70}</title>`));
+  await admin.put('/app/api/admin/shop-content/pages/verzending', { title: 'Verzending', body: '<p>Tekst</p>' });
+  await admin.post('/app/api/admin/shop-content/pages/verzending/publish', {});
+  assert.match((await anonymous.get('/pagina/verzending/')).text, /<title>Verzending – Aquatechshop\.nl<\/title>/);
 });
 
 test('shop uit: sitemap, llms.txt en feed bestaan niet', async () => {

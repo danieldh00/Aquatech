@@ -42,7 +42,7 @@
    */
   function toEditable(list, depth) {
     return list.map((node) => ({
-      name: node.name, slug: node.slug, intro: node.intro || '', image: node.image || '', hidden: node.hidden === true, match: [...(node.match || [])], group: node.group,
+      name: node.name, slug: node.slug, intro: node.intro || '', seoTitle: node.seoTitle || '', seoDescription: node.seoDescription || '', image: node.image || '', hidden: node.hidden === true, match: [...(node.match || [])], group: node.group,
       children: toEditable(node.children || [], depth + 1), _open: depth === 0, _detail: false, _new: false,
     }));
   }
@@ -64,7 +64,7 @@
    */
   function forServer(list) {
     return list.map((node) => ({
-      name: node.name, slug: node.slug, intro: node.intro, image: node.image, hidden: node.hidden, match: node.match, group: node.group, children: forServer(node.children),
+      name: node.name, slug: node.slug, intro: node.intro, seoTitle: node.seoTitle, seoDescription: node.seoDescription, image: node.image, hidden: node.hidden, match: node.match, group: node.group, children: forServer(node.children),
     }));
   }
 
@@ -152,6 +152,8 @@
   function detailHtml(node, isRoot) {
     return `<div class="mn-detail">
       <label>Uitleg boven de pagina<textarea data-mf="intro" rows="3" maxlength="2000">${esc(node.intro)}</textarea><span class="hint">Een lege regel begint een nieuwe alinea; een regel die met ## begint is een tussenkop.</span></label>
+      <label>Titel voor zoekmachines<input data-mf="seoTitle" maxlength="70" value="${esc(node.seoTitle)}" autocomplete="off" placeholder="Leeg = ${esc(node.name)} – Aquatechshop.nl"><span class="hint">Maximaal 70 tekens; langere titels worden in zoekresultaten afgekapt.</span></label>
+      <label>Omschrijving voor zoekmachines<textarea data-mf="seoDescription" rows="2" maxlength="160" placeholder="Leeg = een korte tekst met de naam en het aantal producten">${esc(node.seoDescription)}</textarea><span class="hint">Maximaal 160 tekens. Zichtbaar in zoekresultaten, niet op de pagina.</span></label>
       <label>Afbeelding in het blok${imagePicker(node.image)}<span class="hint">Eigen foto's upload je eerst bij het tabblad Afbeeldingen.</span></label>
       ${isRoot ? '' : `<label>Webshopcategorieën<input data-mf="match" maxlength="400" value="${esc(node.match.join(' | '))}" autocomplete="off" placeholder="Leeg = de naam hierboven"><span class="hint">Producten met een van deze categorieën in de webshop komen in deze categorie; meerdere namen scheid je met |. Een andere naam hierboven verandert dit niet.</span></label>`}
       ${node._new ? '' : `<p class="muted small">Adres: <code>/${isRoot ? 'groep' : 'categorie'}/${esc(isRoot ? node.group : node.slug)}/</code> (blijft gelijk bij hernoemen)</p>`}
@@ -298,7 +300,7 @@
     const index = path[path.length - 1];
     if (action === 'fold') node._open = !node._open;
     else if (action === 'detail') node._detail = !node._detail;
-    else if (action === 'add') { node.children.push({ name: 'Nieuwe categorie', slug: '', intro: '', image: '', hidden: false, match: [], group: undefined, children: [], _open: false, _detail: true, _new: true }); node._open = true; }
+    else if (action === 'add') { node.children.push({ name: 'Nieuwe categorie', slug: '', intro: '', seoTitle: '', seoDescription: '', image: '', hidden: false, match: [], group: undefined, children: [], _open: false, _detail: true, _new: true }); node._open = true; }
     else if (action === 'up' && index > 0) [siblings[index - 1], siblings[index]] = [siblings[index], siblings[index - 1]];
     else if (action === 'down' && index < siblings.length - 1) [siblings[index + 1], siblings[index]] = [siblings[index], siblings[index + 1]];
     else if (action === 'in' && index > 0) { siblings.splice(index, 1); siblings[index - 1].children.push(node); siblings[index - 1]._open = true; }
@@ -325,7 +327,7 @@
     const entry = loose[position];
     if (!entry) return;
     const heading = state.roots.find((root) => root.group === entry.groupSlug) || state.roots[0];
-    heading.children.push({ name: entry.name, slug: '', intro: '', image: '', hidden: false, match: [entry.name], group: undefined, children: [], _open: false, _detail: false, _new: true });
+    heading.children.push({ name: entry.name, slug: '', intro: '', seoTitle: '', seoDescription: '', image: '', hidden: false, match: [entry.name], group: undefined, children: [], _open: false, _detail: false, _new: true });
     heading._open = true;
     render();
   }

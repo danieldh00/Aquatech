@@ -1386,6 +1386,13 @@ const MIGRATIONS = [
   CREATE UNIQUE INDEX monitor_incidents_open ON monitor_incidents (tenant_id, check_key) WHERE state = 'open';
   CREATE INDEX monitor_incidents_recent ON monitor_incidents (tenant_id, state, last_at);
   `,
+  // 73: zoekmachineteksten en merk per artikel (webshop/seo.js): eigen titel en omschrijving voor zoekresultaten (leeg = automatisch
+  // uit naam en omschrijving) en het merk voor de gestructureerde gegevens van het product.
+  `
+  ALTER TABLE stock_items ADD COLUMN seo_title TEXT NOT NULL DEFAULT '';
+  ALTER TABLE stock_items ADD COLUMN seo_description TEXT NOT NULL DEFAULT '';
+  ALTER TABLE stock_items ADD COLUMN brand TEXT NOT NULL DEFAULT '';
+  `,
 ];
 
 /**

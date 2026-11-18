@@ -17,6 +17,46 @@ const MAX_SITEMAP_URLS = 50000;
 const AVAILABILITY = { in: 'https://schema.org/InStock', out: 'https://schema.org/OutOfStock' };
 
 /**
+ * Saneert de instelling `shopSeo`. Zolang `indexing` niet expres aan staat, blijft de shop voor zoekmachines dicht.
+ * @param {*} raw De ingevoerde instelling.
+ * @returns {{ indexing: boolean }} De gesaneerde instelling (indexing = zoekmachines mogen de shop opnemen; standaard uit).
+ */
+function sanitizeSeoSettings(raw) {
+  const input = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  return { indexing: input.indexing === true };
+}
+
+/**
+ * Mogen zoekmachines de shop opnemen? Alleen als de schakelaar aan staat én het webadres van de shop bekend is
+ * (canonical-links, sitemap en feeds hebben dat nodig).
+ * @param {*} setting De opgeslagen instelling `shopSeo`.
+ * @param {string} baseUrl Het webadres van de shop (leeg = onbekend).
+ * @returns {boolean} true als de shop voor zoekmachines open staat.
+ */
+function indexingOn(setting, baseUrl) {
+  return sanitizeSeoSettings(setting).indexing && Boolean(baseUrl);
+}
+
+/**
+ * De robots.txt zolang de shop niet vrijgegeven is: alle crawlers weg, ook AI-zoekers.
+ * @returns {string} De inhoud van robots.txt.
+ */
+function robotsBlockedTxt() {
+  return 'User-agent: *\nDisallow: /\n';
+}
+
+/**
+ * Kiest de titel van een pagina: de eigen zoekmachinetitel, anders de automatische titel.
+ * @param {string} custom De eigen titel uit Beheer (leeg = automatisch).
+ * @param {string} automatic De automatische titel (bijv. "Naam – Aquatechshop.nl").
+ * @returns {string} De titel.
+ */
+function pageTitleOf(custom, automatic) {
+  const own = String(custom || '').trim();
+  return own || automatic;
+}
+
+/**
  * Maakt tekst veilig voor in XML (tekst en attributen).
  * @param {*} value De tekst.
  * @returns {string} De ontsnapte tekst.
@@ -128,10 +168,10 @@ function breadcrumbJsonLd(crumbs, baseUrl) {
 /**
  * Een product met aanbieding (prijs incl. btw voor consumenten, voorraad) als Schema.org Product.
  * Een hoofdartikel met varianten krijgt een AggregateOffer (laagste en hoogste prijs).
- * @param {{ product: object, baseUrl: string, canonicalPath: string, shopName: string, description: string }} input product = uit de catalogus (code, name, priceIncl, inStock, image, categoryName, optioneel variants), canonicalPath = pad van de pagina, description = de tekst van de pagina.
+ * @param {{ product: object, baseUrl: string, canonicalPath: string, shopName: string, description: string, brand?: string, ean?: string }} input product = uit de catalogus (code, name, priceIncl, inStock, image, categoryName, optioneel variants), canonicalPath = pad van de pagina, description = de tekst van de pagina, brand = het merk van het artikel (leeg = geen merk in de gegevens) en ean = de EAN van het getoonde artikel (alleen bij een enkel artikel of variant, nooit bij een prijsbereik).
  * @returns {object} Het Schema.org-object.
  */
-function productJsonLd({ product, baseUrl, canonicalPath, shopName, description }) {
+function productJsonLd({ product, baseUrl, canonicalPath, shopName, description, brand = '', ean = '' }) {
   const url = absoluteUrl(baseUrl, canonicalPath);
   const seller = { '@type': 'Organization', name: shopName };
   const variants = product.variants || [];
@@ -146,8 +186,11 @@ function productJsonLd({ product, baseUrl, canonicalPath, shopName, description 
       '@type': 'Offer', priceCurrency: 'EUR', price: Number(product.priceIncl).toFixed(2), url,
       availability: product.inStock ? AVAILABILITY.in : AVAILABILITY.out, itemCondition: 'https://schema.org/NewCondition', seller,
     };
+  const gtin = !variants.length && /^(\d{8}|\d{13})$/.test(String(ean)) ? String(ean) : '';
   return {
     '@context': 'https://schema.org', '@type': 'Product', name: product.name, sku: product.code, description,
+    ...(brand ? { brand: { '@type': 'Brand', name: brand } } : {}),
+    ...(gtin ? { [gtin.length === 13 ? 'gtin13' : 'gtin8']: gtin } : {}),
     ...(image ? { image: [image] } : {}),
     ...(product.categoryName ? { category: product.categoryName } : {}),
     url, offers,
@@ -295,6 +338,6 @@ function merchantFeedXml({ shopName, baseUrl, products, groups, details = new Ma
 }
 
 module.exports = {
-  ALLOWED_CRAWLERS, PRIVATE_PATHS, escapeXml, absoluteUrl, imageUrlOf, jsonLdBlock, splitAddress, internationalPhone,
+  sanitizeSeoSettings, indexingOn, robotsBlockedTxt, pageTitleOf, ALLOWED_CRAWLERS, PRIVATE_PATHS, escapeXml, absoluteUrl, imageUrlOf, jsonLdBlock, splitAddress, internationalPhone,
   organizationJsonLd, breadcrumbJsonLd, productJsonLd, faqEntriesOf, faqJsonLd, robotsTxt, sitemapEntriesOf, sitemapXml, llmsTxt, merchantFeedXml,
 };
