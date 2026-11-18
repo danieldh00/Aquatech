@@ -101,7 +101,7 @@ test('een mail die niet lukt wordt de volgende ronde opnieuw geprobeerd; een mis
   assert.match(mailsWith(world.sent, SUBJECT)[0].text, /niet gelukt/);
 });
 
-test('een gastbestelling krijgt de persoonlijke link, zonder webadres in Beheer gaat er niets uit', async () => {
+test('een gastbestelling krijgt nooit een herinnering (het adres is niet bevestigd)', async () => {
   const world = await setup({ mollie: true });
   verifyAll(world);
   const client = createClient(world.base);
@@ -110,10 +110,8 @@ test('een gastbestelling krijgt de persoonlijke link, zonder webadres in Beheer 
   assert.strictEqual(placed.status, 303, placed.text);
   const id = /\/bestelling\/([0-9a-f-]{36})\//.exec(placed.location)[1];
   backdate(world, id, 2);
-  assert.deepStrictEqual(await world.app.locals.webPaymentsRemind(), { sent: 1 });
-  const mail = mailsWith(world.sent, SUBJECT)[0];
-  assert.match(mail.text, new RegExp(`https://winkel\\.example/bestelling/${id}/\\?k=`));
-  assert.strictEqual(mail.to, PERSON.email);
+  assert.deepStrictEqual(await world.app.locals.webPaymentsRemind(), { sent: 0 });
+  assert.strictEqual(mailsWith(world.sent, SUBJECT).length, 0);
 });
 
 test('een bestelling die al een herinnering kreeg blokkeert de selectie niet: een latere bestelling komt toch aan de beurt', async () => {

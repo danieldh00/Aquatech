@@ -1226,7 +1226,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
   }
 
   /**
-   * Mag er een betalingsherinnering naar het adres van deze bestelling? Bij een account-bestelling alleen als het adres van
+   * Mag er een betalingsherinnering naar het adres van deze bestelling? Alleen bij een account-bestelling (nooit bij een gast) en alleen als het adres van
    * het account bevestigd is en gelijk aan dat van de bestelling (anders kan iemand een ander adres laten mailen), en nooit meer
    * dan één herinnering per adres per 24 uur (ook niet over meerdere bestellingen of gastbestellingen).
    * @param {string} tenantId Id van de omgeving.
@@ -1237,10 +1237,10 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
   function reminderAllowed(tenantId, order, now = currentTimestamp()) {
     const address = String(order.email || '').trim().toLowerCase();
     if (!address) return false;
-    if (order.userId) {
-      const user = prepare('SELECT email, email_verified_at FROM users WHERE tenant_id = ? AND id = ?').get(tenantId, String(order.userId));
-      if (!user || !user.email_verified_at || String(user.email || '').trim().toLowerCase() !== address) return false;
-    }
+    // Een gast heeft geen bevestigd adres: nooit een ongevraagde mail naar een adres dat iemand zomaar invulde.
+    if (!order.userId) return false;
+    const user = prepare('SELECT email, email_verified_at FROM users WHERE tenant_id = ? AND id = ?').get(tenantId, String(order.userId));
+    if (!user || !user.email_verified_at || String(user.email || '').trim().toLowerCase() !== address) return false;
     const dayAgo = new Date(Date.parse(now) - 24 * 3600 * 1000).toISOString();
     const recent = new Date(Date.parse(now) - 14 * 24 * 3600 * 1000).toISOString();
     const rows = prepare("SELECT data FROM web_orders WHERE tenant_id = ? AND lower(email) = ? AND created_at > ? AND data LIKE '%\"reminderAt\"%'").all(tenantId, address, recent);
