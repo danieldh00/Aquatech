@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.17.3
+
+- Migratie 73: `stock_items.seo_title`, `seo_description` (70 en 160 tekens, opgeschoond via `item-details.js`) en `brand`; de variant erft per veld van het hoofdartikel (`shownDetails`), de EAN is altijd die van het artikel zelf.
+- Categorieknopen in de menuboom (`seoTitle`, `seoDescription`, `normalizeTree`, editor `webshop-menu.js`) en pagina's (`seoTitle`, `normalizePage`) krijgen eigen zoekmachineteksten; de pagina's gebruiken `Seo.pageTitleOf` en de eigen omschrijving, anders de automatische tekst.
+- Product-JSON-LD krijgt `brand` en `gtin13`/`gtin8` (alleen bij een enkel artikel of variant, nooit bij een prijsbereik, en alleen een geldige EAN); de prijs blijft de consumentenprijs incl. btw.
+- Nieuwe instelling `shopSeo` {indexing} (standaard uit, `liveOnly`, alleen hoofdtenant, Beheer > Webshop > Zoekmachines): zolang uit krijgt elke shoppagina `noindex` (meta en `X-Robots-Tag`), zonder canonical, OpenGraph of JSON-LD; `robots.txt` is `Disallow: /`; sitemap, llms.txt en productfeed geven 404. Open vraagt ook een ingevuld webadres (`Seo.indexingOn`).
+- Let op: zolang `shopSeo.indexing` uit staat laat `seoHead` ook OpenGraph en Twitter-kaart weg (gedeelde links krijgen dan geen voorbeeld); dat geldt ook voor een omgeving die al een webadres had ingevuld.
+
 ## 1.17.2
 
 - Nieuw `platform/slow-log.js` + `database/query-stats.js`: elk verzoek of elke achtergrondtaak vanaf `SLOW_REQUEST_MS` (standaard 1000) komt als `[traag]` in het log en in een geheugenlogboek (laatste 500 regels, `app.locals.slowLog`). Per regel: duur, methode, genormaliseerd pad (id's, tokens, e-mailadressen en querystring weg), status, omgeving, aantal databasequeries en -tijd (synchrone brug en `db.async`-pool, ook wachten op een pool-verbinding) en externe aanroepen (`fetch`). Geen koppen, lichamen of gebruikersgegevens.

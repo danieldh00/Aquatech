@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.17.3',
+      date: '2026-11-18',
+      title: 'SEO-opties voor de webshop',
+      items: [
+        { text: 'Per artikel stel je nu een eigen titel en omschrijving voor zoekmachines in, plus het merk. Laat je ze leeg, dan maakt de webshop er zelf een goede van.', for: ['beheer', 'voorraad'] },
+        { text: 'Ook categorieën (Webshop-inhoud > Menu) en pagina\'s krijgen een eigen titel voor zoekmachines.', for: ['beheer'] },
+        { text: 'Nieuw: Beheer > Webshop > Zoekmachines. Zolang je dat niet aanzet, blijft de webshop onzichtbaar voor Google: elke pagina op noindex, robots.txt blokkeert alles en de sitemap bestaat niet. Zet het aan zodra de webshop live gaat.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.17.2',
       date: '2026-11-18',
       title: 'Pagina\'s openen niet meer vast tijdens de back-up',
