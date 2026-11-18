@@ -57,15 +57,17 @@ test('winkelwagen: Verder winkelen keert terug naar de laatst bekeken categorie,
   const search = await shopper.client.request('GET', '/zoeken/?q=sproeier');
   assert.strictEqual(search.status, 200);
   assert.ok(!(search.headers.get('set-cookie') || '').includes('aquatech_laatste_lijst'), 'een zoekterm gaat nooit in een cookie');
-  const group = await shopper.client.request('GET', '/groep/beregening/');
-  const page = group.status === 200 ? group : null;
-  if (page) {
-    assert.match(page.headers.get('set-cookie') || '', /aquatech_laatste_lijst=/);
-    const cart = await shopper.client.request('GET', '/winkelwagen/');
-    assert.match(cart.text, /href="\.\.\/groep\/beregening\/">Verder winkelen/);
-    const again = await shopper.client.request('GET', '/groep/beregening/');
-    assert.ok(!(again.headers.get('set-cookie') || '').includes('aquatech_laatste_lijst'), 'ongewijzigd: geen nieuwe cookie');
-  }
+  // Een categorie die echt bestaat: de eerste die de startpagina noemt.
+  const home = await shopper.client.request('GET', '/');
+  const slug = /href="\.?\/?categorie\/([a-z0-9-]+)\/"/.exec(home.text);
+  assert.ok(slug, 'de startpagina heeft een categorielink');
+  const list = await shopper.client.request('GET', `/categorie/${slug[1]}/`);
+  assert.strictEqual(list.status, 200);
+  assert.match(list.headers.get('set-cookie') || '', /aquatech_laatste_lijst=/);
+  const cart = await shopper.client.request('GET', '/winkelwagen/');
+  assert.ok(cart.text.includes(`href="../categorie/${slug[1]}/">Verder winkelen`), 'Verder winkelen gaat naar de categorie');
+  const again = await shopper.client.request('GET', `/categorie/${slug[1]}/`);
+  assert.ok(!(again.headers.get('set-cookie') || '').includes('aquatech_laatste_lijst'), 'ongewijzigd: geen nieuwe cookie');
 });
 
 test('lastListPath: alleen bekende soorten met veilige tekens', () => {
@@ -95,13 +97,13 @@ test('afrekenen en product: vertrouwensstrook zonder verzonnen punten', async ()
   assert.match(checkout.text, /14 dagen bedenktijd/);
   assert.match(checkout.text, /Gratis bezorgd vanaf|Levertijd ca\./);
   assert.match(checkout.text, /<h2 data-address-heading[^>]*>Bezorg- en factuuradres<\/h2>/);
-  const zonder = await shopper.client.request('GET', '/afrekenen/?deliverySame=0');
-  assert.ok(zonder.status === 200);
-  const product = await shopper.client.request('GET', '/product/sproeier/');
-  if (product.status === 200) {
-    assert.match(product.text, /class="trust-strip"/);
-    assert.match(product.text, /Gratis bezorgd vanaf € 150,00/);
-  }
+  const search = await shopper.client.request('GET', '/zoeken/?q=sproeier');
+  const link = /href="\.\.\/product\/([a-z0-9-]+)\/[^"]*"/.exec(search.text);
+  assert.ok(link, 'de zoekpagina noemt een product');
+  const product = await shopper.client.request('GET', `/product/${link[1]}/`);
+  assert.strictEqual(product.status, 200);
+  assert.match(product.text, /class="trust-strip"/);
+  assert.match(product.text, /Gratis bezorgd vanaf € 150,00/);
 });
 
 test('zoeken zonder resultaat: tips, categorieën en telefoonnummer in plaats van een lege pagina', async () => {
