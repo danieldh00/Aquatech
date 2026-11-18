@@ -2883,6 +2883,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    */
   app.locals.webPaymentsExpire = () => webPayments.expireUnpaid(tenant.id);
   /**
+   * Stuurt de eenmalige betalingsherinnering bij online bestellingen die na een uur niet betaald zijn (elk uur).
+   * @returns {Promise<{ sent: number }>} Het aantal verstuurde herinneringen.
+   */
+  app.locals.webPaymentsRemind = () => webPayments.remindUnpaid(tenant.id, { send: (order) => webOrderMail.sendPaymentReminder(tenant.id, order), canSend: () => webOrderMail.mailReady(tenant.id) });
+  /**
    * Geeft de voorraad vrij van webshopbestellingen op rekening waarvan de reserveringstermijn voorbij is (elk uur).
    * @returns {{ released: number }} Het aantal vrijgegeven bestellingen.
    */
@@ -3582,6 +3587,9 @@ if (require.main === module) {
     slowLog.trackTask('onbetaalde bestellingen laten vervallen', () => app.locals.webPaymentsExpire())
       .then((out) => { if (out.expired) console.log(`Onbetaalde webshopbestellingen vervallen: ${out.expired}`); })
       .catch((error) => console.error('Onbetaalde webshopbestellingen laten vervallen mislukt:', error.message));
+    slowLog.trackTask('betalingsherinneringen', () => app.locals.webPaymentsRemind())
+      .then((out) => { if (out.sent) console.log(`Betalingsherinneringen verstuurd: ${out.sent}`); })
+      .catch((error) => console.error('Betalingsherinneringen mislukt:', error.message));
     slowLog.trackTask('voorraadmeldingen', () => app.locals.stockAlertsRun())
       .then((out) => { if (out.sent || out.purged) console.log(`Voorraadmeldingen: ${out.sent} verstuurd, ${out.purged} verlopen`); })
       .catch((error) => console.error('Voorraadmeldingen mislukt:', error.message));

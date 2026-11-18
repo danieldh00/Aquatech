@@ -212,7 +212,7 @@ function sanitizeCheckout(raw, { method = 'dpd', country = 'NL', billingCountry 
  * Maakt de opslag voor bestellingen van de eigen webshop.
  * @param {object} db De database.
  * @param {{ stock: object, categoryDiscountsOf?: Function, deliveryRulesOf?: Function }} deps De voorraadopslag (reserveren en afboeken), categoryDiscountsOf(tenantId) = per artikelcode de categoriekorting (%) voor zakelijke klanten (zonder: geen) en deliveryRulesOf(tenantId) = per artikelcode de levermethoderegels van de categorie (zonder: geen).
- * @returns {{ priceCart: Function, shippingQuote: Function, orderTotals: Function, place: Function, get: Function, getForUser: Function, listForUser: Function, list: Function, setStatus: Function, setTracking: Function, updateData: Function, changePay: Function, unpaidOnline: Function, listToPick: Function, getMany: Function, pickable: Function, markPackingSlipsPrinted: Function, onShipped: Function, onCancelled: Function, onTracking: Function }} De functies.
+ * @returns {{ priceCart: Function, shippingQuote: Function, orderTotals: Function, place: Function, get: Function, getForUser: Function, listForUser: Function, list: Function, setStatus: Function, setTracking: Function, updateData: Function, changePay: Function, unpaidOnline: Function, reminderAllowed: Function, listToPick: Function, getMany: Function, pickable: Function, markPackingSlipsPrinted: Function, onShipped: Function, onCancelled: Function, onTracking: Function }} De functies.
  */
 function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(), deliveryRulesOf = () => new Map() }) {
   const shippedHooks = [];
@@ -1216,11 +1216,38 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
    * @param {string} before Tijdstip (ISO): alleen bestellingen die daarvoor zijn geplaatst.
    * @param {number} [limit] Hoogstens zoveel bestellingen (standaard 100).
    * @param {number} [skip] Zoveel oudste bestellingen overslaan (voor wie ze laat staan).
+   * @param {{ withoutReminder?: boolean }} [options] `withoutReminder`: alleen bestellingen van een account die nog geen betalingsherinnering kregen (een gast krijgt er nooit een).
    * @returns {string[]} De id's van de bestellingen.
    */
-  function unpaidOnline(tenantId, before, limit = 100, skip = 0) {
-    return prepare("SELECT id FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND created_at < ? AND data LIKE '%\"payment\":\"online\"%' AND data NOT LIKE '%\"status\":\"betaald\"%' ORDER BY created_at, id LIMIT ? OFFSET ?")
+  function unpaidOnline(tenantId, before, limit = 100, skip = 0, { withoutReminder = false } = {}) {
+    const reminderFilter = withoutReminder ? " AND user_id IS NOT NULL AND data NOT LIKE '%\"reminderAt\"%'" : '';
+    return prepare("SELECT id FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND created_at < ? AND data LIKE '%\"payment\":\"online\"%' AND data NOT LIKE '%\"status\":\"betaald\"%'" + reminderFilter + " ORDER BY created_at, id LIMIT ? OFFSET ?")
       .all(tenantId, String(before), Math.max(1, Math.floor(limit)), Math.max(0, Math.floor(skip))).map((row) => row.id);
+  }
+
+  /**
+   * Mag er een betalingsherinnering naar het adres van deze bestelling? Alleen bij een account-bestelling (nooit bij een gast) en alleen als het adres van
+   * het account bevestigd is en gelijk aan dat van de bestelling (anders kan iemand een ander adres laten mailen), en nooit meer
+   * dan één herinnering per adres per 24 uur (ook niet over meerdere bestellingen of gastbestellingen).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ userId: ?string, email: string }} order De bestelling.
+   * @param {string} [now] Het huidige moment (ISO); standaard nu.
+   * @returns {boolean} true als de herinnering mag.
+   */
+  function reminderAllowed(tenantId, order, now = currentTimestamp()) {
+    const address = String(order.email || '').trim().toLowerCase();
+    if (!address) return false;
+    // Een gast heeft geen bevestigd adres: nooit een ongevraagde mail naar een adres dat iemand zomaar invulde.
+    if (!order.userId) return false;
+    const user = prepare('SELECT email, email_verified_at FROM users WHERE tenant_id = ? AND id = ?').get(tenantId, String(order.userId));
+    if (!user || !user.email_verified_at || String(user.email || '').trim().toLowerCase() !== address) return false;
+    const dayAgo = new Date(Date.parse(now) - 24 * 3600 * 1000).toISOString();
+    const recent = new Date(Date.parse(now) - 14 * 24 * 3600 * 1000).toISOString();
+    const rows = prepare("SELECT data FROM web_orders WHERE tenant_id = ? AND lower(email) = ? AND created_at > ? AND data LIKE '%\"reminderAt\"%'").all(tenantId, address, recent);
+    return !rows.some((row) => {
+      const reminderAt = (JSON.parse(row.data).pay || {}).reminderAt;
+      return typeof reminderAt === 'string' && reminderAt > dayAgo;
+    });
   }
 
   /**
@@ -1263,7 +1290,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
     return { released };
   }
 
-  return { priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, countGuestSince, guestAccessOf, attachToUser, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, releaseExpired, listToPick, getMany, pickable, markPackingSlipsPrinted, setDropshippingSlip, onShipped, onCancelled, onTracking, withFulfilment, getDetailed, ship, recordShipmentLabel, setAllowPartial, listBackorders, markBackorderReady, onPartialShipped };
+  return { priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, countGuestSince, guestAccessOf, attachToUser, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, reminderAllowed, releaseExpired, listToPick, getMany, pickable, markPackingSlipsPrinted, setDropshippingSlip, onShipped, onCancelled, onTracking, withFulfilment, getDetailed, ship, recordShipmentLabel, setAllowPartial, listBackorders, markBackorderReady, onPartialShipped };
 }
 
 /**

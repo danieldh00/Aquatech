@@ -23,7 +23,7 @@ const EUR = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' 
 /**
  * Maakt de verzender van bestelmails.
  * @param {{ orders: object, settingsFor: Function, mailerFor: Function, mailBody: Function, guestLinkOf?: Function }} deps De bestelopslag, de instellingen per omgeving, de mailserver en de opmaak van de mail, en `guestLinkOf(tenantId, order, baseUrl)` = de persoonlijke link naar een gastbestelling (guest-orders.js; zonder geen link in de mails).
- * @returns {{ sendPlaced: Function, sendShipment: Function, sendBusinessRequest: Function, businessRequestReady: Function, mailReady: Function, sendStockAlert: Function }} De functies.
+ * @returns {{ sendPlaced: Function, sendShipment: Function, sendBusinessRequest: Function, businessRequestReady: Function, mailReady: Function, sendStockAlert: Function, sendPaymentReminder: Function }} De functies.
  */
 function createOrderMailer({ orders, settingsFor, mailerFor, mailBody, guestLinkOf = () => '' }) {
   /**
@@ -290,7 +290,44 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody, guestLink
     return true;
   }
 
-  return { sendPlaced, sendShipment, sendBusinessRequest, businessRequestReady, mailReady, sendStockAlert };
+  /**
+   * Maakt een naam geschikt voor de aanhef van een ongevraagde mail: geen links, regeleinden of lange tekst.
+   * @param {string} name De naam uit de bestelling.
+   * @returns {string} De opgeschoonde naam, of 'klant'.
+   */
+  const safeName = (name) => String(name || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/https?:\/\/\S*|www\.\S*|\S+@\S+/gi, '').replace(/\s+/g, ' ').trim().slice(0, 60) || 'klant';
+
+  /**
+   * Stuurt één herinnering bij een online bestelling waarvan de betaling niet is afgerond: wat er aan de hand is, tot wanneer de
+   * artikelen gereserveerd blijven en een link om af te rekenen (de persoonlijke link bij een gastbestelling, anders de
+   * bestelpagina met Nu betalen). Zonder webadres uit Beheer wordt er niets gestuurd: een herinnering zonder link helpt niemand.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} order De bestelling (met pay, email, customer, number, reservedUntil).
+   * @returns {Promise<boolean>} true als de mail is verstuurd; false bij een ongeldig adres, geen mailserver of geen webadres.
+   */
+  async function sendPaymentReminder(tenantId, order) {
+    if (!validEmail(order.email)) return false;
+    const settings = settingsFor(tenantId);
+    const mailer = mailerFor(settings);
+    if (!mailer.configured()) return false;
+    const payment = settings.get('shopPayment') || {};
+    const base = cleanPublicUrl(payment.publicUrl);
+    const link = order.guest ? guestLink(tenantId, order, settings) : (base ? `${base}bestelling/${encodeURIComponent(order.id)}/` : '');
+    if (!link) return false;
+    const profile = settings.get('quoteProfile') || {};
+    const failed = order.pay && order.pay.status === 'mislukt';
+    const until = order.reservedUntil ? new Date(order.reservedUntil).toLocaleString('nl-NL', { dateStyle: 'long', timeStyle: 'short', timeZone: 'Europe/Amsterdam' }) : '';
+    const mail = mailBody(profile, [
+      `Beste ${safeName(order.customer.name)},`,
+      failed ? `De betaling van je bestelling ${order.number} is niet gelukt, dus we hebben hem nog niet kunnen verwerken.` : `Je hebt bestelling ${order.number} geplaatst, maar de betaling is nog niet afgerond, dus we hebben hem nog niet kunnen verwerken.`,
+      `${until ? `We houden de artikelen voor je gereserveerd tot ${until}. ` : ''}Reken je bestelling af (${EUR.format(order.totals.total)}) via deze link:\n${link}`,
+      'Heb je al betaald, of wil je de bestelling niet meer? Dan hoef je niets te doen: een niet betaalde bestelling vervalt vanzelf. Antwoord op deze mail als je hulp nodig hebt. Je krijgt deze herinnering één keer.',
+    ]);
+    await mailer.send({ to: order.email, subject: `Je bestelling ${order.number} wacht nog op betaling`, text: mail.text, html: mail.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
+    return true;
+  }
+
+  return { sendPlaced, sendShipment, sendBusinessRequest, businessRequestReady, mailReady, sendStockAlert, sendPaymentReminder };
 }
 
 module.exports = { createOrderMailer };
