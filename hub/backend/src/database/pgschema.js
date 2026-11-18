@@ -1190,6 +1190,18 @@ const PG_MIGRATIONS = [
   CREATE UNIQUE INDEX stock_alerts_unique ON stock_alerts (tenant_id, item_code, email);
   CREATE INDEX stock_alerts_email ON stock_alerts (tenant_id, email);
   `,
+  // 77: zoektermen zonder resultaat in de eigen webshop (zie db.js).
+  `
+  CREATE TABLE shop_search_misses (
+    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+    term      ${TEXT_TYPE} NOT NULL,
+    hits      INTEGER NOT NULL,
+    first_at  ${TEXT_TYPE} NOT NULL,
+    last_at   ${TEXT_TYPE} NOT NULL,
+    PRIMARY KEY (tenant_id, term)
+  );
+  CREATE INDEX shop_search_misses_last ON shop_search_misses (tenant_id, last_at);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

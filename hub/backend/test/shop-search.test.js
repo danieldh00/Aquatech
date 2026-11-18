@@ -2,6 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { setup } = require('./helpers/webshop-world');
+const { createSearchMisses, MAX_TERMS } = require('../src/webshop/search-misses');
 const { searchProducts, normalize, withinDistance, stemOf, stemsOf } = require('../src/webshop/search');
 
 const CATALOG = [
@@ -125,4 +126,59 @@ test('meervouden met verdubbelde medeklinker of klinker en z of v', () => {
   // Een vorm van drie tekens telt alleen als begin van een woord: koppen → kop vindt Koppeling niet als deelreeks midden in een woord.
   assert.deepStrictEqual(codesOf('koppen'), ['KOP'], 'kop is het begin van Koppeling');
   assert.deepStrictEqual(codesOf('oppen'), [], 'opp zit midden in koppeling en telt niet');
+});
+
+test('zoektermen zonder resultaat: tellen, normaliseren, geen persoonsgegevens, plafond en opruimen', async () => {
+  const world = await setup();
+  const tenantId = world.db.prepare('SELECT id FROM tenants ORDER BY created_at LIMIT 1').get().id;
+  const other = world.db.prepare("SELECT id FROM tenants WHERE slug = 'ander'").get().id;
+  const misses = createSearchMisses(world.db);
+  assert.ok(misses.record(tenantId, '  Plantenspuit! '));
+  assert.ok(misses.record(tenantId, 'plantenspuit'));
+  assert.deepStrictEqual(misses.list(tenantId).map((row) => [row.term, row.hits]), [['plantenspuit', 2]]);
+  assert.deepStrictEqual(misses.list(other), [], 'andere omgeving ziet niets');
+  assert.ok(!misses.record(tenantId, 'a'), 'te kort');
+  assert.ok(!misses.record(tenantId, 'x'.repeat(41)), 'te lang');
+  assert.ok(!misses.record(tenantId, 'jan@voorbeeld.nl'), 'e-mailadres');
+  assert.ok(!misses.record(tenantId, '0612345678'), 'lang cijfer');
+  assert.strictEqual(misses.list(tenantId).length, 1);
+  // Plafond: een volle omgeving laat de minst gezochte term vallen.
+  for (let number = 0; number < MAX_TERMS + 5; number += 1) misses.record(tenantId, `term ${number}`);
+  assert.strictEqual(misses.list(tenantId).length, MAX_TERMS);
+  assert.strictEqual(misses.list(tenantId)[0].term, 'plantenspuit', 'de meest gezochte blijft staan');
+  // Opruimen na 90 dagen.
+  world.db.prepare("UPDATE shop_search_misses SET last_at = '2000-01-01T00:00:00.000Z' WHERE term = 'plantenspuit'").run();
+  assert.strictEqual(misses.purgeOld(tenantId), 1);
+});
+
+test('zoekpagina telt een lege zoekopdracht, suggesties en het overzicht in Beheer', async () => {
+  const world = await setup();
+  const client = world.shoppers[0].client;
+  await client.request('GET', '/zoeken/?q=bestaatechtniet');
+  await client.request('GET', '/zoeken/?q=bestaatechtniet');
+  await client.request('GET', '/zoeken/?q=sproeier&voorraad=1');
+  await client.request('GET', '/zoeken/?q=niets&voorraad=1');
+  const listed = await world.admin.get('/app/api/admin/shop-search-misses');
+  assert.strictEqual(listed.status, 200);
+  assert.deepStrictEqual(listed.body.items.map((row) => [row.term, row.hits]), [['bestaatechtniet', 2]], 'met voorraadfilter telt niet mee');
+  assert.strictEqual((await world.vreemd.get('/app/api/admin/shop-search-misses')).body.items.length, 0, 'andere organisatie ziet niets');
+  assert.strictEqual((await client.request('GET', '/app/api/admin/shop-search-misses')).status === 200, false, 'klant heeft geen toegang');
+  // Suggesties.
+  const suggestions = await client.request('GET', '/zoeken/suggesties/?q=sproei');
+  assert.strictEqual(suggestions.status, 200);
+  assert.match(suggestions.headers.get('cache-control'), /no-store/);
+  assert.ok(suggestions.body.items.length >= 1 && suggestions.body.items.length <= 6);
+  assert.deepStrictEqual(Object.keys(suggestions.body.items[0]).sort(), ['category', 'code', 'name', 'url']);
+  assert.deepStrictEqual((await client.request('GET', '/zoeken/suggesties/?q=s')).body.items, [], 'te kort');
+  assert.deepStrictEqual((await client.request('GET', '/zoeken/suggesties/')).body.items, []);
+  // Suggesties tellen niet als zoekopdracht zonder resultaat.
+  await client.request('GET', '/zoeken/suggesties/?q=bestaatechtniet2');
+  assert.strictEqual((await world.admin.get('/app/api/admin/shop-search-misses')).body.items.length, 1);
+  // De kop verwijst naar het script en het script wordt geserveerd.
+  const home = await client.request('GET', '/zoeken/?q=x');
+  assert.match(home.text, /data-suggest="\.\.\/zoeken\/suggesties\/"/);
+  assert.match(home.text, /zoeksuggesties\.js/);
+  const script = await client.request('GET', '/assets/zoeksuggesties.js');
+  assert.strictEqual(script.status, 200);
+  assert.match(script.type, /javascript/);
 });

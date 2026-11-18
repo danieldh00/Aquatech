@@ -1437,6 +1437,19 @@ const MIGRATIONS = [
   CREATE UNIQUE INDEX stock_alerts_unique ON stock_alerts (tenant_id, item_code, email);
   CREATE INDEX stock_alerts_email ON stock_alerts (tenant_id, email);
   `,
+  // 77: zoektermen in de eigen webshop zonder resultaat (webshop/search-misses.js): per omgeving en term een teller, zodat de beheerder
+  // ziet wat bezoekers zoeken en niet vinden. Alleen de genormaliseerde term, nooit wie zocht; na 90 dagen zonder nieuwe zoekopdracht gewist.
+  `
+  CREATE TABLE shop_search_misses (
+    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+    term      TEXT NOT NULL,
+    hits      INTEGER NOT NULL,
+    first_at  TEXT NOT NULL,
+    last_at   TEXT NOT NULL,
+    PRIMARY KEY (tenant_id, term)
+  );
+  CREATE INDEX shop_search_misses_last ON shop_search_misses (tenant_id, last_at);
+  `,
 ];
 
 /**
