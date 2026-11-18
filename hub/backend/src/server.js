@@ -35,6 +35,7 @@ const { createStorefront } = require('./webshop/storefront');
 const { createVies } = require('./webshop/vies');
 const { normalizeVatNumber, validVatNumber } = require('./webshop/vat');
 const { createShopStore, registerShopRoutes, loadArticles } = require('./webshop/shop');
+const { createQuoteRequests } = require('./webshop/quote-requests');
 const { createShopSync } = require('./webshop/shop-sync');
 const { createShopContentStore, registerShopContentRoutes } = require('./webshop/shop-content');
 const { createStorefrontData } = require('./webshop/storefront-data');
@@ -2832,6 +2833,21 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const stockAlerts = createStockAlerts(database);
   // Zoektermen zonder resultaat (webshop/search-misses.js): voor het overzicht in Beheer.
   const searchMisses = createSearchMisses(database);
+  // Offerte aanvragen vanuit de winkelwagen van een zakelijke klant (webshop/quote-requests.js): maakt een conceptofferte in Offertes.
+  const quoteRequests = createQuoteRequests({
+    /**
+     * Maakt de offerte als concept met het nummer en de geldigheid uit het bedrijfsprofiel.
+     * @param {{ id: string, tenant_id: string }} user De klant die aanvraagt (eigenaar van het concept).
+     * @param {object} data De inhoud van de offerte.
+     * @param {string} customerId Het klantaccount.
+     * @returns {object} De offerte.
+     */
+    createDraft: (user, data, customerId) => {
+      const profile = settingsFor(user.tenant_id).get('quoteProfile');
+      return quoteStore.create(user, { ...data, validUntil: QuoteCore.addDays(data.date, profile.validDays || 30) }, { status: 'concept', prefix: profile.numberPrefix, customerId });
+    },
+    settingsFor: (id) => settingsFor(id), mailerFor, mailBody,
+  });
   /**
    * Wist zoektermen zonder resultaat die al 90 dagen niet meer zijn gezocht (elk uur).
    * @returns {number} Het aantal gewiste termen.
@@ -3294,7 +3310,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, loginGuard, twoFactor, tokens: accountTokens, mailerFor, settingsFor: (id) => settingsFor(id), mailBody });
   storefrontRouter = createStorefront({
     addressLookup, addressGuard, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore, data: storefrontData, itemImages: itemImageStore,
-    orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, orderSlips, returns: webReturns, guestOrders, stockAlerts, searchMisses, payments: webPayments,
+    orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, orderSlips, returns: webReturns, guestOrders, stockAlerts, searchMisses, quoteRequests, payments: webPayments,
     vies, captcha, captchaGate,
     onOrder: (req, order) => audit(req, 'webshop_bestelling_geplaatst', { number: order.number, total: order.total, ...(order.guest ? { gast: true } : {}) }, order.userId, tenant.id),
     onGuestAccount: (req, order, user) => audit(req, 'webshop_gastbestelling_gekoppeld', { number: order.number }, user.id, tenant.id),

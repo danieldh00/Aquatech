@@ -111,10 +111,10 @@ function shippingBlock(hint, business) {
  * @param {object[]} groups Alle hoofdcategorieën.
  * @param {string} [notice] Een melding bovenaan, bijvoorbeeld dat een wijziging niet meer in de wagen paste.
  * @param {?{ added: number, notOrderable: string[], otherUnit?: string[] }} [fromPlan] Uitkomst van "in winkelwagen" vanuit de planner: aantal toegevoegde artikelen, de codes die niet te bestellen zijn en de codes die de shop in een andere eenheid verkoopt.
- * @param {{ shipping?: ?object, paymentOptions?: string[], continueHref?: string }} [extras] De verzendgegevens (shippingHint), de betaalwijzen van deze klant en waar Verder winkelen heen gaat (de laatst bekeken categorie of zoekopdracht; standaard de startpagina).
+ * @param {{ shipping?: ?object, paymentOptions?: string[], continueHref?: string, quoteRequest?: boolean, quoteSent?: boolean, reordered?: ?{ added: number, notOrderable: string[] } }} [extras] De verzendgegevens (shippingHint), de betaalwijzen van deze klant en waar Verder winkelen heen gaat (de laatst bekeken categorie of zoekopdracht; standaard de startpagina).
  * @returns {string} De HTML-pagina.
  */
-function cartPage(cart, groups = [], notice = '', fromPlan = null, { shipping = null, paymentOptions = ['rekening'], continueHref = ROOT } = {}) {
+function cartPage(cart, groups = [], notice = '', fromPlan = null, { shipping = null, paymentOptions = ['rekening'], continueHref = ROOT, quoteRequest = false, quoteSent = false, reordered = null } = {}) {
   const leadText = shipping ? `${shipping.leadText[0].toUpperCase()}${shipping.leadText.slice(1)}` : '';
   const planInfo = fromPlan ? `${fromPlan.added > 0 ? `<div class="form-info" role="status"><p>Het materiaal uit je plan staat in je winkelwagen (${fromPlan.added} ${fromPlan.added === 1 ? 'artikel' : 'artikelen'}). Controleer de aantallen en reken af.</p></div>` : ''}${fromPlan.notOrderable.length ? `<div class="form-error" role="alert"><p>Deze onderdelen uit je plan zijn niet in de webshop te bestellen: ${fromPlan.notOrderable.map(escapeHtml).join(', ')}.</p></div>` : ''}${fromPlan.otherUnit && fromPlan.otherUnit.length ? `<div class="form-error" role="alert"><p>Deze onderdelen verkopen we in een andere eenheid dan je plan (bijvoorbeeld per rol in plaats van per meter) en staan daarom niet in je winkelwagen: ${fromPlan.otherUnit.map(escapeHtml).join(', ')}. Kies zelf het aantal dat je nodig hebt.</p></div>` : ''}` : '';
   if (!cart.lines.length && !cart.missing.length) {
@@ -131,12 +131,13 @@ function cartPage(cart, groups = [], notice = '', fromPlan = null, { shipping = 
   const missing = cart.missing.length ? `<div class="form-error" role="alert"><p>Niet meer te koop: ${cart.missing.map(escapeHtml).join(', ')}.</p>${cart.missing.map((code) => `<form class="inline" method="post" action="./"><input type="hidden" name="action" value="remove"><input type="hidden" name="code" value="${escapeHtml(code)}"><button class="button secondary" type="submit">Verwijder ${escapeHtml(code)}</button></form>`).join('')}</div>` : '';
   const full = notice ? `<div class="form-error" role="alert"><p>${escapeHtml(notice)}</p></div>` : '';
   const body = `<section class="cart"><h1>Winkelwagen</h1>
-${planInfo}${full}${missing}
+${planInfo}${reordered ? `<div class="form-info" role="status"><p>${reordered.added > 0 ? `De artikelen van je eerdere bestelling staan in je winkelwagen (${reordered.added}). Controleer de aantallen en prijzen.` : 'Er kon niets uit je eerdere bestelling in de winkelwagen.'}${reordered.notOrderable.length ? ` Niet meer te bestellen: ${reordered.notOrderable.map(escapeHtml).join(', ')}.` : ''}</p></div>` : ''}${quoteSent ? '<div class="form-info" role="status"><p>Je offerteaanvraag is ontvangen. We controleren de prijzen en sturen je de offerte. Je winkelwagen blijft bewaard.</p></div>' : ''}${full}${missing}
 <div class="tablewrap"><table class="cart-table"><thead><tr><th>Artikel</th><th class="num">Prijs${cart.pricesExcl ? ' excl. btw' : ''}</th><th>Aantal</th><th class="num">Totaal${cart.pricesExcl ? ' excl. btw' : ''}</th><th></th></tr></thead>
 <tbody>${rows}</tbody><tfoot>${totalRows(cart.totals, cart.pricesExcl)}</tfoot></table></div>
 ${shippingBlock(shipping, Boolean(cart.pricesExcl))}
 <p class="note">${cart.pricesExcl ? 'Je ziet zakelijke prijzen excl. btw. ' : ''}${paymentNote(paymentOptions)}</p>
 <div class="cart-actions"><a class="button secondary" href="${escapeHtml(continueHref)}">Verder winkelen</a>
+${quoteRequest ? `<form class="inline" method="post" action="offerte/"><button class="button secondary" type="submit">Offerte aanvragen</button></form>` : ''}
 ${cart.ok ? `<a class="button" href="${ROOT}afrekenen/">Naar afrekenen</a>` : '<span class="note">Pas eerst je winkelwagen aan om af te rekenen.</span>'}</div>
 ${trustStrip(ROOT, { leadText, freeFrom: shipping ? shipping.freeFrom : 0, business: Boolean(cart.pricesExcl), online: paymentOptions.includes('online') })}
 </section>`;
@@ -450,7 +451,7 @@ ${dropshipBlock(order, thanks)}${payBlock}<p>Status: <strong>${escapeHtml(order.
 ${invoiceBlock}${history}
 ${returnsHtml}
 ${guest ? guestNote() : ''}${accountCreated ? '<p class="form-info" role="status">Je account is aangemaakt en deze bestelling staat erin. We hebben je een mail gestuurd om je e-mailadres te bevestigen.</p>' : ''}${accountOffer ? accountOfferBlock(order, accountOffer) : ''}
-<p><a class="button" href="${DETAIL_ROOT}">Verder winkelen</a>${guest ? '' : ` <a class="button secondary" href="${DETAIL_ROOT}bestellingen/">Al mijn bestellingen</a>`}</p></section>`;
+<div class="cart-actions"><a class="button" href="${DETAIL_ROOT}">Verder winkelen</a>${guest ? '' : ` <a class="button secondary" href="${DETAIL_ROOT}bestellingen/">Al mijn bestellingen</a>`}${order.lines.length ? `<form class="inline" method="post" action="opnieuw/"><button class="button secondary" type="submit">Opnieuw bestellen</button></form>` : ''}</div></section>`;
   return layout({ root: DETAIL_ROOT, title: `Bestelling ${order.number} – Aquatechshop.nl`, description: 'Je bestelling bij Aquatechshop.nl.', body, groups, events: thanks && !waiting ? Analytics.purchaseEvents({ number: order.number, total: order.totals.total, tax: order.totals.byRate.reduce((sum, row) => sum + row.vat, 0), shipping: order.shipping ? order.shipping.price : 0, payment: order.payment, guest: Boolean(order.guest), items: analyticsItems(order.lines, business) }) : [], script: order.dropshipping && order.status === 'nieuw' && !order.packingSlip ? 'pakbon.js' : '', refresh: autoPay && waiting && !payError ? 'betalen/' : '' });
 }
 
