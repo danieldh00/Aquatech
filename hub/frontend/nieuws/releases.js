@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.19.5',
+      date: '2026-11-18',
+      title: 'Herinnering bij niet afgeronde betaling',
+      items: [
+        { text: 'Een klant die een online betaling niet afrondt, krijgt na een uur één herinneringsmail met een link om alsnog te betalen, zolang de reservering loopt. Je zet dit uit in Beheer > Webshop > Betalen.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.19.4',
       date: '2026-11-18',
       title: 'Zoeksuggesties en zoektermen zonder resultaat',
