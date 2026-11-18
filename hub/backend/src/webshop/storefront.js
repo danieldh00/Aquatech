@@ -1363,6 +1363,15 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     res.type(file.mime).send(file.body);
   });
 
+  // De miniatuur voor kaartjes (zonder miniatuur: de gewone afbeelding).
+  router.get('/artikelfoto/:id/klein', (req, res) => {
+    const file = itemImages && itemImages.thumbFile ? itemImages.thumbFile(tenantId, req.params.id) : null;
+    if (!file) return res.status(404).end();
+    // Zonder miniatuur is dit tijdelijk de grote foto: kort cachen, zodat de miniatuur later wel verschijnt.
+    res.setHeader('Cache-Control', file.fallback ? 'public, max-age=300' : 'public, max-age=31536000, immutable');
+    res.type(file.mime).send(file.body);
+  });
+
   router.get('/groep/:slug', (req, res) => {
     const pathname = req.originalUrl.split('?')[0];
     if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/`);
