@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.21.1',
+      date: '2026-11-18',
+      title: 'Webshop opent ook na een rustig moment snel',
+      items: [
+        { text: 'De webshop opent nu ook voor de eerste bezoeker na een rustig moment snel: pagina\'s wachten niet meer op het opnieuw opbouwen van het assortiment.' },
+      ],
+    },
+    {
       version: '1.21.0',
       date: '2026-11-18',
       title: 'Mail-opmaak en mailteksten zelf instellen',
