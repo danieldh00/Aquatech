@@ -566,3 +566,12 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
 .stock-alert .form-field { display: grid; gap: 4px; }
 .stock-alert small { color: var(--at-muted, inherit); }
 .stock-alert .button { justify-self: start; }
+
+/* Suggesties onder het zoekveld in de kop */
+.shop-search { position: relative; }
+.search-suggest { position: absolute; left: 0; right: 0; top: 100%; z-index: 30; margin: 4px 0 0; padding: 4px; list-style: none; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
+.search-suggest[hidden] { display: none; }
+.search-suggest li a { display: grid; gap: 2px; padding: 8px 10px; border-radius: 8px; color: inherit; text-decoration: none; }
+.search-suggest li[aria-selected="true"] a, .search-suggest li a:hover, .search-suggest li a:focus { background: var(--at-shop-bg, rgba(0, 0, 0, 0.05)); }
+.search-suggest-name { font-weight: 600; overflow-wrap: anywhere; }
+.search-suggest small { color: var(--at-muted, inherit); }

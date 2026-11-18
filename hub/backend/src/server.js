@@ -56,6 +56,7 @@ const { createMollie, cleanPublicUrl } = require('./webshop/mollie');
 const { createWebPayments } = require('./webshop/web-payments');
 const { createWebReturnStore, registerWebReturnRoutes } = require('./webshop/web-returns');
 const { createWebSalesStore, registerWebSalesRoutes } = require('./webshop/web-sales');
+const { createSearchMisses, registerSearchMissRoutes } = require('./webshop/search-misses');
 const { createReturnMailer } = require('./webshop/web-returns-mail');
 const { createShopOrders } = require('./webshop/shop-orders');
 const { createDebtorStore, registerDebtorRoutes } = require('./verkoop/debtors');
@@ -2829,6 +2830,13 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const webOrderMail = createOrderMailer({ orders: webOrders, settingsFor: (id) => settingsFor(id), mailerFor, mailBody, guestLinkOf: guestOrders.linkOf });
   // Voorraadmeldingen: een bezoeker laat zijn adres achter bij een artikel dat niet op voorraad is en krijgt één mail zodra het terug is.
   const stockAlerts = createStockAlerts(database);
+  // Zoektermen zonder resultaat (webshop/search-misses.js): voor het overzicht in Beheer.
+  const searchMisses = createSearchMisses(database);
+  /**
+   * Wist zoektermen zonder resultaat die al 90 dagen niet meer zijn gezocht (elk uur).
+   * @returns {number} Het aantal gewiste termen.
+   */
+  app.locals.searchMissesPurge = () => searchMisses.purgeOld(tenant.id);
   let stockAlertsBusy = false;
   /**
    * Mailt de voorraadmeldingen waarvan het artikel weer te bestellen is en wist ze daarna; een melding met een mislukte mail blijft staan voor de volgende ronde (elk uur).
@@ -2931,6 +2939,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   registerWebReturnRoutes(app, { returns: webReturns, requireJson, audit, credits: webOrderInvoices, mail: webReturnMail, refundOf: refundOfReturn });
   // Margerapportage van de webshop: omzet, inkoop (FIFO-voorraadlagen) en marge (web-sales.js).
   registerWebSalesRoutes(app, { sales: createWebSalesStore(database, { stock: stockStore }) });
+  registerSearchMissRoutes(app, { misses: searchMisses });
   registerShopContentRoutes(app, { content: shopContentStore, requireJson, audit, mainTenantId: tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
     unplacedOf: (tenantId) => storefrontData.catalogOf(tenantId, { preview: true }).categories.filter((category) => category.loose).map((category) => ({ name: category.name, count: category.count, groupSlug: category.groupSlug })) });
   // Openbare vlaggen voor het dashboard en de modules (geen geheimen).
@@ -3280,7 +3289,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, loginGuard, twoFactor, tokens: accountTokens, mailerFor, settingsFor: (id) => settingsFor(id), mailBody });
   storefrontRouter = createStorefront({
     addressLookup, addressGuard, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore, data: storefrontData, itemImages: itemImageStore,
-    orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, orderSlips, returns: webReturns, guestOrders, stockAlerts, payments: webPayments,
+    orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, orderSlips, returns: webReturns, guestOrders, stockAlerts, searchMisses, payments: webPayments,
     vies, captcha, captchaGate,
     onOrder: (req, order) => audit(req, 'webshop_bestelling_geplaatst', { number: order.number, total: order.total, ...(order.guest ? { gast: true } : {}) }, order.userId, tenant.id),
     onGuestAccount: (req, order, user) => audit(req, 'webshop_gastbestelling_gekoppeld', { number: order.number }, user.id, tenant.id),
@@ -3576,6 +3585,8 @@ if (require.main === module) {
     slowLog.trackTask('voorraadmeldingen', () => app.locals.stockAlertsRun())
       .then((out) => { if (out.sent || out.purged) console.log(`Voorraadmeldingen: ${out.sent} verstuurd, ${out.purged} verlopen`); })
       .catch((error) => console.error('Voorraadmeldingen mislukt:', error.message));
+    slowLog.trackTask('oude zoektermen', async () => app.locals.searchMissesPurge())
+      .catch((error) => console.error('Oude zoektermen wissen mislukt:', error.message));
     slowLog.trackTask('seizoensherinneringen', () => app.locals.seasonRemindersAll())
       .then((sent) => { if (Object.keys(sent).length) console.log(`Seizoensherinneringen: ${JSON.stringify(sent)}`); })
       .catch((error) => console.error('Seizoensherinneringen mislukt:', error.message));
