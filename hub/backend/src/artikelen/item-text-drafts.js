@@ -196,6 +196,7 @@ function createItemTextDraftStore(db) {
     const draftRow = prepare('SELECT id, notes, model, base_hash FROM item_text_drafts WHERE tenant_id = ? AND item_id = ?').get(tenantId, String(itemId || ''));
     if (!draftRow) return null;
     const row = findRow(tenantId, itemId);
+    if (!row) return null;
     const { facts } = sourcesOf(row);
     const clean = { description: ItemDetails.sanitizeDescription(texts.description), seoTitle: ItemDetails.sanitizeSeoTitle(texts.seoTitle), seoDescription: ItemDetails.sanitizeSeoDescription(texts.seoDescription) };
     const warnings = warningsFor(clean, facts);
