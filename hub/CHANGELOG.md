@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.21.2
+
+- `webshop/warm-up.js`: twee seconden na het starten haalt de server één voor één de startpagina, de winkelwagen en een paar groepen, categorieën en producten op via 127.0.0.1 (User-Agent met "bot": geen koopfunneltelling, geen medewerkersweergave). Dat vult de catalogus en de omschrijvingen in het geheugen. Een fout of een uitgeschakelde shop stopt niets; uitzetten kan met `WARM_UP=0`. Er wordt niets bewaard behalve wat de pagina's al cachen (geen klantgegevens, geen gerenderde pagina's).
+
 ## 1.21.1
 
 - Catalogus (`storefront-data.js`): stale-while-revalidate. Een verlopen catalogus (tot 2 minuten oud) wordt voor pagina's van het assortiment (alleen GET/HEAD, niet winkelwagen, afrekenen, bestellingen, account, groothandel) meteen getoond terwijl `warm` hem op de achtergrond ververst. Alle andere aanroepen van `catalogOf` en elke POST rekenen met een verse catalogus (prijzen, voorraad, klantprijzen); de cache blijft per omgeving en bevat niets klantspecifieks. Zonder `db.async` (SQLite) verandert er niets.

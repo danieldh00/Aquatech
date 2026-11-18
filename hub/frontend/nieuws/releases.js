@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.21.2',
+      date: '2026-11-18',
+      title: 'Webshop is na een update meteen snel',
+      items: [
+        { text: 'Na een update of herstart warmt de webshop zichzelf op, zodat de eerste bezoekers niet 1 tot 3 seconden extra wachten.' },
+      ],
+    },
+    {
       version: '1.21.1',
       date: '2026-11-18',
       title: 'Webshop opent ook na een rustig moment snel',
