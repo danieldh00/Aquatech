@@ -257,8 +257,9 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
     let sent = 0;
     let looked = 0;
     for (;;) {
-      const batch = orders.unpaidOnline(tenantId, cutoff, 100, looked);
+      const batch = orders.unpaidOnline(tenantId, cutoff, 100, looked, { withoutReminder: true });
       if (!batch.length || looked >= MAX_REMINDER_SCAN) break;
+      // Een bestelling die een herinnering krijgt valt uit de selectie: telt dus niet mee voor het overslaan.
       looked += batch.length;
       for (const id of batch) {
         try {
@@ -274,6 +275,7 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
           if (!(await send(order))) continue;
           orders.changePay(tenantId, id, (pay) => (pay.status === 'betaald' || pay.reminderAt ? null : { ...pay, reminderAt: new Date().toISOString() }));
           sent += 1;
+          looked -= 1;
           if (sent >= MAX_REMINDERS_PER_RUN) return { sent };
         } catch (error) {
           log.warn(`Betalingsherinnering voor bestelling ${id} mislukt: ${error.message}`);
