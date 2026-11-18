@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.19.2',
+      date: '2026-11-18',
+      title: 'Voorraad in de webshop en voorraadmelding',
+      items: [
+        { text: 'Bij een kleine voorraad toont de webshop nu "Nog 3 op voorraad". Is een artikel uitverkocht, dan kan een bezoeker zijn e-mailadres achterlaten en krijgt één mail zodra het weer te bestellen is; het adres wordt daarna gewist.' },
+      ],
+    },
+    {
       version: '1.19.1',
       date: '2026-11-18',
       title: 'Winkelwagen en afrekenen duidelijker',

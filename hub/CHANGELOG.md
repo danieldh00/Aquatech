@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.19.2
+
+- Voorraadmelding (migratie 76, `stock_alerts`, `webshop/stock-alerts.js`): formulier op de productpagina (alleen met bestellen aan en een mailserver), captcha-actie `stock_alert`, limiet per bezoeker en per adres (10 open), honeypot; elk uur mailt `stockAlertsRun` de meldingen waarvan het artikel weer te bestellen is en wist ze, na 180 dagen of bij een gearchiveerd artikel vervalt een melding.
+- Product en variant geven `stockQty`; `stockText` toont "Nog N op voorraad" bij 1 tot en met 5.
+
 ## 1.19.1
 
 Winkelwagen: `shippingHint`/`shippingBlock` (kosten, levertijd, drempelbalk met `<progress>`), betaalnotitie naar de echte betaalwijzen, cookie `aquatech_laatste_lijst` (`rememberList`/`lastListPath`, alleen categorie of groep, nooit een zoekterm, alleen als bestellen aan staat) voor Verder winkelen, aantalformulier dat zichzelf verstuurt (`winkelwagen.js`) en een kaartweergave op smalle schermen. Afrekenen: verzendmethode als keuzekaarten (radio, `chosenShipping` in afrekenen.js), kop *Bezorg- en factuuradres* zolang het afleveradres gelijk is, dropshipping alleen in het formulier van zakelijke klanten. `trustStrip` op productpagina, winkelwagen en afrekenen (alleen punten met gegevens). Zoeken zonder resultaat: `noResults`. `shipping.optionsFor` geeft `freeFrom` mee.
