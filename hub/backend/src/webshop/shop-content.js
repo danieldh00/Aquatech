@@ -419,7 +419,8 @@ function normalizePage(slug, input) {
   if (tooLong) return { error: 'too_long', message: 'De tekst is te lang.' };
   const checked = normalizeBlocks(rawBlocks, { cleanText, imageRef, linkRef, sanitizeHtml, cleanCodes: (value) => cleanCodes(value, 12) });
   if (checked.error) return { error: checked.error, message: checked.message };
-  if (JSON.stringify(checked.blocks).length > MAX_HTML * 2) return { error: 'too_long', message: 'De pagina is te lang.' };
+  // Eén grens voor de hele gesaneerde pagina (tekst, vragen en alle andere blokken samen); de pagina staat in de database.
+  if (JSON.stringify(checked.blocks).length > MAX_HTML) return { error: 'too_long', message: 'De pagina is te lang.' };
   const order = Number.isFinite(Number(given.order)) ? Math.max(0, Math.min(999, Math.round(Number(given.order)))) : 100;
   return { page: { slug, title, description: cleanText(given.description, 200), seoTitle: sanitizeSeoTitle(given.seoTitle), blocks: checked.blocks, menu: given.menu === true, footer: given.footer !== false, order } };
 }

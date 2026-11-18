@@ -103,6 +103,9 @@ test('normalizePage: body wordt één tekstblok; blokken gaan voor; te lange tek
   assert.deepStrictEqual(normalizePage('klantenservice', { title: 'K', body: '<p>Tekst</p>' }).page.blocks, [{ type: 'text', html: '<p>Tekst</p>' }]);
   assert.deepStrictEqual(normalizePage('klantenservice', { title: 'K', body: '<p>x</p>', blocks: [] }).page.blocks, []);
   assert.strictEqual(normalizePage('klantenservice', { title: 'K', blocks: [{ type: 'text', html: 'x'.repeat(100001) }] }).error, 'too_long');
+  assert.strictEqual(normalizePage('klantenservice', { title: 'K', body: `<p>${'x'.repeat(100001)}</p>` }).error, 'too_long', 'ook een pagina met alleen body');
+  const faqItems = new Array(40).fill({ question: 'Vraag?', answer: 'a'.repeat(2000) });
+  assert.strictEqual(normalizePage('klantenservice', { title: 'K', blocks: [{ type: 'faq', items: faqItems }, { type: 'text', html: `<p>${'y'.repeat(30000)}</p>` }] }).error, 'too_long', 'totaal van alle blokken');
   assert.strictEqual(normalizePage('klantenservice', { title: 'K', blocks: new Array(41).fill({ type: 'cta', title: 'x' }) }).error, 'too_many_blocks');
   assert.deepStrictEqual(blocksOf({ body: '<p>oud</p>' }), [{ type: 'text', html: '<p>oud</p>' }]);
   assert.deepStrictEqual(blocksOf({}), []);

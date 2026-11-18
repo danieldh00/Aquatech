@@ -835,6 +835,31 @@ function aboutPage(groups) {
   return layout({ root, groups, wide: true, canonicalPath: 'over-ons/', title: `Over ons – ${SHOP_NAME}`, description: 'Aquatechshop.nl is ontstaan vanuit HVT Beregening: scherpe tarieven, een eigen technische dienst en levering op locatie.', body });
 }
 
+/** Opzoeklijsten per catalogus (artikelcode → artikel, categorie → subcategorieën), zodat een pagina met meer artikelblokken ze één keer opbouwt. */
+const blockLookups = new WeakMap();
+
+/**
+ * De opzoeklijsten voor artikelblokken van een catalogus.
+ * @param {object} catalog De catalogus (zie buildCatalog).
+ * @returns {{ byCode: Map<string, object>, childrenOf: Map<string, string[]> }} Artikel per code (een variantcode geeft het hoofdartikel) en de directe subcategorieën per categorie.
+ */
+function lookupsOf(catalog) {
+  let lookups = blockLookups.get(catalog);
+  if (lookups) return lookups;
+  const byCode = new Map(catalog.products.map((product) => [product.code, product]));
+  const bySlug = new Map(catalog.products.map((product) => [product.slug, product]));
+  for (const variant of catalog.variantProducts || []) {
+    if (!byCode.has(variant.code) && bySlug.has(variant.parentSlug)) byCode.set(variant.code, bySlug.get(variant.parentSlug));
+  }
+  const childrenOf = new Map();
+  for (const category of catalog.categories) {
+    if (category.parentSlug) childrenOf.set(category.parentSlug, [...(childrenOf.get(category.parentSlug) || []), category.slug]);
+  }
+  lookups = { byCode, childrenOf };
+  blockLookups.set(catalog, lookups);
+  return lookups;
+}
+
 /**
  * Zoekt de artikelen voor een artikelblok: eigen artikelcodes (een variantcode geeft het hoofdartikel) of een categorie met haar subcategorieën.
  * @param {object} block Het artikelblok (mode, codes, category, limit).
@@ -842,23 +867,18 @@ function aboutPage(groups) {
  * @returns {object[]} De artikelen (maximaal block.limit, alleen bestaande en niet-dubbele).
  */
 function productsOfBlock(block, catalog) {
+  const { byCode, childrenOf } = lookupsOf(catalog);
   if (block.mode === 'category') {
     const slugs = new Set([block.category]);
-    for (let grew = true; grew;) {
-      grew = false;
-      for (const category of catalog.categories) {
-        if (category.parentSlug && slugs.has(category.parentSlug) && !slugs.has(category.slug)) { slugs.add(category.slug); grew = true; }
+    const queue = [block.category];
+    while (queue.length) {
+      for (const child of childrenOf.get(queue.pop()) || []) {
+        if (!slugs.has(child)) { slugs.add(child); queue.push(child); }
       }
     }
     return catalog.products.filter((product) => slugs.has(product.categorySlug)).slice(0, block.limit);
   }
-  const byCode = new Map(catalog.products.map((product) => [product.code, product]));
-  const bySlug = new Map(catalog.products.map((product) => [product.slug, product]));
-  for (const variant of catalog.variantProducts || []) {
-    if (!byCode.has(variant.code) && bySlug.has(variant.parentSlug)) byCode.set(variant.code, bySlug.get(variant.parentSlug));
-  }
-  const found = [...new Set(block.codes.map((code) => byCode.get(code)).filter(Boolean))];
-  return found.slice(0, block.limit);
+  return [...new Set(block.codes.map((code) => byCode.get(code)).filter(Boolean))].slice(0, block.limit);
 }
 
 /**
