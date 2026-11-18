@@ -1202,6 +1202,16 @@ const PG_MIGRATIONS = [
   );
   CREATE INDEX shop_search_misses_last ON shop_search_misses (tenant_id, last_at);
   `,
+  // 78: eigen koopfunneltelling van de webshop (zie db.js).
+  `
+  CREATE TABLE shop_funnel_days (
+    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+    day       ${TEXT_TYPE} NOT NULL,
+    step      ${TEXT_TYPE} NOT NULL,
+    hits      INTEGER NOT NULL,
+    PRIMARY KEY (tenant_id, day, step)
+  );
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

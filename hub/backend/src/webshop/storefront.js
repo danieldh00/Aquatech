@@ -11,6 +11,7 @@ const express = require('express');
 const { FRONTEND_DIR } = require('../paths');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
 const { searchProducts } = require('./search');
+const { looksLikeBot } = require('./funnel');
 const { registerAddressRoute, normalizePostcode } = require('../platform/address-lookup');
 const { clientKey } = require('../beveiliging/auth');
 const { catchAsync } = require('../platform/error-report');
@@ -86,10 +87,10 @@ const FONT_FILE = /^montserrat-latin-(400|600|700|800)-normal\.woff2$/;
 
 /**
  * Maakt de router van de webshop.
- * @param {{ data?: object, addressLookup?: object, addressGuard?: object, db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, itemImages?: object, previewAllowed?: Function, orders?: object, orderMail?: object, orderInvoices?: object, returns?: object, payments?: object, vies?: object, onOrder?: Function, onReturn?: Function }} options data = de gegevenslaag met de catalogus (storefront-data.js; zonder een eigen met de standaard categorieboom), addressLookup = de opzoekdienst voor adressen (platform/address-lookup.js; zonder vult het afrekenformulier niets automatisch in), addressGuard = de adrescontrole (zonder wordt een Nederlands adres niet gecontroleerd), db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront` en `shopOrdering`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard), itemImages = de afbeeldingen bij artikelen (item-images.js; zonder alleen de adressen van de webshopproducten), previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`), orders = de bestelopslag (web-orders.js; zonder geen bestellen), orderMail = de bevestigingsmail (web-orders-mail.js), orderInvoices = de facturen bij bestellingen (web-order-invoices.js; voor de factuur in de bestelhistorie), orderSlips = de pakbonnen van klanten bij dropshipping (order-slips.js; zonder geen uploaden), returns = de retouropslag (web-returns.js; zonder geen retourneren in het account), guestOrders = de toegang van gasten tot hun bestelling (guest-orders.js; zonder geen bestellen als gast), stockAlerts = de voorraadmeldingen (stock-alerts.js; zonder geen formulier "Mail mij als hij weer binnen is"), searchMisses = de teller van zoektermen zonder resultaat (search-misses.js; zonder wordt dat niet bijgehouden), quoteRequests = de offerteaanvragen vanuit de winkelwagen (quote-requests.js; zonder geen knop Offerte aanvragen), payments = het online betalen (web-payments.js; zonder alleen op rekening), vies = de controle van btw-nummers bij VIES (vies.js; zonder wordt verlegd zonder die controle), captcha = de onzichtbare captcha (beveiliging/captcha.js; zonder geen controle) en captchaGate(req, tenantId, actie, token) = de controle van een formulier met auditlog (server.js), onOrder(req, order) = aanroep na een geplaatste bestelling (auditlog) en onQuoteRequest(req, offerte, klant, gemeld) = aanroep na een offerteaanvraag (auditlog) en onReturn(req, retour) = aanroep na een aangevraagde retour (auditlog) en onSlip(req, order, action) = aanroep na het uploaden of verwijderen van een pakbon (auditlog) en onGuestAccount(req, order, user) = aanroep nadat een gast na zijn bestelling een account maakte en de bestelling eraan is gekoppeld (auditlog).
+ * @param {{ data?: object, addressLookup?: object, addressGuard?: object, db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, itemImages?: object, previewAllowed?: Function, orders?: object, orderMail?: object, orderInvoices?: object, returns?: object, payments?: object, vies?: object, onOrder?: Function, onReturn?: Function }} options data = de gegevenslaag met de catalogus (storefront-data.js; zonder een eigen met de standaard categorieboom), addressLookup = de opzoekdienst voor adressen (platform/address-lookup.js; zonder vult het afrekenformulier niets automatisch in), addressGuard = de adrescontrole (zonder wordt een Nederlands adres niet gecontroleerd), db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront` en `shopOrdering`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard), itemImages = de afbeeldingen bij artikelen (item-images.js; zonder alleen de adressen van de webshopproducten), previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`), orders = de bestelopslag (web-orders.js; zonder geen bestellen), orderMail = de bevestigingsmail (web-orders-mail.js), orderInvoices = de facturen bij bestellingen (web-order-invoices.js; voor de factuur in de bestelhistorie), orderSlips = de pakbonnen van klanten bij dropshipping (order-slips.js; zonder geen uploaden), returns = de retouropslag (web-returns.js; zonder geen retourneren in het account), guestOrders = de toegang van gasten tot hun bestelling (guest-orders.js; zonder geen bestellen als gast), stockAlerts = de voorraadmeldingen (stock-alerts.js; zonder geen formulier "Mail mij als hij weer binnen is"), searchMisses = de teller van zoektermen zonder resultaat (search-misses.js; zonder wordt dat niet bijgehouden), funnel = de eigen koopfunneltelling (funnel.js; zonder wordt er niet geteld), quoteRequests = de offerteaanvragen vanuit de winkelwagen (quote-requests.js; zonder geen knop Offerte aanvragen), payments = het online betalen (web-payments.js; zonder alleen op rekening), vies = de controle van btw-nummers bij VIES (vies.js; zonder wordt verlegd zonder die controle), captcha = de onzichtbare captcha (beveiliging/captcha.js; zonder geen controle) en captchaGate(req, tenantId, actie, token) = de controle van een formulier met auditlog (server.js), onOrder(req, order) = aanroep na een geplaatste bestelling (auditlog) en onQuoteRequest(req, offerte, klant, gemeld) = aanroep na een offerteaanvraag (auditlog) en onReturn(req, retour) = aanroep na een aangevraagde retour (auditlog) en onSlip(req, order, action) = aanroep na het uploaden of verwijderen van een pakbon (auditlog) en onGuestAccount(req, order, user) = aanroep nadat een gast na zijn bestelling een account maakte en de bestelling eraan is gekoppeld (auditlog).
  * @returns {Function} Express-router, te monteren met app.use('/', router) (zie server.js).
  */
-function createStorefront({ addressLookup = null, addressGuard = null, db, tenantId, settingsFor, accounts = null, content = null, data = createStorefrontData(db), itemImages = null, previewAllowed = () => false, orders = null, orderMail = null, orderInvoices = null, orderSlips = null, returns = null, guestOrders = null, stockAlerts = null, searchMisses = null, quoteRequests = null, payments = null, vies = null, captcha = null, captchaGate = null, onOrder = () => {}, onQuoteRequest = () => {}, onReturn = () => {}, onSlip = () => {}, onGuestAccount = () => {} }) {
+function createStorefront({ addressLookup = null, addressGuard = null, db, tenantId, settingsFor, accounts = null, content = null, data = createStorefrontData(db), itemImages = null, previewAllowed = () => false, orders = null, orderMail = null, orderInvoices = null, orderSlips = null, returns = null, guestOrders = null, stockAlerts = null, searchMisses = null, funnel = null, quoteRequests = null, payments = null, vies = null, captcha = null, captchaGate = null, onOrder = () => {}, onQuoteRequest = () => {}, onReturn = () => {}, onSlip = () => {}, onGuestAccount = () => {} }) {
   // Een async route die een fout gooit gaat naar de foutafhandeling in plaats van te blijven hangen.
   const router = catchAsync(express.Router());
   const limiter = createRateLimiter({ windowMs: 60 * 1000, max: 240, keyFn: clientKey });
@@ -213,6 +214,22 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
    * @returns {boolean} true bij een voorbeeld.
    */
   const isPreview = (req) => req.query.voorbeeld === '1' && Boolean(content) && previewAllowed(req);
+
+  /**
+   * Telt een stap van de koopfunnel (funnel.js), anoniem. Medewerkers, voorbeelden en robots tellen niet mee en een fout in de telling
+   * stoort de pagina nooit.
+   * @param {object} req Het verzoek.
+   * @param {string} step De stap (bijv. 'product', 'cart', 'order').
+   * @returns {void}
+   */
+  const track = (req, step) => {
+    if (!funnel || isPreview(req) || looksLikeBot(req)) return;
+    try {
+      const viewer = accounts ? accounts.viewer(req) : null;
+      if (viewer && viewer.isStaff) return;
+      funnel.count(tenantId, step);
+    } catch (error) { console.error(`Funneltelling (${step}) mislukt: ${error.message}`); }
+  };
   /**
    * De catalogus voor dit verzoek: met het concept van de menuboom bij een voorbeeld (`?voorbeeld=1`), anders de gepubliceerde.
    * @param {object} req Het verzoek.
@@ -520,6 +537,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         if (out.skipped) return res.redirect(303, '../');
         if (out.error) return sendWithGroups(req, res, out.status, (groups) => registerPage({ error: out.error, displayName: String(req.body?.displayName ?? '').slice(0, 80), email: String(req.body?.email ?? '').slice(0, 200), next,
           business: wantsBusiness(req.body?.business), companyName: String(req.body?.companyName ?? '').slice(0, 120), kvkNumber: String(req.body?.kvkNumber ?? '').slice(0, 20), vatNumber: String(req.body?.vatNumber ?? '').slice(0, 40) }, groups));
+        track(req, 'signup');
         res.redirect(303, destination(next, '../account/'));
       } catch (error) { next(error); }
     });
@@ -702,6 +720,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         if (!orderingOn()) return orderingOff(req, res);
         res.setHeader('Cache-Control', 'no-store');
         const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
+        if (cart.lines.length) track(req, 'cart');
         /**
          * Leest een lijst artikelcodes uit de zoekopdracht (alleen veilige tekens, hoogstens 60).
          * @param {*} value De waarde uit de zoekopdracht.
@@ -854,7 +873,9 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         const before = readCart(req);
         const after = applyCartAction(before, req.body || {});
         writeCart(req, res, after);
-        res.redirect(303, cartActionRejected(before, after, req.body || {}) ? './?vol=1' : './');
+        const rejected = cartActionRejected(before, after, req.body || {});
+        if (!rejected && req.body && req.body.action === 'add') track(req, 'cart_add');
+        res.redirect(303, rejected ? './?vol=1' : './');
       });
       /**
        * De verzendinstelling van deze winkel (de instelling `shopShipping`, gesaneerd).
@@ -919,9 +940,11 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         const viewer = withBusinessProfile(accounts.viewer(req));
         if (!viewer) {
           // Zonder account: kiezen (inloggen, account maken of als gast bestellen) of, na die keuze, het afrekenformulier voor een gast.
-          if (guestCheckoutOn() && req.query.gast === '1') return sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer: GUEST_VIEWER, guest: true, paymentOptions: ['online'], ...checkoutChoice(cart, req.query || {}, null) }, groups));
+          if (guestCheckoutOn() && req.query.gast === '1') { track(req, 'checkout'); return sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer: GUEST_VIEWER, guest: true, paymentOptions: ['online'], ...checkoutChoice(cart, req.query || {}, null) }, groups)); }
+          track(req, 'checkout_login');
           return sendWithGroups(req, res, 200, (groups) => checkoutLoginPage(groups, cart, { guestAllowed: guestCheckoutOn() }));
         }
+        track(req, 'checkout');
         sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, paymentOptions: paymentOptionsOf(viewer), ...checkoutChoice(cart, { vatNumber: viewer.profile ? viewer.profile.vatNumber : '', ...(req.query || {}) }, viewer) }, groups));
       });
       router.post('/afrekenen', form, async (req, res, next) => {
@@ -1025,6 +1048,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
           writeCart(req, res, []);
           if (access) rememberGrant(req, res, out.order.id, access.token);
           // De bestelling staat al vast: een fout in audit of mail mag de klant niet naar een foutpagina sturen, en de ene stap niet de andere overslaan.
+          track(req, 'order');
           try { onOrder(req, out.order); } catch (failure) { console.error(`Audit van bestelling ${out.order.number} mislukt: ${failure.message}`); }
           // Een online bestelling wordt pas bevestigd als hij betaald is (zie payments.onPaid); de klant gaat eerst naar de betaalpagina.
           if (out.order.payment === 'online') return res.redirect(303, `../bestelling/${out.order.id}/?bedankt=1&betalen=1`);
@@ -1401,6 +1425,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     const product = catalog.products.find((candidate) => candidate.slug === req.params.slug)
       || (parent ? { ...variant, variants: parent.variants, attributeName: parent.attributeName } : variant);
     if (!product) return sendPage(req, res, 404, () => notFoundPage('../../', catalog.groups));
+    track(req, 'product');
     const chosenCode = typeof req.query.v === 'string' ? req.query.v.slice(0, 80) : (variant ? variant.code : '');
     const details = !data.detailsOf ? new Map() : data.detailsOf(tenantId, [product.code, ...(product.variants || []).map((entry) => entry.code)]);
     /**

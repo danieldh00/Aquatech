@@ -12,9 +12,9 @@
    */
   const $ = (selector) => document.querySelector(selector);
   /** Waar het tabblad staat in de adresbalk (#retouren, #rapportage). */
-  const TABS = ['bestellingen', 'te-picken', 'backorders', 'retouren', 'rapportage', 'zoektermen'];
+  const TABS = ['bestellingen', 'te-picken', 'backorders', 'retouren', 'rapportage', 'zoektermen', 'funnel'];
   /** De code achter elk tabblad. */
-  const PANES = { bestellingen: () => window.BeheerBestellingen, 'te-picken': () => window.BeheerTePicken, backorders: () => window.BeheerBackorders, retouren: () => window.BeheerRetouren, rapportage: () => window.BeheerRapportage, zoektermen: () => window.BeheerZoektermen };
+  const PANES = { bestellingen: () => window.BeheerBestellingen, 'te-picken': () => window.BeheerTePicken, backorders: () => window.BeheerBackorders, retouren: () => window.BeheerRetouren, rapportage: () => window.BeheerRapportage, zoektermen: () => window.BeheerZoektermen, funnel: () => window.BeheerFunnel };
 
   /**
    * Toont kort een melding onderin het scherm.
@@ -68,6 +68,7 @@
     window.BeheerRetouren.init({ toast });
     window.BeheerRapportage.init({ toast });
     window.BeheerZoektermen.init({ toast });
+    window.BeheerFunnel.init({ toast });
     for (const button of document.querySelectorAll('.tab')) button.addEventListener('click', () => showTab(button.dataset.tab));
     // Pijltoetsen wisselen tussen de tabbladen (ARIA-patroon voor tabs); alleen het actieve tabblad staat in de tabvolgorde.
     $('.tabs').addEventListener('keydown', (event) => {
