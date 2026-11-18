@@ -52,6 +52,11 @@ webserver in Docker (poort 3300) met PostgreSQL (een eigen container naast de ap
   AI-dienst werken. Bij een storing komt er een incident in Beheer en een melding per e-mail en/of webhook; bij herstel volgt
   een herstelmelding en een herinnering zolang het open blijft. Een extern *heartbeat*-adres (bijvoorbeeld healthchecks.io)
   vangt het geval dat de app of de server zelf uitvalt. Alles is instelbaar in de app (ontvangers, drempels, dempen per controle).
+- **Trage verzoeken en stilstand** (serverlog): elk verzoek of elke achtergrondtaak vanaf `SLOW_REQUEST_MS` (standaard 1000 ms) komt met
+  `[traag]` in het log, met genormaliseerd pad (zonder id's of querystring), status, omgeving, aantal databasequeries en
+  -tijd en externe aanroepen. Stilt de hele server `SLOW_STALL_MS` (standaard 1000 ms) of langer, dan volgt een regel
+  `[stilstand]` met wat er toen liep. Zoek ze met `docker logs <container> | grep -E '\[(traag|stilstand)\]'`. De dagelijkse
+  versleutelde back-up draait in een eigen proces met lagere prioriteit, zodat het kopiëren van de database de pagina's niet stilzet.
 - **Beveiliging**: sessies alleen als hash, wachtwoorden met scrypt, tweestapsverificatie (TOTP), versleutelde
   back-ups (dagelijks, ook vóór elke update, optioneel automatisch naar Google Drive vanuit Beheer; losse records, velden of orderregels terugzetten uit een back-up in Beheer), auditlog. Zie *Beveiliging en privacy* in `hub/DOCS.md`.
 

@@ -9,6 +9,7 @@
 const { Pool, types } = require('pg');
 const { scopeKey } = require('./tenant-scope');
 const { refuseTransaction } = require('./async-db');
+const { recordQuery } = require('./query-stats');
 
 // BIGINT (ook COUNT(*)) en NUMERIC als gewoon getal, zoals in SQLite en in de werkthread.
 types.setTypeParser(20, (text) => Number(text));
@@ -103,6 +104,21 @@ function createPoolAsync({ url, config, db, toPgValue, DatabaseError }) {
    * @throws {DatabaseError} Bij een fout in de database.
    */
   const query = async (sql, params) => {
+    const startedAt = performance.now();
+    try {
+      return await runQuery(sql, params);
+    } finally {
+      recordQuery(performance.now() - startedAt);
+    }
+  };
+  /**
+   * Voert de query uit op een verbinding uit de pool (met één nieuwe poging bij een verbroken verbinding); `query` legt de duur vast.
+   * @param {string} sql De SQL met ?-parameters.
+   * @param {Array} params De parameters.
+   * @returns {Promise<{ rows: object[], rowCount: number }>} Het resultaat van pg.
+   * @throws {DatabaseError} Bij een fout in de database.
+   */
+  const runQuery = async (sql, params) => {
     refuseTransaction(sql);
     const text = db.pgText(sql);
     const values = params.map(toPgValue);

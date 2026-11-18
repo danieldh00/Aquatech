@@ -10,6 +10,7 @@ const { loadOrCreateSecret } = require('./beveiliging/session-secret');
 const { createPlanAnalyzer, AnalyzeError, PROMPT_VERSION } = require('./beregening/plan-analyzer');
 const { createRecognitionStore, sanitizeSamples, sanitizeFinalPlan, imageHash } = require('./beregening/recognitions');
 const { openDb, openDatabase, isPg } = require('./database/db');
+const { createSlowLog, timedFetch } = require('./platform/slow-log');
 const { createStore, withRequestCache, hashPassword, passwordProblem, preferencesOf, fingerprintOf } = require('./platform/store');
 const { withScope, limitTo, bindStream, asSystem } = require('./database/tenant-scope');
 const testdata = require('./platform/test-data');
@@ -333,7 +334,7 @@ function staticHeaders(version) {
  * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, mailerFor, shopFetch, vismaFetch, mollieFetch, addressFetch, viesFetch, captchaFetch (reCAPTCHA), googleFetch (Google Drive), shippingLabelProviders (koppelingen voor verzendlabels per vervoerder) en wanIp (tests vervangen hiermee de buitenwereld).
  * @returns {object} De app; app.locals bevat settings, onderhoud en synchronisatie.
  */
-function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, createOrderReader = createDefaultOrderReader, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, captchaFetch, googleFetch, shippingLabelProviders = {}, wanIp = createWanIp(), loginDelayMs = 1000 }) {
+function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, createOrderReader = createDefaultOrderReader, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, captchaFetch, googleFetch, shippingLabelProviders = {}, wanIp = createWanIp(), loginDelayMs = 1000, backupInChild = false }) {
   const version = readVersion();
   const database = db || openDb();
   const store = createStore(database);
@@ -608,6 +609,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   catchAsync(app);
   // Per verzoek een eigen geheugen voor gegevens die binnen één verzoek
   // meermaals nodig zijn (zoals de tenant); zie withRequestCache in store.js.
+  // Log van trage verzoeken en achtergrondtaken (platform/slow-log.js); eerste in de keten, zodat ook de rest meetelt.
+  const slowLog = createSlowLog({ thresholdMs: Number(env.SLOW_REQUEST_MS) || 1000, stallMs: Number(env.SLOW_STALL_MS) || 1000 });
+  app.locals.slowLog = slowLog;
+  app.use(slowLog.middleware);
   app.use((req, res, next) => withRequestCache(() => withScope(() => { bindStream(req); next(); })));
   // Foutmeldingen met foutcode, en details voor beheerders met de debugmodus aan (platform/error-report.js).
   const errorReport = createErrorReport({
@@ -1795,7 +1800,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (backupRunning) return backupRunning;
     backupRunning = (async () => {
       try {
-        const backup = await backups.createBackup({ db: database, dir: backupDir, vault });
+        // In productie in een eigen proces, zodat het kopiëren van de hele database de verzoeken niet stilzet.
+        const backup = backupInChild
+          ? await backups.createBackupInChild({ dir: backupDir, env })
+          : await backups.createBackup({ db: database, dir: backupDir, vault });
         backups.pruneBackups(backupDir, Math.max(1, settings.get('backupKeepDays')));
         if (req) audit(req, 'backup_gemaakt', { name: backup.name, size: backup.size }, undefined, tenant.id);
         else store.audit({ tenantId: tenant.id, action: 'backup_gemaakt', detail: { name: backup.name, size: backup.size, automatisch: true } });
@@ -3442,8 +3450,11 @@ if (require.main === module) {
   const db = openDatabase(dataDir);
   console.log(isPg(db) ? `Database: PostgreSQL (schema ${db.schema})` : 'Database: SQLite (aquatech.db in de datamap)');
   const backupDir = process.env.BACKUP_DIR || path.join(dataDir, 'backups');
-  const app = createApp({ secret, db, env: process.env, vault: createVault(master.key), backupDir });
-  const { settings } = app.locals;
+  const app = createApp({ secret, db, env: process.env, vault: createVault(master.key), backupDir, backupInChild: true });
+  const { settings, slowLog } = app.locals;
+  // Elke externe aanroep telt mee bij het verzoek dat hem deed; stilstand van de hoofdthread komt in het log van trage verzoeken.
+  globalThis.fetch = timedFetch(globalThis.fetch);
+  slowLog.startStallWatch();
 
   if (!app.locals.hasAdminAccount()) {
     console.log('Nog geen beheerder: open de app in de browser en maak het eerste beheerdersaccount aan.');
@@ -3454,7 +3465,7 @@ if (require.main === module) {
    * systeemupdate.
    * @returns {Promise<void>}
    */
-  const runPurchaseProposals = () => (app.locals.systemUpdate.maintenance().active ? Promise.resolve() : app.locals.purchaseProposalsAll())
+  const runPurchaseProposals = () => (app.locals.systemUpdate.maintenance().active ? Promise.resolve() : slowLog.trackTask('bestelvoorstellen', () => app.locals.purchaseProposalsAll()))
     .then((changed) => { if (changed && Object.keys(changed).length) console.log(`Bestelvoorstellen bijgewerkt: ${JSON.stringify(changed)}`); })
     .catch((error) => console.error('Bestelvoorstellen bijwerken mislukt:', error.message));
   /**
@@ -3465,37 +3476,37 @@ if (require.main === module) {
     // Tijdens een systeemupdate niets op de achtergrond; de volgende ronde (na de update) haalt het in.
     if (app.locals.systemUpdate.maintenance().active) return;
     try {
-      const removed = app.locals.maintenance();
+      const removed = slowLog.trackTask('onderhoud bewaartermijnen', () => app.locals.maintenance());
       const total = Object.values(removed).reduce((sum, count) => sum + count, 0);
       if (total) console.log(`Bewaartermijnen toegepast: ${JSON.stringify(removed)}`);
     } catch (err) {
       console.error('Onderhoud mislukt:', err);
     }
     try {
-      const freed = app.locals.webOrdersRelease();
+      const freed = slowLog.trackTask('reserveringen vrijgeven', () => app.locals.webOrdersRelease());
       if (freed.released) console.log(`Reserveringen van webshopbestellingen op rekening vrijgegeven: ${freed.released}`);
     } catch (error) {
       console.error('Reserveringen van webshopbestellingen vrijgeven mislukt:', error.message);
     }
-    app.locals.webPaymentsExpire()
+    slowLog.trackTask('onbetaalde bestellingen laten vervallen', () => app.locals.webPaymentsExpire())
       .then((out) => { if (out.expired) console.log(`Onbetaalde webshopbestellingen vervallen: ${out.expired}`); })
       .catch((error) => console.error('Onbetaalde webshopbestellingen laten vervallen mislukt:', error.message));
-    app.locals.seasonRemindersAll()
+    slowLog.trackTask('seizoensherinneringen', () => app.locals.seasonRemindersAll())
       .then((sent) => { if (Object.keys(sent).length) console.log(`Seizoensherinneringen: ${JSON.stringify(sent)}`); })
       .catch((error) => console.error('Seizoensherinneringen mislukt:', error.message));
     // Een halve minuut later, zodat de server bij het opstarten eerst luistert (niet blokkerend).
     setTimeout(runPurchaseProposals, 30 * 1000).unref();
-    app.locals.backupIfDue()
+    slowLog.trackTask('back-up', () => app.locals.backupIfDue())
       .then((backup) => { if (backup) console.log(`Versleutelde back-up gemaakt: ${backup.name} (${backup.size} bytes) in ${backupDir}`); })
       .catch((err) => console.error('Back-up mislukt:', err.message))
-      .then(() => app.locals.driveBackupSync())
+      .then(() => slowLog.trackTask('back-up naar Google Drive', () => app.locals.driveBackupSync()))
       .then((out) => { if (out && out.uploaded.length) console.log(`Back-ups naar Google Drive: ${out.uploaded.join(', ')}`); })
       .catch((err) => console.error('Back-up naar Google Drive mislukt:', err.message));
   };
   runMaintenance();
   setInterval(runMaintenance, 60 * 60 * 1000).unref();
   // Bewaking: elke 5 minuten (de monitor slaat zelf de eerste twee minuten na het starten en onderhoudsmodus over).
-  setInterval(() => (app.locals.systemUpdate.maintenance().active ? Promise.resolve() : app.locals.monitorRun()
+  setInterval(() => (app.locals.systemUpdate.maintenance().active ? Promise.resolve() : slowLog.trackTask('bewaking', () => app.locals.monitorRun())
     .catch((error) => console.error('Bewaking mislukt:', error.message))), 5 * 60 * 1000).unref();
   // Eerst prijs en voorraad, daarna de bestellingen (dan is de verkoop al afgeboekt).
   try {
@@ -3503,11 +3514,11 @@ if (require.main === module) {
   } catch (error) {
     console.error('Afgeronde systeemupdate vastleggen mislukt:', error.message);
   }
-  setInterval(() => (app.locals.systemUpdate.maintenance().active ? Promise.resolve() : app.locals.shopSyncAll()
+  setInterval(() => (app.locals.systemUpdate.maintenance().active ? Promise.resolve() : slowLog.trackTask('webshopsynchronisatie', () => app.locals.shopSyncAll())
     .catch((err) => console.error('Webshopsynchronisatie mislukt:', err.message))
-    .then(() => app.locals.shopOrdersAll())
+    .then(() => slowLog.trackTask('webshopbestellingen ophalen', () => app.locals.shopOrdersAll()))
     .catch((err) => console.error('Webshopbestellingen ophalen mislukt:', err.message))
-    .then(() => app.locals.vismaAll())
+    .then(() => slowLog.trackTask('doorsturen naar Visma', () => app.locals.vismaAll()))
     .catch((err) => console.error('Doorsturen naar Visma mislukt:', err.message))), 10 * 60 * 1000).unref();
   if (!settings.get('anthropicApiKey')) console.log('Geen API-sleutel ingesteld: automatisch herkennen met AI staat uit (tekenen, lokale herkenning en de toverstaf werken wel).');
 
