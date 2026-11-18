@@ -271,6 +271,16 @@ test('artikel: eigen zoekmachinetitel, -omschrijving en merk komen in de pagina 
   assert.deepStrictEqual([cleared.seoTitle, cleared.seoDescription, cleared.brand], ['', '', '']);
 });
 
+test('zoekmachineteksten met aanhalingstekens en haakjes worden overal ontsnapt (title, meta, OpenGraph, JSON-LD)', async () => {
+  const { anonymous, admin } = await setupShop();
+  const sproeier = (await admin.get('/app/api/stock')).body.items.find((item) => item.code === 'SPR-1');
+  await admin.put(`/app/api/stock/items/${sproeier.id}`, { seoTitle: 'Titel "><script>alert(1)</script> & co', seoDescription: 'Omschrijving "><img src=x onerror=alert(1)> </script>', brand: 'Merk "x" </script>' });
+  const page = (await anonymous.get('/product/sproeier-pro-spr-1/')).text;
+  assert.doesNotMatch(page, /<script>alert|<img src=x|onerror=alert\(1\)>/);
+  assert.match(page, /<title>Titel &quot;&gt;alert\(1\) &amp; co<\/title>/);
+  assert.strictEqual(jsonLdOf(page).find((item) => item['@type'] === 'Product').brand.name, 'Merk "x" </script>'.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim());
+});
+
 test('pagina: eigen titel voor zoekmachines, anders de paginatitel; te lang wordt afgekapt', async () => {
   const { anonymous, admin } = await setupShop();
   assert.strictEqual((await admin.put('/app/api/admin/shop-content/pages/verzending', { title: 'Verzending', description: 'Zo leveren wij.', seoTitle: '  Verzending en levertijd <i>tuinberegening</i> ', body: '<p>Tekst</p>' })).status, 200);
