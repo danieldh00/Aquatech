@@ -156,3 +156,11 @@ body.has-nav .tab[data-purchasing] { display: none; }
   .tx-facts { grid-template-columns: 1fr; }
   .tx-actions .btn { flex: 1 1 auto; }
 }
+
+/* Inkooporder versturen naar de leverancier: statusregel onder de knoppen en het nakijkpaneel (geen eigen kleuren: thema-variabelen). */
+#po-mail-status { margin: 10px 0 0; }
+#po-mail { margin-top: 16px; padding: 14px 16px; border: 1px solid var(--line); border-left: 4px solid var(--at-teal); border-radius: var(--radius); background: var(--panel); }
+#po-mail h4 { margin: 0 0 10px; font-size: 15px; }
+#po-mail .form-grid > p { margin: 0; }
+#po-mail textarea { font: inherit; resize: vertical; }
+#po-mail .row.actions { margin-top: 16px; }

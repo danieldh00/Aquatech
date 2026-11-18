@@ -101,16 +101,54 @@ test('een mail die niet lukt wordt de volgende ronde opnieuw geprobeerd; een mis
   assert.match(mailsWith(world.sent, SUBJECT)[0].text, /niet gelukt/);
 });
 
-test('een gastbestelling krijgt nooit een herinnering (het adres is niet bevestigd)', async () => {
-  const world = await setup({ mollie: true });
-  verifyAll(world);
+/**
+ * Plaatst een online gastbestelling (zonder account, zonder betalen) en geeft het bestel-id.
+ * @param {object} world De testopzet.
+ * @param {string} email Het adres dat de gast invult.
+ * @returns {Promise<string>} Het bestel-id.
+ */
+async function placeGuest(world, email) {
   const client = createClient(world.base);
   await postForm(world.base, client, '/winkelwagen/', { action: 'add', code: 'BUS', qty: '1' });
-  const placed = await postCheckout(world.base, client, { ...PERSON, guest: 'ja', paymentMethod: 'online' });
+  const placed = await postCheckout(world.base, client, { ...PERSON, email, guest: 'ja', paymentMethod: 'online' });
   assert.strictEqual(placed.status, 303, placed.text);
-  const id = /\/bestelling\/([0-9a-f-]{36})\//.exec(placed.location)[1];
+  return /\/bestelling\/([0-9a-f-]{36})\//.exec(placed.location)[1];
+}
+
+test('een gastbestelling krijgt één herinnering op het ingevulde adres, met de persoonlijke link', async () => {
+  const world = await setup({ mollie: true });
+  const id = await placeGuest(world, 'gast@voorbeeld.nl');
+  assert.deepStrictEqual(await world.app.locals.webPaymentsRemind(), { sent: 0 }, 'binnen het uur nog niets');
   backdate(world, id, 2);
+  assert.deepStrictEqual(await world.app.locals.webPaymentsRemind(), { sent: 1 });
+  const mails = mailsWith(world.sent, SUBJECT);
+  assert.strictEqual(mails.length, 1);
+  assert.strictEqual(mails[0].to, 'gast@voorbeeld.nl');
+  assert.match(mails[0].text, new RegExp(`https://winkel\\.example/bestelling/${id}/\\?k=`));
+  assert.deepStrictEqual(await world.app.locals.webPaymentsRemind(), { sent: 0 }, 'nooit twee keer');
+  assert.strictEqual(mailsWith(world.sent, SUBJECT).length, 1);
+});
+
+test('gast: hoogstens één herinnering per adres per 24 uur, ook samen met een account met hetzelfde adres', async () => {
+  const world = await setup({ mollie: true });
+  const first = await placeGuest(world, 'gast@voorbeeld.nl');
+  const second = await placeGuest(world, 'Gast@Voorbeeld.nl');
+  backdate(world, first, 3);
+  backdate(world, second, 2);
+  assert.deepStrictEqual(await world.app.locals.webPaymentsRemind(), { sent: 1 }, 'twee gastbestellingen, één adres');
+  assert.strictEqual(mailsWith(world.sent, SUBJECT).length, 1);
+});
+
+test('gast: geen herinnering als het is uitgezet of als de reservering verlopen is', async () => {
+  const world = await setup({ mollie: true });
+  const id = await placeGuest(world, 'gast@voorbeeld.nl');
+  backdate(world, id, 2);
+  const off = await world.admin.put('/app/api/admin/settings', { shopPayment: { online: true, publicUrl: 'https://winkel.example/', onAccount: 'iedereen', holdHours: 24, paymentReminder: false } });
+  assert.strictEqual(off.status, 200, JSON.stringify(off.body));
   assert.deepStrictEqual(await world.app.locals.webPaymentsRemind(), { sent: 0 });
+  await world.admin.put('/app/api/admin/settings', { shopPayment: { online: true, publicUrl: 'https://winkel.example/', onAccount: 'iedereen', holdHours: 24, paymentReminder: true } });
+  backdate(world, id, 30);
+  assert.deepStrictEqual(await world.app.locals.webPaymentsRemind(), { sent: 0 }, 'reservering voorbij');
   assert.strictEqual(mailsWith(world.sent, SUBJECT).length, 0);
 });
 

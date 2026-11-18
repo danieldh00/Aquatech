@@ -84,6 +84,7 @@ const { createItemTextWriter: createDefaultItemTextWriter } = require('./artikel
 const { createItemTextDraftStore, registerItemTextRoutes } = require('./artikelen/item-text-drafts');
 const { createPackagingStore, registerPackagingRoutes } = require('./artikelen/packagings');
 const { createPurchaseOrderStore, registerPurchaseOrderRoutes } = require('./artikelen/purchase-orders');
+const { createPurchaseOrderMailer } = require('./artikelen/purchase-order-mail');
 const { createNewsStore, registerNewsRoutes, unreadCount } = require('./platform/news');
 const { createSprinklerStore, registerSprinklerRoutes } = require('./beregening/sprinklers');
 const { runPlanTask } = require('./beregening/plan-runner');
@@ -2719,6 +2720,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   registerPackagingRoutes(app, { packagings: packagingStore, requireRight, requireJson, audit });
   registerPurchaseOrderRoutes(app, {
     purchaseOrders: purchaseOrderStore, requireRight, requireJson, audit, proposalsEnabled,
+    mail: createPurchaseOrderMailer({ purchaseOrders: purchaseOrderStore, suppliers: supplierStore, settingsFor: (id) => settingsFor(id), mailerFor, mailBody, colorsOf: documentColorsOf }),
     // Een ontvangst kan een backorder leverbaar maken: zulke bestellingen krijgen een markering en staan weer in Te picken.
     afterReceive: (tenantId, itemIds) => { try { webOrders.markBackorderReady(tenantId, itemIds); } catch (error) { console.warn(`Backorders na ontvangst: ${error.message}`); } },
   });

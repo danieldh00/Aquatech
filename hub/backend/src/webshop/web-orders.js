@@ -1216,19 +1216,20 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
    * @param {string} before Tijdstip (ISO): alleen bestellingen die daarvoor zijn geplaatst.
    * @param {number} [limit] Hoogstens zoveel bestellingen (standaard 100).
    * @param {number} [skip] Zoveel oudste bestellingen overslaan (voor wie ze laat staan).
-   * @param {{ withoutReminder?: boolean }} [options] `withoutReminder`: alleen bestellingen van een account die nog geen betalingsherinnering kregen (een gast krijgt er nooit een).
+   * @param {{ withoutReminder?: boolean }} [options] `withoutReminder`: alleen bestellingen die nog geen betalingsherinnering kregen (ook gastbestellingen).
    * @returns {string[]} De id's van de bestellingen.
    */
   function unpaidOnline(tenantId, before, limit = 100, skip = 0, { withoutReminder = false } = {}) {
-    const reminderFilter = withoutReminder ? " AND user_id IS NOT NULL AND data NOT LIKE '%\"reminderAt\"%'" : '';
+    const reminderFilter = withoutReminder ? " AND data NOT LIKE '%\"reminderAt\"%'" : '';
     return prepare("SELECT id FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND created_at < ? AND data LIKE '%\"payment\":\"online\"%' AND data NOT LIKE '%\"status\":\"betaald\"%'" + reminderFilter + " ORDER BY created_at, id LIMIT ? OFFSET ?")
       .all(tenantId, String(before), Math.max(1, Math.floor(limit)), Math.max(0, Math.floor(skip))).map((row) => row.id);
   }
 
   /**
-   * Mag er een betalingsherinnering naar het adres van deze bestelling? Alleen bij een account-bestelling (nooit bij een gast) en alleen als het adres van
-   * het account bevestigd is en gelijk aan dat van de bestelling (anders kan iemand een ander adres laten mailen), en nooit meer
-   * dan één herinnering per adres per 24 uur (ook niet over meerdere bestellingen of gastbestellingen).
+   * Mag er een betalingsherinnering naar het adres van deze bestelling? Een gast krijgt hem op het adres dat hij bij het afrekenen invulde (besluit
+   * Daniël 2026-11-18, geen vinkje). Bij een account-bestelling alleen als het adres van het account bevestigd is en gelijk aan dat van de
+   * bestelling (anders kan iemand een ander adres laten mailen). Nooit meer dan één herinnering per adres per 24 uur (ook niet over meerdere
+   * bestellingen, van gasten of accounts).
    * @param {string} tenantId Id van de omgeving.
    * @param {{ userId: ?string, email: string }} order De bestelling.
    * @param {string} [now] Het huidige moment (ISO); standaard nu.
@@ -1237,10 +1238,10 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
   function reminderAllowed(tenantId, order, now = currentTimestamp()) {
     const address = String(order.email || '').trim().toLowerCase();
     if (!address) return false;
-    // Een gast heeft geen bevestigd adres: nooit een ongevraagde mail naar een adres dat iemand zomaar invulde.
-    if (!order.userId) return false;
-    const user = prepare('SELECT email, email_verified_at FROM users WHERE tenant_id = ? AND id = ?').get(tenantId, String(order.userId));
-    if (!user || !user.email_verified_at || String(user.email || '').trim().toLowerCase() !== address) return false;
+    if (order.userId) {
+      const user = prepare('SELECT email, email_verified_at FROM users WHERE tenant_id = ? AND id = ?').get(tenantId, String(order.userId));
+      if (!user || !user.email_verified_at || String(user.email || '').trim().toLowerCase() !== address) return false;
+    }
     const dayAgo = new Date(Date.parse(now) - 24 * 3600 * 1000).toISOString();
     const recent = new Date(Date.parse(now) - 14 * 24 * 3600 * 1000).toISOString();
     const rows = prepare("SELECT data FROM web_orders WHERE tenant_id = ? AND lower(email) = ? AND created_at > ? AND data LIKE '%\"reminderAt\"%'").all(tenantId, address, recent);

@@ -1471,6 +1471,14 @@ const MIGRATIONS = [
     AND q.customer_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = q.customer_id)) WHERE quote_id IS NOT NULL;
   UPDATE work_orders SET customer_id = (SELECT sr.customer_id FROM service_requests sr WHERE sr.tenant_id = work_orders.tenant_id AND sr.work_order_id = work_orders.id
     AND sr.customer_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = sr.customer_id) ORDER BY sr.created_at LIMIT 1) WHERE customer_id IS NULL;
+  `,  // 80: inkooporder per e-mail naar de leverancier (artikelen/purchase-order-mail.js): wanneer en naar wie hij is verstuurd (alleen na een
+  // klik van een medewerker) en de melding van de laatste mislukte poging (leeg na een geslaagde verzending). Een order die nooit is
+  // verstuurd houdt lege waarden.
+  `
+  ALTER TABLE purchase_orders ADD COLUMN mail_sent_at TEXT;
+  ALTER TABLE purchase_orders ADD COLUMN mail_sent_to TEXT NOT NULL DEFAULT '';
+  ALTER TABLE purchase_orders ADD COLUMN mail_sent_by TEXT NOT NULL DEFAULT '';
+  ALTER TABLE purchase_orders ADD COLUMN mail_error TEXT NOT NULL DEFAULT '';
   `,
 ];
 

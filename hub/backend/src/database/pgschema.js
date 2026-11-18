@@ -1220,6 +1220,12 @@ const PG_MIGRATIONS = [
     AND q.customer_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = q.customer_id)) WHERE quote_id IS NOT NULL;
   UPDATE work_orders SET customer_id = (SELECT sr.customer_id FROM service_requests sr WHERE sr.tenant_id = work_orders.tenant_id AND sr.work_order_id = work_orders.id
     AND sr.customer_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = sr.customer_id) ORDER BY sr.created_at LIMIT 1) WHERE customer_id IS NULL;
+  `,  // 80: inkooporder per e-mail naar de leverancier (zie db.js).
+  `
+  ALTER TABLE purchase_orders ADD COLUMN mail_sent_at ${TEXT_TYPE};
+  ALTER TABLE purchase_orders ADD COLUMN mail_sent_to ${TEXT_TYPE} NOT NULL DEFAULT '';
+  ALTER TABLE purchase_orders ADD COLUMN mail_sent_by ${TEXT_TYPE} NOT NULL DEFAULT '';
+  ALTER TABLE purchase_orders ADD COLUMN mail_error ${TEXT_TYPE} NOT NULL DEFAULT '';
   `,
 ];
 
