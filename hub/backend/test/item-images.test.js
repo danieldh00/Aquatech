@@ -292,6 +292,8 @@ test('miniatuur: opslaan, tonen in de shop met terugval, porties en afkeuren van
   const fallback = await anonymous.get(`/artikelfoto/${imageId}/klein`);
   assert.strictEqual(fallback.status, 200);
   assert.match(fallback.type, /image\/png/);
+  assert.match(fallback.headers.get('cache-control'), /max-age=300/);
+  assert.doesNotMatch(fallback.headers.get('cache-control'), /immutable/, 'de terugval wordt niet een jaar onthouden');
   assert.deepStrictEqual((await admin.get('/app/api/stock/images-thumbs')).body, { pending: 1, ids: [imageId], next: null });
   // Ongeldig: geen WebP, te groot van afmeting, geen afbeelding.
   assert.strictEqual((await admin.put(`/app/api/stock/images/${imageId}/thumb`, { data: pngBase64(12) })).status, 400);

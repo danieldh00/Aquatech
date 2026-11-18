@@ -1367,7 +1367,8 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
   router.get('/artikelfoto/:id/klein', (req, res) => {
     const file = itemImages && itemImages.thumbFile ? itemImages.thumbFile(tenantId, req.params.id) : null;
     if (!file) return res.status(404).end();
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    // Zonder miniatuur is dit tijdelijk de grote foto: kort cachen, zodat de miniatuur later wel verschijnt.
+    res.setHeader('Cache-Control', file.fallback ? 'public, max-age=300' : 'public, max-age=31536000, immutable');
     res.type(file.mime).send(file.body);
   });
 

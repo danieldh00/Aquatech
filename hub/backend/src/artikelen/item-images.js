@@ -176,7 +176,7 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
    * De miniatuur van een afbeelding, of de afbeelding zelf als er nog geen miniatuur is.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} imageId Id van de afbeelding.
-   * @returns {{ mime: string, body: Buffer }|null} De miniatuur of afbeelding, of null als hij niet bestaat.
+   * @returns {{ mime: string, body: Buffer, fallback?: boolean }|null} De miniatuur of afbeelding (fallback = de gewone afbeelding, want er is nog geen miniatuur), of null als hij niet bestaat.
    */
   function thumbFile(tenantId, imageId) {
     if (!IMAGE_ID_PATTERN.test(String(imageId))) return null;
@@ -184,9 +184,14 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
     const remembered = memory.get(tenantId, key);
     if (remembered) return remembered;
     const row = prepare('SELECT thumb FROM item_images WHERE tenant_id = ? AND id = ?').get(tenantId, String(imageId));
-    if (!row || !row.thumb) return file(tenantId, imageId);
+    /**
+     * De gewone afbeelding als terugval, gemarkeerd zodat hij maar kort wordt gecachet.
+     * @returns {{ mime: string, body: Buffer, fallback: boolean }|null} De afbeelding, of null.
+     */
+    const original = () => { const full = file(tenantId, imageId); return full ? { ...full, fallback: true } : null; };
+    if (!row || !row.thumb) return original();
     let found;
-    try { found = { mime: 'image/webp', body: vault.openBytes(row.thumb, thumbAadOf(tenantId, String(imageId))) }; } catch (error) { return file(tenantId, imageId); }
+    try { found = { mime: 'image/webp', body: vault.openBytes(row.thumb, thumbAadOf(tenantId, String(imageId))) }; } catch (error) { return original(); }
     memory.set(tenantId, key, found);
     return found;
   }
