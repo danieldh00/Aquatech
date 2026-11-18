@@ -2777,7 +2777,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    */
   const deliveryRulesOf = (tenantId) => {
     const clean = sanitizeCategoryRules(settingsFor(tenantId).get('deliveryRules'));
-    if (!clean.categories.length) return new Map();
+    if (!clean.categories.length) {
+      deliveryRulesCache.delete(tenantId);
+      return new Map();
+    }
     const catalog = storefrontData.catalogOf(tenantId);
     const key = JSON.stringify(clean);
     const cached = deliveryRulesCache.get(tenantId);

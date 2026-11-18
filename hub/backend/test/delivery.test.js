@@ -295,7 +295,7 @@ test('beheerroutes: lezen, controleren, opslaan, rechten en tenantgrens', async 
   assert.strictEqual(saved.status, 200, JSON.stringify(saved.body));
   assert.deepStrictEqual(saved.body.categories, [{ categorySlug: CHILD.slug, rules: [{ method: 'pallet', minQty: 100, maxQty: null }] }], 'een categorie zonder regels valt weg');
   assert.deepStrictEqual((await world.admin.get('/app/api/admin/delivery-rules')).body.categories.length, 1);
-  assert.strictEqual((await world.shoppers[0].client.get('/app/api/admin/delivery-rules')).status >= 400, true, 'een klant mag niet bij het beheer');
+  assert.strictEqual((await world.shoppers[0].client.get('/app/api/admin/delivery-rules')).status === 403, true, 'een klant mag niet bij het beheer');
   const other = await world.vreemd.get('/app/api/admin/delivery-rules');
   assert.notStrictEqual(other.status, 500);
   assert.ok(!other.body.categories || other.body.categories.length === 0, 'een andere organisatie ziet de regels niet');
