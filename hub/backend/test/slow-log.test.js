@@ -47,6 +47,7 @@ test('normalizePath: id\'s, tokens en e-mailadressen weg, geen querystring', () 
   assert.strictEqual(normalizePath('/app/api/plans/0f8fad5b-d9cb-469f-a165-70867728950e/history'), '/app/api/plans/:id/history');
   assert.strictEqual(normalizePath('/bestelling/9/?k=abcdefghijklmnopqrstuvwx1234'), '/bestelling/:id/');
   assert.strictEqual(normalizePath('/x/abcdefghijklmnopqrstuvwx1234'), '/x/:token');
+  assert.strictEqual(normalizePath('/x/abcdefghijklmnopqrstuvwxyzabcdefgh'), '/x/:token');
   assert.strictEqual(normalizePath('/zoeken/jan%40example.nl'), '/zoeken/:waarde');
   assert.strictEqual(normalizePath('/app/api/users/jan@example.nl'), '/app/api/users/:waarde');
   assert.strictEqual(normalizePath('/groep/beregening/'), '/groep/beregening/');
@@ -226,6 +227,16 @@ test('back-up in een eigen proces: een script dat niets teruggeeft wordt een fou
     await assert.rejects(createBackupInChild({ dir: os.tmpdir(), script }), /geen bestandsnaam/);
     fs.writeFileSync(script, "console.error('kapot'); process.exit(3);");
     await assert.rejects(createBackupInChild({ dir: os.tmpdir(), script }), /code 3.*kapot/s);
+  } finally {
+    fs.rmSync(script, { force: true });
+  }
+});
+
+test('back-up in een eigen proces: een hangend proces wordt na de maximale duur gestopt', async () => {
+  const script = path.join(os.tmpdir(), `aquatech-hang-${process.pid}.js`);
+  fs.writeFileSync(script, 'setInterval(() => {}, 1000);');
+  try {
+    await assert.rejects(createBackupInChild({ dir: os.tmpdir(), script, timeoutMs: 200 }), /gestopt na/);
   } finally {
     fs.rmSync(script, { force: true });
   }

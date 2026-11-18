@@ -26,7 +26,7 @@ function normalizePath(rawUrl) {
     if (!segment) return segment;
     if (UUID.test(segment) || NUMBER.test(segment)) return ':id';
     if (/[@%]/.test(segment)) return ':waarde';
-    if (TOKEN.test(segment) && /\d/.test(segment)) return ':token';
+    if (TOKEN.test(segment) && (/\d/.test(segment) || segment.length >= 32)) return ':token';
     return segment.length > 60 ? ':waarde' : segment;
   }).join('/') || '/';
 }

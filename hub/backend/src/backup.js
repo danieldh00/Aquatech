@@ -134,20 +134,24 @@ async function createBackup({ db, dir, vault }) {
 
 /** Prioriteit (nice) van het kindproces dat een back-up maakt: hoger = minder voorrang op de server zelf. */
 const CHILD_NICE = 10;
+/** Hoogstens zoveel milliseconden mag het back-upproces duren; daarna wordt het gestopt, zodat een hangend proces niets blokkeert. */
+const CHILD_TIMEOUT_MS = 30 * 60 * 1000;
 
 /**
  * Maakt een versleutelde back-up in een eigen proces (`node src/backup.js create <map>`), zodat het kopiëren van de hele
  * database de hoofdthread van de server niet stilzet. Het proces draait met lagere prioriteit; de uitkomst is dezelfde
  * als bij createBackup. Het proces opent zelf de database (DATABASE_URL of DATA_DIR uit `env`).
- * @param {{ dir: string, env?: object, script?: string }} options De map voor back-ups, de omgevingsvariabelen en (voor tests) het script.
+ * @param {{ dir: string, env?: object, script?: string, timeoutMs?: number }} options De map voor back-ups, de omgevingsvariabelen, (voor tests) het script en de maximale duur (standaard 30 minuten, daarna wordt het proces gestopt).
  * @returns {Promise<{ name: string, size: number, createdAt: string }>} Naam, grootte en tijdstip van de back-up.
  * @throws {Error} Als het proces mislukt; de melding bevat het laatste stuk van de foutuitvoer.
  */
-function createBackupInChild({ dir, env = process.env, script = __filename }) {
+function createBackupInChild({ dir, env = process.env, script = __filename, timeoutMs = CHILD_TIMEOUT_MS }) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [script, 'create', dir], { env, stdio: ['ignore', 'pipe', 'pipe'] });
     let output = '';
     let errors = '';
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, timeoutMs);
     child.stdout.on('data', (chunk) => { output += chunk; });
     child.stderr.on('data', (chunk) => { errors = (errors + chunk).slice(-2000); });
     try {
@@ -155,8 +159,10 @@ function createBackupInChild({ dir, env = process.env, script = __filename }) {
     } catch {
       // Zonder rechten om de prioriteit te zetten draait het proces gewoon met de normale prioriteit.
     }
-    child.on('error', (error) => reject(new Error(`Back-upproces starten mislukt: ${error.message}`)));
+    child.on('error', (error) => { clearTimeout(timer); reject(new Error(`Back-upproces starten mislukt: ${error.message}`)); });
     child.on('close', (code) => {
+      clearTimeout(timer);
+      if (timedOut) return reject(new Error(`Back-upproces gestopt na ${Math.round(timeoutMs / 1000)} seconden zonder resultaat.`));
       if (code !== 0) return reject(new Error(`Back-upproces mislukt (code ${code}): ${errors.trim() || output.trim()}`));
       const match = /Back-up gemaakt: (.+) \(\d+ bytes\)/.exec(output);
       const name = match && path.basename(match[1]);
