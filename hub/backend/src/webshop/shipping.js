@@ -200,7 +200,7 @@ function countriesOf(config) {
  */
 function carrierOption(carrier, config, { country, weightGrams, subtotal, quantity = 0, blocked = {} }) {
   const zone = config[carrier].zones.find((entry) => entry.country === country && (entry.tiers.length || (entry.qtyTiers || []).length));
-  const option = { method: carrier, label: config[carrier].label, price: 0, free: false, available: false, reason: '', note: '', leadDays: config[carrier].leadDays, dayType: config[carrier].dayType };
+  const option = { method: carrier, label: config[carrier].label, price: 0, free: false, freeFrom: 0, available: false, reason: '', note: '', leadDays: config[carrier].leadDays, dayType: config[carrier].dayType };
   if (blocked[carrier]) option.reason = blocked[carrier];
   else if (!zone) option.reason = 'Bezorging naar dit land is niet mogelijk.';
   else {
@@ -210,6 +210,7 @@ function carrierOption(carrier, config, { country, weightGrams, subtotal, quanti
     if (!tier) option.reason = byQuantity ? `Dit aantal valt buiten de tarieven van deze methode (${config[carrier].label}).` : `Deze bestelling is te zwaar voor deze methode (${config[carrier].label}).`;
     else {
       option.available = true;
+      option.freeFrom = zone.freeFrom > 0 ? zone.freeFrom : 0;
       option.free = zone.freeFrom > 0 && subtotal >= zone.freeFrom;
       option.price = option.free ? 0 : tier.price;
       if (zone.freeFrom > 0 && !option.free) option.note = `Gratis bezorging vanaf ${new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(zone.freeFrom)}.`;
@@ -222,11 +223,11 @@ function carrierOption(carrier, config, { country, weightGrams, subtotal, quanti
  * De verzendopties voor een winkelwagen en een land, in de volgorde van de keuzelijst: bezorgmethodes die aan staan, afhalen als laatste.
  * @param {object} config De instelling.
  * @param {{ country: string, weightGrams: number, subtotal: number, quantity?: number, blocked?: Object<string, string> }} basket Het land, het gewicht (gram), het bedrag van de artikelen incl. btw, het aantal en de uitgesloten methodes (delivery-rules.js, blockedMethods).
- * @returns {{ method: string, label: string, price: number, free: boolean, available: boolean, reason: string, note: string, leadDays: ?object, dayType: string }[]} De opties.
+ * @returns {{ method: string, label: string, price: number, free: boolean, freeFrom: number, available: boolean, reason: string, note: string, leadDays: ?object, dayType: string }[]} De opties.
  */
 function optionsFor(config, basket) {
   const options = CARRIERS.filter((carrier) => config[carrier].enabled).map((carrier) => carrierOption(carrier, config, basket));
-  if (config.pickup.enabled) options.push({ method: 'ophalen', label: config.pickup.label, price: 0, free: true, available: true, reason: '', note: config.pickup.note, leadDays: config.pickup.leadDays, dayType: config.pickup.dayType });
+  if (config.pickup.enabled) options.push({ method: 'ophalen', label: config.pickup.label, price: 0, free: true, freeFrom: 0, available: true, reason: '', note: config.pickup.note, leadDays: config.pickup.leadDays, dayType: config.pickup.dayType });
   return options;
 }
 

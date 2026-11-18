@@ -18,7 +18,7 @@ const { homePage, aboutPage, contentPage, renderWith, groupPage, categoryPage, s
 const { DEFAULT_SITE } = require('./shop-content');
 const { wantsBusiness } = require('./business-profile');
 const { loginPage, registerPage, accountPage, plannerPage, forgotPage, resetPage, verifyPage } = require('./storefront-account-pages');
-const { cartPage, checkoutPage, checkoutLoginPage, orderPage, ordersPage, guestNoAccessPage, guestLinkInvalidPage } = require('./storefront-order-pages');
+const { shippingHint, cartPage, checkoutPage, checkoutLoginPage, orderPage, ordersPage, guestNoAccessPage, guestLinkInvalidPage } = require('./storefront-order-pages');
 const { rememberGrant } = require('./guest-orders');
 const { wholesalePage, orderableProducts } = require('./storefront-wholesale-pages');
 const Wholesale = require('./wholesale');
@@ -30,7 +30,7 @@ const Vat = require('./vat');
 const { validPaymentId, cleanPublicUrl, sanitizePayment } = require('./mollie');
 const Analytics = require('./shop-analytics');
 const Seo = require('./seo');
-const { readCart, writeCart, applyCartAction, cartActionRejected, addCartLines, setCartLines, plannedLinesFrom, convertPlannedQty, MAX_QTY } = require('./storefront-cart');
+const { rememberList, lastListPath, readCart, writeCart, applyCartAction, cartActionRejected, addCartLines, setCartLines, plannedLinesFrom, convertPlannedQty, MAX_QTY } = require('./storefront-cart');
 const { deliverySameOf } = require('./web-orders');
 const { visibleFor: packagingVisibleFor } = require('../artikelen/packagings');
 const { inspectSlip, MAX_SLIP_BYTES } = require('./order-slips');
@@ -56,6 +56,7 @@ const ASSETS = {
   'afrekenen.js': { file: path.join(__dirname, 'storefront-checkout.js'), type: 'text/javascript; charset=utf-8' },
   'captcha.js': { file: path.join(SHARED_DIR, 'captcha.js'), type: 'text/javascript; charset=utf-8' },
   'analytiek.js': { file: path.join(__dirname, 'storefront-analytics.js'), type: 'text/javascript; charset=utf-8' },
+  'winkelwagen.js': { file: path.join(__dirname, 'storefront-cart-page.js'), type: 'text/javascript; charset=utf-8' },
   'pakbon.js': { file: path.join(__dirname, 'storefront-slip.js'), type: 'text/javascript; charset=utf-8' },
   'groothandel.js': { file: path.join(__dirname, 'storefront-wholesale.js'), type: 'text/javascript; charset=utf-8' },
   'account-link.js': { file: path.join(__dirname, 'storefront-account-link.js'), type: 'text/javascript; charset=utf-8' },
@@ -628,7 +629,9 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
          */
         const codesOf = (value) => String(value || '').split(',').map((code) => code.replace(/[^A-Za-z0-9._\- ]/g, '').trim().slice(0, 60)).filter(Boolean).slice(0, 60);
         const fromPlan = req.query.plan === undefined ? null : { added: Math.max(0, Math.floor(Number(req.query.plan)) || 0), notOrderable: codesOf(req.query.niet), otherUnit: codesOf(req.query.eenheid) };
-        sendWithGroups(req, res, 200, (groups) => cartPage(cart, groups, req.query.vol === '1' ? 'Je winkelwagen is vol: deze wijziging paste er niet meer bij. Plaats eerst deze bestelling en bestel de rest daarna.' : '', fromPlan));
+        const continuePath = lastListPath(req);
+        const shipping = cart.lines.length ? shippingHintOf(cart) : null;
+        sendWithGroups(req, res, 200, (groups) => cartPage(cart, groups, req.query.vol === '1' ? 'Je winkelwagen is vol: deze wijziging paste er niet meer bij. Plaats eerst deze bestelling en bestel de rest daarna.' : '', fromPlan, { shipping, paymentOptions: paymentOptionsOf(accounts.viewer(req)), continueHref: continuePath ? `../${continuePath}` : '../' }));
       });
       // Het materiaal uit de stuklijst van de planner in één keer in de winkelwagen (formulier uit de planner, velden q:<code>).
       router.post('/winkelwagen/planner', express.urlencoded({ extended: false, limit: '32kb', parameterLimit: 200 }), (req, res) => {
@@ -778,6 +781,17 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
        * @returns {object} De instelling met ophalen en DPD.
        */
       const shippingConfig = () => Shipping.sanitizeShipping(settingsFor(tenantId).get('shopShipping'));
+      /**
+       * De verzendgegevens voor de winkelwagenpagina: kosten, levertijd en wat er aan gratis bezorgen ontbreekt, voor het eerste bezorgbare land.
+       * @param {object} cart De geprijsde winkelwagen.
+       * @returns {?object} De gegevens (storefront-order-pages.js, shippingHint), of null zonder bezorgmethode.
+       */
+      const shippingHintOf = (cart) => {
+        const config = shippingConfig();
+        const countries = Shipping.countriesOf(config);
+        const first = countries.length ? countries[0] : { code: 'NL', name: 'Nederland' };
+        return shippingHint(orders.shippingQuote(cart, config, first.code), cart, first.name);
+      };
       /**
        * De betaalwijzen die deze klant bij het afrekenen mag kiezen.
        * @param {{ customerGroup?: string }} viewer De ingelogde klant.
@@ -1248,6 +1262,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     const catalog = catalogOf(req);
     const group = catalog.groups.find((candidate) => candidate.slug === req.params.slug);
     if (!group) return sendPage(req, res, 404, () => notFoundPage('../../', catalog.groups));
+    if (orderingOn()) rememberList(req, res, 'groep', group.slug);
     sendPage(req, res, 200, () => groupPage(group, catalog.groups));
   });
 
@@ -1292,6 +1307,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
       sort: ['prijs-laag', 'prijs-hoog'].includes(req.query.sorteer) ? req.query.sorteer : '', page: Number.parseInt(req.query.pagina, 10) || 1, preview: isPreview(req),
     };
     const inCategory = catalog.products.filter((product) => product.categorySlug === category.slug);
+    if (orderingOn()) rememberList(req, res, 'categorie', category.slug);
     sendPage(req, res, 200, () => categoryPage(category, inCategory, catalog.groups, options));
   });
 
@@ -1344,7 +1360,9 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
       const lead = DeliveryTimes.leadFor({ override: info.override, inStock, methodLead: leadMethod.leadDays, dayType: leadMethod.dayType, expectedDate: info.expectedDate, supplierLeadDays: info.supplierLeadDays });
       return lead ? (lead.max === 0 ? 'Direct beschikbaar' : `Levertijd ca. ${DeliveryTimes.leadText(lead)}`) : DeliveryTimes.UNKNOWN_TEXT;
     };
-    sendPage(req, res, 200, () => productPage(product, catalog.groups, chosenCode || (variant ? variant.code : ''), details, { packagingsFor, packCode, leadTextFor }));
+    const firstZone = leadMethod && leadMethod.zones ? leadMethod.zones.find((zone) => zone.tiers.length || (zone.qtyTiers || []).length) : null;
+    const trust = { freeFrom: firstZone ? firstZone.freeFrom : 0, online: Boolean(orders && payments && payments.optionsFor(tenantId, accounts ? accounts.viewer(req) : null).includes('online')) };
+    sendPage(req, res, 200, () => productPage(product, catalog.groups, chosenCode || (variant ? variant.code : ''), details, { packagingsFor, packCode, leadTextFor, trust }));
   });
 
   router.use((req, res) => {

@@ -190,7 +190,7 @@ async function optionsAfter(world, cart) {
   const page = await world.customer.get('/afrekenen/');
   assert.strictEqual(page.status, 200);
   const out = {};
-  for (const match of page.text.matchAll(/<option value="(dpd|pallet|eigen|ophalen)"([^>]*)>([^<]*)<\/option>/g)) out[match[1]] = { available: !/disabled/.test(match[2]), text: match[3].replace(/&[^;]+;/g, (entity) => entity) };
+  for (const match of page.text.matchAll(/<input type="radio" name="shippingMethod" value="(dpd|pallet|eigen|ophalen)"([^>]*)>([\s\S]*?)<\/label>/g)) out[match[1]] = { available: !/disabled/.test(match[2]), text: match[3].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').toLowerCase() };
   out.reasons = page.text;
   return out;
 }
