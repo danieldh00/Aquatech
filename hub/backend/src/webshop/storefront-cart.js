@@ -163,17 +163,17 @@ function writeCart(req, res, lines) {
   res.setHeader('Set-Cookie', [...(Array.isArray(previous) ? previous : previous ? [previous] : []), attrs.join('; ')]);
 }
 
-/** Naam van de cookie met de laatst bekeken lijst (categorie, productgroep of zoekopdracht), voor Verder winkelen. */
+/** Naam van de cookie met de laatst bekeken lijst (categorie of productgroep), voor Verder winkelen. */
 const LAST_LIST_COOKIE = 'aquatech_laatste_lijst';
 /** Soorten lijsten die onthouden worden. */
-const LIST_KINDS = ['categorie', 'groep', 'zoeken'];
+const LIST_KINDS = ['categorie', 'groep'];
 
 /**
  * Onthoudt de laatst bekeken lijst, zodat Verder winkelen in de winkelwagen daarheen terugkeert. Een ongewijzigde waarde zet geen nieuwe cookie.
  * @param {object} req Het verzoek.
  * @param {object} res Het antwoord.
- * @param {string} kind De soort lijst: categorie, groep of zoeken.
- * @param {string} value De codering van de lijst: de slug van een categorie of groep, of de zoekterm.
+ * @param {string} kind De soort lijst: categorie of groep (een zoekterm wordt bewust niet onthouden: die kan persoonsgegevens bevatten).
+ * @param {string} value De slug van de categorie of groep.
  * @returns {void}
  */
 function rememberList(req, res, kind, value) {
@@ -189,7 +189,7 @@ function rememberList(req, res, kind, value) {
 /**
  * Het adres (relatief aan de shop-startpagina) van de laatst bekeken lijst. Alleen een bekende soort met veilige tekens telt; de rest geeft niets.
  * @param {object} req Het verzoek.
- * @returns {string} Bijvoorbeeld `categorie/pompen/` of `zoeken/?q=pomp`; leeg als er niets (geldigs) onthouden is.
+ * @returns {string} Bijvoorbeeld `categorie/pompen/` of `groep/beregening/`; leeg als er niets (geldigs) onthouden is.
  */
 function lastListPath(req) {
   const raw = parseCookies(req.headers.cookie)[LAST_LIST_COOKIE];
@@ -197,7 +197,6 @@ function lastListPath(req) {
   try {
     const [kind, value] = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
     if (!LIST_KINDS.includes(kind) || typeof value !== 'string' || !value || value.length > 80) return '';
-    if (kind === 'zoeken') return `zoeken/?q=${encodeURIComponent(value)}`;
     return /^[a-z0-9][a-z0-9-]*$/.test(value) ? `${kind}/${value}/` : '';
   } catch { return ''; }
 }

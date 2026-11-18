@@ -73,9 +73,10 @@ function leadPhrase(option) {
  * wat er nog aan een gratis bestelling ontbreekt en de levertijd. Bedragen volgen de klantgroep (zakelijk excl. btw).
  * @param {{ options: object[] }} quote De verzendopties (web-orders.js, shippingQuote).
  * @param {{ totals: { total: number }, pricesExcl?: boolean }} cart De geprijsde winkelwagen.
- * @returns {?{ label: string, price: number, free: boolean, freeFrom: number, remaining: number, leadText: string, excl: boolean }} De gegevens, of null als er geen bezorgmethode beschikbaar is (dan alleen afhalen of niets).
+ * @param {string} [countryName] De naam van het land waarvoor dit geldt (het eerste bezorgbare land).
+ * @returns {?{ label: string, price: number, free: boolean, freeFrom: number, remaining: number, leadText: string, excl: boolean, countryName: string }} De gegevens, of null als er geen bezorgmethode beschikbaar is (dan alleen afhalen of niets).
  */
-function shippingHint(quote, cart) {
+function shippingHint(quote, cart, countryName = '') {
   const option = quote.options.find((entry) => entry.available && entry.method !== 'ophalen');
   if (!option) return null;
   const excl = Boolean(cart.pricesExcl);
@@ -86,7 +87,7 @@ function shippingHint(quote, cart) {
    */
   const toShown = (amount) => (excl ? Math.round((amount / (1 + Shipping.SHIPPING_VAT_RATE / 100)) * 100) / 100 : amount);
   const remaining = option.freeFrom > 0 && !option.free ? Math.max(0, Math.round((option.freeFrom - cart.totals.total) * 100) / 100) : 0;
-  return { label: option.label, price: toShown(option.price), free: option.free, freeFrom: option.freeFrom, remaining, leadText: leadPhrase(option), excl };
+  return { label: option.label, price: toShown(option.price), free: option.free, freeFrom: option.freeFrom, remaining, leadText: leadPhrase(option), excl, countryName };
 }
 
 /**
@@ -101,7 +102,7 @@ function shippingBlock(hint, business) {
   const bar = hint.remaining > 0 && hint.freeFrom > 0
     ? `<p class="free-bar-text">Nog <strong>${escapeHtml(formatPrice(hint.remaining))}</strong> tot gratis bezorging${business ? ' (incl. btw)' : ''}.</p><progress class="free-bar" max="${hint.freeFrom}" value="${Math.round(Math.max(0, Math.min(hint.freeFrom, hint.freeFrom - hint.remaining)) * 100) / 100}" aria-label="Voortgang naar gratis bezorging"></progress>`
     : hint.free && hint.freeFrom > 0 ? '<p class="free-bar-text">Je bestelling wordt gratis bezorgd.</p>' : '';
-  return `<div class="shipping-hint" data-shipping-hint><p><strong>Verzending</strong> (${escapeHtml(hint.label)}): ${escapeHtml(cost)} · ${escapeHtml(hint.leadText)}</p>${bar}<p class="muted"><small>Definitieve kosten en levertijd zie je bij het afrekenen; levertijden zijn indicatief.</small></p></div>`;
+  return `<div class="shipping-hint" data-shipping-hint><p><strong>Verzending${hint.countryName ? ` naar ${escapeHtml(hint.countryName)}` : ''}</strong> (${escapeHtml(hint.label)}): ${escapeHtml(cost)} · ${escapeHtml(hint.leadText)}</p>${bar}<p class="muted"><small>Definitieve kosten en levertijd zie je bij het afrekenen; levertijden zijn indicatief.</small></p></div>`;
 }
 
 /**

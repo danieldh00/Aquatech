@@ -7,7 +7,7 @@ const { createApp } = require('../src/server');
 const { createPdokFake } = require('./helpers/pdok-fake');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
-const { createClient, listen } = require('./helpers/http-client');
+const { createClient, listen, postForm } = require('./helpers/http-client');
 
 const SECRET = 'q'.repeat(64);
 const PASSWORD = 'Tuin-Plan-2026!';
@@ -307,6 +307,41 @@ test('queries: geen SELECT * in de backend', () => {
     });
   }
   assert.deepStrictEqual(hits, []);
+});
+
+test('webshop: de winkelwagenpagina met verzendinfo doet geen query per regel', async () => {
+  const db = openDb();
+  const store = createStore(db);
+  const main = store.ensureTenant().id;
+  await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PASSWORD, mustChangePassword: false }, { platformAdmin: true });
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db }));
+  try {
+    const admin = createClient(base);
+    assert.strictEqual((await admin.post('/app/api/auth/login', { username: 'baas', password: PASSWORD })).status, 200);
+    for (const code of ['SPR-1', 'SPR-2', 'SPR-3', 'SPR-4']) assert.strictEqual((await admin.post('/app/api/stock/items', { code, name: `Sproeier ${code}`, onHand: 5, salePrice: 10, weightGrams: 300 })).status, 201);
+    assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true, shopOrdering: true, shopShipping: { pickup: { enabled: true }, dpd: { enabled: true, zones: [{ country: 'NL', freeFrom: 100, tiers: [{ upToGrams: 5000, price: 6.95 }] }] } } })).status, 200);
+    const counter = instrument(db);
+    /**
+     * Telt de queries van de winkelwagenpagina met de gegeven artikelen in de wagen.
+     * @param {string[]} codes De artikelcodes.
+     * @returns {Promise<number>} Het aantal queries.
+     */
+    const queriesFor = async (codes) => {
+      const cart = createClient(base);
+      for (const code of codes) await postForm(base, cart, '/winkelwagen/', { action: 'add', code, qty: '1' });
+      await cart.get('/winkelwagen/');
+      counter.reset();
+      const page = await cart.get('/winkelwagen/');
+      assert.strictEqual(page.status, 200);
+      assert.match(page.text, /data-shipping-hint/);
+      return counter.stats.queries;
+    };
+    const one = await queriesFor(['SPR-1']);
+    const four = await queriesFor(['SPR-1', 'SPR-2', 'SPR-3', 'SPR-4']);
+    assert.strictEqual(four, one, `geen query per regel (1 regel: ${one}, 4 regels: ${four})`);
+  } finally {
+    server.close();
+  }
 });
 
 test('webshop: met een warme cache kost een shop-pagina geen query, ook de productpagina met omschrijving niet (1)', async () => {

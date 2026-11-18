@@ -24,6 +24,7 @@ test('winkelwagen: verzendkosten, levertijd en drempelbalk staan er al, en de be
   await postForm(world.base, shopper.client, '/winkelwagen/', { action: 'add', code: 'BUS', qty: '1' });
   const page = await shopper.client.request('GET', '/winkelwagen/');
   assert.match(page.text, /data-shipping-hint/);
+  assert.match(page.text, /Verzending naar Nederland/, 'het land waarvoor de kosten gelden staat erbij');
   assert.match(page.text, /€ 6,95/, 'de verzendkosten staan al in de winkelwagen');
   assert.match(page.text, /levertijd ca\./);
   assert.match(page.text, /Nog <strong>€ 37,90<\/strong> tot gratis bezorging/, 'drempel 50 min 12,10');
@@ -47,7 +48,7 @@ test('winkelwagen: bij online betalen noemt de notitie online betalen', async ()
   assert.match(page.text, /Veilig betalen met iDEAL/, 'de vertrouwensstrook noemt online betalen');
 });
 
-test('winkelwagen: Verder winkelen keert terug naar de laatst bekeken lijst en een kapotte cookie geeft de startpagina', async () => {
+test('winkelwagen: Verder winkelen keert terug naar de laatst bekeken categorie, niet naar een zoekopdracht', async () => {
   const world = await setup();
   const [shopper] = world.shoppers;
   await postForm(world.base, shopper.client, '/winkelwagen/', { action: 'add', code: 'BUS', qty: '1' });
@@ -55,11 +56,16 @@ test('winkelwagen: Verder winkelen keert terug naar de laatst bekeken lijst en e
   assert.match(empty.text, /<a class="button secondary" href="\.\.\/">Verder winkelen/);
   const search = await shopper.client.request('GET', '/zoeken/?q=sproeier');
   assert.strictEqual(search.status, 200);
-  const cart = await shopper.client.request('GET', '/winkelwagen/');
-  assert.match(cart.text, /href="\.\.\/zoeken\/\?q=sproeier">Verder winkelen/);
-  // De cookie wordt niet opnieuw gezet als er niets verandert.
-  const again = await shopper.client.request('GET', '/zoeken/?q=sproeier');
-  assert.ok(!(again.headers.get('set-cookie') || '').includes('aquatech_laatste_lijst'));
+  assert.ok(!(search.headers.get('set-cookie') || '').includes('aquatech_laatste_lijst'), 'een zoekterm gaat nooit in een cookie');
+  const group = await shopper.client.request('GET', '/groep/beregening/');
+  const page = group.status === 200 ? group : null;
+  if (page) {
+    assert.match(page.headers.get('set-cookie') || '', /aquatech_laatste_lijst=/);
+    const cart = await shopper.client.request('GET', '/winkelwagen/');
+    assert.match(cart.text, /href="\.\.\/groep\/beregening\/">Verder winkelen/);
+    const again = await shopper.client.request('GET', '/groep/beregening/');
+    assert.ok(!(again.headers.get('set-cookie') || '').includes('aquatech_laatste_lijst'), 'ongewijzigd: geen nieuwe cookie');
+  }
 });
 
 test('lastListPath: alleen bekende soorten met veilige tekens', () => {
@@ -71,11 +77,10 @@ test('lastListPath: alleen bekende soorten met veilige tekens', () => {
   const cookieFor = (value) => ({ headers: { cookie: `aquatech_laatste_lijst=${Buffer.from(JSON.stringify(value)).toString('base64url')}` } });
   assert.strictEqual(lastListPath(cookieFor(['categorie', 'pompen'])), 'categorie/pompen/');
   assert.strictEqual(lastListPath(cookieFor(['groep', 'beregening'])), 'groep/beregening/');
-  assert.strictEqual(lastListPath(cookieFor(['zoeken', 'pomp & kraan'])), 'zoeken/?q=pomp%20%26%20kraan');
+  assert.strictEqual(lastListPath(cookieFor(['zoeken', 'pomp'])), '', 'zoektermen worden niet meer onthouden');
   assert.strictEqual(lastListPath(cookieFor(['categorie', '../admin'])), '', 'geen padafwijking');
   assert.strictEqual(lastListPath(cookieFor(['categorie', 'A B'])), '');
   assert.strictEqual(lastListPath(cookieFor(['product', 'pompen'])), '', 'onbekende soort');
-  assert.strictEqual(lastListPath(cookieFor(['zoeken', 'x'.repeat(81)])), '');
   assert.strictEqual(lastListPath({ headers: { cookie: 'aquatech_laatste_lijst=%%%' } }), '');
   assert.strictEqual(lastListPath({ headers: {} }), '');
 });

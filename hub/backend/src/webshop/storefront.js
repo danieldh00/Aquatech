@@ -789,7 +789,8 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
       const shippingHintOf = (cart) => {
         const config = shippingConfig();
         const countries = Shipping.countriesOf(config);
-        return shippingHint(orders.shippingQuote(cart, config, countries.length ? countries[0].code : 'NL'), cart);
+        const first = countries.length ? countries[0] : { code: 'NL', name: 'Nederland' };
+        return shippingHint(orders.shippingQuote(cart, config, first.code), cart, first.name);
       };
       /**
        * De betaalwijzen die deze klant bij het afrekenen mag kiezen.
@@ -1261,7 +1262,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     const catalog = catalogOf(req);
     const group = catalog.groups.find((candidate) => candidate.slug === req.params.slug);
     if (!group) return sendPage(req, res, 404, () => notFoundPage('../../', catalog.groups));
-    rememberList(req, res, 'groep', group.slug);
+    if (orderingOn()) rememberList(req, res, 'groep', group.slug);
     sendPage(req, res, 200, () => groupPage(group, catalog.groups));
   });
 
@@ -1283,7 +1284,6 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         return candidates.some((candidate) => (!onlyInStock || candidate.inStock) && words.every((word) => candidate.haystack.toLowerCase().includes(word)));
       })
       : [];
-    if (query) rememberList(req, res, 'zoeken', query);
     sendPage(req, res, 200, () => searchPage(query, found, catalog.groups, onlyInStock, isPreview(req)));
   });
 
@@ -1307,7 +1307,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
       sort: ['prijs-laag', 'prijs-hoog'].includes(req.query.sorteer) ? req.query.sorteer : '', page: Number.parseInt(req.query.pagina, 10) || 1, preview: isPreview(req),
     };
     const inCategory = catalog.products.filter((product) => product.categorySlug === category.slug);
-    rememberList(req, res, 'categorie', category.slug);
+    if (orderingOn()) rememberList(req, res, 'categorie', category.slug);
     sendPage(req, res, 200, () => categoryPage(category, inCategory, catalog.groups, options));
   });
 
