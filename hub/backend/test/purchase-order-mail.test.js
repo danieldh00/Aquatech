@@ -134,8 +134,13 @@ test('versturen: alleen na een klik, met de PDF als bijlage, en het resultaat st
     assert.ok(Date.now() - Date.parse(out.body.mail.sentAt) < 60000);
     // De status van de order verandert er niet door.
     assert.strictEqual(out.body.status, 'besteld');
-    // Opnieuw versturen mag (nieuwe klik) en werkt de datum bij.
-    assert.strictEqual((await kees.post(`/app/api/purchase-orders/${order.id}/send`, {})).status, 200);
+    // Een tweede klik zonder bewuste keuze (of vanaf een tweede scherm) mailt niet nog eens.
+    const again = await kees.post(`/app/api/purchase-orders/${order.id}/send`, {});
+    assert.strictEqual(again.status, 409);
+    assert.strictEqual(again.body.error, 'already_sent');
+    assert.strictEqual(sent.length, 1);
+    // Bewust opnieuw versturen mag en werkt de datum bij.
+    assert.strictEqual((await kees.post(`/app/api/purchase-orders/${order.id}/send`, { resend: true })).status, 200);
     assert.strictEqual(sent.length, 2);
   } finally {
     server.close();

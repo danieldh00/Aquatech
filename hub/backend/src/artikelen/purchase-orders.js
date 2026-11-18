@@ -969,12 +969,13 @@ function registerPurchaseOrderRoutes(app, ctx) {
           to: typeof body.to === 'string' ? body.to : undefined,
           subject: typeof body.subject === 'string' ? body.subject : undefined,
           message: typeof body.message === 'string' ? body.message : undefined,
+          resend: body.resend === true,
         }, req.user);
         audit(req, 'inkooporder_naar_leverancier_gemaild', { number: order.number });
         res.json(order);
       } catch (error) {
         if (error.code === 'not_found') return notFound(res);
-        const status = { not_sendable: 409, not_configured: 409, busy: 409, invalid_to: 400, send_failed: 502 }[error.code];
+        const status = { not_sendable: 409, already_sent: 409, not_configured: 409, busy: 409, invalid_to: 400, send_failed: 502 }[error.code];
         if (!status) throw error;
         withCause(res, error.cause || error).status(status).json({ error: error.code, message: error.message });
       }

@@ -114,13 +114,14 @@ function createPurchaseOrderMailer({ purchaseOrders, suppliers, settingsFor, mai
    * Verstuurt de order met de PDF als bijlage naar het opgegeven adres. Alleen aanroepen na een expliciete klik; legt het resultaat vast op de order.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van de order.
-   * @param {{ to?: string, subject?: string, message?: string }} options De ontvanger(s), het onderwerp en de tekst zoals de medewerker ze nakeek; leeg = de standaard.
+   * @param {{ to?: string, subject?: string, message?: string, resend?: boolean }} options De ontvanger(s), het onderwerp en de tekst zoals de medewerker ze nakeek (leeg = de standaard); `resend: true` is nodig als de order al eerder is verstuurd (zo mailt een tweede klik of een tweede scherm nooit per ongeluk dubbel).
    * @param {{ display_name?: string, name?: string }} user De medewerker die verstuurt (req.user).
-   * @returns {Promise<object>} De bijgewerkte order. Gooit een fout met code not_found, not_sendable, not_configured, invalid_to, busy of send_failed.
+   * @returns {Promise<object>} De bijgewerkte order. Gooit een fout met code not_found, not_sendable, already_sent, not_configured, invalid_to, busy of send_failed.
    */
-  async function send(tenantId, id, { to, subject, message } = {}, user = {}) {
+  async function send(tenantId, id, { to, subject, message, resend = false } = {}, user = {}) {
     const { order, supplier } = load(tenantId, id);
     if (!SENDABLE_STATUSES.includes(order.status)) throw failure('not_sendable', 'Alleen een bestelde order is naar de leverancier te sturen.');
+    if (order.mail.sentAt && resend !== true) throw failure('already_sent', `Deze order is al verstuurd naar ${order.mail.sentTo}. Open het paneel opnieuw als je hem nog een keer wilt sturen.`);
     const settings = settingsFor(tenantId);
     const mailer = mailerFor(settings);
     if (!mailer.configured()) throw failure('not_configured', 'Er is geen mailserver ingesteld (Beheer → Integraties → E-mail).');
@@ -146,7 +147,13 @@ function createPurchaseOrderMailer({ purchaseOrders, suppliers, settingsFor, mai
         purchaseOrders.markMail(tenantId, order.id, { error: reason });
         throw failure('send_failed', reason, error);
       }
-      return purchaseOrders.markMail(tenantId, order.id, { to: addresses.join(', '), by: user.display_name || user.name || '' });
+      // De mail is weg: een databasefout bij het vastleggen mag er geen fout van maken (dan klikt iemand opnieuw en gaat hij dubbel).
+      try {
+        return purchaseOrders.markMail(tenantId, order.id, { to: addresses.join(', '), by: user.display_name || user.name || '' });
+      } catch (error) {
+        console.error(`Inkooporder ${order.number} verstuurd, maar vastleggen mislukte: ${error.message}`);
+        return purchaseOrders.get(tenantId, order.id) || order;
+      }
     } finally {
       sending.delete(key);
     }

@@ -487,8 +487,10 @@
     form.mailSubject.value = draft.subject;
     form.mailMessage.value = draft.message;
     const problem = $('#po-mail-problem');
-    problem.textContent = draft.problem;
-    problem.hidden = !draft.problem;
+    const earlier = draft.mail && draft.mail.sentAt ? `Deze order is al verstuurd naar ${draft.mail.sentTo} op ${new Date(draft.mail.sentAt).toLocaleString('nl-NL', { dateStyle: 'long', timeStyle: 'short' })}. Versturen mailt hem opnieuw.` : '';
+    problem.textContent = [draft.problem, earlier].filter(Boolean).join(' ');
+    problem.hidden = !problem.textContent;
+    state.resend = Boolean(earlier);
     const link = $('#po-mail-pdf');
     link.textContent = draft.fileName;
     link.href = `../api/purchase-orders/${encodeURIComponent(state.order.id)}/pdf`;
@@ -504,7 +506,7 @@
    */
   async function sendMail() {
     const form = $('#order-form');
-    const body = { to: form.mailTo.value.trim(), subject: form.mailSubject.value, message: form.mailMessage.value };
+    const body = { to: form.mailTo.value.trim(), subject: form.mailSubject.value, message: form.mailMessage.value, resend: Boolean(state.resend) };
     await run(`Inkooporder verstuurd naar ${body.to || 'de leverancier'}`, () => context.api(`purchase-orders/${encodeURIComponent(state.order.id)}/send`, { method: 'POST', body }));
   }
 
