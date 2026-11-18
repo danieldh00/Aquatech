@@ -32,7 +32,8 @@ test('warmShop: eerst de startpagina, dan winkelwagen en de gevonden pagina\'s, 
 });
 
 test('warmShop: een shop die uit staat (404) of een fout stopt zonder gooien', async () => {
-  assert.deepStrictEqual(await warmShop({ baseUrl: 'http://x', fetchImpl: async () => ({ status: 404, text: async () => 'Niet gevonden.' }) }), ['/']);
+  assert.deepStrictEqual(await warmShop({ baseUrl: 'http://x', fetchImpl: async () => ({ status: 404, text: async () => 'Niet gevonden.' }) }), []);
+  assert.deepStrictEqual(await warmShop({ baseUrl: 'http://x', fetchImpl: async () => ({ status: 302, text: async () => '' }) }), [], 'een doorverwijzing (shop uit) telt niet als opgewarmd');
   const logged = [];
   const visited = await warmShop({ baseUrl: 'http://x', fetchImpl: async () => { throw new Error('verbinding geweigerd'); }, log: (message) => logged.push(message) });
   assert.deepStrictEqual(visited, []);

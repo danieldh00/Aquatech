@@ -39,9 +39,11 @@ async function warmShop({ baseUrl, fetchImpl = fetch, log = () => {} }) {
    */
   const get = async (target) => {
     try {
-      const response = await fetchImpl(`${baseUrl}${target}`, { headers: { 'User-Agent': 'AquaTech-warmup-bot' }, signal: AbortSignal.timeout(15000) });
+      const response = await fetchImpl(`${baseUrl}${target}`, { headers: { 'User-Agent': 'AquaTech-warmup-bot' }, redirect: 'manual', signal: AbortSignal.timeout(15000) });
+      // Alleen een echte pagina telt (een uitgeschakelde shop stuurt door naar de app).
+      if (response.status !== 200) return '';
       visited.push(target);
-      return response.status === 200 ? await response.text() : '';
+      return await response.text();
     } catch (error) {
       log(`Opwarmen van ${target} mislukt: ${error.message}`);
       return '';
