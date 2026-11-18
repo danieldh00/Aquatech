@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.18.1',
+      date: '2026-11-18',
+      title: 'Webshoppagina\'s bouwen met blokken',
+      items: [
+        { text: 'Nieuwe pagina\'s voor de webshop maak je nu zonder code in Beheer > Webshop-inhoud > Pagina\'s: bouw ze uit blokken (tekst, afbeelding, artikelen, veelgestelde vragen en een knop met tekst), zet ze in de gewenste volgorde en bekijk eerst het voorbeeld.', for: ['beheer'] },
+        { text: 'Veelgestelde vragen op een pagina komen ook als gestructureerde gegevens (FAQPage) in de pagina, en pagina\'s met een korte omschrijving staan met die omschrijving in llms.txt (zodra de webshop is vrijgegeven voor zoekmachines).', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.18.0',
       date: '2026-11-18',
       title: 'Levermethode en levertijd per artikel',

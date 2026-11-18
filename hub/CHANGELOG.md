@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.18.1
+
+- Pagina's in `shop_content` bewaren hun inhoud als `blocks` (nieuw bestand `webshop/page-blocks.js`: `text`, `image`, `products` (codes of categorie), `faq`, `cta`; maximaal 40 blokken, 40 vragen per FAQ-blok, 12 artikelen). Een pagina met alleen `body` krijgt die tekst als één tekstblok (`blocksOf`, `normalizePage`).
+- `contentPage` tekent de blokken (`renderPageBlocks`) en zet FAQPage-gegevens uit alle FAQ-blokken (voor `veelgestelde-vragen` zonder FAQ-blok nog steeds uit de koppen). Wat in de gegevens staat, staat ook zichtbaar op de pagina.
+- `llms.txt` toont de omschrijving van een pagina. Sitemap en `llms.txt` bestaan nog steeds alleen als de shop is vrijgegeven; een concept komt er nooit in.
+- Editor in `beheer/webshop-inhoud.js` met blokken toevoegen, verplaatsen en verwijderen. Geen migratie.
+
 ## 1.18.0
 
 - Migratie 74: `stock_items.delivery_rules` (JSON), `lead_days_min`/`lead_days_max` en `item_suppliers.lead_days`.
