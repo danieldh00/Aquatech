@@ -14,6 +14,8 @@ const ON_ACCOUNT = ['iedereen', 'zakelijk', 'nooit'];
 const DEFAULT_HOLD_HOURS = 24;
 /** Standaard zoveel dagen houdt een bestelling op rekening de voorraad vast (0 = tot verzenden of annuleren). */
 const DEFAULT_ACCOUNT_HOLD_DAYS = 14;
+/** Vanaf welk bedrag (excl. btw) de knop Offerte aanvragen standaard verschijnt. */
+const DEFAULT_QUOTE_REQUEST_MIN = 500;
 /** Hoe lang we op Mollie wachten (milliseconden). */
 const TIMEOUT_MS = 15000;
 
@@ -53,12 +55,13 @@ function cleanPublicUrl(raw) {
 /**
  * Saneert de instelling `shopPayment`. Lege of onbruikbare invoer geeft de standaardwaarden.
  * @param {*} raw De ingevoerde instelling.
- * @returns {{ online: boolean, publicUrl: string, onAccount: string, holdHours: number, accountHoldDays: number, guestCheckout: boolean, paymentReminder: boolean }} De gesaneerde instelling (paymentReminder: één herinneringsmail na een uur bij een niet afgeronde online betaling, standaard aan; guestCheckout: bestellen zonder account, standaard aan; werkt alleen als online betalen werkt).
+ * @returns {{ online: boolean, publicUrl: string, onAccount: string, holdHours: number, accountHoldDays: number, guestCheckout: boolean, paymentReminder: boolean, quoteRequest: boolean, quoteRequestMin: number }} De gesaneerde instelling (quoteRequest: knop Offerte aanvragen voor zakelijke klanten, standaard aan; quoteRequestMin: vanaf welk bedrag excl. btw die knop verschijnt, 1 tot 1.000.000 euro, standaard 500; paymentReminder: één herinneringsmail na een uur bij een niet afgeronde online betaling, standaard aan; guestCheckout: bestellen zonder account, standaard aan; werkt alleen als online betalen werkt).
  */
 function sanitizePayment(raw) {
   const input = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   const hours = Math.floor(Number(input.holdHours));
   // Alleen hele dagen: 0,5 wordt niet stilletjes 0 (dat zou het vrijgeven uitzetten) maar valt terug op de standaard.
+  const minimum = input.quoteRequestMin === '' || input.quoteRequestMin == null ? NaN : Number(input.quoteRequestMin);
   const days = input.accountHoldDays === '' || input.accountHoldDays == null ? NaN : Number(input.accountHoldDays);
   return {
     online: input.online === true,
@@ -68,6 +71,8 @@ function sanitizePayment(raw) {
     accountHoldDays: Number.isInteger(days) && days >= 0 && days <= 90 ? days : DEFAULT_ACCOUNT_HOLD_DAYS,
     guestCheckout: input.guestCheckout !== false,
     paymentReminder: input.paymentReminder !== false,
+    quoteRequest: input.quoteRequest !== false,
+    quoteRequestMin: Number.isFinite(minimum) && minimum >= 1 && minimum <= 1000000 ? Math.round(minimum * 100) / 100 : DEFAULT_QUOTE_REQUEST_MIN,
   };
 }
 
@@ -198,4 +203,4 @@ function createMollie({ fetchImpl = fetch } = {}) {
   return { createPayment, getPayment, createRefund, checkKey };
 }
 
-module.exports = { createMollie, MollieError, sanitizePayment, configOf, validPaymentId, cleanPublicUrl, ON_ACCOUNT, DEFAULT_HOLD_HOURS, DEFAULT_ACCOUNT_HOLD_DAYS };
+module.exports = { DEFAULT_QUOTE_REQUEST_MIN, createMollie, MollieError, sanitizePayment, configOf, validPaymentId, cleanPublicUrl, ON_ACCOUNT, DEFAULT_HOLD_HOURS, DEFAULT_ACCOUNT_HOLD_DAYS };

@@ -113,3 +113,40 @@ test('offerte aanvragen: de auditregel meldt of de mail aan het bedrijf is verst
   const row = world.db.prepare("SELECT detail FROM audit WHERE action = 'webshop_offerte_aangevraagd'").get();
   assert.strictEqual(JSON.parse(row.detail).mailed, false);
 });
+
+test('instelling: drempelbedrag en aan/uit voor Offerte aanvragen worden gesaneerd', () => {
+  const { sanitizePayment } = require('../src/webshop/mollie');
+  assert.strictEqual(sanitizePayment({}).quoteRequest, true);
+  assert.strictEqual(sanitizePayment({}).quoteRequestMin, 500);
+  assert.strictEqual(sanitizePayment({ quoteRequest: false }).quoteRequest, false);
+  assert.strictEqual(sanitizePayment({ quoteRequestMin: 250 }).quoteRequestMin, 250);
+  assert.strictEqual(sanitizePayment({ quoteRequestMin: '1250.456' }).quoteRequestMin, 1250.46);
+  for (const bad of [0, -5, '', null, 'abc', 2000000, NaN]) assert.strictEqual(sanitizePayment({ quoteRequestMin: bad }).quoteRequestMin, 500, `ongeldig: ${bad}`);
+  assert.strictEqual(qualifies({ pricesExcl: true, ok: true, lines: [{ lineExcl: 250 }] }, 250), true);
+  assert.strictEqual(qualifies({ pricesExcl: true, ok: true, lines: [{ lineExcl: 249.99 }] }, 250), false);
+});
+
+test('instelling: een lager drempelbedrag toont de knop eerder, uitzetten verbergt hem en weigert de aanvraag', async () => {
+  const world = await setup();
+  const [shopper] = world.shoppers;
+  const user = world.db.prepare('SELECT id FROM users WHERE email = ?').get('k1@voorbeeld.nl');
+  await world.admin.patch(`/app/api/admin/users/${user.id}`, { customerGroup: 'zakelijk' });
+  // 20 × 10 = 200 euro: onder de standaarddrempel.
+  await postForm(world.base, shopper.client, '/winkelwagen/', { action: 'add', code: 'BUS', qty: '20' });
+  assert.doesNotMatch((await shopper.client.get('/winkelwagen/')).text, BUTTON);
+  assert.strictEqual((await world.admin.put('/app/api/admin/settings', { shopPayment: { quoteRequestMin: 150 } })).status, 200);
+  assert.match((await shopper.client.get('/winkelwagen/')).text, BUTTON);
+  await postForm(world.base, shopper.client, '/winkelwagen/offerte/', {});
+  assert.strictEqual(world.db.prepare('SELECT COUNT(*) AS n FROM quotes').get().n, 1);
+  // Hoger dan de wagen: weer geen knop en geen nieuwe offerte.
+  await postForm(world.base, shopper.client, '/winkelwagen/', { action: 'set', code: 'BUS', qty: '21' });
+  assert.strictEqual((await world.admin.put('/app/api/admin/settings', { shopPayment: { quoteRequestMin: 5000 } })).status, 200);
+  assert.doesNotMatch((await shopper.client.get('/winkelwagen/')).text, BUTTON);
+  await postForm(world.base, shopper.client, '/winkelwagen/offerte/', {});
+  assert.strictEqual(world.db.prepare('SELECT COUNT(*) AS n FROM quotes').get().n, 1);
+  // Uitgezet, ook al haalt het bedrag de drempel.
+  assert.strictEqual((await world.admin.put('/app/api/admin/settings', { shopPayment: { quoteRequest: false, quoteRequestMin: 50 } })).status, 200);
+  assert.doesNotMatch((await shopper.client.get('/winkelwagen/')).text, BUTTON);
+  await postForm(world.base, shopper.client, '/winkelwagen/offerte/', {});
+  assert.strictEqual(world.db.prepare('SELECT COUNT(*) AS n FROM quotes').get().n, 1);
+});
