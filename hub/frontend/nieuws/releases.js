@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.19.6',
+      date: '2026-11-18',
+      title: 'Planner promoten in de webshop',
+      items: [
+        { text: 'De webshop prijst de gratis planner aan: een blok "Ontwerp je beregening gratis, bestel de complete lijst" op de startpagina en in de beregeningscategorieën. Het blok verdwijnt als je de planner uitzet in de instellingen.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.19.5',
       date: '2026-11-18',
       title: 'Herinnering bij niet afgeronde betaling',

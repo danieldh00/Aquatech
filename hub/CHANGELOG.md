@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.19.6
+
+- `plannerPromoMark`/`isIrrigationGroup` in storefront-pages.js (merkteken `<!--planner-promo:…-->` op de startpagina en boven de producten van een hoofdcategorie met "beregening" in naam of adres); `storefront.js` vervangt het door het blok als `shopPlanner` aan staat (zoals het kopje Planner) en haalt het anders weg. De knop leidt naar `planner/` (ingelogd direct door naar de planner). Stijl `.planner-promo` in storefront.css via de `--at-shop-*`-variabelen. Geen migratie; de meting `planner_to_cart` bestond al.
+
 ## 1.19.5
 
 - Instelling `shopPayment.paymentReminder` (standaard aan). Uurlijkse taak `betalingsherinneringen` (`app.locals.webPaymentsRemind`, `webPayments.remindUnpaid`): bestellingen met status `nieuw`, online betaling open of mislukt, ouder dan een uur en met een lopende reservering; eerst een opvraging bij Mollie, betaald = geen mail. Eén mail per bestelling (`data.pay.reminderAt`, pas gezet na een gelukte verzending, dus een mislukte mail wordt volgende ronde herhaald); hoogstens 50 per ronde. Geen migratie.
