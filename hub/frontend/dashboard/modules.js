@@ -154,7 +154,7 @@
       status: 'actief',
       right: 'voorraad',
       // Bestelvoorstellen: alleen de voorstel-routes vergrendeld, niet /api/purchase-orders zelf (die volgt het recht voorraad).
-      configuration: { sections: ['labels', 'bestelvoorstellen'], settings: ['labelTemplates', 'priceFactors', 'purchaseProposals'], routes: ['/api/stock/label-templates', '/api/stock/labels', '/api/stock/price-factors', '/api/purchase-orders/proposals', '/api/orderpick/receipts'] },
+      configuration: { sections: ['labels', 'bestelvoorstellen'], settings: ['labelTemplates', 'priceFactors', 'purchaseProposals'], routes: ['/api/stock/label-templates', '/api/stock/labels', '/api/stock/price-factors', '/api/purchase-orders/proposals', '/api/orderpick/receipts', '/api/stock/item-texts'] },
     },
     {
       id: 'bestelvoorstel',

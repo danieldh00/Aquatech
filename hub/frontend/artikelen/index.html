@@ -46,6 +46,7 @@
         <button class="tab" data-tab="orders" data-purchasing role="tab">Inkooporders</button>
         <button class="tab" data-tab="pricefactor" data-purchasing role="tab">Prijsfactor</button>
         <button class="tab" data-tab="media" role="tab">Afbeeldingen</button>
+        <button class="tab" data-tab="texts" role="tab">Teksten <span id="t-texts" class="count"></span></button>
       </nav>
 
       <section id="tab-stock" class="tabpane">
@@ -320,6 +321,52 @@
         <div class="tablewrap"><table class="grid" id="m-missing-table" hidden></table></div>
       </section>
 
+      <section id="tab-texts" class="tabpane" hidden>
+        <p class="muted small">De AI schrijft een concept van de omschrijving en de zoekmachineteksten, alleen met de gegevens die bij het artikel staan (naam, merk, specificaties, bestaande omschrijving). Niets gaat vanzelf live: jij controleert elk concept en keurt het goed. Getallen, eenheden en beweringen die niet in de artikelgegevens staan worden gemarkeerd.</p>
+        <div id="tx-notice" class="notice" hidden></div>
+        <div class="filters">
+          <input id="tx-search" type="search" placeholder="Zoek op code of naam">
+          <select id="tx-category" aria-label="Categorie"><option value="">Alle categorieën</option></select>
+          <select id="tx-filter" aria-label="Filter">
+            <option value="alle">Alle artikelen</option>
+            <option value="ontbreekt">Tekst ontbreekt</option>
+            <option value="zonderconcept">Zonder concept</option>
+            <option value="concept">Met concept</option>
+          </select>
+          <span class="spacer"></span>
+          <span id="tx-count" class="muted small"></span>
+        </div>
+        <div class="form-actions tx-actions">
+          <button class="btn primary" id="tx-write" type="button">Concepten schrijven</button>
+          <button class="btn" id="tx-approve" type="button">Goedkeuren</button>
+          <button class="btn" id="tx-reject" type="button">Afwijzen</button>
+          <span id="tx-progress" class="muted small" role="status"></span>
+        </div>
+        <div class="tablewrap"><table class="grid" id="tx-table"></table></div>
+        <section id="tx-detail" class="card card-form tx-detail" hidden aria-labelledby="tx-detail-title">
+          <div class="tx-detail-head"><h2 id="tx-detail-title"></h2><button class="btn" id="tx-close" type="button">Sluiten</button></div>
+          <div id="tx-warnings"></div>
+          <div class="form-grid tx-compare">
+            <div class="field full"><span>Gegevens waar de AI mee werkt</span><dl id="tx-facts" class="tx-facts"></dl></div>
+            <label class="field" title="Wat nu in de webshop staat">Huidige omschrijving<textarea id="tx-live-description" rows="6" readonly></textarea></label>
+            <label class="field">Concept omschrijving<textarea id="tx-description" rows="6" maxlength="5000"></textarea></label>
+            <label class="field">Huidige titel voor zoekmachines<input id="tx-live-seoTitle" readonly></label>
+            <label class="field">Concept titel (max. 70 tekens)<input id="tx-seoTitle" maxlength="70"></label>
+            <label class="field">Huidige omschrijving voor zoekmachines<textarea id="tx-live-seoDescription" rows="2" readonly></textarea></label>
+            <label class="field">Concept omschrijving voor zoekmachines (max. 160)<textarea id="tx-seoDescription" rows="2" maxlength="160"></textarea></label>
+          </div>
+          <p id="tx-notes" class="muted small"></p>
+          <label class="chk" id="tx-ack-row" hidden><input type="checkbox" id="tx-ack"> Ik heb de gemarkeerde punten gecontroleerd en de tekst klopt met het artikel</label>
+          <label class="chk" id="tx-over-row" hidden><input type="checkbox" id="tx-over"> De huidige tekst is intussen gewijzigd; overschrijf hem toch</label>
+          <div class="form-actions">
+            <button class="btn" id="tx-save" type="button">Wijziging bewaren</button>
+            <button class="btn primary" id="tx-publish" type="button">Goedkeuren en plaatsen</button>
+            <button class="btn" id="tx-redo" type="button">Opnieuw schrijven</button>
+            <button class="btn" id="tx-discard" type="button">Afwijzen</button>
+          </div>
+        </section>
+      </section>
+
       <section id="tab-reorder" class="tabpane" hidden>
         <section id="pp-block" class="pp-block" aria-labelledby="pp-title">
           <div class="pp-head">
@@ -554,6 +601,7 @@
   <script src="proposals-core.js"></script>
   <script src="proposals.js"></script>
   <script src="price-factor.js"></script>
+  <script src="item-texts.js"></script>
   <script src="artikelen.js"></script>
 </body>
 </html>
