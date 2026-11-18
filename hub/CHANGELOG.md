@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.19.9
+
+- Instelling `shopPayment` krijgt `quoteRequest` (standaard aan) en `quoteRequestMin` (1 tot 1.000.000 euro excl. btw, standaard 500, ongeldig = 500) in `sanitizePayment`; `quoteRequests.offered(tenantId, cart)` vervangt `qualifies(cart)` bij de knop en de route (`qualifies(cart, minimum)` blijft de zuivere controle). Geen migratie.
+
 ## 1.19.8
 
 - Migratie 78 `shop_funnel_days` (omgeving, dag, stap, teller; geen persoonsgegevens; na 400 dagen gewist via het uurlijkse onderhoud). `webshop/funnel.js` (`createFunnel`: `count`, `flush`, `report`, `purgeOld`): tellers in het geheugen, elke minuut en bij elk overzicht in één transactie naar de database, dus een warme shoppagina kost nog steeds 0 queries. Stappen `product`, `cart_add`, `cart`, `checkout`, `order`, `paid` en daarnaast `checkout_login` en `signup`; medewerkers, voorbeelden (`?voorbeeld=1`) en robots (`looksLikeBot`) tellen niet mee. Dag in Nederlandse tijd.

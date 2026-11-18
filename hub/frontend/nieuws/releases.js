@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.19.9',
+      date: '2026-11-18',
+      title: 'Drempelbedrag voor Offerte aanvragen instelbaar',
+      items: [
+        { text: 'In Beheer > Webshop > Betalen stel je in vanaf welk bedrag (excl. btw) een zakelijke klant in de winkelwagen een offerte kan aanvragen (standaard 500 euro), of zet je Offerte aanvragen helemaal uit.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.19.8',
       date: '2026-11-18',
       title: 'Eigen koopfunnelteller in de webshop',
