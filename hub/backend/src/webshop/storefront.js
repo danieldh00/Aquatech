@@ -73,7 +73,7 @@ for (const name of fs.readdirSync(path.join(__dirname, 'assets'))) {
 /** Paden waar een formulier naartoe mag posten (inloggen, registreren, uitloggen, planner, wachtwoord vergeten en herstellen, e-mail bevestigen). */
 const ACCOUNT_POSTS = /^\/(inloggen|registreren|uitloggen|planner|account\/zakelijk|account\/bevestigen|wachtwoord-vergeten|wachtwoord-herstellen|e-mail-bevestigen)\/?$/;
 /** Paden waar de winkelwagen, het groothandelsvenster, het afrekenformulier, de webhook van Mollie en het retourformulier (met intrekken) naartoe posten. */
-const ORDER_POSTS = /^\/(winkelwagen(?:\/planner)?|afrekenen|groothandel|mollie\/webhook\/[^/]+|bestelling\/[^/]+\/(?:retour(?:\/[^/]+\/intrekken)?|pakbon|account))\/?$/;
+const ORDER_POSTS = /^\/(winkelwagen(?:\/(?:planner|offerte))?|afrekenen|groothandel|mollie\/webhook\/[^/]+|bestelling\/[^/]+\/(?:opnieuw|retour(?:\/[^/]+\/intrekken)?|pakbon|account))\/?$/;
 /** Hoeveel producten de suggesties onder het zoekveld tonen. */
 const SUGGESTION_COUNT = 6;
 /** Pad van het aanvraagformulier voor een zakelijk account op de startpagina. */
@@ -86,10 +86,10 @@ const FONT_FILE = /^montserrat-latin-(400|600|700|800)-normal\.woff2$/;
 
 /**
  * Maakt de router van de webshop.
- * @param {{ data?: object, addressLookup?: object, addressGuard?: object, db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, itemImages?: object, previewAllowed?: Function, orders?: object, orderMail?: object, orderInvoices?: object, returns?: object, payments?: object, vies?: object, onOrder?: Function, onReturn?: Function }} options data = de gegevenslaag met de catalogus (storefront-data.js; zonder een eigen met de standaard categorieboom), addressLookup = de opzoekdienst voor adressen (platform/address-lookup.js; zonder vult het afrekenformulier niets automatisch in), addressGuard = de adrescontrole (zonder wordt een Nederlands adres niet gecontroleerd), db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront` en `shopOrdering`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard), itemImages = de afbeeldingen bij artikelen (item-images.js; zonder alleen de adressen van de webshopproducten), previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`), orders = de bestelopslag (web-orders.js; zonder geen bestellen), orderMail = de bevestigingsmail (web-orders-mail.js), orderInvoices = de facturen bij bestellingen (web-order-invoices.js; voor de factuur in de bestelhistorie), orderSlips = de pakbonnen van klanten bij dropshipping (order-slips.js; zonder geen uploaden), returns = de retouropslag (web-returns.js; zonder geen retourneren in het account), guestOrders = de toegang van gasten tot hun bestelling (guest-orders.js; zonder geen bestellen als gast), stockAlerts = de voorraadmeldingen (stock-alerts.js; zonder geen formulier "Mail mij als hij weer binnen is"), searchMisses = de teller van zoektermen zonder resultaat (search-misses.js; zonder wordt dat niet bijgehouden), payments = het online betalen (web-payments.js; zonder alleen op rekening), vies = de controle van btw-nummers bij VIES (vies.js; zonder wordt verlegd zonder die controle), captcha = de onzichtbare captcha (beveiliging/captcha.js; zonder geen controle) en captchaGate(req, tenantId, actie, token) = de controle van een formulier met auditlog (server.js), onOrder(req, order) = aanroep na een geplaatste bestelling (auditlog) en onReturn(req, retour) = aanroep na een aangevraagde retour (auditlog) en onSlip(req, order, action) = aanroep na het uploaden of verwijderen van een pakbon (auditlog) en onGuestAccount(req, order, user) = aanroep nadat een gast na zijn bestelling een account maakte en de bestelling eraan is gekoppeld (auditlog).
+ * @param {{ data?: object, addressLookup?: object, addressGuard?: object, db: object, tenantId: string, settingsFor: Function, accounts?: object, content?: object, itemImages?: object, previewAllowed?: Function, orders?: object, orderMail?: object, orderInvoices?: object, returns?: object, payments?: object, vies?: object, onOrder?: Function, onReturn?: Function }} options data = de gegevenslaag met de catalogus (storefront-data.js; zonder een eigen met de standaard categorieboom), addressLookup = de opzoekdienst voor adressen (platform/address-lookup.js; zonder vult het afrekenformulier niets automatisch in), addressGuard = de adrescontrole (zonder wordt een Nederlands adres niet gecontroleerd), db = database, tenantId = omgeving waarvan de artikelen getoond worden, settingsFor(tenantId) = instellingen van die omgeving (leest `storefront` en `shopOrdering`), accounts = de accountfuncties (shop-accounts.js; zonder geen inloggen), content = de opgeslagen inhoud uit Beheer (shop-content.js; zonder geldt de standaard), itemImages = de afbeeldingen bij artikelen (item-images.js; zonder alleen de adressen van de webshopproducten), previewAllowed(req) = of dit verzoek een beheerder is die het concept mag bekijken (`?voorbeeld=1`), orders = de bestelopslag (web-orders.js; zonder geen bestellen), orderMail = de bevestigingsmail (web-orders-mail.js), orderInvoices = de facturen bij bestellingen (web-order-invoices.js; voor de factuur in de bestelhistorie), orderSlips = de pakbonnen van klanten bij dropshipping (order-slips.js; zonder geen uploaden), returns = de retouropslag (web-returns.js; zonder geen retourneren in het account), guestOrders = de toegang van gasten tot hun bestelling (guest-orders.js; zonder geen bestellen als gast), stockAlerts = de voorraadmeldingen (stock-alerts.js; zonder geen formulier "Mail mij als hij weer binnen is"), searchMisses = de teller van zoektermen zonder resultaat (search-misses.js; zonder wordt dat niet bijgehouden), quoteRequests = de offerteaanvragen vanuit de winkelwagen (quote-requests.js; zonder geen knop Offerte aanvragen), payments = het online betalen (web-payments.js; zonder alleen op rekening), vies = de controle van btw-nummers bij VIES (vies.js; zonder wordt verlegd zonder die controle), captcha = de onzichtbare captcha (beveiliging/captcha.js; zonder geen controle) en captchaGate(req, tenantId, actie, token) = de controle van een formulier met auditlog (server.js), onOrder(req, order) = aanroep na een geplaatste bestelling (auditlog) en onQuoteRequest(req, offerte, klant, gemeld) = aanroep na een offerteaanvraag (auditlog) en onReturn(req, retour) = aanroep na een aangevraagde retour (auditlog) en onSlip(req, order, action) = aanroep na het uploaden of verwijderen van een pakbon (auditlog) en onGuestAccount(req, order, user) = aanroep nadat een gast na zijn bestelling een account maakte en de bestelling eraan is gekoppeld (auditlog).
  * @returns {Function} Express-router, te monteren met app.use('/', router) (zie server.js).
  */
-function createStorefront({ addressLookup = null, addressGuard = null, db, tenantId, settingsFor, accounts = null, content = null, data = createStorefrontData(db), itemImages = null, previewAllowed = () => false, orders = null, orderMail = null, orderInvoices = null, orderSlips = null, returns = null, guestOrders = null, stockAlerts = null, searchMisses = null, payments = null, vies = null, captcha = null, captchaGate = null, onOrder = () => {}, onReturn = () => {}, onSlip = () => {}, onGuestAccount = () => {} }) {
+function createStorefront({ addressLookup = null, addressGuard = null, db, tenantId, settingsFor, accounts = null, content = null, data = createStorefrontData(db), itemImages = null, previewAllowed = () => false, orders = null, orderMail = null, orderInvoices = null, orderSlips = null, returns = null, guestOrders = null, stockAlerts = null, searchMisses = null, quoteRequests = null, payments = null, vies = null, captcha = null, captchaGate = null, onOrder = () => {}, onQuoteRequest = () => {}, onReturn = () => {}, onSlip = () => {}, onGuestAccount = () => {} }) {
   // Een async route die een fout gooit gaat naar de foutafhandeling in plaats van te blijven hangen.
   const router = catchAsync(express.Router());
   const limiter = createRateLimiter({ windowMs: 60 * 1000, max: 240, keyFn: clientKey });
@@ -657,6 +657,46 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
        */
       const priceOptionsOf = (req) => ({ group: groupOf(req), wholesale: wholesaleOf(accounts.viewer(req)) });
 
+      /**
+       * Of bij deze winkelwagen de knop Offerte aanvragen getoond wordt: een ingelogde zakelijke klant met een winkelwagen vanaf het drempelbedrag.
+       * @param {object} req Het verzoek.
+       * @param {object} cart De geprijsde winkelwagen.
+       * @returns {boolean} true als de knop erbij hoort.
+       */
+      const quoteOffered = (req, cart) => {
+        const viewer = accounts.viewer(req);
+        return Boolean(quoteRequests && viewer && viewer.isCustomer && viewer.customerGroup === 'zakelijk' && quoteRequests.qualifies(cart));
+      };
+      const quoteLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 5, keyFn: (req) => `offerte:${(accounts.viewer(req) || {}).id || clientKey(req)}` });
+      // Een zakelijke klant vraagt een offerte aan voor zijn winkelwagen: dat maakt een concept in Offertes (nooit verstuurd) en meldt het aan het bedrijf.
+      router.post('/winkelwagen/offerte', quoteLimiter, express.urlencoded({ extended: false, limit: '2kb' }), async (req, res, next) => {
+        try {
+          if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
+          if (!orderingOn()) return orderingOff(req, res);
+          const viewer = accounts.viewer(req);
+          if (!viewer) return res.redirect(303, '../../inloggen/');
+          if (!quoteRequests || !viewer.isCustomer || viewer.customerGroup !== 'zakelijk') return res.redirect(303, '../');
+          const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
+          if (!quoteRequests.qualifies(cart)) return res.redirect(303, '../');
+          const made = await quoteRequests.request(tenantId, viewer, accounts.businessProfile(viewer), cart);
+          if (made.quote && !made.duplicate) onQuoteRequest(req, made.quote, viewer, made.mailed);
+          res.redirect(303, '../?offerte=ja');
+        } catch (error) { next(error); }
+      });
+      // Een eerdere bestelling opnieuw bestellen: de artikelen die nog te koop zijn komen bij de winkelwagen; prijzen en voorraad worden opnieuw berekend.
+      router.post('/bestelling/:id/opnieuw', express.urlencoded({ extended: false, limit: '2kb' }), (req, res) => {
+        if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
+        if (!orderingOn()) return orderingOff(req, res);
+        const access = orderAccessOf(req, req.params.id);
+        if (!access) return orderAccessDenied(req, res, req.params.id, '../../../inloggen/', '../../../');
+        const wanted = access.order.lines.map((line) => ({ code: String(line.code).toUpperCase(), qty: line.qty }));
+        const priced = orders.priceCart(tenantId, wanted, priceOptionsOf(req));
+        const known = wanted.filter((line) => !priced.missing.map((code) => String(code).toUpperCase()).includes(line.code) && line.qty >= 1);
+        const merged = addCartLines(readCart(req), known);
+        writeCart(req, res, merged.lines);
+        const notOrderable = [...priced.missing, ...merged.skipped];
+        res.redirect(303, `../../../winkelwagen/?opnieuw=${known.length - merged.skipped.length}${notOrderable.length ? `&niet=${encodeURIComponent(notOrderable.join(','))}` : ''}`);
+      });
       router.get('/winkelwagen', (req, res) => {
         if (withSlash(req, res)) return;
         if (!orderingOn()) return orderingOff(req, res);
@@ -671,7 +711,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         const fromPlan = req.query.plan === undefined ? null : { added: Math.max(0, Math.floor(Number(req.query.plan)) || 0), notOrderable: codesOf(req.query.niet), otherUnit: codesOf(req.query.eenheid) };
         const continuePath = lastListPath(req);
         const shipping = cart.lines.length ? shippingHintOf(cart) : null;
-        sendWithGroups(req, res, 200, (groups) => cartPage(cart, groups, req.query.vol === '1' ? 'Je winkelwagen is vol: deze wijziging paste er niet meer bij. Plaats eerst deze bestelling en bestel de rest daarna.' : '', fromPlan, { shipping, paymentOptions: paymentOptionsOf(accounts.viewer(req)), continueHref: continuePath ? `../${continuePath}` : '../' }));
+        sendWithGroups(req, res, 200, (groups) => cartPage(cart, groups, req.query.vol === '1' ? 'Je winkelwagen is vol: deze wijziging paste er niet meer bij. Plaats eerst deze bestelling en bestel de rest daarna.' : '', fromPlan, { shipping, paymentOptions: paymentOptionsOf(accounts.viewer(req)), continueHref: continuePath ? `../${continuePath}` : '../', quoteRequest: quoteOffered(req, cart), quoteSent: req.query.offerte === 'ja', reordered: req.query.opnieuw === undefined ? null : { added: Math.max(0, Math.floor(Number(req.query.opnieuw)) || 0), notOrderable: codesOf(req.query.niet) } }));
       });
       // Het materiaal uit de stuklijst van de planner in één keer in de winkelwagen (formulier uit de planner, velden q:<code>).
       router.post('/winkelwagen/planner', express.urlencoded({ extended: false, limit: '32kb', parameterLimit: 200 }), (req, res) => {
