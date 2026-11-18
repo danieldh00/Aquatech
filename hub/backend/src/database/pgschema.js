@@ -1214,7 +1214,7 @@ const PG_MIGRATIONS = [
   `,
   // 79: werkorder aan een klantrecord (zie db.js).
   `
-  ALTER TABLE work_orders ADD COLUMN customer_id ${TEXT_TYPE} REFERENCES users(id);
+  ALTER TABLE work_orders ADD COLUMN customer_id ${TEXT_TYPE} ${references('users(id)')};
   CREATE INDEX work_orders_customer ON work_orders (tenant_id, customer_id);
   UPDATE work_orders SET customer_id = (SELECT q.customer_id FROM quotes q WHERE q.id = work_orders.quote_id AND q.tenant_id = work_orders.tenant_id
     AND q.customer_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = q.customer_id)) WHERE quote_id IS NOT NULL;
