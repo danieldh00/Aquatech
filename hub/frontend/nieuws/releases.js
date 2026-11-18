@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.20.0',
+      date: '2026-11-18',
+      title: 'Werkorders hangen aan een klant',
+      items: [
+        { text: 'Een werkorder hangt nu echt aan een klant uit de klantenlijst. In de werkorder kies je de klant (adres, e-mail en telefoon worden ingevuld) of ontkoppel je hem weer; de werkorder staat dan ook op de klantkaart.', for: ['werkorders', 'klanten'] },
+        { text: 'Bestaande werkorders zijn gekoppeld via hun offerte of melding. Met *Koppel op naam* in het werkorderoverzicht koppel je de rest als de naam bij precies één klant past (alleen als je op de knop klikt, dus een bewuste ontkoppeling blijft staan); werkorders zonder klant krijgen het label *Niet gekoppeld* en zijn te filteren.', for: ['werkorders', 'klanten'] },
+        { text: 'De AI-koppeling zet bij een werkorder de gekozen klant (klantId) nu ook echt vast.', for: ['werkorders'] },
+      ],
+    },
+    {
       version: '1.19.9',
       date: '2026-11-18',
       title: 'Drempelbedrag voor Offerte aanvragen instelbaar',

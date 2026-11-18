@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.20.0
+
+- Migratie 79: `work_orders.customer_id` (verwijzing naar users, index `(tenant_id, customer_id)`), gevuld uit `quotes.customer_id` en `service_requests.customer_id`. Werkorderdata (`customer.*`) blijft de momentopname voor werkbon en pdf.
+- `workorders.create/createReceived/update` nemen `customerId`; `update` laat de koppeling staan bij `undefined`. API: `customerId` in `PUT /api/workorders/:id` (recht `klanten`, klant moet een actieve klant van de organisatie zijn), `GET /api/workorder-customers`, `POST /api/workorders/link-customers` (`workorders.autoLink`: alleen een eenduidige, exacte naam of bedrijfsnaam, alleen op de knop, nooit automatisch op de achtergrond zodat een bewuste ontkoppeling blijft). Werkorderantwoord heeft `customerId` en `customerAccount`.
+- Klantkaart (`customers.overview`) toont ook werkorders met `customer_id`; verwijderen van een klant ontkoppelt zijn werkorders; MCP `maak_concept_werkorder` en `plan_omzetten` geven `customerId` door. Het klantportaal en de planning zijn ongewijzigd.
+
 ## 1.19.9
 
 - Instelling `shopPayment` krijgt `quoteRequest` (standaard aan) en `quoteRequestMin` (1 tot 1.000.000 euro excl. btw, standaard 500, ongeldig = 500) in `sanitizePayment`; `quoteRequests.offered(tenantId, cart)` vervangt `qualifies(cart)` bij de knop en de route (`qualifies(cart, minimum)` blijft de zuivere controle). Geen migratie.
