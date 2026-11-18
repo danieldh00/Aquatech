@@ -16,6 +16,8 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const os = require('os');
+const { spawn } = require('child_process');
 const { pipeline } = require('stream/promises');
 const { isPg, openSqlite } = require('./database/db');
 const { copyDatabase } = require('./database/db-copy');
@@ -130,6 +132,45 @@ async function createBackup({ db, dir, vault }) {
   return { name, size: stats.size, createdAt: stats.mtime.toISOString() };
 }
 
+/** Prioriteit (nice) van het kindproces dat een back-up maakt: hoger = minder voorrang op de server zelf. */
+const CHILD_NICE = 10;
+
+/**
+ * Maakt een versleutelde back-up in een eigen proces (`node src/backup.js create <map>`), zodat het kopiëren van de hele
+ * database de hoofdthread van de server niet stilzet. Het proces draait met lagere prioriteit; de uitkomst is dezelfde
+ * als bij createBackup. Het proces opent zelf de database (DATABASE_URL of DATA_DIR uit `env`).
+ * @param {{ dir: string, env?: object, script?: string }} options De map voor back-ups, de omgevingsvariabelen en (voor tests) het script.
+ * @returns {Promise<{ name: string, size: number, createdAt: string }>} Naam, grootte en tijdstip van de back-up.
+ * @throws {Error} Als het proces mislukt; de melding bevat het laatste stuk van de foutuitvoer.
+ */
+function createBackupInChild({ dir, env = process.env, script = __filename }) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [script, 'create', dir], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+    let output = '';
+    let errors = '';
+    child.stdout.on('data', (chunk) => { output += chunk; });
+    child.stderr.on('data', (chunk) => { errors = (errors + chunk).slice(-2000); });
+    try {
+      if (child.pid) os.setPriority(child.pid, CHILD_NICE);
+    } catch {
+      // Zonder rechten om de prioriteit te zetten draait het proces gewoon met de normale prioriteit.
+    }
+    child.on('error', (error) => reject(new Error(`Back-upproces starten mislukt: ${error.message}`)));
+    child.on('close', (code) => {
+      if (code !== 0) return reject(new Error(`Back-upproces mislukt (code ${code}): ${errors.trim() || output.trim()}`));
+      const match = /Back-up gemaakt: (.+) \(\d+ bytes\)/.exec(output);
+      const name = match && path.basename(match[1]);
+      if (!name || !NAME.test(name)) return reject(new Error('Back-upproces gaf geen bestandsnaam terug.'));
+      try {
+        const stats = fs.statSync(path.join(dir, name));
+        resolve({ name, size: stats.size, createdAt: stats.mtime.toISOString() });
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+}
+
 /**
  * De back-ups in een map, nieuwste eerst.
  * @param {string} dir De map met back-ups.
@@ -174,7 +215,7 @@ function pruneBackups(dir, keepDays) {
  */
 const isBackupName = (name) => NAME.test(String(name));
 
-module.exports = { createBackup, listBackups, pruneBackups, decryptFile, isBackupName, keyOf };
+module.exports = { createBackup, createBackupInChild, listBackups, pruneBackups, decryptFile, isBackupName, keyOf };
 
 if (require.main === module) {
   const [command, source, target] = process.argv.slice(2);
