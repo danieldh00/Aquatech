@@ -76,7 +76,8 @@ prepare_source() {
   if [[ -f "$SRC_DIR/supabase-root-2021.crt" ]]; then
     # Systeemcertificaten + de root-CA van Supabase (zoals de app zelf doet).
     docker cp "$SRC_DIR/supabase-root-2021.crt" "$PG_CONTAINER:/tmp/supabase-ca.crt" >/dev/null
-    docker exec "$PG_CONTAINER" sh -c 'cat /etc/ssl/certs/ca-certificates.crt /tmp/supabase-ca.crt > /tmp/supabase-bundle.crt'
+    # Niet elk postgres-image heeft een systeembundel (postgres:17 op Debian trixie niet): dan volstaat de root-CA van Supabase.
+    docker exec "$PG_CONTAINER" sh -c 'if [ -f /etc/ssl/certs/ca-certificates.crt ]; then cat /etc/ssl/certs/ca-certificates.crt /tmp/supabase-ca.crt; else cat /tmp/supabase-ca.crt; fi > /tmp/supabase-bundle.crt'
   else
     log "Waarschuwing: root-CA van Supabase niet meegekomen; verbinding met sslmode=require (versleuteld, certificaat niet gecontroleerd)."
     sslmode="require"
