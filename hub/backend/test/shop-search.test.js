@@ -42,6 +42,9 @@ test('exacte artikelcode staat bovenaan, ook als de naam van een ander product d
   assert.deepStrictEqual(codesOf('mp2000'), ['MP2000', 'MPX']);
   assert.strictEqual(codesOf('MP-2000')[0], 'MP2000', 'streepje of spatie in de code maakt niet uit');
   assert.strictEqual(codesOf('spr-10')[0], 'SPR-10');
+  assert.deepStrictEqual(codesOf('SPR10'), ['SPR-10'], 'zonder streepje');
+  assert.deepStrictEqual(codesOf('spr 10'), ['SPR-10'], 'met spatie');
+  assert.deepStrictEqual(codesOf('kop32'), ['KOP'], 'variantcode zonder streepje');
 });
 
 test('een leeg of onbruikbaar zoekwoord geeft niets', () => {

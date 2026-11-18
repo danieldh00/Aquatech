@@ -95,13 +95,15 @@ function withinDistance(left, right, limit) {
  * Bereidt één zoekbare eenheid voor (een product, of een product met één variant): genormaliseerde naam, code en woorden.
  * @param {object} product Het hoofdartikel (code, name, categoryName).
  * @param {?object} variant De variant (code, label) of null.
- * @returns {{ name: string, code: string, haystack: string, tokens: string[], inStock: boolean }} De eenheid.
+ * @returns {{ name: string, code: string, compactCode: string, haystack: string, tokens: string[], inStock: boolean }} De eenheid.
  */
 function candidateOf(product, variant) {
   const name = normalize(product.name);
   const code = normalize(variant ? variant.code : product.code);
-  const haystack = normalize(`${product.name} ${product.code} ${product.categoryName || ''} ${variant ? `${variant.code} ${variant.label}` : ''}`);
-  return { name, code, haystack, tokens: haystack.split(' ').filter(Boolean), inStock: variant ? Boolean(variant.inStock) : Boolean(product.inStock) };
+  // Een code met streepje of spatie (SPR-10) is ook zonder te vinden (SPR10): de samengevoegde code is een eigen woord.
+  const compactCode = code.replace(/ /g, '');
+  const haystack = normalize(`${product.name} ${product.code} ${product.categoryName || ''} ${variant ? `${variant.code} ${variant.label}` : ''} ${compactCode}`);
+  return { name, code, compactCode, haystack, tokens: haystack.split(' ').filter(Boolean), inStock: variant ? Boolean(variant.inStock) : Boolean(product.inStock) };
 }
 
 /**
@@ -113,7 +115,7 @@ function candidateOf(product, variant) {
  * @returns {number} 0 als het niet past, anders een score (hoger is beter).
  */
 function wordScore(word, candidate, wide) {
-  if (candidate.code === word) return 100;
+  if (candidate.code === word || candidate.compactCode === word) return 100;
   if (candidate.tokens.includes(word)) return 40;
   if (candidate.tokens.some((token) => token.startsWith(word))) return 30;
   if (candidate.haystack.includes(word)) return 20;
@@ -155,8 +157,8 @@ function searchTier(products, words, phrase, onlyInStock, wide) {
         total += score;
       }
       if (!allMatch) continue;
-      if (candidate.code === phrase || candidate.code === compact) total += 1000;
-      else if (candidate.code.startsWith(compact)) total += 400;
+      if (candidate.code === phrase || candidate.compactCode === compact) total += 1000;
+      else if (candidate.compactCode.startsWith(compact)) total += 400;
       const productName = normalize(product.name);
       if (productName.startsWith(phrase)) total += 100;
       if (words.every((word) => productName.includes(word))) total += 50;
