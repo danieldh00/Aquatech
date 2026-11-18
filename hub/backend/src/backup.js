@@ -138,6 +138,20 @@ const CHILD_NICE = 10;
 const CHILD_TIMEOUT_MS = 30 * 60 * 1000;
 
 /**
+ * Ruimt de tijdelijke bestanden op die een afgebroken back-up achterlaat (de onversleutelde kopie `.tmp-<uuid>.db` en
+ * `<naam>.db.enc.part`). Alleen veilig als er geen andere back-up tegelijk loopt (de server maakt er één tegelijk).
+ * @param {string} dir De map met back-ups.
+ * @returns {void}
+ */
+function removeLeftovers(dir) {
+  let entries = [];
+  try { entries = fs.readdirSync(dir); } catch { return; }
+  for (const entry of entries) {
+    if (/^\.tmp-[0-9a-f-]+\.db$/.test(entry) || /\.db\.enc\.part$/.test(entry)) fs.rmSync(path.join(dir, entry), { force: true });
+  }
+}
+
+/**
  * Maakt een versleutelde back-up in een eigen proces (`node src/backup.js create <map>`), zodat het kopiëren van de hele
  * database de hoofdthread van de server niet stilzet. Het proces draait met lagere prioriteit; de uitkomst is dezelfde
  * als bij createBackup. Het proces opent zelf de database (DATABASE_URL of DATA_DIR uit `env`).
@@ -162,7 +176,10 @@ function createBackupInChild({ dir, env = process.env, script = __filename, time
     child.on('error', (error) => { clearTimeout(timer); reject(new Error(`Back-upproces starten mislukt: ${error.message}`)); });
     child.on('close', (code) => {
       clearTimeout(timer);
-      if (timedOut) return reject(new Error(`Back-upproces gestopt na ${Math.round(timeoutMs / 1000)} seconden zonder resultaat.`));
+      if (timedOut) {
+        removeLeftovers(dir);
+        return reject(new Error(`Back-upproces gestopt na ${Math.round(timeoutMs / 1000)} seconden zonder resultaat.`));
+      }
       if (code !== 0) return reject(new Error(`Back-upproces mislukt (code ${code}): ${errors.trim() || output.trim()}`));
       const match = /Back-up gemaakt: (.+) \(\d+ bytes\)/.exec(output);
       const name = match && path.basename(match[1]);

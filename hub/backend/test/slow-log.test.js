@@ -234,10 +234,16 @@ test('back-up in een eigen proces: een script dat niets teruggeeft wordt een fou
 
 test('back-up in een eigen proces: een hangend proces wordt na de maximale duur gestopt', async () => {
   const script = path.join(os.tmpdir(), `aquatech-hang-${process.pid}.js`);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aquatech-hang-dir-'));
   fs.writeFileSync(script, 'setInterval(() => {}, 1000);');
+  const plaintext = path.join(dir, '.tmp-0f8fad5b-d9cb-469f-a165-70867728950e.db');
+  fs.writeFileSync(plaintext, 'onversleutelde kopie');
+  fs.writeFileSync(path.join(dir, 'aquatech-20261118-040000.db.enc.part'), 'half');
   try {
-    await assert.rejects(createBackupInChild({ dir: os.tmpdir(), script, timeoutMs: 200 }), /gestopt na/);
+    await assert.rejects(createBackupInChild({ dir, script, timeoutMs: 200 }), /gestopt na/);
+    assert.deepStrictEqual(fs.readdirSync(dir), [], 'na een time-out blijven er geen tijdelijke bestanden achter');
   } finally {
     fs.rmSync(script, { force: true });
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });
