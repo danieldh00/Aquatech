@@ -267,6 +267,7 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
           if (!order || order.status !== 'nieuw' || !order.pay || order.pay.reminderAt || order.pay.status === 'betaald') continue;
           const deadline = order.reservedUntil;
           if (deadline ? deadline <= nowIso : order.createdAt <= fallback) continue;
+          if (!orders.reminderAllowed(tenantId, order)) continue;
           if (order.pay.id && config.apiKey) {
             const out = await sync(tenantId, id);
             if (out.becamePaid || (out.order && out.order.pay.status === 'betaald')) continue;

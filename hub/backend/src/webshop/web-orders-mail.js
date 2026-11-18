@@ -291,6 +291,13 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody, guestLink
   }
 
   /**
+   * Maakt een naam geschikt voor de aanhef van een ongevraagde mail: geen links, regeleinden of lange tekst.
+   * @param {string} name De naam uit de bestelling.
+   * @returns {string} De opgeschoonde naam, of 'klant'.
+   */
+  const safeName = (name) => String(name || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/https?:\/\/\S*|www\.\S*|\S+@\S+/gi, '').replace(/\s+/g, ' ').trim().slice(0, 60) || 'klant';
+
+  /**
    * Stuurt één herinnering bij een online bestelling waarvan de betaling niet is afgerond: wat er aan de hand is, tot wanneer de
    * artikelen gereserveerd blijven en een link om af te rekenen (de persoonlijke link bij een gastbestelling, anders de
    * bestelpagina met Nu betalen). Zonder webadres uit Beheer wordt er niets gestuurd: een herinnering zonder link helpt niemand.
@@ -311,7 +318,7 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody, guestLink
     const failed = order.pay && order.pay.status === 'mislukt';
     const until = order.reservedUntil ? new Date(order.reservedUntil).toLocaleString('nl-NL', { dateStyle: 'long', timeStyle: 'short', timeZone: 'Europe/Amsterdam' }) : '';
     const mail = mailBody(profile, [
-      `Beste ${order.customer.name},`,
+      `Beste ${safeName(order.customer.name)},`,
       failed ? `De betaling van je bestelling ${order.number} is niet gelukt, dus we hebben hem nog niet kunnen verwerken.` : `Je hebt bestelling ${order.number} geplaatst, maar de betaling is nog niet afgerond, dus we hebben hem nog niet kunnen verwerken.`,
       `${until ? `We houden de artikelen voor je gereserveerd tot ${until}. ` : ''}Reken je bestelling af (${EUR.format(order.totals.total)}) via deze link:\n${link}`,
       'Heb je al betaald, of wil je de bestelling niet meer? Dan hoef je niets te doen: een niet betaalde bestelling vervalt vanzelf. Antwoord op deze mail als je hulp nodig hebt. Je krijgt deze herinnering één keer.',

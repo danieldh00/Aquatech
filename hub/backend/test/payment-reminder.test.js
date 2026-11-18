@@ -22,6 +22,15 @@ async function placeOpen(world, shopper) {
 }
 
 /**
+ * Bevestigt het e-mailadres van alle testklanten (een herinnering gaat alleen naar een bevestigd adres).
+ * @param {object} world De testopzet.
+ * @returns {void}
+ */
+function verifyAll(world) {
+  world.db.prepare('UPDATE users SET email_verified_at = ? WHERE email IS NOT NULL AND email <> ?').run(new Date().toISOString(), '');
+}
+
+/**
  * Zet een bestelling terug in de tijd (aanmaakmoment en reserveringstermijn schuiven mee).
  * @param {object} world De testopzet.
  * @param {string} orderId Het bestel-id.
@@ -38,6 +47,7 @@ function backdate(world, orderId, hours) {
 
 test('herinnering na een uur: één mail met link en reserveringstijd, daarna nooit meer', async () => {
   const world = await setup({ mollie: true });
+  verifyAll(world);
   const [shopper] = world.shoppers;
   const { id } = await placeOpen(world, shopper);
   assert.deepStrictEqual(await world.app.locals.webPaymentsRemind(), { sent: 0 }, 'binnen het uur nog niets');
@@ -57,6 +67,7 @@ test('herinnering na een uur: één mail met link en reserveringstijd, daarna no
 
 test('geen herinnering voor een betaalde bestelling, een verlopen reservering of als het is uitgezet', async () => {
   const world = await setup({ mollie: true });
+  verifyAll(world);
   const [first, second] = world.shoppers;
   const paid = await placeOpen(world, first);
   world.mollie.set(paid.paymentId, 'paid');
@@ -77,6 +88,7 @@ test('geen herinnering voor een betaalde bestelling, een verlopen reservering of
 
 test('een mail die niet lukt wordt de volgende ronde opnieuw geprobeerd; een mislukte betaling krijgt een eigen tekst', async () => {
   const world = await setup({ mollie: true });
+  verifyAll(world);
   const [shopper] = world.shoppers;
   const { id, paymentId } = await placeOpen(world, shopper);
   world.mollie.set(paymentId, 'failed');
@@ -91,6 +103,7 @@ test('een mail die niet lukt wordt de volgende ronde opnieuw geprobeerd; een mis
 
 test('een gastbestelling krijgt de persoonlijke link, zonder webadres in Beheer gaat er niets uit', async () => {
   const world = await setup({ mollie: true });
+  verifyAll(world);
   const client = createClient(world.base);
   await postForm(world.base, client, '/winkelwagen/', { action: 'add', code: 'BUS', qty: '1' });
   const placed = await postCheckout(world.base, client, { ...PERSON, guest: 'ja', paymentMethod: 'online' });
@@ -105,6 +118,7 @@ test('een gastbestelling krijgt de persoonlijke link, zonder webadres in Beheer 
 
 test('een bestelling die al een herinnering kreeg blokkeert de selectie niet: een latere bestelling komt toch aan de beurt', async () => {
   const world = await setup({ mollie: true });
+  verifyAll(world);
   const [first, second] = world.shoppers;
   const early = await placeOpen(world, first);
   const late = await placeOpen(world, second);
@@ -113,4 +127,19 @@ test('een bestelling die al een herinnering kreeg blokkeert de selectie niet: ee
   backdate(world, late.id, 2);
   assert.deepStrictEqual(await world.app.locals.webPaymentsRemind(), { sent: 1 }, 'alleen de nieuwe bestelling');
   assert.strictEqual(mailsWith(world.sent, SUBJECT).length, 2);
+});
+
+test('geen herinnering naar een niet bevestigd accountadres, en hoogstens één per adres per 24 uur', async () => {
+  const world = await setup({ mollie: true });
+  const [shopper] = world.shoppers;
+  const first = await placeOpen(world, shopper);
+  const second = await placeOpen(world, shopper);
+  backdate(world, first.id, 3);
+  backdate(world, second.id, 2);
+  assert.deepStrictEqual(await world.app.locals.webPaymentsRemind(), { sent: 0 }, 'adres niet bevestigd');
+  assert.strictEqual(mailsWith(world.sent, SUBJECT).length, 0);
+  verifyAll(world);
+  assert.deepStrictEqual(await world.app.locals.webPaymentsRemind(), { sent: 1 }, 'twee bestellingen, één adres: één herinnering');
+  assert.deepStrictEqual(await world.app.locals.webPaymentsRemind(), { sent: 0 });
+  assert.strictEqual(mailsWith(world.sent, SUBJECT).length, 1);
 });
