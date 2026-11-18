@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.19.8',
+      date: '2026-11-18',
+      title: 'Eigen koopfunnelteller in de webshop',
+      items: [
+        { text: 'Webshopbestellingen heeft een tabblad Funnel: hoe vaak bezoekers een productpagina bekeken, iets in de winkelwagen legden, afrekenen openden, bestelden en online betaalden, met het aandeel ten opzichte van de vorige stap, per periode (7, 30, 90 dagen of 12 maanden) en met Excel-export. Het zijn aantallen, geen unieke bezoekers, en er wordt nooit bewaard wie het was.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.19.7',
       date: '2026-11-18',
       title: 'Offerte aanvragen en opnieuw bestellen in de webshop',
