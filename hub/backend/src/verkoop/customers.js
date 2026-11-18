@@ -66,10 +66,11 @@ function createCustomerStore(db) {
     const workOrders = wanted.workOrders
       ? prepare(`SELECT w.id, w.number, w.status, w.title, w.planned_date FROM work_orders w
           WHERE w.tenant_id = ? AND w.deleted_at IS NULL AND (
-            w.quote_id IN (SELECT q.id FROM quotes q WHERE q.tenant_id = w.tenant_id AND q.customer_id = ? AND q.deleted_at IS NULL)
+            w.customer_id = ?
+            OR w.quote_id IN (SELECT q.id FROM quotes q WHERE q.tenant_id = w.tenant_id AND q.customer_id = ? AND q.deleted_at IS NULL)
             OR EXISTS (SELECT 1 FROM service_requests sr WHERE sr.tenant_id = w.tenant_id AND sr.work_order_id = w.id AND sr.customer_id = ?))
           ORDER BY w.updated_at DESC, w.id LIMIT ${OVERVIEW_LIMIT}`)
-        .all(tenantId, customerId, customerId).map((row) => ({ id: row.id, number: row.number, status: row.status, title: row.title, plannedDate: row.planned_date || null }))
+        .all(tenantId, customerId, customerId, customerId).map((row) => ({ id: row.id, number: row.number, status: row.status, title: row.title, plannedDate: row.planned_date || null }))
       : null;
     const invoices = wanted.invoices
       ? prepare(`SELECT id, number, status, kind, total, invoice_date, due_date FROM invoices

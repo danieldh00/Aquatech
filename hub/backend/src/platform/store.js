@@ -763,6 +763,7 @@ function createStore(db) {
       prepare('UPDATE service_requests SET customer_id = NULL WHERE customer_id = ?').run(user.id);
       prepare('UPDATE service_requests SET handled_by = NULL WHERE handled_by = ?').run(user.id);
       prepare('UPDATE work_orders SET assignee_id = NULL WHERE assignee_id = ?').run(user.id);
+      prepare('UPDATE work_orders SET customer_id = NULL WHERE customer_id = ?').run(user.id);
       prepare('UPDATE work_order_photos SET uploaded_by = NULL WHERE uploaded_by = ?').run(user.id);
       // Geboekte uren en materiaal blijven (urenstaat, voorraad); de naam staat in user_name.
       for (const table of ['work_order_hours', 'work_order_materials']) {

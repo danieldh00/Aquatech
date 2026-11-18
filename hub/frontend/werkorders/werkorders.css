@@ -80,3 +80,6 @@ table.st-lines .st-act input { width: 70px; margin-right: 4px; }
 .nc-good { color: var(--at-green-dark); }
 .nc-bad { color: var(--at-danger); }
 .nc-materials { margin: 8px 0; }
+
+/* Werkorder zonder klantrecord */
+.unlinked-mark { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 10px; font-size: 11px; font-weight: 600; color: var(--at-warn); border: 1px solid var(--at-warn); white-space: nowrap; }

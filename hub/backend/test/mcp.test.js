@@ -773,6 +773,8 @@ test('maak_concept_werkorder: nieuwe werkorder zonder offerte, vraagt terug bij 
   assert.strictEqual(order.assigneeId || null, null);
   assert.strictEqual(order.data.customer.name, 'Jan Tuinman');
   assert.match(order.data.customer.address, /Tuinstraat 1/);
+  assert.strictEqual(order.customerId, customer.id, 'de werkorder hangt aan het klantrecord');
+  assert.strictEqual(result.klantId, customer.id);
   assert.deepStrictEqual(order.data.steps.map((step) => [step.title, step.hours]), [['Leidingen leegblazen', 1.5], ['Computer afkoppelen', 0]]);
   assert.deepStrictEqual(order.data.materials.map((material) => [material.code, material.qty, material.unit]), [['PE-25', 10, 'm']]);
   assert.match(order.data.internalNote, /AI-koppeling/);

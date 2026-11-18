@@ -172,7 +172,7 @@ function findArticle(articles, code) {
  * Maakt de tools van de MCP-server.
  * @param {object} ctx { can(user, recht), searchCustomers(req, zoektekst), getCustomer(req, id), createCustomer(req, invoer),
  *   lookupAddress(invoer), verifyAddress(tekst), articleChoices(tenantId), quoteProfile(req), createDraft(req, data, customerId), quoteUrl(req, id),
- *   appUrl(req, pad), buildPlan(req, invoer), savePlan(req, planId, data), getPlan(req, planId), summarizePlan(req, data), periodLog(req, { from, to, userId, limit }), openInvoiceRows(req, limit), storeReport(req, bestandsnaam, buffer) (geeft { error } als het niet past), maxReportRows (voor tests), createWorkOrder(req, data), planLines(req, planData, profiel), findWorkOrder(req, nummer), workLogOf(req, werkorderId), bookHours(req, werkorderId, invoer), bookMaterial(req, werkorderId, invoer), today(), customerOverview(req, klantId, gevraagd), defaultPaymentDays(req), customerBalance(req, klantId), priceCart(req, regels, klant),
+ *   appUrl(req, pad), buildPlan(req, invoer), savePlan(req, planId, data), getPlan(req, planId), summarizePlan(req, data), periodLog(req, { from, to, userId, limit }), openInvoiceRows(req, limit), storeReport(req, bestandsnaam, buffer) (geeft { error } als het niet past), maxReportRows (voor tests), createWorkOrder(req, data, klantId), planLines(req, planData, profiel), findWorkOrder(req, nummer), workLogOf(req, werkorderId), bookHours(req, werkorderId, invoer), bookMaterial(req, werkorderId, invoer), today(), customerOverview(req, klantId, gevraagd), defaultPaymentDays(req), customerBalance(req, klantId), priceCart(req, regels, klant),
  *   documentStatus(req, soort, nummer, opties), openInvoices(req, opties), audit(req, actie, detail) }.
  * @returns {{ list: Function, has: Function, call: Function }} De tools.
  */
@@ -686,12 +686,14 @@ function createMcpTools(ctx) {
         const rawMaterials = Array.isArray(args.materiaal) ? args.materiaal : [];
         if (rawSteps.length > MAX_ORDER_ITEMS || rawMaterials.length > MAX_ORDER_ITEMS) return errorOf(`Hoogstens ${MAX_ORDER_ITEMS} stappen en ${MAX_ORDER_ITEMS} materiaalregels.`);
         let customer = { name: '', contact: '', address: '', email: '', phone: '' };
+        let customerId = null;
         const wantedId = cleanText(args.klantId, 64);
         if (wantedId) {
           // De klantkaart (adres, e-mail, telefoon) is voor medewerkers met het recht klanten; anderen geven de klant als tekst op.
           if (!ctx.can(req.user, 'klanten')) return errorOf('Je mag in AquaTech geen klantgegevens opzoeken. Geef de klant als tekst op (klant.naam) in plaats van klantId.');
           const account = ctx.getCustomer(req, wantedId);
           if (!account || account.disabled) return errorOf('Deze klant bestaat niet (meer). Zoek opnieuw met zoek_klant.');
+          customerId = account.id;
           customer = { name: account.companyName || account.displayName, contact: account.companyName ? account.displayName : '', address: account.address || '', email: account.email || '', phone: account.phone || '' };
         } else if (args.klant && typeof args.klant === 'object') {
           customer = { ...customer, name: cleanText(args.klant.naam, 200), email: cleanText(args.klant.email, 200), phone: cleanText(args.klant.telefoon, 40) };
@@ -736,12 +738,14 @@ function createMcpTools(ctx) {
         }
         if (!withinLimit(workOrdersPerHour, req) || !withinLimit(workOrdersPerDay, req)) return errorOf('Te veel werkorders via de AI-koppeling in korte tijd. Probeer het later opnieuw.');
         const internalNote = ['Aangemaakt via de AI-koppeling: controleer stappen en materiaal.', ...(!customer.name ? ['Geen klant gekoppeld.'] : []), ...notes].join('\n');
-        const workOrder = ctx.createWorkOrder(req, { title, customer, instructions: cleanText(args.instructies, 4000), steps, materials, internalNote });
+        const workOrder = ctx.createWorkOrder(req, { title, customer, instructions: cleanText(args.instructies, 4000), steps, materials, internalNote }, customerId);
         ctx.audit(req, 'werkorder_concept_via_ai', { workOrderId: workOrder.id, number: workOrder.number, stappen: steps.length, materiaal: materials.length, openPunten: questions.length });
         return resultOf({
           werkorderId: workOrder.id, nummer: workOrder.number, status: workOrder.status, link: ctx.appUrl(req, `werkorders/?id=${encodeURIComponent(workOrder.id)}`),
           stappen: steps.length, materiaalregels: materials.length, ...(notes.length ? { aandachtspunten: notes } : {}),
+          ...(customerId ? { klantId: customerId } : {}),
           ...(customer.name ? {} : { let_op: 'Geen klant op de werkorder.' }),
+          ...(customer.name && !customerId ? { let_op_klant: 'De klant staat alleen als tekst op de werkorder, niet gekoppeld aan een klantrecord. Gebruik klantId uit zoek_klant om te koppelen.' } : {}),
           melding: 'De werkorder staat klaar met status Nieuw (niet ingepland, geen uitvoerder). Controleer hem in AquaTech en plan hem daar in.',
         });
       },
@@ -941,7 +945,7 @@ function createMcpTools(ctx) {
         const cappedMaterials = materials.slice(0, MAX_ORDER_ITEMS);
         if (materials.length > MAX_ORDER_ITEMS) skipped.push(`${materials.length - MAX_ORDER_ITEMS} materiaalregels (te veel voor één werkorder)`);
         const internalNote = [sourceNote, ...(!customer.name ? ['Geen klant gekoppeld.'] : []), ...(skipped.length ? [`Niet op de werkorder gezet: ${skipped.join(', ')}.`] : []), ...warnings].join('\n');
-        const workOrder = ctx.createWorkOrder(req, { title, customer, instructions: `Uitvoering beregeningsplan. Plan: ${planUrl}`, steps, materials: cappedMaterials, internalNote });
+        const workOrder = ctx.createWorkOrder(req, { title, customer, instructions: `Uitvoering beregeningsplan. Plan: ${planUrl}`, steps, materials: cappedMaterials, internalNote }, customerId);
         ctx.audit(req, 'werkorder_concept_via_ai', { workOrderId: workOrder.id, number: workOrder.number, stappen: steps.length, materiaal: cappedMaterials.length, planId: plan.id, via: 'plan' });
         return resultOf({
           werkorderId: workOrder.id, nummer: workOrder.number, status: workOrder.status, link: ctx.appUrl(req, `werkorders/?id=${encodeURIComponent(workOrder.id)}`), planLink: planUrl,
