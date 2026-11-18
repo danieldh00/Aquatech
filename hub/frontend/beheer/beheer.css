@@ -28,10 +28,9 @@ input, select { font: inherit; font-family: var(--at-font); padding: 7px 10px; b
 .tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; box-sizing: border-box; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
 /* Gedeeld tabelpatroon voor smalle schermen: een tabel scrolt horizontaal binnen zijn eigen .tablewrap en duwt de kaart nooit breder.
    Een rasterkolom of flexkind krimpt standaard niet onder de breedte van zijn inhoud (min-width: auto); daarom mogen kaarten,
-   panelen en rasterkinderen hier wel krimpen. Losse kleine tabellen (.mini) scrollen zelf. */
+   panelen en rasterkinderen hier wel krimpen. */
 .card, .card-form, .tabpane, .cols > *, .card-grid > *, .form-grid > *, .do-layout > *, .row > * { min-width: 0; }
 .card-form, .card { max-width: 100%; box-sizing: border-box; }
-table.mini { display: block; max-width: 100%; overflow-x: auto; }
 table.grid { width: 100%; border-collapse: collapse; font-size: 14px; }
 table.grid th, table.grid td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; white-space: nowrap; }
 table.grid th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); background: #fafbfc; }
