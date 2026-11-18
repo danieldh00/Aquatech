@@ -122,4 +122,7 @@ test('meervouden met verdubbelde medeklinker of klinker en z of v', () => {
   assert.deepStrictEqual(stemsOf('pomp'), []);
   assert.deepStrictEqual(codesOf('magneetkleppen'), ['KLEP1']);
   assert.deepStrictEqual(codesOf('kranen'), ['KOGEL']);
+  // Een vorm van drie tekens telt alleen als begin van een woord: koppen → kop vindt Koppeling niet als deelreeks midden in een woord.
+  assert.deepStrictEqual(codesOf('koppen'), ['KOP'], 'kop is het begin van Koppeling');
+  assert.deepStrictEqual(codesOf('oppen'), [], 'opp zit midden in koppeling en telt niet');
 });

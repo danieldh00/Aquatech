@@ -129,16 +129,17 @@ function candidateOf(product, variant) {
  * @param {string} word Het genormaliseerde zoekwoord.
  * @param {object} candidate De eenheid (uit candidateOf).
  * @param {boolean} wide Of verwante woorden en tikfouten meetellen.
+ * @param {string[]} [forms] De mogelijke enkelvoudsvormen van het zoekwoord (stemsOf, één keer per zoekopdracht berekend).
  * @returns {number} 0 als het niet past, anders een score (hoger is beter).
  */
-function wordScore(word, candidate, wide) {
+function wordScore(word, candidate, wide, forms = []) {
   if (candidate.code === word || candidate.compactCode === word) return 100;
   if (candidate.tokens.includes(word)) return 40;
   if (candidate.tokens.some((token) => token.startsWith(word))) return 30;
   if (candidate.haystack.includes(word)) return 20;
   if (!wide) return 0;
-  const forms = stemsOf(word);
-  if (forms.some((form) => candidate.haystack.includes(form))) return 18;
+  // Een vorm van drie tekens (koppen → kop) telt alleen als begin van een woord, anders vindt kop ook Koppeling.
+  if (forms.some((form) => (form.length > 3 ? candidate.haystack.includes(form) : candidate.tokens.some((token) => token.startsWith(form))))) return 18;
   for (const form of [word, ...forms]) {
     for (const related of SYNONYMS.get(form) || []) {
       if (candidate.haystack.includes(related)) return 14;
@@ -177,9 +178,10 @@ function indexOf(products) {
  * @param {string} phrase Alle woorden achter elkaar, genormaliseerd.
  * @param {boolean} onlyInStock Of de gevonden eenheid op voorraad moet zijn.
  * @param {boolean} wide Of verwante woorden en tikfouten meetellen.
+ * @param {Map<string, string[]>} formsByWord Per zoekwoord de mogelijke enkelvoudsvormen.
  * @returns {{ product: object, score: number }[]} De gevonden producten met score, nog ongesorteerd.
  */
-function searchTier(index, words, phrase, onlyInStock, wide) {
+function searchTier(index, words, phrase, onlyInStock, wide, formsByWord) {
   // Een code met streepjes of spaties (MP-2000, mp 2000) is na het normaliseren los van elkaar; samen vergelijken we hem met de code.
   const compact = words.join('');
   const found = [];
@@ -190,7 +192,7 @@ function searchTier(index, words, phrase, onlyInStock, wide) {
       let total = 0;
       let allMatch = true;
       for (const word of words) {
-        const score = wordScore(word, candidate, wide);
+        const score = wordScore(word, candidate, wide, formsByWord.get(word));
         if (!score) { allMatch = false; break; }
         total += score;
       }
@@ -220,11 +222,12 @@ function searchProducts(products, query, { onlyInStock = false, limit = MAX_RESU
   const words = phrase.split(' ').filter(Boolean);
   if (!words.length) return { products: [], widened: false };
   const index = indexOf(products);
+  const formsByWord = new Map(words.map((word) => [word, stemsOf(word)]));
   let widened = false;
-  let found = searchTier(index, words, phrase, onlyInStock, false);
+  let found = searchTier(index, words, phrase, onlyInStock, false, formsByWord);
   if (!found.length) {
     widened = true;
-    found = searchTier(index, words, phrase, onlyInStock, true);
+    found = searchTier(index, words, phrase, onlyInStock, true, formsByWord);
   }
   found.sort((left, right) => right.score - left.score || left.product.name.localeCompare(right.product.name, 'nl'));
   return { products: found.slice(0, limit).map((entry) => entry.product), widened };
