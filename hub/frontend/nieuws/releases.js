@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.21.0',
+      date: '2026-11-18',
+      title: 'Mail-opmaak en mailteksten zelf instellen',
+      items: [
+        { text: 'Nieuw: Beheer > Mail-opmaak. Stel het logo, de kleuren en de voettekst van je e-mails in en pas per soort mail het onderwerp en de tekst aan (orderbevestiging, verzending, retour, betalingsherinnering, account, inkooporder). Je ziet meteen een voorbeeld en kunt een testmail naar jezelf sturen.', for: ['beheer'] },
+        { text: 'Alle mails aan klanten staan nu in de huisstijl van je organisatie, met je logo erin.' },
+      ],
+    },
+    {
       version: '1.20.2',
       date: '2026-11-18',
       title: 'Betalingsherinnering ook voor gasten en inkooporders mailen',
