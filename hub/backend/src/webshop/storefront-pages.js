@@ -8,6 +8,7 @@ const { version: SHOP_VERSION } = require('../../package.json');
 const { DEFAULT_SITE } = require('./shop-content');
 const { LEGAL_SLUGS, LEGAL_TITLES } = require('./legal-pages');
 const Seo = require('./seo');
+const { blocksOf, faqEntriesOfBlocks } = require('./page-blocks');
 const Analytics = require('./shop-analytics');
 
 const SHOP_NAME = 'Aquatechshop.nl';
@@ -835,19 +836,88 @@ function aboutPage(groups) {
 }
 
 /**
- * Een vaste pagina uit Beheer (zoals Over ons): titel en tekst.
- * @param {object} page De pagina (slug, title, description, body).
- * @param {object[]} groups Alle hoofdcategorieën (voor menu en voet).
- * @param {string} root Relatief pad naar de shop-startpagina ('../' of '../../').
+ * Zoekt de artikelen voor een artikelblok: eigen artikelcodes (een variantcode geeft het hoofdartikel) of een categorie met haar subcategorieën.
+ * @param {object} block Het artikelblok (mode, codes, category, limit).
+ * @param {object} catalog De catalogus (zie buildCatalog).
+ * @returns {object[]} De artikelen (maximaal block.limit, alleen bestaande en niet-dubbele).
+ */
+function productsOfBlock(block, catalog) {
+  if (block.mode === 'category') {
+    const slugs = new Set([block.category]);
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const category of catalog.categories) {
+        if (category.parentSlug && slugs.has(category.parentSlug) && !slugs.has(category.slug)) { slugs.add(category.slug); grew = true; }
+      }
+    }
+    return catalog.products.filter((product) => slugs.has(product.categorySlug)).slice(0, block.limit);
+  }
+  const byCode = new Map(catalog.products.map((product) => [product.code, product]));
+  const bySlug = new Map(catalog.products.map((product) => [product.slug, product]));
+  for (const variant of catalog.variantProducts || []) {
+    if (!byCode.has(variant.code) && bySlug.has(variant.parentSlug)) byCode.set(variant.code, bySlug.get(variant.parentSlug));
+  }
+  const found = [...new Set(block.codes.map((code) => byCode.get(code)).filter(Boolean))];
+  return found.slice(0, block.limit);
+}
+
+/**
+ * Tekent de blokken van een pagina (tekst, afbeelding, artikelen, vragen, knop).
+ * @param {object[]} blocks De blokken (zie page-blocks.js).
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @param {object} catalog De catalogus voor de artikelblokken.
+ * @returns {string} HTML van de blokken.
+ */
+function renderPageBlocks(blocks, root, catalog) {
+  return blocks.map((block) => {
+    if (block.type === 'text') return `<div class="cms-text">${block.html.replace(/<img src="media:([0-9a-f-]{36})"/g, (_, id) => `<img loading="lazy" src="${root}media/${id}"`)}</div>`;
+    if (block.type === 'image') {
+      const image = `<img loading="lazy" src="${imageSrc(root, block.image)}" alt="${escapeHtml(block.alt)}">`;
+      const href = linkHref(block.link, root, '');
+      return `<figure class="cms-image">${href ? `<a href="${href}">${image}</a>` : image}${block.caption ? `<figcaption>${escapeHtml(block.caption)}</figcaption>` : ''}</figure>`;
+    }
+    if (block.type === 'products') {
+      const products = productsOfBlock(block, catalog);
+      if (!products.length) return '';
+      return `<section class="cms-products">${block.title ? `<h2>${escapeHtml(block.title)}</h2>` : ''}<div class="product-grid">\n${products.map((product) => productCard(product, root)).join('\n')}\n</div></section>`;
+    }
+    if (block.type === 'faq') {
+      return `<section class="cms-faq">${block.title ? `<h2>${escapeHtml(block.title)}</h2>` : ''}${block.items.map((item) => `<details><summary>${escapeHtml(item.question)}</summary>${item.answer.split(/\n{2,}/).map((part) => `<p>${escapeHtml(part).replace(/\n/g, '<br>')}</p>`).join('')}</details>`).join('')}</section>`;
+    }
+    const href = linkHref(block.link, root, '');
+    return `<aside class="cms-cta">${block.title ? `<h2>${escapeHtml(block.title)}</h2>` : ''}${block.text ? `<p>${escapeHtml(block.text)}</p>` : ''}${href && block.button ? `<a class="button" href="${href}">${escapeHtml(block.button)}</a>` : ''}</aside>`;
+  }).join('\n');
+}
+
+/**
+ * Vragen met antwoord voor de FAQPage-gegevens van een pagina: de vragen uit de FAQ-blokken, en op de pagina
+ * veelgestelde-vragen (zonder FAQ-blok) de koppen in de tekstblokken.
+ * @param {{ slug: string }} page De pagina.
+ * @param {object[]} blocks De blokken van de pagina.
+ * @returns {{ question: string, answer: string }[]} De vragen.
+ */
+function faqEntriesOfPage(page, blocks) {
+  const fromBlocks = faqEntriesOfBlocks(blocks);
+  if (fromBlocks.length || page.slug !== FAQ_SLUG) return fromBlocks;
+  return Seo.faqEntriesOf(blocks.filter((block) => block.type === 'text').map((block) => block.html).join(''));
+}
+
+/**
+ * Een vaste pagina uit Beheer.
+ * @param {{ slug: string, title: string, description?: string, seoTitle?: string, blocks?: object[], body?: string }} page De pagina.
+ * @param {object[]} groups Alle hoofdcategorieën.
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @param {object} [catalog] De catalogus voor artikelblokken (zonder tonen die blokken niets).
  * @returns {string} De HTML-pagina.
  */
-function contentPage(page, groups, root) {
-  const body = page.body.replace(/<img src="media:([0-9a-f-]{36})"/g, (_, id) => `<img loading="lazy" src="${root}media/${id}"`);
+function contentPage(page, groups, root, catalog = { products: [], categories: [] }) {
+  const blocks = blocksOf(page);
   const html = `<div class="wrap"><nav class="crumbs" aria-label="Kruimelpad"><a href="${root}">Shop</a> › <span>${escapeHtml(page.title)}</span></nav>
 <article class="cms-page"><h1>${escapeHtml(page.title)}</h1>
-${body}
+${renderPageBlocks(blocks, root, catalog)}
 </article></div>`;
-  return layout({ root, groups, wide: true, canonicalPath: page.slug === 'over-ons' ? 'over-ons/' : `pagina/${page.slug}/`, jsonLd: page.slug === FAQ_SLUG ? [Seo.faqJsonLd(Seo.faqEntriesOf(page.body))] : [], title: Seo.pageTitleOf(page.seoTitle, `${page.title} – ${SHOP_NAME}`), description: page.description || `${page.title} bij ${SHOP_NAME}.`, body: html });
+  const faq = Seo.faqJsonLd(faqEntriesOfPage(page, blocks));
+  return layout({ root, groups, wide: true, canonicalPath: page.slug === 'over-ons' ? 'over-ons/' : `pagina/${page.slug}/`, jsonLd: faq ? [faq] : [], title: Seo.pageTitleOf(page.seoTitle, `${page.title} – ${SHOP_NAME}`), description: page.description || `${page.title} bij ${SHOP_NAME}.`, body: html });
 }
 
 /**

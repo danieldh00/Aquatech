@@ -128,7 +128,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
    * @returns {{ slug: string, title: string }[]} De pagina's.
    */
   const infoPagesOf = (req) => {
-    const own = contentOf(req).pages.map((page) => ({ slug: page.slug, title: page.title }));
+    const own = contentOf(req).pages.map((page) => ({ slug: page.slug, title: page.title, description: page.description || '' }));
     const legal = LEGAL_SLUGS.filter((slug) => !own.some((page) => page.slug === slug)).map((slug) => ({ slug, title: LEGAL_TITLES[slug] }));
     return [...(own.some((page) => page.slug === 'over-ons') ? [] : [{ slug: 'over-ons', title: 'Over ons' }]), ...own, ...legal];
   };
@@ -1212,7 +1212,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     const pathname = req.originalUrl.split('?')[0];
     if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/${req.originalUrl.slice(pathname.length)}`);
     const own = contentOf(req).pages.find((page) => page.slug === 'over-ons');
-    sendPage(req, res, 200, () => (own ? contentPage(own, catalogOf(req).groups, '../') : aboutPage(catalogOf(req).groups)));
+    sendPage(req, res, 200, () => (own ? contentPage(own, catalogOf(req).groups, '../', catalogOf(req)) : aboutPage(catalogOf(req).groups)));
   });
 
   // Vaste pagina's uit Beheer.
@@ -1223,7 +1223,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     const page = contentOf(req).pages.find((candidate) => candidate.slug === req.params.slug) || legalDefaults(site.contact)[req.params.slug];
     const groups = catalogOf(req).groups;
     if (!page) return sendPage(req, res, 404, () => notFoundPage('../../', groups));
-    sendPage(req, res, 200, () => contentPage(page, groups, '../../'));
+    sendPage(req, res, 200, () => contentPage(page, groups, '../../', catalogOf(req)));
   });
 
   // Afbeeldingen die in Beheer zijn geüpload; het id is onraadbaar en de afbeelding verandert nooit.
