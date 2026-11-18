@@ -86,3 +86,17 @@ test('offerte aanvragen: niet ingelogd gaat naar inloggen en meer dan vijf per u
   assert.deepStrictEqual(statuses, [303, 303, 303, 303, 303, 429, 429]);
   assert.strictEqual(world.db.prepare('SELECT COUNT(*) AS n FROM quotes').get().n, 1, 'steeds dezelfde wagen: één concept');
 });
+
+test('offerte aanvragen: een mislukte melding aan het bedrijf houdt het concept intact', async () => {
+  const world = await setup();
+  const [shopper] = world.shoppers;
+  await world.admin.put('/app/api/admin/settings', { quoteProfile: { email: 'verkoop@aquatech.example', companyName: 'AquaTech' } });
+  const user = world.db.prepare('SELECT id FROM users WHERE email = ?').get('k1@voorbeeld.nl');
+  await world.admin.patch(`/app/api/admin/users/${user.id}`, { customerGroup: 'zakelijk' });
+  await postForm(world.base, shopper.client, '/winkelwagen/', { action: 'add', code: 'BUS', qty: '50' });
+  world.mailFailing.on = true;
+  const sent = await postForm(world.base, shopper.client, '/winkelwagen/offerte/', {});
+  assert.strictEqual(sent.status, 303);
+  assert.strictEqual(world.db.prepare('SELECT COUNT(*) AS n FROM quotes').get().n, 1);
+  assert.strictEqual(mailsWith(world.sent, /Offerteaanvraag via de webshop/).length, 0);
+});

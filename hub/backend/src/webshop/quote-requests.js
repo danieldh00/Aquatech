@@ -2,7 +2,7 @@
 // plaats van af te rekenen. Dat maakt een concept in Offertes (nooit verstuurd, een medewerker controleert en verstuurt het zelf) en
 // meldt het aan het bedrijf. De prijzen en btw komen uit dezelfde berekening als de winkelwagen (priceCart), dus nooit uit de browser.
 const crypto = require('node:crypto');
-const { validEmail } = require('../platform/mailer');
+const { validEmail, mailFailure } = require('../platform/mailer');
 
 /** Binnen hoeveel minuten dezelfde winkelwagen niet opnieuw een offerte aanmaakt (dubbelklik, herladen). */
 const DUPLICATE_MINUTES = 10;
@@ -74,7 +74,11 @@ function createQuoteRequests({ createDraft, findRecent, settingsFor, mailerFor, 
         const mail = mailBody(quoteProfile, ['Een zakelijke klant vroeg via de webshop een offerte aan.', `Klant: ${customer.name}${company ? ` (${company})` : ''}\nE-mail: ${customer.email}\nOfferte: ${quote.number} (concept, ${cart.lines.length} ${cart.lines.length === 1 ? 'regel' : 'regels'}, ${cartExcl(cart).toFixed(2).replace('.', ',')} euro excl. btw)\n\nControleer de offerte in Offertes en verstuur hem zelf.`]);
         await mailer.send({ to: quoteProfile.email, subject: `Offerteaanvraag via de webshop: ${company || customer.name}`, text: mail.text, html: mail.html, replyTo: validEmail(customer.email) ? customer.email : undefined });
         mailed = true;
-      } catch { mailed = false; }
+      } catch (error) {
+        // De offerte staat al als concept; een mislukte melding komt (zonder geheimen) in het serverlog.
+        mailFailure(error);
+        mailed = false;
+      }
     }
     return { quote, mailed };
   }
