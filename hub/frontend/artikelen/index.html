@@ -343,28 +343,6 @@
           <span id="tx-progress" class="muted small" role="status"></span>
         </div>
         <div class="tablewrap"><table class="grid" id="tx-table"></table></div>
-        <section id="tx-detail" class="card card-form tx-detail" hidden aria-labelledby="tx-detail-title">
-          <div class="tx-detail-head"><h2 id="tx-detail-title"></h2><button class="btn" id="tx-close" type="button">Sluiten</button></div>
-          <div id="tx-warnings"></div>
-          <div class="form-grid tx-compare">
-            <div class="field full"><span>Gegevens waar de AI mee werkt</span><dl id="tx-facts" class="tx-facts"></dl></div>
-            <label class="field" title="Wat nu in de webshop staat">Huidige omschrijving<textarea id="tx-live-description" rows="6" readonly></textarea></label>
-            <label class="field">Concept omschrijving<textarea id="tx-description" rows="6" maxlength="5000"></textarea></label>
-            <label class="field">Huidige titel voor zoekmachines<input id="tx-live-seoTitle" readonly></label>
-            <label class="field">Concept titel (max. 70 tekens)<input id="tx-seoTitle" maxlength="70"></label>
-            <label class="field">Huidige omschrijving voor zoekmachines<textarea id="tx-live-seoDescription" rows="2" readonly></textarea></label>
-            <label class="field">Concept omschrijving voor zoekmachines (max. 160)<textarea id="tx-seoDescription" rows="2" maxlength="160"></textarea></label>
-          </div>
-          <p id="tx-notes" class="muted small"></p>
-          <label class="chk" id="tx-ack-row" hidden><input type="checkbox" id="tx-ack"> Ik heb de gemarkeerde punten gecontroleerd en de tekst klopt met het artikel</label>
-          <label class="chk" id="tx-over-row" hidden><input type="checkbox" id="tx-over"> De huidige tekst is intussen gewijzigd; overschrijf hem toch</label>
-          <div class="form-actions">
-            <button class="btn" id="tx-save" type="button">Wijziging bewaren</button>
-            <button class="btn primary" id="tx-publish" type="button">Goedkeuren en plaatsen</button>
-            <button class="btn" id="tx-redo" type="button">Opnieuw schrijven</button>
-            <button class="btn" id="tx-discard" type="button">Afwijzen</button>
-          </div>
-        </section>
       </section>
 
       <section id="tab-reorder" class="tabpane" hidden>
@@ -493,6 +471,29 @@
           <div class="err" role="alert"></div>
         </form>
       </div>
+      <section id="tx-detail" class="card-form tx-detail" hidden aria-labelledby="tx-detail-title">
+        <div class="tx-detail-head"><h3 id="tx-detail-title">Producttekst</h3></div>
+        <p class="muted small">De AI schrijft een concept van de omschrijving en de zoekmachineteksten, alleen met de gegevens van dit artikel. Niets gaat live zonder jouw goedkeuring.</p>
+        <div id="tx-warnings"></div>
+        <div class="form-grid tx-compare">
+          <div class="field full"><span>Gegevens waar de AI mee werkt</span><dl id="tx-facts" class="tx-facts"></dl></div>
+          <label class="field" title="Wat nu in de webshop staat">Huidige omschrijving<textarea id="tx-live-description" rows="6" readonly></textarea></label>
+          <label class="field">Concept omschrijving<textarea id="tx-description" rows="6" maxlength="5000"></textarea></label>
+          <label class="field">Huidige titel voor zoekmachines<input id="tx-live-seoTitle" readonly></label>
+          <label class="field">Concept titel (max. 70 tekens)<input id="tx-seoTitle" maxlength="70"></label>
+          <label class="field">Huidige omschrijving voor zoekmachines<textarea id="tx-live-seoDescription" rows="2" readonly></textarea></label>
+          <label class="field">Concept omschrijving voor zoekmachines (max. 160)<textarea id="tx-seoDescription" rows="2" maxlength="160"></textarea></label>
+        </div>
+        <p id="tx-notes" class="muted small"></p>
+        <label class="chk" id="tx-ack-row" hidden><input type="checkbox" id="tx-ack"> Ik heb de gemarkeerde punten gecontroleerd en de tekst klopt met het artikel</label>
+        <label class="chk" id="tx-over-row" hidden><input type="checkbox" id="tx-over"> De huidige tekst is intussen gewijzigd; overschrijf hem toch</label>
+        <div class="form-actions">
+          <button class="btn" id="tx-save" type="button">Wijziging bewaren</button>
+          <button class="btn primary" id="tx-publish" type="button">Goedkeuren en plaatsen</button>
+          <button class="btn" id="tx-redo" type="button">Opnieuw schrijven</button>
+          <button class="btn" id="tx-discard" type="button">Afwijzen</button>
+        </div>
+      </section>
       <section class="card-form" id="d-costs">
         <h3>Inkoopprijs en voorraadlagen (FIFO)</h3>
         <p class="muted small">Een nieuwe inkoopprijs overschrijft de oude niet: elke prijs blijft met zijn datum bewaard. Elke ontvangst is een eigen partij (laag) met de inkoopprijs van dat moment; bij verkoop of verbruik gaat de oudste partij eerst. Zo blijft in de rapportages de inkoopprijs staan waarvoor de artikelen echt zijn ingekocht.</p>

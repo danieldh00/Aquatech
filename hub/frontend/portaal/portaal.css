@@ -1,6 +1,6 @@
 /* Klantportaal: kaarten voor acties en werkzaamheden, tabel met offertes en
    een opleverdossier per werkorder. Basis uit dashboard.css en beheer.css. */
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 14px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
 .card.season { border-left: 4px solid var(--at-green); }
 .season-mail { display: flex; gap: 8px; align-items: center; margin-top: 10px; font-size: 14px; }
@@ -38,7 +38,7 @@
 .answer { background: var(--primary-soft); border-radius: 8px; padding: 10px 12px; display: grid; gap: 8px; }
 .answer textarea { font: inherit; font-family: var(--at-font); padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; min-height: 60px; }
 
-.photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); gap: 10px; }
 .photos figure { margin: 0; }
 .photos button { padding: 0; border: 0; background: none; cursor: zoom-in; display: block; width: 100%; }
 .photos img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 8px; display: block; background: #eceff1; }

@@ -21,7 +21,7 @@ table.grid tr[data-id]:hover td { background: var(--at-green-soft); }
 .i-list .have { color: var(--muted); }
 .item-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 12px; }
 .item-head h1 { margin: 0; font-size: 22px; }
-.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 14px; }
 .cols .card-form { margin-bottom: 0; }
 #v-item > section { margin-top: 14px; }
 @media (max-width: 640px) {
@@ -69,7 +69,7 @@ table.grid .toggle:hover { color: var(--at-teal); }
 #images-bar { margin: 8px 0 12px; }
 
 /* Mediabibliotheek: raster met alle afbeeldingen. */
-.media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; margin-top: 4px; }
+.media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); gap: 14px; margin-top: 4px; }
 .media-card { margin: 0; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 .media-card a { display: flex; align-items: center; justify-content: center; aspect-ratio: 1; background: #fff; /* bewust vast wit, geen thema-kleur: een streepjescode moet altijd zwart op wit gescand worden */ }
 .media-card img { width: 100%; height: 100%; object-fit: contain; }
@@ -87,8 +87,8 @@ table.grid .toggle:hover { color: var(--at-teal); }
 .merge-notes .bad { color: var(--danger, #c62828); font-weight: 600; }
 /* Inkoopprijs en voorraadlagen (FIFO) op het artikel. */
 #d-costs h4 { margin: 10px 0 6px; font-size: 14px; }
-#d-costs .cols { margin-top: 6px; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); }
-@media (max-width: 560px) { #d-costs .cols { grid-template-columns: 1fr; } }
+#d-costs .cols { margin-top: 6px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); }
+@media (max-width: 560px) { #d-costs .cols { grid-template-columns: minmax(0, 1fr); } }
 .layer-cost { display: inline-flex; gap: 4px; margin-left: 8px; vertical-align: middle; }
 .layer-cost input { width: 90px; }
 #move-form [hidden], #d-costs[hidden], #d-costs [hidden] { display: none !important; }

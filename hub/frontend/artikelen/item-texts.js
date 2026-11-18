@@ -1,10 +1,11 @@
-// Producttekst door de AI (module Artikelen, tabblad Teksten): artikelen kiezen, concepten laten schrijven (in porties,
-// met voortgang), de bronvelden en de feitencontrole bekijken, een concept aanpassen en goedkeuren of afwijzen.
+// Producttekst door de AI (module Artikelen): in het artikelscherm een concept laten schrijven, de bronvelden en de
+// feitencontrole bekijken, het concept aanpassen en goedkeuren of afwijzen; in het tabblad Teksten artikelen in bulk kiezen
+// en concepten laten schrijven (in porties, met voortgang). Beoordelen gebeurt altijd in het artikelscherm.
 // Niets gaat live zonder goedkeuring; een concept met waarschuwingen vraagt een uitdrukkelijke bevestiging.
 // Praat met /api/stock/item-texts (recht voorraad).
 (function () {
   const context = { api: null, toast: null, esc: null };
-  const state = { data: null, selected: new Set(), openId: null, detail: null, busy: false };
+  const state = { data: null, ai: null, selected: new Set(), openId: null, detail: null, busy: false };
   const FIELDS = ['description', 'seoTitle', 'seoDescription'];
   const FIELD_NAMES = { description: 'Omschrijving', seoTitle: 'Titel voor zoekmachines', seoDescription: 'Omschrijving voor zoekmachines' };
 
@@ -30,9 +31,18 @@
    */
   async function load() {
     state.data = await context.api(`stock/item-texts?${queryOf()}`);
+    state.ai = state.data.ai;
     const present = new Set(state.data.items.map((item) => item.id));
     state.selected = new Set([...state.selected].filter((id) => present.has(id)));
     renderList();
+  }
+
+  /**
+   * Ververst de lijst in het tabblad Teksten, maar alleen als die al is geladen (in het artikelscherm is hij dat niet).
+   * @returns {Promise<void>}
+   */
+  async function refreshList() {
+    if (state.data) await load();
   }
 
   /** Tekent de melding over AI, de categorielijst en de tabel. */
@@ -97,7 +107,6 @@
     progress(`${tally.ok} concept${tally.ok === 1 ? '' : 'en'} geschreven${tally.skipped ? `, ${tally.skipped} overgeslagen` : ''}${tally.error ? `, ${tally.error} mislukt` : ''}.${stopMessage ? ` ${stopMessage}` : ''}`);
     context.toast(stopMessage || `${tally.ok} concept${tally.ok === 1 ? '' : 'en'} geschreven.`, Boolean(stopMessage) || tally.error > 0);
     await load();
-    if (state.openId) await openDetail(state.openId);
   }
 
   /**
@@ -115,33 +124,48 @@
   }
 
   /**
-   * Opent een artikel met zijn gegevens, de live tekst en het concept.
+   * Haalt de producttekst van een artikel op (gegevens, live tekst, concept, AI-status) en tekent het blok.
    * @param {string} itemId Het artikel.
    * @returns {Promise<void>}
    */
   async function openDetail(itemId) {
     const detail = await context.api(`stock/item-texts/${encodeURIComponent(itemId)}`);
-    state.openId = itemId;
+    if (state.openId !== itemId) return;
     state.detail = detail;
+    state.ai = detail.ai;
     $('#tx-detail').hidden = false;
-    $('#tx-detail-title').textContent = `${detail.item.code} · ${detail.item.name}`;
     $('#tx-facts').innerHTML = detail.facts.map((field) => `<dt>${context.esc(field.label)}</dt><dd>${context.esc(field.value)}</dd>`).join('');
     for (const field of FIELDS) {
       $(`#tx-live-${field}`).value = detail.live[field];
       $(`#tx-${field}`).value = detail.draft ? detail.draft[field] : '';
       $(`#tx-${field}`).disabled = !detail.draft;
     }
-    $('#tx-notes').textContent = detail.draft && detail.draft.notes ? `Opmerking van de AI: ${detail.draft.notes}` : detail.draft ? '' : 'Dit artikel heeft nog geen concept. Kies het in de lijst en klik op Concepten schrijven, of klik hieronder op Opnieuw schrijven.';
+    const aiOff = !detail.ai.enabled ? 'AI staat uit (Beheer → Integraties → AI-herkenning).' : !detail.ai.configured ? 'Er is geen API-sleutel ingesteld (Beheer → Integraties → AI-herkenning).' : '';
+    $('#tx-notes').textContent = detail.draft && detail.draft.notes ? `Opmerking van de AI: ${detail.draft.notes}` : detail.draft ? '' : 'Dit artikel heeft nog geen concept. Klik op Concept schrijven.';
+    if (detail.thin && !detail.draft) $('#tx-notes').textContent += ' Let op: er zijn weinig gegevens; de tekst wordt kort.';
+    if (aiOff) $('#tx-notes').textContent = `${$('#tx-notes').textContent} ${aiOff}`.trim();
     $('#tx-over-row').hidden = true;
     $('#tx-over').checked = false;
     $('#tx-ack').checked = false;
     $('#tx-ack-row').hidden = true;
     for (const id of ['tx-save', 'tx-publish', 'tx-discard']) $(`#${id}`).hidden = !detail.draft;
     $('#tx-redo').textContent = detail.draft ? 'Opnieuw schrijven' : 'Concept schrijven';
-    $('#tx-redo').disabled = !state.data.ai.enabled || !state.data.ai.configured;
+    $('#tx-redo').disabled = Boolean(aiOff);
     renderWarnings(detail.draft ? detail.draft.warnings : []);
-    if (detail.thin && !detail.draft) $('#tx-notes').textContent += ' Let op: er zijn weinig gegevens; de tekst wordt kort.';
-    $('#tx-detail').scrollIntoView({ block: 'nearest' });
+  }
+
+  /**
+   * Toont het blok Producttekst voor het geopende artikel. Een variant (die erft de tekst van het hoofdartikel) en een
+   * gearchiveerd artikel krijgen het blok niet.
+   * @param {object} item Het artikel uit het artikelscherm.
+   * @returns {Promise<void>}
+   */
+  async function showItem(item) {
+    state.openId = item.id;
+    state.detail = null;
+    $('#tx-detail').hidden = true;
+    if (item.archived || item.parentId) return;
+    await openDetail(item.id);
   }
 
   /**
@@ -211,7 +235,7 @@
     });
     $('#tx-table').addEventListener('click', (event) => {
       const id = event.target.dataset && event.target.dataset.open;
-      if (id) openDetail(id).catch((error) => context.toast(error.message, true));
+      if (id) context.openItem(id);
     });
     $('#tx-write').addEventListener('click', () => { writeSelected(); });
     $('#tx-approve').addEventListener('click', async () => {
@@ -228,8 +252,7 @@
         await load();
       } catch (error) { context.toast(error.message, true); }
     });
-    $('#tx-close').addEventListener('click', () => { $('#tx-detail').hidden = true; state.openId = null; });
-    $('#tx-save').addEventListener('click', async () => { if (await saveDraft()) { context.toast('Concept bewaard.'); await load(); } });
+    $('#tx-save').addEventListener('click', async () => { if (await saveDraft()) { context.toast('Concept bewaard.'); await refreshList(); } });
     $('#tx-publish').addEventListener('click', async () => {
       try {
         if (!(await saveDraft())) return;
@@ -238,34 +261,35 @@
         if (warnings.length && !ack) { context.toast('Vink eerst aan dat je de gemarkeerde punten hebt gecontroleerd.', true); return; }
         const [result] = await approve([state.openId], { acknowledgeWarnings: ack, overwrite: $('#tx-over').checked });
         if (result.status === 'changed') $('#tx-over-row').hidden = false;
-        await load();
-        if (result.status === 'approved') await openDetail(state.openId);
+        await refreshList();
+        if (result.status === 'approved') await context.reloadItem();
       } catch (error) { context.toast(error.message, true); }
     });
     $('#tx-discard').addEventListener('click', async () => {
       try {
         await context.api(`stock/item-texts/${encodeURIComponent(state.openId)}`, { method: 'DELETE' });
         context.toast('Concept afgewezen.');
-        await load();
+        await refreshList();
         await openDetail(state.openId);
       } catch (error) { context.toast(error.message, true); }
     });
     $('#tx-redo').addEventListener('click', async () => {
       if (state.busy) return;
       state.busy = true;
-      progress('Schrijven…');
+      const itemId = state.openId;
+      $('#tx-redo').disabled = true;
+      $('#tx-redo').textContent = 'Schrijven…';
       try {
-        const out = await context.api('stock/item-texts/generate', { method: 'POST', body: { itemIds: [state.openId] } });
+        const out = await context.api('stock/item-texts/generate', { method: 'POST', body: { itemIds: [itemId] } });
         const [result] = out.results;
         if (result.status !== 'ok') context.toast(result.message || 'Schrijven is niet gelukt.', true);
         else context.toast('Nieuw concept geschreven.');
       } catch (error) { context.toast(error.message, true); }
       state.busy = false;
-      progress('');
-      await load();
+      await refreshList();
       await openDetail(state.openId);
     });
   }
 
-  window.ArtikelenTexts = { setup, load };
+  window.ArtikelenTexts = { setup, load, showItem };
 })();

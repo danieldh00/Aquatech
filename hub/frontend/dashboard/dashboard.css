@@ -30,7 +30,7 @@ body {
 .intro p { margin: 0 0 20px; color: var(--muted); }
 h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 24px 0 10px; }
 
-.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 14px; }
 .tile {
   display: flex; gap: 14px; align-items: flex-start; padding: 18px;
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
@@ -145,7 +145,7 @@ h2 .h2-link:hover { text-decoration: underline; }
 .today-tools .chk input { width: 18px; height: 18px; accent-color: var(--primary); }
 .today-tools .muted, .today .muted { color: var(--muted); }
 .today-link { margin-left: auto; color: var(--primary); font-weight: 600; text-decoration: none; }
-.jobs { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+.jobs { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
 .job {
   display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; background: var(--panel);
   border: 1px solid var(--line); border-left: 5px solid var(--primary); border-radius: var(--radius);

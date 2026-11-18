@@ -2,7 +2,7 @@
    - .form-grid: velden in een raster van gelijke kolommen, label boven het veld, korte hulptekst eronder.
      .full = over de hele breedte, .span-2 = twee kolommen breed (op een smal scherm ook gewoon één).
    - .card-grid: kaarten naast elkaar die in een rij even hoog zijn; de inhoud begint bovenaan, de knoppen onderaan. */
-.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px 16px; align-items: start; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 14px 16px; align-items: start; }
 .form-grid > .full { grid-column: 1 / -1; }
 .form-grid > .span-2 { grid-column: span 2; }
 .form-grid .field { display: flex; flex-direction: column; gap: 4px; margin: 0; font-size: 13px; color: var(--muted); min-width: 0; }
