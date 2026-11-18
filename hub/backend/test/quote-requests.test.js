@@ -100,3 +100,16 @@ test('offerte aanvragen: een mislukte melding aan het bedrijf houdt het concept 
   assert.strictEqual(world.db.prepare('SELECT COUNT(*) AS n FROM quotes').get().n, 1);
   assert.strictEqual(mailsWith(world.sent, /Offerteaanvraag via de webshop/).length, 0);
 });
+
+test('offerte aanvragen: de auditregel meldt of de mail aan het bedrijf is verstuurd', async () => {
+  const world = await setup();
+  const [shopper] = world.shoppers;
+  await world.admin.put('/app/api/admin/settings', { quoteProfile: { email: 'verkoop@aquatech.example', companyName: 'AquaTech' } });
+  const user = world.db.prepare('SELECT id FROM users WHERE email = ?').get('k1@voorbeeld.nl');
+  await world.admin.patch(`/app/api/admin/users/${user.id}`, { customerGroup: 'zakelijk' });
+  await postForm(world.base, shopper.client, '/winkelwagen/', { action: 'add', code: 'BUS', qty: '50' });
+  world.mailFailing.on = true;
+  await postForm(world.base, shopper.client, '/winkelwagen/offerte/', {});
+  const row = world.db.prepare("SELECT detail FROM audit WHERE action = 'webshop_offerte_aangevraagd'").get();
+  assert.strictEqual(JSON.parse(row.detail).mailed, false);
+});

@@ -3322,7 +3322,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, orderSlips, returns: webReturns, guestOrders, stockAlerts, searchMisses, quoteRequests, payments: webPayments,
     vies, captcha, captchaGate,
     onOrder: (req, order) => audit(req, 'webshop_bestelling_geplaatst', { number: order.number, total: order.total, ...(order.guest ? { gast: true } : {}) }, order.userId, tenant.id),
-    onQuoteRequest: (req, quote, viewer) => audit(req, 'webshop_offerte_aangevraagd', { number: quote.number }, viewer.id, tenant.id),
+    onQuoteRequest: (req, quote, viewer, mailed) => audit(req, 'webshop_offerte_aangevraagd', { number: quote.number, mailed: Boolean(mailed) }, viewer.id, tenant.id),
     onGuestAccount: (req, order, user) => audit(req, 'webshop_gastbestelling_gekoppeld', { number: order.number }, user.id, tenant.id),
     onReturn: (req, record) => audit(req, 'webshop_retour_aangevraagd', { number: record.number }, record.userId, tenant.id),
     onSlip: (req, order, action) => audit(req, `webshop_pakbon_${action}`, { number: order.number }, order.userId, tenant.id),
