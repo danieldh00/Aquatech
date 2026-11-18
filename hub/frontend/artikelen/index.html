@@ -241,12 +241,28 @@
             <button class="btn primary" type="button" data-act="receivenow" title="Maakt de order en boekt alles meteen in de voorraad">Bewaren en inboeken</button>
             <button class="btn primary" type="button" data-act="place">Bestellen</button>
             <button class="btn primary" type="button" data-act="receive">Ontvangst boeken</button>
+            <button class="btn primary" type="button" data-act="mail" title="Toont eerst wat er verstuurd wordt; er gaat niets weg zonder jouw klik op Versturen">Versturen naar leverancier</button>
             <button class="btn" type="button" data-act="excel">Excel voor de leverancier</button>
             <button class="btn" type="button" data-act="close" title="Wat nog niet is geleverd vervalt">Afsluiten</button>
             <button class="btn danger" type="button" data-act="cancel">Annuleren</button>
             <button class="btn danger" type="button" data-act="remove">Weggooien</button>
             <button class="btn" type="button" data-act="hide">Sluiten</button>
           </div>
+          <p class="muted small" id="po-mail-status" hidden></p>
+          <section id="po-mail" class="subcard" hidden aria-label="Inkooporder versturen naar de leverancier">
+            <h4>Versturen naar de leverancier</h4>
+            <p class="muted small" id="po-mail-problem" hidden></p>
+            <div class="form-grid">
+              <label class="field full">Aan (meerdere adressen met een komma)<input name="mailTo" type="text" inputmode="email" autocomplete="off" maxlength="200" placeholder="inkoop@leverancier.nl"></label>
+              <label class="field full">Onderwerp<input name="mailSubject" maxlength="200"></label>
+              <label class="field full">Tekst van de mail<textarea name="mailMessage" rows="9" maxlength="5000"></textarea></label>
+              <p class="muted small full">Bijlage: <a id="po-mail-pdf" href="#" target="_blank" rel="noopener"></a>. Je bedrijfsgegevens worden onderaan de mail automatisch toegevoegd.</p>
+            </div>
+            <div class="row actions">
+              <button class="btn primary" type="button" data-act="mail-send">Versturen</button>
+              <button class="btn" type="button" data-act="mail-cancel">Niet versturen</button>
+            </div>
+          </section>
           <div class="err" role="alert"></div>
         </form>
         <div class="tablewrap"><table class="grid" id="po-table"></table></div>
