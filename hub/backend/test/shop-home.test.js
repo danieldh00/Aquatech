@@ -102,6 +102,21 @@ test('startpagina: hero zonder tekst, banners, kolommen, citaat en tabbladen na 
   assert.deepStrictEqual(catalog.bestsellers.map((product) => product.code), ['BUIS-25']);
 });
 
+test('startpagina: hero, banners en zakelijk blok als WebP met een JPEG-terugval, kleine variant voor smalle schermen', async () => {
+  const { base } = await setup();
+  const home = await (await fetch(`${base}/`)).text();
+  assert.match(home, /<picture><source type="image\/webp" srcset="assets\/hero-tuin-klein\.webp\?v=[^ ]+ 720w, assets\/hero-tuin\.webp\?v=[^ ]+ 1440w" sizes="100vw"><img src="assets\/hero-tuin\.jpg\?v=[^"]+" alt="" width="1440" height="419" fetchpriority="high"><\/picture>/);
+  assert.match(home, /<picture><source type="image\/webp" srcset="assets\/banner-druppelslang-klein\.webp[^"]* 600w, assets\/banner-druppelslang\.webp[^"]* 1000w" sizes="\(max-width: 800px\) 100vw, 50vw"><img src="assets\/banner-druppelslang\.jpg[^"]*" alt="" loading="lazy"><\/picture>/);
+  assert.match(home, /<picture><source type="image\/webp" srcset="assets\/zakelijk-achtergrond\.webp[^"]*"><img src="assets\/zakelijk-achtergrond\.jpg/);
+  for (const name of ['hero-tuin.webp', 'hero-tuin-klein.webp', 'banner-pomp.webp', 'zakelijk-achtergrond.webp']) {
+    const file = await fetch(`${base}/assets/${name}`);
+    assert.strictEqual(file.status, 200, name);
+    assert.strictEqual(file.headers.get('content-type'), 'image/webp');
+  }
+  // Logo's en pictogrammen (PNG zonder WebP-variant) blijven gewone afbeeldingen.
+  assert.doesNotMatch(home, /<picture><source[^>]*usp-/);
+});
+
 test('zakelijk formulier: alleen met mailserver en e-mailadres, anders de knop', async () => {
   const { base, admin } = await setup();
   assert.match(await (await fetch(`${base}/`)).text(), /class="business-form"/);

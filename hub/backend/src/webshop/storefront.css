@@ -31,6 +31,7 @@
   --at-foot-line: rgba(255, 255, 255, 0.2);
 }
 * { box-sizing: border-box; }
+picture { display: contents; }
 body { margin: 0; font-family: var(--at-font); color: var(--at-ink); background: var(--at-page); line-height: 1.5; }
 a { color: var(--at-shop-navy); }
 h1 { color: var(--at-shop-navy); font-size: 1.7rem; margin: 0.4em 0; }
