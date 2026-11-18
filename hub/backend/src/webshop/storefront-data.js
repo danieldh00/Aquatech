@@ -288,6 +288,12 @@ function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE, discoun
     return slug;
   };
   /**
+   * Hoeveel stuks er te bestellen zijn (voorraad min reserveringen, naar beneden afgerond): alleen met voorraadbeheer, anders onbekend.
+   * @param {object} row Artikelrij met on_hand, reserved en stock_managed.
+   * @returns {?number} Het aantal (nooit negatief), of null zonder voorraadbeheer.
+   */
+  const stockQtyOf = (row) => (Number(row.stock_managed) === 0 ? null : Math.max(0, Math.floor(Math.round((Number(row.on_hand) - Number(row.reserved || 0)) * 1000) / 1000)));
+  /**
    * Of een artikel op voorraad is: met voorraadbeheer stand min gereserveerd boven nul; zonder
    * voorraadbeheer (stock_managed = 0, bijvoorbeeld uit de webshop overgenomen zonder aantal) de
    * status uit het gekoppelde webshopproduct (zonder koppeling: op voorraad).
@@ -331,7 +337,7 @@ function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE, discoun
       priceIncl: Math.round(priceExcl * (1 + vatRate / 100) * 100) / 100,
       priceBusiness, priceBusinessIncl: Math.round(priceBusiness * (1 + vatRate / 100) * 100) / 100,
       explicitBusinessPrice: row.business_price != null,
-      inStock: stockOf(row), image: imageOf(row), updatedAt: String(row.updated_at || '').slice(0, 10),
+      inStock: stockOf(row), stockQty: stockQtyOf(row), image: imageOf(row), updatedAt: String(row.updated_at || '').slice(0, 10),
       // Groothandelsvoorwaarden (alleen gebruikt op de groothandelspagina's): verpakkingseenheid, minimale afname en staffels.
       packSize: Number(row.order_pack_size) || 1, minimum: Wholesale.minimumOf({ packSize: row.order_pack_size, orderMinQty: row.order_min_qty }), tiers: Wholesale.tiersOf(row.price_tiers),
     };
@@ -384,7 +390,7 @@ function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE, discoun
       variants: variants.map((variant) => ({
         slug: variant.slug, code: variant.code, label: Object.values(variant.values).join(' / ') || variant.code,
         meta: Object.entries(variant.values).map(([name, value]) => `${name}: ${value}`).join(' | '),
-        priceIncl: variant.priceIncl, priceBusiness: variant.priceBusiness, priceBusinessIncl: variant.priceBusinessIncl, vatRate: variant.vatRate, inStock: variant.inStock, image: variant.image || imageOf(parent),
+        priceIncl: variant.priceIncl, priceBusiness: variant.priceBusiness, priceBusinessIncl: variant.priceBusinessIncl, vatRate: variant.vatRate, inStock: variant.inStock, stockQty: variant.stockQty, image: variant.image || imageOf(parent),
       })),
     };
     for (const variant of variants) {

@@ -1178,6 +1178,18 @@ const PG_MIGRATIONS = [
   );
   CREATE UNIQUE INDEX item_text_drafts_item ON item_text_drafts (tenant_id, item_id);
   `,
+  // 76: voorraadmeldingen in de eigen webshop (zie db.js).
+  `
+  CREATE TABLE stock_alerts (
+    id         TEXT PRIMARY KEY,
+    tenant_id  TEXT NOT NULL REFERENCES tenants(id),
+    item_code  ${TEXT_TYPE} NOT NULL,
+    email      ${TEXT_TYPE} NOT NULL,
+    created_at ${TEXT_TYPE} NOT NULL
+  );
+  CREATE UNIQUE INDEX stock_alerts_unique ON stock_alerts (tenant_id, item_code, email);
+  CREATE INDEX stock_alerts_email ON stock_alerts (tenant_id, email);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

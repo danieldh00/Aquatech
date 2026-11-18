@@ -13,7 +13,7 @@ const SITE_KEY_PATTERN = /^6L[A-Za-z0-9_-]{38}$/;
 const VERIFY_TIMEOUT_MS = 4000;
 
 /** De acties die een formulier mag melden (Google hoort de actienaam terug te geven). */
-const ACTIONS = ['login', 'register', 'planner_signup', 'forgot_password', 'business_request', 'checkout', 'drawing_submit'];
+const ACTIONS = ['login', 'register', 'planner_signup', 'forgot_password', 'business_request', 'checkout', 'drawing_submit', 'stock_alert'];
 
 /** Google-foutcodes die aan onze kant liggen (verkeerde of ontbrekende geheime sleutel): geen schuld van de bezoeker. */
 const CONFIGURATION_ERRORS = ['missing-input-secret', 'invalid-input-secret'];

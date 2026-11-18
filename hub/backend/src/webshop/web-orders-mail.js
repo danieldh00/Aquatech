@@ -23,7 +23,7 @@ const EUR = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' 
 /**
  * Maakt de verzender van bestelmails.
  * @param {{ orders: object, settingsFor: Function, mailerFor: Function, mailBody: Function, guestLinkOf?: Function }} deps De bestelopslag, de instellingen per omgeving, de mailserver en de opmaak van de mail, en `guestLinkOf(tenantId, order, baseUrl)` = de persoonlijke link naar een gastbestelling (guest-orders.js; zonder geen link in de mails).
- * @returns {{ sendPlaced: Function, sendShipment: Function, sendBusinessRequest: Function, businessRequestReady: Function }} De functies.
+ * @returns {{ sendPlaced: Function, sendShipment: Function, sendBusinessRequest: Function, businessRequestReady: Function, mailReady: Function, sendStockAlert: Function }} De functies.
  */
 function createOrderMailer({ orders, settingsFor, mailerFor, mailBody, guestLinkOf = () => '' }) {
   /**
@@ -254,7 +254,43 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody, guestLink
     record({ sent: !error, error });
   }
 
-  return { sendPlaced, sendShipment, sendBusinessRequest, businessRequestReady };
+  /**
+   * Of de omgeving mail kan versturen (een mailserver is ingesteld).
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {boolean} true als er een mailserver is.
+   */
+  function mailReady(tenantId) {
+    try {
+      return mailerFor(settingsFor(tenantId)).configured();
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Meldt een bezoeker dat een artikel weer te bestellen is (voorraadmelding), met een link naar de webshop als het webadres bekend is.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ email: string, name: string, code: string }} alert Het adres van de bezoeker en het artikel.
+   * @returns {Promise<boolean>} true als de mail is verstuurd; false zonder mailserver of bij een ongeldig adres. Een verzendfout wordt gegooid, zodat de melding blijft staan voor een volgende ronde.
+   */
+  async function sendStockAlert(tenantId, { email, name, code }) {
+    if (!validEmail(email)) return false;
+    const settings = settingsFor(tenantId);
+    const mailer = mailerFor(settings);
+    if (!mailer.configured()) return false;
+    const profile = settings.get('quoteProfile') || {};
+    const base = cleanPublicUrl((settings.get('shopPayment') || {}).publicUrl);
+    const link = base ? `${base}zoeken/?q=${encodeURIComponent(code)}` : '';
+    const mail = mailBody(profile, [
+      'Goed nieuws,',
+      `${name} (artikelnummer ${code}) is weer te bestellen.${link ? `\n\nBekijk het artikel: ${link}` : ''}`,
+      'Je krijgt deze mail eenmalig, omdat je bij dit artikel een voorraadmelding hebt aangevraagd. We hebben je e-mailadres daarna gewist.',
+    ]);
+    await mailer.send({ to: email, subject: `${name} is weer op voorraad`, text: mail.text, html: mail.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
+    return true;
+  }
+
+  return { sendPlaced, sendShipment, sendBusinessRequest, businessRequestReady, mailReady, sendStockAlert };
 }
 
 module.exports = { createOrderMailer };

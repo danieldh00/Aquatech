@@ -1423,6 +1423,20 @@ const MIGRATIONS = [
   );
   CREATE UNIQUE INDEX item_text_drafts_item ON item_text_drafts (tenant_id, item_id);
   `,
+  // 76: voorraadmeldingen in de eigen webshop (webshop/stock-alerts.js): een bezoeker laat zijn e-mailadres achter bij een artikel
+  // dat niet op voorraad is en krijgt één mail zodra het weer te bestellen is; daarna wordt de rij gewist (het adres wordt niet
+  // langer bewaard dan nodig). Hoogstens één melding per artikel en adres.
+  `
+  CREATE TABLE stock_alerts (
+    id         TEXT PRIMARY KEY,
+    tenant_id  TEXT NOT NULL REFERENCES tenants(id),
+    item_code  TEXT NOT NULL,
+    email      TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX stock_alerts_unique ON stock_alerts (tenant_id, item_code, email);
+  CREATE INDEX stock_alerts_email ON stock_alerts (tenant_id, email);
+  `,
 ];
 
 /**

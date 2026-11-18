@@ -559,3 +559,10 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
   .cart-table tfoot th, .cart-table tfoot td { padding: 0; border: 0; }
   .cart-table tfoot th[colspan], .cart-table tfoot td[colspan] { flex: 1; }
 }
+
+/* Voorraadmelding bij een artikel dat niet op voorraad is */
+.stock-alert { margin-top: 16px; padding: 14px; display: grid; gap: 10px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 10px; max-width: 420px; }
+.stock-alert h2 { margin: 0; font-size: 1.05rem; }
+.stock-alert .form-field { display: grid; gap: 4px; }
+.stock-alert small { color: var(--at-muted, inherit); }
+.stock-alert .button { justify-self: start; }
