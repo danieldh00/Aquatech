@@ -137,7 +137,7 @@ remote_status() {
     if docker exec aquatech-postgres pg_isready -U postgres -d aquatech >/dev/null 2>&1; then ok "PostgreSQL accepteert verbindingen"; else fail "PostgreSQL accepteert geen verbindingen"; fi
     local current expected
     current="$(db_version || true)"; expected="$(expected_version || true)"
-    if [[ -z "$current" || -z "$expected" ]]; then warn "databaseversie niet te bepalen (database: '${current:-?}', app verwacht: '${expected:-?}')"
+    if ! [[ "$current" =~ ^[0-9]+$ && "$expected" =~ ^[0-9]+$ ]]; then warn "databaseversie niet te bepalen (database: '${current:-?}', app verwacht: '${expected:-?}')"
     elif [[ "$current" == "$expected" ]]; then ok "databaseversie $current is bij (app verwacht $expected)"
     elif (( current < expected )); then warn "database loopt achter: $current, app verwacht $expected (draai: servertaken.sh migraties)"
     else fail "database ($current) is nieuwer dan wat de app kent ($expected): een oudere versie draait op een nieuwere database"; fi
@@ -213,7 +213,7 @@ remote_migrate_check() {
   docker inspect aquatech-postgres >/dev/null 2>&1 || { echo "Geen eigen PostgreSQL-container: migraties draaien bij het starten van de app (niets te doen)."; return 0; }
   local current expected
   current="$(db_version || true)"; expected="$(expected_version || true)"
-  [[ -n "$current" && -n "$expected" ]] || { echo "FOUT: databaseversie ('${current:-?}') of verwachte versie ('${expected:-?}') niet te bepalen." >&2; return 1; }
+  [[ "$current" =~ ^[0-9]+$ && "$expected" =~ ^[0-9]+$ ]] || { echo "FOUT: databaseversie ('${current:-?}') of verwachte versie ('${expected:-?}') niet te bepalen." >&2; return 1; }
   echo "Databaseversie: $current; de draaiende app verwacht: $expected."
   if [[ "$current" == "$expected" ]]; then echo "De database is bij: er zijn geen migraties te draaien."; return 0; fi
   if (( current > expected )); then echo "FOUT: de database is nieuwer dan de app; migreren is hier niet het probleem (draait er een oudere versie?)." >&2; return 1; fi
@@ -262,10 +262,13 @@ remote_update_run() {
   if [[ "$(env_get AQUATECH_TAG)" == "$before" ]]; then
     available="$(json_field "$APP_DIR/update/status/status.json" available)"
     if [[ "$available" =~ $VERSION_RE ]] && is_newer "$available" "$before" && [[ "$(cat "$APP_DIR/.failed-version" 2>/dev/null || true)" != "$available" ]]; then
+      if [[ ! -d "$APP_DIR/update/request" ]]; then
+        echo "FOUT: $APP_DIR/update/request bestaat niet; draai eerst setup-app-update.sh (dan krijgt de map de juiste eigenaar)." >&2; return 1
+      fi
       log "Automatisch bijwerken staat uit of wacht: aanvraag voor $available klaarzetten"
-      mkdir -p "$APP_DIR/update/request"
       printf '{"id":"%s","version":"%s","requestedAt":"%s","by":"servertaken","byName":"servertaken.sh"}\n' \
         "$(cat /proc/sys/kernel/random/uuid)" "$available" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$APP_DIR/update/request/request.json"
+      chown --reference="$APP_DIR/update/request" "$APP_DIR/update/request/request.json"
       systemctl start aquatech-update.service || true
     fi
   fi
