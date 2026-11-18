@@ -235,7 +235,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
    * @param {object} req Het verzoek.
    * @returns {object} De catalogus (zie buildCatalog).
    */
-  const catalogOf = (req) => data.catalogOf(tenantId, { preview: isPreview(req) });
+  const catalogOf = (req) => data.catalogOf(tenantId, { preview: isPreview(req), stale: Boolean(req.catalogStaleOk) });
   /**
    * De inhoud uit Beheer waarmee een pagina wordt getekend (gepubliceerd, of het concept bij een voorbeeld).
    * @param {object} req Het verzoek.
@@ -274,7 +274,10 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
   // bestanden en afbeeldingen, en niet bij een voorbeeld (dat wordt niet onthouden).
   router.use((req, res, next) => {
     if (!data.warm || !['GET', 'HEAD', 'POST'].includes(req.method) || /^\/(assets|media|artikelfoto)\//.test(req.path) || isPreview(req)) return next();
-    data.warm(tenantId).then(() => next(), () => next());
+    // Pagina's van het assortiment mogen een verlopen catalogus (hoogstens twee minuten) tonen terwijl hij op de
+    // achtergrond ververst; winkelwagen, afrekenen, bestellingen en alles met een POST rekenen altijd met verse prijzen.
+    req.catalogStaleOk = ['GET', 'HEAD'].includes(req.method) && !/^\/(winkelwagen|afrekenen|bestelling|account|groothandel|mollie)(\/|$)/.test(req.path);
+    data.warm(tenantId, { allowStale: req.catalogStaleOk }).then(() => next(), () => next());
     return undefined;
   });
 

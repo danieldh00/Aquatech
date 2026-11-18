@@ -108,3 +108,44 @@ test('webshop: warm vult de catalogus via db.async, daarna geen query meer', asy
   data.catalogOf(tenantId);
   assert.strictEqual(syncQueries, 2);
 });
+
+test('webshop: een verlopen catalogus dient nog twee minuten voor pagina\'s, afrekenen krijgt altijd een verse', async () => {
+  const { db, mine: tenantId } = openWithTenants();
+  const data = createStorefrontData(db);
+  const realNow = Date.now;
+  let offsetMs = 0;
+  /**
+   * De klok van de test, met een verschuiving.
+   * @returns {number} De tijd in milliseconden.
+   */
+  Date.now = () => realNow() + offsetMs;
+  try {
+    await data.warm(tenantId);
+    let syncQueries = 0;
+    const prepare = db.prepare.bind(db);
+    /**
+     * Telt elke synchrone query.
+     * @param {string} sql De SQL.
+     * @returns {object} Het statement.
+     */
+    db.prepare = (sql) => { syncQueries++; return prepare(sql); };
+    const first = data.catalogOf(tenantId);
+    // Na 45 s is de cache verlopen: een pagina krijgt de oude catalogus meteen en de verversing loopt op de achtergrond.
+    offsetMs = 45 * 1000;
+    const refreshing = data.warm(tenantId, { allowStale: true });
+    assert.strictEqual(data.catalogOf(tenantId, { stale: true }), first);
+    await refreshing;
+    assert.strictEqual(syncQueries, 0);
+    // Een verzoek dat verse prijzen nodig heeft (geen stale) wacht op de verversing of leest zelf vers.
+    await data.warm(tenantId);
+    const fresh = data.catalogOf(tenantId);
+    assert.notStrictEqual(fresh, first);
+    assert.strictEqual(syncQueries, 0);
+    // Na meer dan twee minuten is stale niet meer toegestaan: dan wordt er gewacht op een verse catalogus.
+    offsetMs += 3 * 60 * 1000;
+    data.catalogOf(tenantId, { stale: true });
+    assert.strictEqual(syncQueries, db.async ? 2 : 0);
+  } finally {
+    Date.now = realNow;
+  }
+});

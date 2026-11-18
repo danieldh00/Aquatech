@@ -12,6 +12,8 @@ const ItemDetails = require('../artikelen/item-details');
 
 /** Hoe lang (ms) een opgebouwde catalogus per omgeving wordt hergebruikt. */
 const CACHE_MS = 30 * 1000;
+/** Hoelang een verlopen catalogus nog mag dienen voor het tonen van pagina's (stale-while-revalidate); afrekenen rekent altijd vers. */
+const STALE_MS = 2 * 60 * 1000;
 /** Hoogstens zoveel productpagina's met omschrijving in de cache. */
 const DETAILS_CACHE_MAX = 2000;
 /** Categorie voor artikelen zonder categorie in de webshop. */
@@ -458,16 +460,17 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
      * verkoopprijs die naar de webshop mogen (shop_sync), met categorie en
      * afbeelding van het gekoppelde webshopproduct. Eén query.
      * @param {string} tenantId De omgeving.
-     * @param {{ preview?: boolean }} [options] preview = met het concept van de categorieboom (niet onthouden).
+     * @param {{ preview?: boolean, stale?: boolean }} [options] preview = met het concept van de categorieboom (niet onthouden); stale = een verlopen catalogus van hoogstens twee minuten oud is goed (alleen voor het tonen van pagina's; de verversing loopt op de achtergrond via warm).
      * @returns {{ products: object[], categories: object[], groups: object[], featured: object[], bestsellers: object[] }} Zie buildCatalog.
      */
-    catalogOf(tenantId, { preview = false } = {}) {
+    catalogOf(tenantId, { preview = false, stale = false } = {}) {
       const tree = treeOf(tenantId, preview);
       const discounts = discountsOf(tenantId);
       const discountKey = JSON.stringify(discounts);
       const cached = !preview && cache.get(tenantId);
       // Een andere boom (na publiceren) of andere kortingen geven een nieuwe catalogus, ook binnen de cachetijd.
       if (cached && cached.until > Date.now() && cached.tree === tree && cached.discountKey === discountKey) return cached.catalog;
+      if (stale && db.async && cached && cached.until + STALE_MS > Date.now() && cached.tree === tree && cached.discountKey === discountKey) return cached.catalog;
       const rows = db.prepare(CATALOG_SQL).all(tenantId, tenantId);
       const sold = db.prepare(SOLD_SQL).all(tenantId, soldSince());
       const catalog = buildCatalog(rows, new Map(sold.map((row) => [String(row.code), Number(row.qty)])), tree, discounts);
@@ -477,11 +480,13 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
     /**
      * Vult de cache van de gepubliceerde catalogus alvast via db.async (met PostgreSQL de pool, beide queries tegelijk),
      * zodat een shop-pagina daarna catalogOf zonder query uit het geheugen haalt en de hoofdthread niet stilstaat. Doet
-     * niets als de cache nog geldig is; gelijktijdige verzoeken wachten op dezelfde opvraging.
+     * niets als de cache nog geldig is; gelijktijdige verzoeken wachten op dezelfde opvraging. Met allowStale en een
+     * verlopen catalogus van hoogstens twee minuten oud komt het antwoord meteen en loopt de verversing op de achtergrond.
      * @param {string} tenantId De omgeving.
+     * @param {{ allowStale?: boolean }} [options] allowStale = een verlopen catalogus mag nog dienen (alleen om pagina's te tonen).
      * @returns {Promise<void>}
      */
-    warm(tenantId) {
+    warm(tenantId, { allowStale = false } = {}) {
       if (!db.async) return Promise.resolve();
       const tree = treeOf(tenantId, false);
       const discounts = discountsOf(tenantId);
@@ -489,7 +494,8 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
       const cached = cache.get(tenantId);
       if (cached && cached.until > Date.now() && cached.tree === tree && cached.discountKey === discountKey) return Promise.resolve();
       const running = warming.get(tenantId);
-      if (running) return running;
+      const usable = allowStale && cached && cached.until + STALE_MS > Date.now() && cached.tree === tree && cached.discountKey === discountKey;
+      if (running) return usable ? Promise.resolve() : running;
       const started = generation;
       const job = Promise.all([db.async.all(CATALOG_SQL, tenantId, tenantId), db.async.all(SOLD_SQL, tenantId, soldSince())])
         .then(([rows, sold]) => {
@@ -499,6 +505,10 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
         })
         .finally(() => warming.delete(tenantId));
       warming.set(tenantId, job);
+      if (usable) {
+        job.catch(() => {});
+        return Promise.resolve();
+      }
       return job;
     },
     /**
