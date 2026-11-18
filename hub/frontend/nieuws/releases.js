@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.20.1',
+      date: '2026-11-18',
+      title: 'Tabellen kloppen op de telefoon en producttekst bij het artikel',
+      items: [
+        { text: 'Tabellen (zoals de prijshistorie en voorraadlagen van een artikel) blijven op de telefoon binnen hun kaart en scrollen zijdelings.' },
+        { text: 'De producttekst van een artikel schrijf, controleer en keur je nu goed in het artikel zelf. Het tabblad Teksten blijft voor in bulk concepten schrijven en opent het artikel om te beoordelen.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.20.0',
       date: '2026-11-18',
       title: 'Werkorders hangen aan een klant',
