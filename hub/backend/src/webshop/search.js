@@ -95,15 +95,14 @@ function withinDistance(left, right, limit) {
  * Bereidt één zoekbare eenheid voor (een product, of een product met één variant): genormaliseerde naam, code en woorden.
  * @param {object} product Het hoofdartikel (code, name, categoryName).
  * @param {?object} variant De variant (code, label) of null.
- * @returns {{ name: string, code: string, compactCode: string, haystack: string, tokens: string[], inStock: boolean }} De eenheid.
+ * @returns {{ code: string, compactCode: string, haystack: string, tokens: string[], inStock: boolean }} De eenheid.
  */
 function candidateOf(product, variant) {
-  const name = normalize(product.name);
   const code = normalize(variant ? variant.code : product.code);
   // Een code met streepje of spatie (SPR-10) is ook zonder te vinden (SPR10): de samengevoegde code is een eigen woord.
   const compactCode = code.replace(/ /g, '');
   const haystack = normalize(`${product.name} ${product.code} ${product.categoryName || ''} ${variant ? `${variant.code} ${variant.label}` : ''} ${compactCode}`);
-  return { name, code, compactCode, haystack, tokens: haystack.split(' ').filter(Boolean), inStock: variant ? Boolean(variant.inStock) : Boolean(product.inStock) };
+  return { code, compactCode, haystack, tokens: haystack.split(' ').filter(Boolean), inStock: variant ? Boolean(variant.inStock) : Boolean(product.inStock) };
 }
 
 /**
@@ -130,22 +129,41 @@ function wordScore(word, candidate, wide) {
   return 0;
 }
 
+/** Per catalogus (de lijst producten, die de gegevenslaag 30 seconden hergebruikt) de eenmaal genormaliseerde zoekeenheden. */
+const INDEX_CACHE = new WeakMap();
+
+/**
+ * De zoekeenheden van een catalogus: per product de genormaliseerde naam en per variant (of het product zelf) één kandidaat.
+ * Wordt één keer per catalogus berekend, zodat een zoekopdracht alleen nog scoort.
+ * @param {object[]} products De producten van de catalogus.
+ * @returns {{ product: object, productName: string, candidates: object[] }[]} De index.
+ */
+function indexOf(products) {
+  let index = INDEX_CACHE.get(products);
+  if (!index) {
+    index = products.map((product) => {
+      const variants = product.variants || [];
+      return { product, productName: normalize(product.name), candidates: variants.length ? variants.map((variant) => candidateOf(product, variant)) : [candidateOf(product, null)] };
+    });
+    INDEX_CACHE.set(products, index);
+  }
+  return index;
+}
+
 /**
  * Zoekt één tier: elk zoekwoord moet bij dezelfde eenheid (het hoofdartikel of één variant) passen.
- * @param {object[]} products De producten van de catalogus.
+ * @param {{ product: object, productName: string, candidates: object[] }[]} index De zoekeenheden van de catalogus (uit indexOf).
  * @param {string[]} words De genormaliseerde zoekwoorden.
  * @param {string} phrase Alle woorden achter elkaar, genormaliseerd.
  * @param {boolean} onlyInStock Of de gevonden eenheid op voorraad moet zijn.
  * @param {boolean} wide Of verwante woorden en tikfouten meetellen.
  * @returns {{ product: object, score: number }[]} De gevonden producten met score, nog ongesorteerd.
  */
-function searchTier(products, words, phrase, onlyInStock, wide) {
+function searchTier(index, words, phrase, onlyInStock, wide) {
   // Een code met streepjes of spaties (MP-2000, mp 2000) is na het normaliseren los van elkaar; samen vergelijken we hem met de code.
   const compact = words.join('');
   const found = [];
-  for (const product of products) {
-    const variants = product.variants || [];
-    const candidates = variants.length ? variants.map((variant) => candidateOf(product, variant)) : [candidateOf(product, null)];
+  for (const { product, productName, candidates } of index) {
     let best = 0;
     for (const candidate of candidates) {
       if (onlyInStock && !candidate.inStock) continue;
@@ -159,7 +177,6 @@ function searchTier(products, words, phrase, onlyInStock, wide) {
       if (!allMatch) continue;
       if (candidate.code === phrase || candidate.compactCode === compact) total += 1000;
       else if (candidate.compactCode.startsWith(compact)) total += 400;
-      const productName = normalize(product.name);
       if (productName.startsWith(phrase)) total += 100;
       if (words.every((word) => productName.includes(word))) total += 50;
       if (candidate.inStock) total += 5;
@@ -182,11 +199,12 @@ function searchProducts(products, query, { onlyInStock = false, limit = MAX_RESU
   const phrase = normalize(query);
   const words = phrase.split(' ').filter(Boolean);
   if (!words.length) return { products: [], widened: false };
+  const index = indexOf(products);
   let widened = false;
-  let found = searchTier(products, words, phrase, onlyInStock, false);
+  let found = searchTier(index, words, phrase, onlyInStock, false);
   if (!found.length) {
     widened = true;
-    found = searchTier(products, words, phrase, onlyInStock, true);
+    found = searchTier(index, words, phrase, onlyInStock, true);
   }
   found.sort((left, right) => right.score - left.score || left.product.name.localeCompare(right.product.name, 'nl'));
   return { products: found.slice(0, limit).map((entry) => entry.product), widened };

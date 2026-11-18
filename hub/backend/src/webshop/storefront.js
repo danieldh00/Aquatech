@@ -10,6 +10,7 @@ const path = require('path');
 const express = require('express');
 const { FRONTEND_DIR } = require('../paths');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
+const { searchProducts } = require('./search');
 const { registerAddressRoute, normalizePostcode } = require('../platform/address-lookup');
 const { clientKey } = require('../beveiliging/auth');
 const { catchAsync } = require('../platform/error-report');
@@ -73,7 +74,6 @@ const ACCOUNT_POSTS = /^\/(inloggen|registreren|uitloggen|planner|account\/zakel
 /** Paden waar de winkelwagen, het groothandelsvenster, het afrekenformulier, de webhook van Mollie en het retourformulier (met intrekken) naartoe posten. */
 const ORDER_POSTS = /^\/(winkelwagen(?:\/planner)?|afrekenen|groothandel|mollie\/webhook\/[^/]+|bestelling\/[^/]+\/(?:retour(?:\/[^/]+\/intrekken)?|pakbon|account))\/?$/;
 /** Pad van het aanvraagformulier voor een zakelijk account op de startpagina. */
-const { searchProducts } = require('./search');
 const REQUEST_POST = /^\/zakelijk-aanvraag\/?$/;
 /** Het formulier "Mail mij als hij weer binnen is" (voorraadmelding). */
 const ALERT_POST = /^\/voorraadmelding\/?$/;
