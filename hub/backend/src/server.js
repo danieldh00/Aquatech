@@ -76,6 +76,8 @@ const { createSupplierStore, registerSupplierRoutes } = require('./artikelen/sup
 const { createPriceFactorStore, registerPriceFactorRoutes } = require('./artikelen/price-factor');
 const { createOrderReader: createDefaultOrderReader } = require('./artikelen/order-reader');
 const { registerOrderReadRoute } = require('./artikelen/order-read-route');
+const { createItemTextWriter: createDefaultItemTextWriter } = require('./artikelen/item-text-writer');
+const { createItemTextDraftStore, registerItemTextRoutes } = require('./artikelen/item-text-drafts');
 const { createPackagingStore, registerPackagingRoutes } = require('./artikelen/packagings');
 const { createPurchaseOrderStore, registerPurchaseOrderRoutes } = require('./artikelen/purchase-orders');
 const { createNewsStore, registerNewsRoutes, unreadCount } = require('./platform/news');
@@ -335,7 +337,7 @@ function staticHeaders(version) {
  * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, mailerFor, shopFetch, vismaFetch, mollieFetch, addressFetch, viesFetch, captchaFetch (reCAPTCHA), googleFetch (Google Drive), shippingLabelProviders (koppelingen voor verzendlabels per vervoerder) en wanIp (tests vervangen hiermee de buitenwereld).
  * @returns {object} De app; app.locals bevat settings, onderhoud en synchronisatie.
  */
-function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, createOrderReader = createDefaultOrderReader, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, captchaFetch, googleFetch, shippingLabelProviders = {}, wanIp = createWanIp(), loginDelayMs = 1000, backupInChild = false }) {
+function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, createOrderReader = createDefaultOrderReader, createItemTextWriter = createDefaultItemTextWriter, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, captchaFetch, googleFetch, shippingLabelProviders = {}, wanIp = createWanIp(), loginDelayMs = 1000, backupInChild = false }) {
   const version = readVersion();
   const database = db || openDb();
   const store = createStore(database);
@@ -587,6 +589,24 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (!cached) {
       cached = createOrderReader({ apiKey: key, model });
       orderReaders.set(cacheKey, cached);
+    }
+    return cached;
+  }
+  const itemTextWriters = new Map();
+  /**
+   * De AI-schrijver voor producttekst van een omgeving (per model en sleutel onthouden).
+   * @param {string} [tenantId] Id van de omgeving.
+   * @returns {object} De schrijver (item-text-writer.js).
+   */
+  function currentItemTextWriter(tenantId = tenant.id) {
+    const aiSettings = settingsFor(aiTenantOf(tenantId));
+    const key = aiSettings.get('anthropicApiKey');
+    const model = aiSettings.get('aiModel');
+    const cacheKey = `${model}|${key}`;
+    let cached = itemTextWriters.get(cacheKey);
+    if (!cached) {
+      cached = createItemTextWriter({ apiKey: key, model });
+      itemTextWriters.set(cacheKey, cached);
     }
     return cached;
   }
@@ -2669,6 +2689,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const priceFactorStore = createPriceFactorStore(database, { stock: stockStore, settingsOf: (tenantId) => settingsFor(tenantId), treeOf: (tenantId) => shopContentStore.publicContent(tenantId).tree });
   stockStore.setPricer((tenantId, item) => priceFactorStore.priceFor(tenantId, item));
   registerPriceFactorRoutes(app, { priceFactors: priceFactorStore, suppliers: supplierStore, settingsOf: (tenantId) => settingsFor(tenantId), treeOf: (tenantId) => shopContentStore.publicContent(tenantId).tree, requireRight, requireJson, audit });
+  // Producttekst door de AI: de browser vraagt per portie van 5 artikelen, dus ruimer dan de limiet voor plannen (de dagelijkse limiet telt per artikel).
+  const itemTextLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 120, keyFn: (req) => `${req.tenantId || tenant.id}|${clientKey(req)}` });
+  registerItemTextRoutes(app, { drafts: createItemTextDraftStore(database), stock: stockStore, requireRight, requireJson, audit, settingsFor, aiTenantOf, currentItemTextWriter, dailyFor, limiter: itemTextLimiter, aiUsage });
   registerOrderReadRoute(app, { stock: stockStore, suppliers: supplierStore, requireRight, audit, settingsFor, aiTenantOf, currentOrderReader, dailyFor, limiter: analyzeLimiter, aiUsage });
   // Verpakkingseenheden per artikel (zie packagings.js).
   registerPackagingRoutes(app, { packagings: packagingStore, requireRight, requireJson, audit });

@@ -1158,6 +1158,26 @@ const PG_MIGRATIONS = [
   ALTER TABLE stock_items ADD COLUMN lead_days_max BIGINT;
   ALTER TABLE item_suppliers ADD COLUMN lead_days BIGINT;
   `,
+  // 75: concepten van producttekst door de AI (zie db.js).
+  `
+  CREATE TABLE item_text_drafts (
+    id              TEXT PRIMARY KEY,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id),
+    item_id         TEXT NOT NULL REFERENCES stock_items(id),
+    description     ${TEXT_TYPE} NOT NULL DEFAULT '',
+    seo_title       ${TEXT_TYPE} NOT NULL DEFAULT '',
+    seo_description ${TEXT_TYPE} NOT NULL DEFAULT '',
+    warnings        ${TEXT_TYPE} NOT NULL DEFAULT '[]',
+    notes           ${TEXT_TYPE} NOT NULL DEFAULT '',
+    model           ${TEXT_TYPE} NOT NULL DEFAULT '',
+    base_hash       ${TEXT_TYPE} NOT NULL DEFAULT '',
+    edited          BIGINT NOT NULL DEFAULT 0,
+    created_by      ${TEXT_TYPE},
+    created_at      ${TEXT_TYPE} NOT NULL,
+    updated_at      ${TEXT_TYPE} NOT NULL
+  );
+  CREATE UNIQUE INDEX item_text_drafts_item ON item_text_drafts (tenant_id, item_id);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

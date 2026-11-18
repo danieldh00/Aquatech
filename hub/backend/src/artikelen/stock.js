@@ -888,6 +888,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     prepare('DELETE FROM item_packagings WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
     prepare('DELETE FROM price_proposal_rejections WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
     prepare('DELETE FROM purchase_proposal_dismissals WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
+    prepare('DELETE FROM item_text_drafts WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
     prepare('DELETE FROM stock_items WHERE tenant_id = ? AND id = ?').run(tenantId, row.id);
     return false;
   }
@@ -1396,6 +1397,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     prepare('UPDATE stock_items SET has_variants = 1, ean = NULL, attributes = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(attributes, currentTimestamp(), tenantId, item.id);
     prepare('DELETE FROM item_suppliers WHERE tenant_id = ? AND item_id = ?').run(tenantId, item.id);
     prepare('DELETE FROM item_packagings WHERE tenant_id = ? AND item_id = ?').run(tenantId, item.id);
+    prepare('DELETE FROM item_text_drafts WHERE tenant_id = ? AND item_id = ?').run(tenantId, item.id);
     item.has_variants = 1;
     item.attributes = attributes;
     return true;

@@ -136,3 +136,23 @@ body.has-nav .tab[data-purchasing] { display: none; }
 .pp-dismissed summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
 .pp-dismissed li { align-items: center; }
 .pill.voorstel { background: var(--at-green-soft); color: var(--at-green-dark); }
+
+/* Producttekst door de AI (tabblad Teksten): overzicht, bronvelden, waarschuwingen en vergelijking live/concept. */
+.tx-actions { margin: 10px 0; align-items: center; }
+.tx-detail { margin-top: 16px; border-left: 4px solid var(--at-teal); }
+.tx-detail-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.tx-detail-head h2 { margin: 0; font-size: 18px; }
+.tx-facts { display: grid; grid-template-columns: minmax(120px, max-content) 1fr; gap: 4px 14px; margin: 0; font-size: 13px; color: var(--text); }
+.tx-facts dt { color: var(--muted); }
+.tx-facts dd { margin: 0; white-space: pre-line; overflow-wrap: anywhere; }
+.tx-warn { margin: 0 0 12px; padding: 10px 14px; border: 1px solid var(--at-danger); border-left-width: 4px; border-radius: var(--radius); background: color-mix(in srgb, var(--at-danger) 8%, var(--panel)); font-size: 14px; }
+.tx-warn ul { margin: 6px 0 0; padding-left: 20px; }
+.tx-warn b { color: var(--at-danger); }
+.tx-ok { margin: 0 0 12px; padding: 10px 14px; border-radius: var(--radius); background: var(--at-green-soft); color: var(--at-green-dark); font-size: 14px; }
+.tx-compare textarea[readonly], .tx-compare input[readonly] { background: var(--panel); color: var(--muted); }
+.pill.warn { background: var(--danger, #c62828); color: #fff; }
+.tx-detail .chk { display: flex; margin: 8px 0; }
+@media (max-width: 640px) {
+  .tx-facts { grid-template-columns: 1fr; }
+  .tx-actions .btn { flex: 1 1 auto; }
+}

@@ -378,7 +378,7 @@
   }
 
   /** De tabbladen, ook als #-adres (de zijbalk onder Inkoop wijst naar moves, reorder, suppliers en orders). */
-  const TABS = ['stock', 'reserved', 'moves', 'reorder', 'suppliers', 'orders', 'pricefactor', 'media'];
+  const TABS = ['stock', 'reserved', 'moves', 'reorder', 'suppliers', 'orders', 'pricefactor', 'media', 'texts'];
 
   /**
    * Tekent het bestelvoorstel op het scherm: per leverancier de artikelen die onder het minimum zitten.
@@ -412,6 +412,7 @@
     if (name === 'suppliers') window.ArtikelenSuppliers.load().catch((error) => toast(error.message, true));
     if (name === 'orders') window.ArtikelenOrders.load().catch((error) => toast(error.message, true));
     if (name === 'pricefactor') window.ArtikelenPriceFactor.load().catch((error) => toast(error.message, true));
+    if (name === 'texts') window.ArtikelenTexts.load().catch((error) => toast(error.message, true));
     if (name === 'media') loadMedia().catch((error) => toast(error.message, true));
     try { history.replaceState(null, '', `./#${name}`); } catch { /* file:// */ }
     if (window.AquatechNav) window.AquatechNav.refresh();
@@ -1557,6 +1558,7 @@
       pricingForm.addEventListener('change', () => syncPricing(pricingForm));
       pricingForm.addEventListener('reset', () => setTimeout(() => syncPricing(pricingForm)));
     }
+    window.ArtikelenTexts.setup({ api, toast, esc });
     window.ArtikelenPriceFactor.setup({ api, toast, esc, nl, eur, workbook, save, stamp });
     window.ArtikelenOrders.setup({ api, toast, esc, nl, eur, getItems: () => state.items, workbook, save, stamp, afterProposal: () => loadReorder().catch((error) => toast(error.message, true)) });
     window.ArtikelenProposals.setup({

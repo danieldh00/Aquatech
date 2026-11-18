@@ -1401,6 +1401,28 @@ const MIGRATIONS = [
   ALTER TABLE stock_items ADD COLUMN lead_days_max INTEGER;
   ALTER TABLE item_suppliers ADD COLUMN lead_days INTEGER;
   `,
+  // 75: concepten van producttekst door de AI (artikelen/item-text-drafts.js): per artikel hoogstens één concept van omschrijving en
+  // zoekmachineteksten, met de controlemeldingen en een vingerafdruk van de live tekst bij het schrijven. Pas na handmatige goedkeuring
+  // komt de tekst in stock_items.
+  `
+  CREATE TABLE item_text_drafts (
+    id              TEXT PRIMARY KEY,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id),
+    item_id         TEXT NOT NULL REFERENCES stock_items(id),
+    description     TEXT NOT NULL DEFAULT '',
+    seo_title       TEXT NOT NULL DEFAULT '',
+    seo_description TEXT NOT NULL DEFAULT '',
+    warnings        TEXT NOT NULL DEFAULT '[]',
+    notes           TEXT NOT NULL DEFAULT '',
+    model           TEXT NOT NULL DEFAULT '',
+    base_hash       TEXT NOT NULL DEFAULT '',
+    edited          INTEGER NOT NULL DEFAULT 0,
+    created_by      TEXT,
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX item_text_drafts_item ON item_text_drafts (tenant_id, item_id);
+  `,
 ];
 
 /**
