@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.19.1
+
+Winkelwagen: `shippingHint`/`shippingBlock` (kosten, levertijd, drempelbalk met `<progress>`), betaalnotitie naar de echte betaalwijzen, cookie `aquatech_laatste_lijst` (`rememberList`/`lastListPath`, alleen categorie of groep, nooit een zoekterm, alleen als bestellen aan staat) voor Verder winkelen, aantalformulier dat zichzelf verstuurt (`winkelwagen.js`) en een kaartweergave op smalle schermen. Afrekenen: verzendmethode als keuzekaarten (radio, `chosenShipping` in afrekenen.js), kop *Bezorg- en factuuradres* zolang het afleveradres gelijk is, dropshipping alleen in het formulier van zakelijke klanten. `trustStrip` op productpagina, winkelwagen en afrekenen (alleen punten met gegevens). Zoeken zonder resultaat: `noResults`. `shipping.optionsFor` geeft `freeFrom` mee.
+
 ## 1.19.0
 
 - Migratie 75: tabel `item_text_drafts` (één concept per artikel: omschrijving, zoekmachinetitel en -omschrijving, waarschuwingen, vingerafdruk van de live tekst bij het schrijven). Wordt gewist met het artikel (`removeRow`, samenvoegen).

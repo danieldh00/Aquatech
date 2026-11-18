@@ -13,6 +13,17 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.19.1',
+      date: '2026-11-18',
+      title: 'Winkelwagen en afrekenen duidelijker',
+      items: [
+        { text: 'De winkelwagen toont nu al de verzendkosten, de levertijd en hoeveel er nog aan gratis bezorging ontbreekt.' },
+        { text: 'Bij het afrekenen kies je de verzendmethode uit kaarten met prijs en levertijd, en staat er een strook met levertijd, gratis-vanaf, bedenktijd en het telefoonnummer.' },
+        { text: 'Het aantal in de winkelwagen wordt direct bijgewerkt en op een telefoon staat elke regel als kaart. Verder winkelen brengt je terug naar de laatst bekeken categorie.' },
+        { text: 'Een zoekopdracht zonder resultaat geeft tips, de categorieën en ons telefoonnummer. Het blok Dropshipping zien alleen zakelijke klanten.' },
+      ],
+    },
+    {
       version: '1.19.0',
       date: '2026-11-18',
       title: 'Producttekst laten schrijven door de AI',
