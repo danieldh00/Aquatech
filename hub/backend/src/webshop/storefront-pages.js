@@ -129,6 +129,14 @@ const ICONS = {
   down: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
 };
 
+/** Pictogrammen voor de vertrouwensstrook (inline SVG). */
+const ICONS_TRUST = {
+  truck: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h11v10H3zM14 9h4l3 3v4h-7"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="17.5" cy="17.5" r="1.5"/></svg>',
+  tag: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.2"/></svg>',
+  back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7 4 12l5 5"/><path d="M4 12h10a6 6 0 0 1 0 12"/></svg>',
+  lock: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
+};
+
 /**
  * Adres van een bestand van de shop (CSS, afbeelding) met de versie erbij, zodat
  * een browser na een nieuwe versie nooit een oud bestand uit de cache gebruikt.
@@ -353,6 +361,24 @@ function vatLabel(item) {
  */
 function productHref(root, product, variant) {
   return `${root}product/${escapeHtml(product.slug)}/${variant ? `?v=${encodeURIComponent(variant.code)}` : ''}`;
+}
+
+/**
+ * De vertrouwensstrook op de beslismomenten (productpagina, winkelwagen, afrekenen): levertijd, gratis verzenden, retour, advies en
+ * betalen. Alleen wat klopt: een punt zonder gegevens (geen drempel, geen telefoonnummer, geen online betalen) blijft weg.
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @param {{ leadText?: string, freeFrom?: number, business?: boolean, online?: boolean }} [facts] De levertijd van de eerste bezorgmethode (leeg = onbekend), de gratis-vanaf-drempel (incl. btw), of de klant zakelijk is (geen herroepingsrecht) en of online betalen aan staat.
+ * @returns {string} HTML van de strook, of leeg als er niets te melden is.
+ */
+function trustStrip(root, { leadText = '', freeFrom = 0, business = false, online = false } = {}) {
+  const phone = activeContent.site.contact.phone;
+  const items = [];
+  if (leadText) items.push(`<li>${ICONS_TRUST.truck}<span>${escapeHtml(leadText)}</span></li>`);
+  if (freeFrom > 0) items.push(`<li>${ICONS_TRUST.tag}<span>Gratis bezorgd vanaf ${escapeHtml(formatPrice(freeFrom))}${business ? ' (incl. btw)' : ''}</span></li>`);
+  if (!business) items.push(`<li>${ICONS_TRUST.back}<span><a href="${root}pagina/herroepingsrecht/">14 dagen bedenktijd</a> voor consumenten</span></li>`);
+  if (phone) items.push(`<li>${ICONS.phone}<span>Advies van vakmensen: <a href="${escapeHtml(phoneLink(phone))}">${escapeHtml(phone)}</a></span></li>`);
+  if (online) items.push(`<li>${ICONS_TRUST.lock}<span>Veilig betalen met iDEAL en andere methodes</span></li>`);
+  return items.length ? `<ul class="trust-strip" aria-label="Waarom bij ons bestellen">${items.join('')}</ul>` : '';
 }
 
 /**
@@ -697,6 +723,18 @@ function categoryPage(category, products, groups, options = {}) {
 }
 
 /**
+ * De hulp bij een zoekopdracht zonder resultaat: tips, de hoofdcategorieën en het telefoonnummer, zodat de bezoeker niet op een lege pagina strandt.
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @param {object[]} groups Alle hoofdcategorieën.
+ * @returns {string} HTML van het blok.
+ */
+function noResults(root, groups) {
+  const phone = activeContent.site.contact.phone;
+  const links = groups.map((group) => `<li><a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a></li>`).join('');
+  return `<div class="no-results"><p><strong>Niets gevonden.</strong> Probeer een korter woord, een andere schrijfwijze of het artikelnummer.</p>${links ? `<p>Of kijk in een van onze categorieën:</p><ul class="no-results-groups">${links}</ul>` : ''}${phone ? `<p>Zoek je iets specifieks? Bel ons voor advies: <a href="${escapeHtml(phoneLink(phone))}">${escapeHtml(phone)}</a>.</p>` : ''}</div>`;
+}
+
+/**
  * Zoekpagina: producten waarvan naam of artikelnummer de zoekterm bevat.
  * @param {string} query De zoekterm.
  * @param {object[]} products De producten die passen (al gefilterd).
@@ -711,6 +749,7 @@ function searchPage(query, products, groups, onlyInStock = false, preview = fals
   const body = `<h1>Zoeken</h1>
 ${query ? `<p class="muted">${productCount(products.length)} voor “${escapeHtml(query)}”${products.length > shown.length ? ` (de eerste ${shown.length} getoond)` : ''}.</p>` : '<p class="muted">Typ een productnaam of artikelnummer.</p>'}
 ${query ? stockFilter(onlyInStock, `q=${encodeURIComponent(query)}`, `q=${encodeURIComponent(query)}&amp;voorraad=1`, preview) : ''}
+${query && !products.length ? noResults(root, groups) : ''}
 <div class="product-grid">
 ${shown.map((product) => productCard(product, root)).join('\n')}
 </div>`;
@@ -755,10 +794,10 @@ function detailsSection(details) {
  * @param {object[]} groups Alle hoofdcategorieën.
  * @param {string} [chosenCode] Artikelnummer van de gekozen variant (alleen bij een hoofdartikel; anders de eerste op voorraad).
  * @param {Map<string, { description: string, specifications: object[] }>} [details] Omschrijving en specificaties per artikelcode (storefront-data.detailsOf).
- * @param {{ packagingsFor?: Function, packCode?: string }} [packaging] packagingsFor(artikelcode) = de verpakkingen die de bezoeker mag kiezen (zie storefront.js) en packCode = de gekozen verpakking (leeg = per stuk).
+ * @param {{ packagingsFor?: Function, packCode?: string, leadTextFor?: Function, trust?: { freeFrom?: number, online?: boolean } }} [packaging] packagingsFor(artikelcode) = de verpakkingen die de bezoeker mag kiezen (zie storefront.js) en packCode = de gekozen verpakking (leeg = per stuk).
  * @returns {string} De HTML-pagina.
  */
-function productPage(product, groups, chosenCode = '', details = new Map(), { packagingsFor = () => [], packCode = '', leadTextFor = () => '' } = {}) {
+function productPage(product, groups, chosenCode = '', details = new Map(), { packagingsFor = () => [], packCode = '', leadTextFor = () => '', trust = {} } = {}) {
   const root = '../../';
   const variants = product.variants || [];
   const chosen = variants.length ? (variants.find((variant) => variant.code === chosenCode) || variants.find((variant) => variant.inStock) || variants[0]) : null;
@@ -794,6 +833,7 @@ function productPage(product, groups, chosenCode = '', details = new Map(), { pa
     ${leadTextFor(shown.code, pack ? pack.inStock : shown.inStock) ? `<p class="lead-time">${escapeHtml(leadTextFor(shown.code, pack ? pack.inStock : shown.inStock))}</p>` : ''}
     ${activeShop.ordering ? orderForm(root, pack ? pack.cartCode : shown.code, pack ? pack.inStock : shown.inStock, 'product-order', viewedItem) : '<button class="button" type="button" disabled>In winkelwagen</button>\n    <p class="note">Online bestellen volgt binnenkort.</p>'}
     ${parentLink}
+    ${trustStrip(root, { freeFrom: trust.freeFrom || 0, online: Boolean(trust.online), business: activeShop.business })}
   </div>
 </article>
 ${detailsSection(shownDetails)}`;
@@ -951,4 +991,4 @@ function notFoundPage(root, groups) {
   return layout({ root, groups, title: `Pagina niet gevonden – ${SHOP_NAME}`, description: 'Deze pagina bestaat niet.', body: `<h1>Pagina niet gevonden</h1><p><a href="${root || './'}">Terug naar de shop</a></p>` });
 }
 
-module.exports = { layout, renderWith, captchaFields, contentPage, homePage, aboutPage, groupPage, categoryPage, searchPage, productPage, notFoundPage, escapeHtml, formatPrice };
+module.exports = { layout, renderWith, captchaFields, trustStrip, contentPage, homePage, aboutPage, groupPage, categoryPage, searchPage, productPage, notFoundPage, escapeHtml, formatPrice };

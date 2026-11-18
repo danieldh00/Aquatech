@@ -150,13 +150,18 @@ test('afrekenen: dropshipping vraagt een geldig e-mailadres voor het afleverbewi
   const [shopper] = world.shoppers;
   const { postForm, postCheckout } = require('./helpers/http-client');
   await postForm(world.base, shopper.client, '/winkelwagen/', { action: 'add', code: 'BUS', qty: '1' });
+  // Een particulier ziet het blok Dropshipping niet; een zakelijke klant wel.
+  const consumerForm = await shopper.client.request('GET', '/afrekenen/');
+  assert.doesNotMatch(consumerForm.text, /name="dropshipping"/);
+  const user = world.db.prepare('SELECT id FROM users WHERE email = ?').get('k1@voorbeeld.nl');
+  assert.strictEqual((await world.admin.patch(`/app/api/admin/users/${user.id}`, { customerGroup: 'zakelijk' })).status, 200);
   const form = await shopper.client.request('GET', '/afrekenen/');
   assert.match(form.text, /name="dropshipping"/);
   assert.match(form.text, /name="dropshipProofEmail"/);
-  const noMail = await postCheckout(world.base, shopper.client, { ...PERSON, dropshipping: 'ja', dropshipProofEmail: 'geen-adres' });
+  const noMail = await postCheckout(world.base, shopper.client, { ...PERSON, company: 'Reseller BV', dropshipping: 'ja', dropshipProofEmail: 'geen-adres' });
   assert.strictEqual(noMail.status, 400);
   assert.match(noMail.text, /afleverbewijs naartoe moet/);
-  const pickup = await postCheckout(world.base, shopper.client, { ...PERSON, ...DROP, shippingMethod: 'ophalen' });
+  const pickup = await postCheckout(world.base, shopper.client, { ...PERSON, company: 'Reseller BV', ...DROP, shippingMethod: 'ophalen' });
   assert.strictEqual(pickup.status, 400);
   assert.match(pickup.text, /Dropshipping kan alleen met bezorgen/);
   assert.strictEqual((await world.admin.get('/app/api/admin/web-orders')).body.items.length, 0, 'er is niets besteld');

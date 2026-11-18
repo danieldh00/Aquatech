@@ -513,3 +513,49 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
 .grecaptcha-badge { visibility: hidden; }
 .captcha-note { font-size: 0.75rem; color: var(--at-muted, #5b6575); margin: 0 0 12px; }
 .captcha-note a { color: inherit; text-decoration: underline; }
+
+/* Vertrouwensstrook op productpagina, winkelwagen en afrekenen. */
+.trust-strip { list-style: none; margin: 16px 0 0; padding: 12px 14px; display: grid; gap: 8px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 10px; font-size: 0.9rem; }
+.trust-strip li { display: flex; gap: 10px; align-items: center; }
+.trust-strip svg { flex: none; width: 20px; height: 20px; fill: none; stroke: var(--at-shop-green-dark); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.cart .trust-strip { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 24px; }
+
+/* Verzendkosten, levertijd en drempelbalk in de winkelwagen. */
+.shipping-hint { margin-top: 16px; padding: 12px 14px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 10px; }
+.shipping-hint p { margin: 0 0 6px; }
+.shipping-hint p:last-child { margin-bottom: 0; }
+.free-bar { display: block; width: 100%; height: 10px; margin: 4px 0 8px; border: 0; border-radius: 5px; overflow: hidden; background: var(--at-line); accent-color: var(--at-shop-green-dark); }
+.free-bar::-webkit-progress-bar { background: var(--at-line); }
+.free-bar::-webkit-progress-value { background: var(--at-shop-green-dark); }
+.free-bar::-moz-progress-bar { background: var(--at-shop-green-dark); }
+
+/* Verzendmethode als keuzekaarten. */
+.ship-cards { border: 0; margin: 0 0 8px; padding: 0; display: grid; gap: 8px; }
+.ship-cards legend { padding: 0; margin-bottom: 6px; font-weight: 700; }
+.ship-card { display: grid; grid-template-columns: auto 1fr auto; column-gap: 10px; align-items: baseline; padding: 12px 14px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 10px; cursor: pointer; }
+.ship-card input { grid-row: 1 / span 2; align-self: center; width: 20px; height: 20px; margin: 0; }
+.ship-card:has(input:checked) { border-color: var(--at-shop-green-dark); background: var(--at-shop-green-soft); }
+.ship-card:has(input:focus-visible) { outline: 2px solid var(--at-shop-green-dark); outline-offset: 2px; }
+.ship-card .ship-card-name { font-weight: 700; }
+.ship-card .ship-card-price { font-weight: 700; text-align: right; }
+.ship-card small { grid-column: 2 / span 2; color: var(--at-muted); }
+.ship-card.unavailable { opacity: 0.6; cursor: not-allowed; }
+
+/* Zoekopdracht zonder resultaat. */
+.no-results { margin: 16px 0; padding: 14px 16px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 10px; }
+.no-results p { margin: 0 0 8px; }
+.no-results-groups { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0 0 12px; padding: 0; list-style: none; }
+
+/* Winkelwagen op een smal scherm: elke regel een kaart in plaats van een tabel die zijwaarts scrolt. */
+@media (max-width: 640px) {
+  .cart-table, .cart-table tbody, .cart-table tfoot { display: block; }
+  .cart-table thead { display: none; }
+  .cart-table tbody tr { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; padding: 12px; margin-bottom: 10px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 10px; }
+  .cart-table tbody td { padding: 0; border: 0; }
+  .cart-table tbody td:first-child { grid-column: 1 / -1; }
+  .cart-table tbody td[data-label]::before { content: attr(data-label) ": "; color: var(--at-muted); font-size: 0.85rem; }
+  .cart-table tbody td.num { text-align: left; }
+  .cart-table tfoot tr { display: flex; justify-content: space-between; gap: 12px; padding: 6px 12px; }
+  .cart-table tfoot th, .cart-table tfoot td { padding: 0; border: 0; }
+  .cart-table tfoot th[colspan], .cart-table tfoot td[colspan] { flex: 1; }
+}
