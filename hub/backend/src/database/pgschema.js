@@ -1227,6 +1227,10 @@ const PG_MIGRATIONS = [
   ALTER TABLE purchase_orders ADD COLUMN mail_sent_by ${TEXT_TYPE} NOT NULL DEFAULT '';
   ALTER TABLE purchase_orders ADD COLUMN mail_error ${TEXT_TYPE} NOT NULL DEFAULT '';
   `,
+  // 81: miniatuur bij een artikelafbeelding (zie db.js).
+  `
+  ALTER TABLE item_images ADD COLUMN thumb ${TEXT_TYPE};
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

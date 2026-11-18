@@ -886,12 +886,14 @@
     $('#images-text').textContent = 'Controleren…';
     dialog.showModal();
     try {
-      const pendingCount = await window.ItemImages.pending();
-      $('#images-text').textContent = pendingCount
-        ? `${pendingCount} artikel${pendingCount === 1 ? '' : 'en'} gebruik${pendingCount === 1 ? 't' : 'en'} nog de afbeelding van de oude webshop. Overnemen bewaart ze in dit systeem; opnieuw uitvoeren neemt alleen over wat nog ontbreekt.`
-        : 'Alle afbeeldingen van gekoppelde webshopproducten staan al in dit systeem.';
-      $('#images-start').hidden = !pendingCount;
+      const [pendingCount, thumbCount] = await Promise.all([window.ItemImages.pending(), window.ItemImages.thumbsPending()]);
+      const lines = [];
+      if (pendingCount) lines.push(`${pendingCount} artikel${pendingCount === 1 ? '' : 'en'} gebruik${pendingCount === 1 ? 't' : 'en'} nog de afbeelding van de oude webshop. Overnemen bewaart ze in dit systeem; opnieuw uitvoeren neemt alleen over wat nog ontbreekt.`);
+      if (thumbCount) lines.push(`${thumbCount} afbeelding${thumbCount === 1 ? '' : 'en'} ${thumbCount === 1 ? 'heeft' : 'hebben'} nog geen miniatuur. Miniaturen maken de webshop op telefoons en bij veel producten sneller; ze worden hier in uw browser gemaakt.`);
+      $('#images-text').textContent = lines.length ? lines.join(' ') : 'Alle afbeeldingen staan in dit systeem en hebben een miniatuur.';
+      $('#images-start').hidden = !lines.length;
       $('#images-start').dataset.total = String(pendingCount);
+      $('#images-start').dataset.thumbs = String(thumbCount);
     } catch (error) {
       $('#images-text').textContent = `Controleren mislukt: ${error.message}`;
     }
@@ -903,17 +905,24 @@
     $('#images-close').onclick = () => { $('#images-dialog').close(); };
     /** Neemt de afbeeldingen over met een voortgangsbalk. */
     $('#images-start').onclick = async () => {
-      const total = Number($('#images-start').dataset.total) || 1;
+      const total = Number($('#images-start').dataset.total) || 0;
       $('#images-start').hidden = true;
       $('#images-close').disabled = true;
       try {
-        const totals = await window.ItemImages.importAll((progress) => {
+        const totals = total ? await window.ItemImages.importAll((progress) => {
           $('#images-bar').value = Math.min(1, (total - progress.pending) / total);
           $('#images-text').textContent = `${progress.imported + progress.reused} artikelen gekoppeld, ${progress.stored} afbeeldingen bewaard…`;
-        });
+        }) : { imported: 0, reused: 0, stored: 0, failed: [] };
+        // Daarna de miniaturen (ook voor de zojuist overgenomen afbeeldingen).
+        const thumbTotal = await window.ItemImages.thumbsPending();
+        $('#images-bar').value = 0;
+        const thumbs = thumbTotal ? await window.ItemImages.thumbsAll((progress) => {
+          $('#images-bar').value = Math.min(1, (progress.done + progress.failed) / thumbTotal);
+          $('#images-text').textContent = `Miniaturen maken: ${progress.done} van ${thumbTotal}…`;
+        }) : { done: 0, failed: 0 };
         $('#images-bar').value = 1;
         const linked = totals.imported + totals.reused;
-        $('#images-text').textContent = `Klaar: ${linked} artikel${linked === 1 ? '' : 'en'} gekoppeld; ${totals.stored} nieuwe afbeelding${totals.stored === 1 ? '' : 'en'} bewaard, bestaande foto\'s zijn hergebruikt${totals.failed.length ? `. ${totals.failed.length} niet gelukt` : ''}.`;
+        $('#images-text').textContent = `Klaar: ${linked} artikel${linked === 1 ? '' : 'en'} gekoppeld; ${totals.stored} nieuwe afbeelding${totals.stored === 1 ? '' : 'en'} bewaard; ${thumbs.done} miniatuur${thumbs.done === 1 ? '' : 'en'} gemaakt${totals.failed.length || thumbs.failed ? `. ${totals.failed.length + thumbs.failed} niet gelukt (opnieuw uitvoeren probeert ze nog eens)` : ''}.`;
         if (totals.failed.length) {
           $('#images-failed').hidden = false;
           $('#images-failed').innerHTML = `Niet gelukt (opnieuw uitvoeren probeert ze nog eens):<br>${totals.failed.slice(0, 20).map((failure) => `${esc(failure.code)}: ${esc(failure.reason)}`).join('<br>')}${totals.failed.length > 20 ? `<br>… en ${totals.failed.length - 20} meer` : ''}`;

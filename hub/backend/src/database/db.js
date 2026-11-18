@@ -1480,6 +1480,11 @@ const MIGRATIONS = [
   ALTER TABLE purchase_orders ADD COLUMN mail_sent_by TEXT NOT NULL DEFAULT '';
   ALTER TABLE purchase_orders ADD COLUMN mail_error TEXT NOT NULL DEFAULT '';
   `,
+  // 81: miniatuur bij een artikelafbeelding (item-images.js): een kleine WebP (hoogstens 480 px, door de browser gemaakt) voor de kaartjes in de
+  // webshop, versleuteld zoals de afbeelding zelf. Leeg = nog geen miniatuur; de shop toont dan de gewone afbeelding.
+  `
+  ALTER TABLE item_images ADD COLUMN thumb TEXT;
+  `,
 ];
 
 /**

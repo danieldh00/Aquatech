@@ -4,6 +4,8 @@
 (function () {
   const MAX_SIDE = 1200;
   const KEEP_BYTES = 300 * 1024;
+  /** Lange kant van de miniatuur voor de kaartjes in de webshop. */
+  const THUMB_SIDE = 480;
 
   /**
    * Roept de API aan en geeft de JSON terug.
@@ -37,16 +39,35 @@
   }
 
   /**
+   * Maakt van een afbeelding een miniatuur (WebP, hoogstens 480 pixels, witte ondergrond) voor de kaartjes in de webshop.
+   * @param {ImageBitmap} bitmap de afbeelding
+   * @returns {Promise<string>} de miniatuur als base64, of '' als de browser geen WebP kan maken
+   */
+  async function makeThumb(bitmap) {
+    const scale = Math.min(1, THUMB_SIDE / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext('2d');
+    context.fillStyle = '#fff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', 0.8));
+    return blob && blob.type === 'image/webp' ? readBase64(blob) : '';
+  }
+
+  /**
    * Maakt een gekozen bestand klaar voor het uploaden: een grote afbeelding wordt
    * verkleind tot maximaal 1200 pixels (JPEG op een witte ondergrond), een kleine blijft zoals hij is.
    * @param {File} file het gekozen bestand (JPEG, PNG of WebP)
-   * @returns {Promise<{ name: string, data: string }>} bestandsnaam en base64-inhoud
+   * @returns {Promise<{ name: string, data: string, thumb?: string }>} bestandsnaam, base64-inhoud en (als de browser het kan) een miniatuur
    */
   async function prepare(file) {
     if (!file || !/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error('Kies een JPEG-, PNG- of WebP-afbeelding.');
     let bitmap = null;
     try { bitmap = await createImageBitmap(file); } catch (error) { /* geen voorbeeld mogelijk: de server controleert */ }
-    if (!bitmap || (file.size <= KEEP_BYTES && Math.max(bitmap.width, bitmap.height) <= MAX_SIDE)) return { name: file.name, data: await readBase64(file) };
+    const thumb = bitmap ? await makeThumb(bitmap).catch(() => '') : '';
+    if (!bitmap || (file.size <= KEEP_BYTES && Math.max(bitmap.width, bitmap.height) <= MAX_SIDE)) return { name: file.name, data: await readBase64(file), thumb };
     const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(bitmap.width * scale);
@@ -56,7 +77,7 @@
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.86));
-    return { name: file.name.replace(/\.[^.]+$/, '') + '.jpg', data: await readBase64(blob || file) };
+    return { name: file.name.replace(/\.[^.]+$/, '') + '.jpg', data: await readBase64(blob || file), thumb };
   }
 
   /**
@@ -115,5 +136,43 @@
     }
   }
 
-  window.ItemImages = { prepare, upload, remove, src, pending, importAll };
+  /**
+   * Hoeveel afbeeldingen nog geen miniatuur hebben.
+   * @returns {Promise<number>} het aantal
+   */
+  async function thumbsPending() {
+    return Number((await api('stock/images-thumbs')).pending) || 0;
+  }
+
+  /**
+   * Maakt de ontbrekende miniaturen aan, portie voor portie: haalt elke afbeelding op, verkleint hem in de browser en bewaart de miniatuur.
+   * Opnieuw uitvoeren doet alleen wat nog ontbreekt.
+   * @param {(progress: { done: number, failed: number, pending: number }) => void} onProgress wordt na elke afbeelding aangeroepen
+   * @returns {Promise<{ done: number, failed: number, pending: number }>} de totalen
+   */
+  async function thumbsAll(onProgress) {
+    const totals = { done: 0, failed: 0, pending: 0 };
+    let after = '';
+    for (;;) {
+      const part = await api(`stock/images-thumbs?after=${encodeURIComponent(after)}`);
+      totals.pending = part.pending;
+      for (const id of part.ids) {
+        try {
+          const response = await fetch(src(id), { cache: 'no-store' });
+          if (!response.ok) throw new Error('niet te lezen');
+          const thumb = await makeThumb(await createImageBitmap(await response.blob()));
+          if (!thumb) throw new Error('geen WebP');
+          await api(`stock/images/${encodeURIComponent(id)}/thumb`, { method: 'PUT', body: { data: thumb } });
+          totals.done += 1;
+        } catch (error) {
+          totals.failed += 1;
+        }
+        if (onProgress) onProgress({ ...totals, pending: Math.max(0, part.pending - totals.done - totals.failed) });
+      }
+      if (!part.next) return totals;
+      after = part.next;
+    }
+  }
+
+  window.ItemImages = { prepare, upload, remove, src, pending, importAll, thumbsPending, thumbsAll };
 })();

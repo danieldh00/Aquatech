@@ -87,11 +87,12 @@ function imageSrc(root, reference) {
  * de shop zelf, anders is het het https-adres van het webshopproduct.
  * @param {string} root Relatief pad naar de shop-startpagina.
  * @param {string} image De waarde uit de catalogus ('own:<id>' of een https-adres).
+ * @param {{ small?: boolean }} [options] small = de miniatuur voor een kaartje (alleen bij een eigen afbeelding; zonder miniatuur levert de server de gewone).
  * @returns {string} Het adres, ontsnapt voor in een attribuut.
  */
-function productImageSrc(root, image) {
+function productImageSrc(root, image, { small = false } = {}) {
   const text = String(image || '');
-  return text.startsWith('own:') ? `${root}artikelfoto/${escapeHtml(text.slice(4))}` : escapeHtml(text);
+  return text.startsWith('own:') ? `${root}artikelfoto/${escapeHtml(text.slice(4))}${small ? '/klein' : ''}` : escapeHtml(text);
 }
 
 /**
@@ -447,7 +448,7 @@ function productCard(product, root) {
   const variants = product.variants || [];
   const selected = variants.length ? (variants.find((variant) => variant.inStock) || variants[0]) : product;
   const href = productHref(root, product, variants.length ? selected : null);
-  const image = product.image ? `<img src="${productImageSrc(root, product.image)}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>';
+  const image = product.image ? `<img src="${productImageSrc(root, product.image, { small: true })}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>';
   const options = variants.map((variant) => `<option value="${escapeHtml(variant.code)}" data-code="${escapeHtml(variant.code)}" data-meta="${escapeHtml(variant.meta)}" data-price="${escapeHtml(formatPrice(shownPrice(variant)))}" ${activeShop.business ? ` data-price-incl="${escapeHtml(formatPrice(variant.priceBusinessIncl))}"` : ''} data-stock="${variant.inStock ? 'in' : 'out'}" data-value="${escapeHtml(String(shownPrice(variant)))}" data-label="${escapeHtml(variant.label)}" data-href="${productHref(root, product, variant)}"${variant === selected ? ' selected' : ''}>${escapeHtml(variant.label)}</option>`).join('');
   const picker = variants.length ? `<form class="variant-pick" method="get" action="${root}product/${escapeHtml(product.slug)}/">
     <label>${escapeHtml(product.attributeName)}<select name="v" data-variant-select>${options}</select></label>
@@ -494,7 +495,7 @@ function groupShowcase(group, products) {
  * @returns {string} HTML van de regel.
  */
 function productRow(product, root) {
-  return `<a class="product-row" href="${root}product/${escapeHtml(product.slug)}/"><span class="product-image"><img src="${productImageSrc(root, product.image)}" alt="" loading="lazy"></span><span class="product-row-text"><span class="product-name" title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</span><span class="product-price">${priceText(product)}</span>${variantBadge(product)}<span class="stock ${product.inStock ? 'in' : 'out'}">${product.inStock ? 'Op voorraad' : 'Niet op voorraad'}</span></span></a>`;
+  return `<a class="product-row" href="${root}product/${escapeHtml(product.slug)}/"><span class="product-image"><img src="${productImageSrc(root, product.image, { small: true })}" alt="" loading="lazy"></span><span class="product-row-text"><span class="product-name" title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</span><span class="product-price">${priceText(product)}</span>${variantBadge(product)}<span class="stock ${product.inStock ? 'in' : 'out'}">${product.inStock ? 'Op voorraad' : 'Niet op voorraad'}</span></span></a>`;
 }
 
 /**
@@ -575,7 +576,7 @@ function homePage(catalog) {
   if (!catalog.products.length) return layout({ root, groups: catalog.groups, wide: true, canonicalPath: '', jsonLd: homeJsonLd(hero.image), ogImage: homeImage(hero.image), title: `${SHOP_NAME} – alles voor uw tuinberegening`, description: 'Sproeiers, druppelslang, leidingen en pompen voor tuinberegening van AquaTech Service.', body: `${intro}<div class="wrap"><p class="muted">De webshop wordt gevuld. Kom snel terug.</p></div>` });
   const tiles = catalog.groups.map((group) => {
     const showcase = groupShowcase(group, catalog.products);
-    return `<a class="assortment-tile" href="groep/${escapeHtml(group.slug)}/"><span class="product-image">${showcase ? `<img src="${productImageSrc(root, showcase.image)}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>'}</span><span>${escapeHtml(group.name)}</span></a>`;
+    return `<a class="assortment-tile" href="groep/${escapeHtml(group.slug)}/"><span class="product-image">${showcase ? `<img src="${productImageSrc(root, showcase.image, { small: true })}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>'}</span><span>${escapeHtml(group.name)}</span></a>`;
   }).join('');
   const assortment = `<section class="assortment"><div class="wrap assortment-inner"><div class="assortment-title"><h2>Assortiment</h2><p>Alles voor jouw project</p></div><div class="assortment-strip">${tiles}</div></div></section>`;
   /**

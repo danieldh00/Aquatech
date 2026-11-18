@@ -199,3 +199,18 @@ terugzetten*), anders mis je alles van na de overstap.
 
 Cloudflare-tunnel `apps01` (remote-managed, token in `.env`), route
 `aquatech.den-hollander.com` → `http://aquatech:3300`.
+
+### Cloudflare-cacheregel voor foto's (eenmalig, in het Cloudflare-dashboard)
+
+Cloudflare cachet standaard alleen adressen met een bestandsextensie. Artikelfoto's (`/artikelfoto/<id>` en de miniatuur
+`/artikelfoto/<id>/klein`) en bestanden uit de paginabewerker (`/media/…`) hebben er geen en komen daardoor elke keer van de server
+(`cf-cache-status: DYNAMIC`). De server stuurt al `Cache-Control: public, max-age=31536000, immutable`; de id's zijn onraadbaar en een
+afbeelding verandert nooit onder hetzelfde id, dus cachen is veilig.
+
+1. Cloudflare → het domein → *Caching* → *Cache Rules* → *Create rule*.
+2. Naam: `Artikelfoto's en media`. Voorwaarde (*Custom filter expression*):
+   `(http.request.uri.path matches "^/(artikelfoto|media)/")`.
+3. *Cache eligibility*: *Eligible for cache*. *Edge TTL*: *Use cache-control header if present* (anders 1 jaar). *Browser TTL*: *Respect origin*.
+4. Opslaan en controleren: `curl -sI https://<webadres>/artikelfoto/<id>/klein | grep -i cf-cache-status` geeft bij de tweede aanroep `HIT`.
+
+Niet voor HTML of `/app/…`: daar staan sessies en prijzen per klant in.

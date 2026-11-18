@@ -160,7 +160,7 @@ test('artikelafbeelding: de openbare shop toont de eigen afbeelding', async () =
   const item = await article(admin, 'IMG-4');
   const { imageId } = (await admin.put(`/app/api/stock/items/${item.id}/image`, { name: 'shop.png', data: pngBase64(6) })).body;
   const home = await anonymous.get('/');
-  assert.ok(home.text.includes(`src="artikelfoto/${imageId}"`), 'startpagina verwijst naar de eigen afbeelding');
+  assert.ok(home.text.includes(`src="artikelfoto/${imageId}/klein"`), 'startpagina verwijst naar de miniatuur van de eigen afbeelding');
   const product = await anonymous.get(`/product/${/product\/([^/"]+)\//.exec(home.text)[1]}/`);
   assert.ok(product.text.includes(`src="../../artikelfoto/${imageId}"`), 'productpagina verwijst naar de eigen afbeelding');
   const picture = await anonymous.get(`/artikelfoto/${imageId}`);
@@ -264,4 +264,60 @@ test('afbeeldingen overnemen: veel artikelen en verschillende adressen met dezel
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM item_images WHERE tenant_id = ?').get(main).n, 1);
   assert.strictEqual(db.prepare('SELECT COUNT(DISTINCT image_id) AS n FROM stock_items WHERE tenant_id = ? AND image_id IS NOT NULL').get(main).n, 1);
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_items WHERE tenant_id = ? AND image_id IS NOT NULL').get(main).n, 30);
+});
+
+/**
+ * Een minimale WebP (VP8L-kop, geen echte beelddata) met de opgegeven afmetingen, genoeg voor de controle op inhoud.
+ * @param {number} width De breedte.
+ * @param {number} height De hoogte.
+ * @returns {string} De WebP als base64.
+ */
+function webpBase64(width, height) {
+  const data = Buffer.alloc(20);
+  data[0] = 0x2f;
+  data.writeUInt32LE((width - 1) | ((height - 1) << 14), 1);
+  const chunk = Buffer.concat([Buffer.from('VP8L'), Buffer.from(Uint32Array.of(data.length).buffer), data]);
+  const header = Buffer.alloc(12);
+  header.write('RIFF', 0, 'latin1');
+  header.writeUInt32LE(chunk.length + 4, 4);
+  header.write('WEBP', 8, 'latin1');
+  return Buffer.concat([header, chunk]).toString('base64');
+}
+
+test('miniatuur: opslaan, tonen in de shop met terugval, porties en afkeuren van ongeldige', async () => {
+  const { admin, klant, vreemd, anonymous, db, main, vault } = await setup();
+  const item = await article(admin, 'IMG-T1');
+  const { imageId } = (await admin.put(`/app/api/stock/items/${item.id}/image`, { name: 'groot.png', data: pngBase64(11) })).body;
+  // Zonder miniatuur levert /klein de gewone afbeelding.
+  const fallback = await anonymous.get(`/artikelfoto/${imageId}/klein`);
+  assert.strictEqual(fallback.status, 200);
+  assert.match(fallback.type, /image\/png/);
+  assert.deepStrictEqual((await admin.get('/app/api/stock/images-thumbs')).body, { pending: 1, ids: [imageId], next: null });
+  // Ongeldig: geen WebP, te groot van afmeting, geen afbeelding.
+  assert.strictEqual((await admin.put(`/app/api/stock/images/${imageId}/thumb`, { data: pngBase64(12) })).status, 400);
+  assert.strictEqual((await admin.put(`/app/api/stock/images/${imageId}/thumb`, { data: webpBase64(900, 600) })).status, 400);
+  assert.strictEqual((await admin.put(`/app/api/stock/images/${imageId}/thumb`, { data: 'geen afbeelding' })).status, 400);
+  // Rechten en andere organisatie.
+  assert.strictEqual((await klant.put(`/app/api/stock/images/${imageId}/thumb`, { data: webpBase64(480, 320) })).status, 403);
+  assert.strictEqual((await vreemd.put(`/app/api/stock/images/${imageId}/thumb`, { data: webpBase64(480, 320) })).status, 404);
+  assert.strictEqual((await admin.put('/app/api/stock/images/geen-id/thumb', { data: webpBase64(480, 320) })).status, 404);
+  // Geldig: versleuteld bewaard, daarna geserveerd als WebP.
+  assert.strictEqual((await admin.put(`/app/api/stock/images/${imageId}/thumb`, { data: webpBase64(480, 320) })).status, 200);
+  const stored = db.prepare('SELECT thumb FROM item_images WHERE tenant_id = ?').get(main).thumb;
+  assert.deepStrictEqual(vault.openBytes(stored, `${main}:artikel-afbeelding-klein:${imageId}`), Buffer.from(webpBase64(480, 320), 'base64'));
+  const small = await anonymous.get(`/artikelfoto/${imageId}/klein`);
+  assert.match(small.type, /image\/webp/);
+  assert.match(small.headers.get('cache-control'), /immutable/);
+  assert.match((await anonymous.get(`/artikelfoto/${imageId}`)).type, /image\/png/, 'de gewone afbeelding blijft de grote');
+  assert.deepStrictEqual((await admin.get('/app/api/stock/images-thumbs')).body, { pending: 0, ids: [], next: null });
+  assert.strictEqual((await anonymous.get('/artikelfoto/geen-id/klein')).status, 404);
+  // Nieuwe upload met miniatuur meteen erbij; een ongeldige miniatuur laat de upload wel slagen.
+  const second = await article(admin, 'IMG-T2');
+  const withThumb = await admin.put(`/app/api/stock/items/${second.id}/image`, { name: 'b.png', data: pngBase64(13), thumb: webpBase64(300, 200) });
+  assert.strictEqual(withThumb.status, 200);
+  assert.match((await anonymous.get(`/artikelfoto/${withThumb.body.imageId}/klein`)).type, /image\/webp/);
+  const third = await article(admin, 'IMG-T3');
+  const badThumb = await admin.put(`/app/api/stock/items/${third.id}/image`, { name: 'c.png', data: pngBase64(14), thumb: 'rommel' });
+  assert.strictEqual(badThumb.status, 200);
+  assert.match((await anonymous.get(`/artikelfoto/${badThumb.body.imageId}/klein`)).type, /image\/png/);
 });
