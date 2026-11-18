@@ -363,7 +363,7 @@ function createServiceRequestStore(db, { vault, workorders, photos }) {
         design: installationData.design || null, zones: installationData.zones || [], heads: installationData.heads || [],
         steps, materials: [],
       };
-      const workOrder = workorders.createReceived({ id: user.id, tenant_id: tenantId }, data, { assigneeId });
+      const workOrder = workorders.createReceived({ id: user.id, tenant_id: tenantId }, data, { assigneeId, customerId: requestRow.customer_id || null });
       prepare("UPDATE service_requests SET status = 'ingepland', work_order_id = ?, handled_by = ?, handled_by_name = ?, updated_at = ? WHERE id = ?")
         .run(workOrder.id, user.kind === 'account' ? user.id : null, cleanText(user.display_name || '', 200), currentTimestamp(), requestRow.id);
       // Foto's van de klant mee als foto's "voor" (zichtbaar voor de klant: ze zijn van hem).

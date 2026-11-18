@@ -44,6 +44,8 @@
       <select id="l-status"><option value="">Alle statussen</option></select>
       <label class="chk"><input type="checkbox" id="l-mine"> Alleen aan mij toegewezen</label>
       <label class="chk"><input type="checkbox" id="l-done"> Ook gereed en geannuleerd</label>
+      <label class="chk" id="l-unlinked-wrap" hidden><input type="checkbox" id="l-unlinked"> Alleen zonder klantrecord (<span id="l-unlinked-count">0</span>)</label>
+      <button id="l-link" class="btn" hidden title="Koppelt werkorders aan een klant als de naam precies bij één klant past">Koppel op naam</button>
       <button id="l-new" class="btn primary">Nieuwe werkorder uit offerte</button>
       <button id="l-export" class="btn">Exporteer naar Excel</button>
       <button id="l-hours" class="btn">Urenstaat</button>
@@ -81,6 +83,14 @@
     <div class="cols">
       <section class="card-form">
         <h3>Klant en adres</h3>
+        <div class="cust-pick" id="e-cust-pick" hidden>
+          <label>Klant uit de klantenlijst
+            <input id="e-cust-search" type="search" autocomplete="off" maxlength="100" placeholder="Zoek op naam, bedrijf, e-mail, telefoon of adres" role="combobox" aria-expanded="false" aria-controls="e-cust-list">
+          </label>
+          <ul id="e-cust-list" class="cust-list" role="listbox" hidden></ul>
+          <div id="e-cust-chosen" class="cust-chosen" hidden><span><span id="e-cust-name"></span> · <a id="e-cust-card" href="../klanten/">Klantkaart</a></span><button type="button" id="e-cust-clear" class="btn small">Ontkoppelen</button></div>
+          <p id="e-cust-none" class="muted small" hidden>Niet gekoppeld aan een klantrecord: de naam hieronder is alleen tekst. Kies een klant om hem te koppelen; adres, e-mail en telefoon worden dan ingevuld.</p>
+        </div>
         <label>Naam / bedrijf<input data-f="customer.name" maxlength="200"></label>
         <label>Contactpersoon<input data-f="customer.contact" maxlength="200"></label>
         <label>Adres van de klus<textarea data-address-lookup data-f="customer.address" rows="3" maxlength="400"></textarea></label>

@@ -83,10 +83,10 @@ function appointmentOf(workOrderRow, data) {
 /**
  * Maakt de opslag voor werkorders en de afspraaklink.
  * @param {object} db De database.
- * @param {{ vault?: object, staffRoles?: Function }} [options] Kluis voor het token; rollen die een werkorder kunnen uitvoeren (per tenant).
- * @returns {object} list, get, day, quoteOf, staff, create, createReceived, update, schedule, share, unshare, markSent, byToken, markViewed, shareLink, publicView, respond, remove, purge en nextNumber.
+ * @param {{ vault?: object, staffRoles?: Function, customerScopeOf?: Function }} [options] Kluis voor het token; rollen die een werkorder kunnen uitvoeren (per tenant); (tenantId) => { tenantIds, roleKeys } = waar de klanten van een omgeving wonen en welke rollen klant zijn (voor `autoLink`).
+ * @returns {object} list, get, day, quoteOf, staff, create, createReceived, update, schedule, share, unshare, markSent, byToken, markViewed, shareLink, publicView, respond, remove, purge, nextNumber, autoLink en countUnlinked.
  */
-function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['beheerder', 'installateur'] } = {}) {
+function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['beheerder', 'installateur'], customerScopeOf = () => null } = {}) {
   /**
    * Bereidt een SQL-opdracht voor.
    * @param {string} sql De SQL.
@@ -126,6 +126,9 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
       quoteId: workOrderRow.quote_id || null, quoteNumber: data.quoteNumber || '', planId: workOrderRow.plan_id || null,
       plannedDate: workOrderRow.planned_date || '', startTime: data.startTime || '', endTime: data.endTime || '', days: data.days || 1,
       crew: data.crew || '',
+      // Het klantrecord waaraan de werkorder hangt (null = nog niet gekoppeld; de naam in `customer` is dan alleen tekst).
+      customerId: workOrderRow.customer_id || null,
+      customerAccount: workOrderRow.customer_id ? { id: workOrderRow.customer_id, displayName: workOrderRow.customer_account_name || '', companyName: workOrderRow.customer_account_company || '' } : null,
       summary: Core.summary(data),
       assigneeId: workOrderRow.assignee_id || null, assignee: workOrderRow.assignee_id ? { id: workOrderRow.assignee_id, displayName: workOrderRow.assignee_name || '' } : null,
       appointment: appointmentOf(workOrderRow, data),
@@ -139,17 +142,18 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
     return out;
   }
 
-  const FROM = 'FROM work_orders w JOIN users o ON o.id = w.owner_id LEFT JOIN users a ON a.id = w.assignee_id';
+  const FROM = 'FROM work_orders w JOIN users o ON o.id = w.owner_id LEFT JOIN users a ON a.id = w.assignee_id LEFT JOIN users c ON c.id = w.customer_id';
   // Volledig (detail, met de klantlink) en voor overzichten: zonder de
   // versleutelde link en de verzendgegevens, die alleen het detail toont.
   const SELECT = `SELECT w.id, w.tenant_id, w.owner_id, w.quote_id, w.plan_id, w.number, w.status, w.title, w.customer, w.address,
       w.planned_date, w.assignee_id, w.data, w.created_at, w.updated_at, w.share_hash, w.share_token, w.share_url, w.shared_at,
-      w.viewed_at, w.sent_at, w.sent_to, w.appointment, o.display_name AS owner_name, a.display_name AS assignee_name ${FROM}`;
+      w.viewed_at, w.sent_at, w.sent_to, w.appointment, w.customer_id, o.display_name AS owner_name, a.display_name AS assignee_name,
+      c.display_name AS customer_account_name, c.company_name AS customer_account_company ${FROM}`;
   // Wat de openbare afspraakpagina en de reactie van de klant nodig hebben.
   const PUBLIC_COLS = 'id, tenant_id, number, status, data, appointment, share_hash, shared_at, planned_date';
   const LIST_SELECT = `SELECT w.id, w.tenant_id, w.owner_id, w.quote_id, w.plan_id, w.number, w.status, w.title, w.customer, w.address,
-      w.planned_date, w.assignee_id, w.data, w.created_at, w.updated_at, w.share_hash, w.appointment,
-      o.display_name AS owner_name, a.display_name AS assignee_name ${FROM}`;
+      w.planned_date, w.assignee_id, w.data, w.created_at, w.updated_at, w.share_hash, w.appointment, w.customer_id,
+      o.display_name AS owner_name, a.display_name AS assignee_name, c.display_name AS customer_account_name, c.company_name AS customer_account_company ${FROM}`;
   // Werkorders van een klantaccount: via een niet-concept-offerte aan dat
   // account, of gemaakt uit een melding van dat account (service-requests.js).
   // Twee parameters: twee keer het klant-id.
@@ -211,11 +215,11 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
    * De offerte waaruit een werkorder ontstaat: bestaand, niet verwijderd, in deze omgeving.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van de offerte.
-   * @returns {object|null} id, number, status, planId en data, of null.
+   * @returns {object|null} id, number, status, planId, customerId (klantrecord van de offerte) en data, of null.
    */
   function quoteOf(tenantId, id) {
-    const quoteRow = prepare('SELECT id, number, status, plan_id, data FROM quotes WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL').get(tenantId, String(id));
-    return quoteRow ? { id: quoteRow.id, number: quoteRow.number, status: quoteRow.status, planId: quoteRow.plan_id, data: JSON.parse(quoteRow.data) } : null;
+    const quoteRow = prepare('SELECT id, number, status, plan_id, customer_id, data FROM quotes WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL').get(tenantId, String(id));
+    return quoteRow ? { id: quoteRow.id, number: quoteRow.number, status: quoteRow.status, planId: quoteRow.plan_id, customerId: quoteRow.customer_id || null, data: JSON.parse(quoteRow.data) } : null;
   }
 
   /**
@@ -305,6 +309,60 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
   }
 
   /**
+   * Normaliseert een naam om te vergelijken (kleine letters, spaties samengevoegd).
+   * @param {string} name De naam.
+   * @returns {string} De genormaliseerde naam.
+   */
+  const nameKey = (name) => String(name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+  /**
+   * Koppelt werkorders zonder klantrecord aan een klant als de naam op de werkorder precies (zonder letterverschil) de naam of de
+   * bedrijfsnaam is van één enkele actieve klant. Meerdere kandidaten of geen kandidaat: de werkorder blijft ongekoppeld. De
+   * wijzigingstijd van de werkorder blijft staan (het is geen wijziging door een gebruiker).
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {{ linked: number, ambiguous: number, unmatched: number }} Aantallen gekoppeld, met meerdere kandidaten en zonder kandidaat.
+   */
+  function autoLink(tenantId) {
+    const out = { linked: 0, ambiguous: 0, unmatched: 0 };
+    const scope = customerScopeOf(tenantId);
+    if (!scope || !scope.roleKeys.length) return out;
+    const open = prepare("SELECT id, customer FROM work_orders WHERE tenant_id = ? AND deleted_at IS NULL AND customer_id IS NULL AND customer <> ''").all(tenantId);
+    if (!open.length) return out;
+    const tenantIds = [...new Set(scope.tenantIds.map(String))];
+    const candidates = new Map();
+    for (const account of prepare(`SELECT id, display_name, company_name FROM users WHERE tenant_id IN (${tenantIds.map(() => '?').join(', ')})
+      AND kind = 'account' AND disabled = 0 AND role IN (${scope.roleKeys.map(() => '?').join(', ')})`).all(...tenantIds, ...scope.roleKeys)) {
+      for (const name of [account.display_name, account.company_name]) {
+        const key = nameKey(name);
+        if (!key) continue;
+        if (!candidates.has(key)) candidates.set(key, new Set());
+        candidates.get(key).add(account.id);
+      }
+    }
+    transaction(db, () => {
+      for (const workOrderRow of open) {
+        const matches = candidates.get(nameKey(workOrderRow.customer));
+        if (!matches) out.unmatched += 1;
+        else if (matches.size > 1) out.ambiguous += 1;
+        else {
+          prepare('UPDATE work_orders SET customer_id = ? WHERE tenant_id = ? AND id = ? AND customer_id IS NULL').run([...matches][0], tenantId, workOrderRow.id);
+          out.linked += 1;
+        }
+      }
+    });
+    return out;
+  }
+
+  /**
+   * Het aantal werkorders in een omgeving dat nog aan geen klantrecord hangt (niet verwijderd of geannuleerd).
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {number} Het aantal.
+   */
+  function countUnlinked(tenantId) {
+    return Number(prepare("SELECT COUNT(*) AS n FROM work_orders WHERE tenant_id = ? AND deleted_at IS NULL AND status <> 'geannuleerd' AND customer_id IS NULL").get(tenantId).n);
+  }
+
+  /**
    * Nieuwe werkorder bij een offerte. Zonder data bouwt de server die zelf op
    * uit de offerteregels (zonder zone-indeling; die komt uit de browser, waar
    * de plannerbibliotheken geladen zijn). De koppeling met offerte en plan
@@ -312,10 +370,10 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
    * @param {object} user Wie hem maakt (eigenaar).
    * @param {object} quote De offerte (quoteOf).
    * @param {object|undefined} rawData Werkorderdata uit de browser.
-   * @param {{ assigneeId?: string|null }} [options] Uitvoerder.
+   * @param {{ assigneeId?: string|null, customerId?: string|null }} [options] Uitvoerder; klantrecord (leeg = dat van de offerte).
    * @returns {object} De nieuwe werkorder.
    */
-  function create(user, quote, rawData, { assigneeId = null } = {}) {
+  function create(user, quote, rawData, { assigneeId = null, customerId = null } = {}) {
     const base = Core.fromQuote(quote).data;
     const data = rawData ? Core.sanitize(rawData) : base;
     data.quoteId = quote.id;
@@ -328,10 +386,10 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
       const id = crypto.randomUUID();
       const timestamp = currentTimestamp();
       const number = nextNumber(user.tenant_id, timestamp.slice(0, 4));
-      prepare(`INSERT INTO work_orders (id, tenant_id, owner_id, quote_id, plan_id, number, status, title, customer, address, planned_date, assignee_id, data, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      prepare(`INSERT INTO work_orders (id, tenant_id, owner_id, quote_id, plan_id, number, status, title, customer, address, planned_date, assignee_id, data, created_at, updated_at, customer_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(id, user.tenant_id, user.id, quote.id, quote.planId || null, number, data.plannedDate ? 'gepland' : 'open',
-          columns.title, columns.customer, columns.address, columns.plannedDate, assigneeId || null, JSON.stringify(data), timestamp, timestamp);
+          columns.title, columns.customer, columns.address, columns.plannedDate, assigneeId || null, JSON.stringify(data), timestamp, timestamp, customerId || quote.customerId || null);
       return fullRow(id);
     });
   }
@@ -343,10 +401,10 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
    * binnen de transactie van de aanroeper.
    * @param {object} user Wie hem maakt (eigenaar).
    * @param {object} rawData De werkorderdata.
-   * @param {{ assigneeId?: string|null }} [options] Uitvoerder.
+   * @param {{ assigneeId?: string|null, customerId?: string|null }} [options] Uitvoerder; klantrecord (de aanroeper heeft dat al gecontroleerd).
    * @returns {object} De nieuwe werkorder.
    */
-  function createReceived(user, rawData, { assigneeId = null } = {}) {
+  function createReceived(user, rawData, { assigneeId = null, customerId = null } = {}) {
     const data = Core.sanitize(rawData);
     data.quoteId = '';
     data.quoteNumber = '';
@@ -356,10 +414,10 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
     const id = crypto.randomUUID();
     const timestamp = currentTimestamp();
     const number = nextNumber(user.tenant_id, timestamp.slice(0, 4));
-    prepare(`INSERT INTO work_orders (id, tenant_id, owner_id, quote_id, plan_id, number, status, title, customer, address, planned_date, assignee_id, data, created_at, updated_at)
-       VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    prepare(`INSERT INTO work_orders (id, tenant_id, owner_id, quote_id, plan_id, number, status, title, customer, address, planned_date, assignee_id, data, created_at, updated_at, customer_id)
+       VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(id, user.tenant_id, user.id, number, data.plannedDate ? 'gepland' : 'open',
-        columns.title, columns.customer, columns.address, columns.plannedDate, assigneeId || null, JSON.stringify(data), timestamp, timestamp);
+        columns.title, columns.customer, columns.address, columns.plannedDate, assigneeId || null, JSON.stringify(data), timestamp, timestamp, customerId || null);
     return fullRow(id);
   }
 
@@ -370,12 +428,12 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
    * @param {object|undefined} rawData Nieuwe data (undefined = ongewijzigd).
    * @param {string|undefined} status Nieuwe status (onbekend = ongewijzigd).
    * @param {string|null|undefined} assigneeId undefined = ongewijzigd, null = niemand.
-   * @param {{ ifBase?: string|null }} [options] Alleen opslaan als de werkorder nog op die updatedAt staat (offline wijziging uit de wachtrij).
+   * @param {{ ifBase?: string|null, customerId?: string|null }} [options] Alleen opslaan als de werkorder nog op die updatedAt staat (offline wijziging uit de wachtrij); klantrecord (undefined = ongewijzigd, null = ontkoppelen; de aanroeper controleert het id).
    * @returns {object|null} De werkorder, { conflict: true, current }, of null als hij niet bestaat.
    */
-  function update(tenantId, id, rawData, status, assigneeId, { ifBase = null } = {}) {
+  function update(tenantId, id, rawData, status, assigneeId, { ifBase = null, customerId = undefined } = {}) {
     return transaction(db, () => {
-      const existing = find(tenantId, id, 'id, status, assignee_id, data, updated_at');
+      const existing = find(tenantId, id, 'id, status, assignee_id, customer_id, data, updated_at');
       if (!existing) return null;
       if (ifBase && existing.updated_at !== ifBase) return { conflict: true, current: fullRow(existing.id) };
       const old = JSON.parse(existing.data);
@@ -387,8 +445,9 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
       const columns = fields(data);
       const newStatus = STATUSES.includes(status) ? status : existing.status;
       const assignee = assigneeId === undefined ? existing.assignee_id : assigneeId || null;
-      prepare(`UPDATE work_orders SET status = ?, title = ?, customer = ?, address = ?, planned_date = ?, assignee_id = ?, data = ?, updated_at = ? WHERE id = ?`)
-        .run(newStatus, columns.title, columns.customer, columns.address, columns.plannedDate, assignee, JSON.stringify(data), currentTimestamp(), existing.id);
+      const newCustomerId = customerId === undefined ? existing.customer_id || null : customerId || null;
+      prepare(`UPDATE work_orders SET status = ?, title = ?, customer = ?, address = ?, planned_date = ?, assignee_id = ?, data = ?, updated_at = ?, customer_id = ? WHERE tenant_id = ? AND id = ?`)
+        .run(newStatus, columns.title, columns.customer, columns.address, columns.plannedDate, assignee, JSON.stringify(data), currentTimestamp(), newCustomerId, tenantId, existing.id);
       return fullRow(existing.id);
     });
   }
@@ -578,7 +637,7 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
     });
   }
 
-  return { list, get, day, quoteOf, staff, create, createReceived, update, schedule, share, unshare, markSent, byToken, markViewed, shareLink, publicView, respond, remove, purge, nextNumber };
+  return { list, get, day, quoteOf, staff, create, createReceived, update, schedule, share, unshare, markSent, byToken, markViewed, shareLink, publicView, respond, remove, purge, nextNumber, autoLink, countUnlinked };
 }
 
 /**
@@ -635,6 +694,30 @@ function registerWorkOrderRoutes(app, ctx) {
   const requireWo = requireRight('werkorders');
   // Inplannen en de afspraak met de klant (planning of de werkorder zelf).
   const requirePlanning = requireRight('planning');
+  // Klantrecords zoeken en koppelen vraagt ook het recht 'klanten' (de klantkaart is niet voor iedereen met werkorders).
+  const requireCustomers = requireRight('klanten');
+  /**
+   * Leest de gekozen klant uit de body: undefined = niet meegestuurd, null = ontkoppelen, anders het gecontroleerde id van een
+   * actieve klant van deze organisatie.
+   * @param {object} req Het verzoek.
+   * @param {object} res Het antwoord (bij een fout is dat al verstuurd).
+   * @returns {{ value: (string|null|undefined) }|null} De keuze, of null als er al een fout is teruggegeven.
+   */
+  const customerChoice = (req, res) => {
+    const raw = req.body && req.body.customerId;
+    if (raw === undefined) return { value: undefined };
+    if (!ctx.can || !ctx.can(req.user, 'klanten')) {
+      res.status(403).json({ error: 'forbidden', message: 'Je mag geen klant aan een werkorder koppelen.' });
+      return null;
+    }
+    if (raw === null || raw === '') return { value: null };
+    const account = typeof raw === 'string' && raw.length <= 64 && ctx.customerOf ? ctx.customerOf(req, raw) : null;
+    if (!account || account.disabled) {
+      res.status(400).json({ error: 'customer_not_found', message: 'Deze klant bestaat niet (meer).' });
+      return null;
+    }
+    return { value: account.id };
+  };
   /**
    * De actieve omgeving van het verzoek.
    * @param {object} req Het verzoek.
@@ -712,6 +795,19 @@ function registerWorkOrderRoutes(app, ctx) {
     res.json({ ...workOrder, outsourcing: outsourcingOf(tenantOf(req))[workOrder.id] || null });
   });
 
+  // Klanten zoeken voor de klantkeuze in het werkorderformulier (tot 20, actieve klanten van de organisatie).
+  app.get('/api/workorder-customers', requireWo, requireCustomers, (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ items: ctx.searchCustomers ? ctx.searchCustomers(req, String(req.query.q || '').slice(0, 100)) : [] });
+  });
+
+  // Koppelt werkorders zonder klantrecord aan een klant als de naam eenduidig is; de rest blijft ongekoppeld.
+  app.post('/api/workorders/link-customers', requireWo, requireCustomers, (req, res) => {
+    const result = workorders.autoLink(tenantOf(req));
+    audit(req, 'werkorders_klanten_gekoppeld', { ...result });
+    res.json({ ...result, unlinked: workorders.countUnlinked(tenantOf(req)) });
+  });
+
   // Alleen vanuit een offerte met status akkoord.
   app.post('/api/workorders', requireJson, requireWo, requireVerifiedAddress(ctx.addressGuard, (req) => req.body?.data?.customer?.address, (req) => () => workorders.quoteOf(tenantOf(req), req.body?.quoteId)?.data?.customer?.address), (req, res) => {
     const { quoteId, data } = req.body || {};
@@ -732,10 +828,13 @@ function registerWorkOrderRoutes(app, ctx) {
     if ((data !== undefined && !validData(data)) || !validStatus(status)) return res.status(400).json({ error: 'invalid_workorder', message: 'Ongeldige werkorder.' });
     const assignee = assigneeOf(req, req.body.assigneeId);
     if (assignee.error) return badAssignee(res);
-    const workOrder = workorders.update(tenantOf(req), req.params.id, data, status, assignee.value, { ifBase: ifBaseOf(req) });
+    const customerPick = customerChoice(req, res);
+    if (!customerPick) return;
+    const workOrder = workorders.update(tenantOf(req), req.params.id, data, status, assignee.value, { ifBase: ifBaseOf(req), customerId: customerPick.value });
     if (!workOrder) return notFound(res);
     // Offline gemaakt terwijl een ander de werkorder wijzigde: de gebruiker kiest.
     if (workOrder.conflict) return res.status(409).json({ error: 'conflict', message: `Werkorder ${workOrder.current.number} is intussen door iemand anders gewijzigd.`, updatedAt: workOrder.current.updatedAt });
+    if (customerPick.value !== undefined) audit(req, 'werkorder_klant_gekoppeld', { workOrderId: workOrder.id, number: workOrder.number, customerId: customerPick.value });
     changed(req, workOrder.id);
     res.json(workOrder);
   });

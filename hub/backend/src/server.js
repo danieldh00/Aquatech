@@ -2286,7 +2286,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // Opslag van offertes, werkorders en webshop (ook gebruikt door de testdata).
   const quoteStore = createQuoteStore(database, { vault });
-  const workOrderStore = createWorkOrderStore(database, { vault, staffRoles: (tid) => store.roles.keysWith(tid, 'uitvoerder') });
+  const workOrderStore = createWorkOrderStore(database, {
+    vault, staffRoles: (tid) => store.roles.keysWith(tid, 'uitvoerder'),
+    // Waar de klanten van een omgeving wonen (de live-tenant en de eigen omgeving) en welke rollen klant zijn: voor het automatisch koppelen op naam.
+    customerScopeOf: (tid) => { const home = homeOf(tid); return { tenantIds: home === tid ? [tid] : [home, tid], roleKeys: store.roles.keysOfKind(home, 'klant') }; },
+  });
   const shopStore = createShopStore(database);
   const photoStore = createPhotoStore(database, { vault });
   // Uren en materiaalverbruik op werkorders; voorraadbeheer haakt in via workLogStore.hook().
@@ -2444,6 +2448,19 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     photoCounts: (tid, ids) => photoStore.counts(tid, ids),
     loggedOf: (tid, ids) => workLogStore.counts(tid, ids),
     outsourcingOf: (tid) => outsourcingStore.marks(tid),
+    can: (user, right) => Roles.can(user, right),
+    // Klantrecords voor de klantkeuze en de controle op een gekozen klant (zoals bij de offerte).
+    searchCustomers: (req, search) => {
+      const tid = req.tenantId || tenant.id;
+      const home = homeOf(tid);
+      return store.listCustomerPage(home === tid ? [tid] : [home, tid], { search, limit: 20, activeOnly: true }).items
+        .map((customer) => ({ id: customer.id, username: customer.username, displayName: customer.displayName, companyName: customer.companyName, email: customer.email, phone: customer.phone, address: customer.address }));
+    },
+    customerOf: (req, id) => {
+      const tid = req.tenantId || tenant.id;
+      const home = homeOf(tid);
+      return store.getCustomer(home === tid ? [tid] : [home, tid], id);
+    },
     // Voorraad: reserveren na elke wijziging, afboeken bij Gereed (zie stock.js).
     onChange: (tid, id, user) => stockStore.onWorkOrderChange(tid, id, user),
     // Medewerkers horen bij de live-tenant; in een testomgeving komen de
@@ -2631,10 +2648,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
        * Maakt een werkorder zonder offerte (status Nieuw, niet ingepland, geen uitvoerder) en reserveert het materiaal.
        * @param {object} req Het verzoek.
        * @param {object} data De werkorderdata (titel, klant, instructies, stappen, materiaal, interne notitie).
+       * @param {string|null} [customerId] Id van het klantrecord (al gecontroleerd), of null.
        * @returns {object} De werkorder.
        */
-      createWorkOrder: (req, data) => {
-        const workOrder = workOrderStore.createReceived({ id: req.user.id, tenant_id: req.tenantId }, data);
+      createWorkOrder: (req, data, customerId = null) => {
+        const workOrder = workOrderStore.createReceived({ id: req.user.id, tenant_id: req.tenantId }, data, { customerId });
         try { stockStore.onWorkOrderChange(req.tenantId, workOrder.id, req.user); } catch (error) { console.warn(`Voorraad bij werkorder ${workOrder.id} niet bijgewerkt: ${error.message}`); }
         return workOrder;
       },
@@ -3514,6 +3532,21 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Inkooporders, ook voor de uurlijkse bestelvoorstellen hieronder (tests kunnen autoPropose hier vervangen).
   app.locals.purchaseOrders = purchaseOrderStore;
   /**
+   * Koppelt werkorders zonder klantrecord aan een klant waar de naam eenduidig is (elk uur vanuit main): per actieve omgeving
+   * `workOrderStore.autoLink`. Een fout in één omgeving stopt de rest niet.
+   * @returns {{ linked: number }} Het totaal aantal gekoppelde werkorders.
+   */
+  app.locals.workOrdersLinkCustomers = () => asSystem(() => {
+    const activeIds = inScopeOnly(store.listTenants()).filter((live) => !live.disabled)
+      .flatMap((live) => [live, ...live.environments.filter((environment) => !environment.disabled)])
+      .map((environment) => environment.id);
+    let linked = 0;
+    for (const tenantId of activeIds) {
+      try { linked += workOrderStore.autoLink(tenantId).linked; } catch (error) { console.error(`Werkorders koppelen in omgeving ${tenantId} mislukt:`, error.message); }
+    }
+    return { linked };
+  });
+  /**
    * Automatische bestelvoorstellen (elk uur vanuit main en kort na het opstarten): per actieve omgeving waar de instelling
    * en de module Artikelen aan staan, werkt `purchaseOrders.autoPropose` de concept-inkooporders met herkomst 'voorstel'
    * bij. Er wordt nooit besteld: de beheerder keurt een voorstel zelf goed. Een fout in één omgeving stopt de rest niet.
@@ -3635,6 +3668,12 @@ if (require.main === module) {
       .catch((error) => console.error('Oude funneltellingen wissen mislukt:', error.message));
     slowLog.trackTask('oude zoektermen', async () => app.locals.searchMissesPurge())
       .catch((error) => console.error('Oude zoektermen wissen mislukt:', error.message));
+    try {
+      const linked = slowLog.trackTask('werkorders aan klanten koppelen', () => app.locals.workOrdersLinkCustomers());
+      if (linked.linked) console.log(`Werkorders aan een klantrecord gekoppeld: ${linked.linked}`);
+    } catch (error) {
+      console.error('Werkorders aan klanten koppelen mislukt:', error.message);
+    }
     slowLog.trackTask('seizoensherinneringen', () => app.locals.seasonRemindersAll())
       .then((sent) => { if (Object.keys(sent).length) console.log(`Seizoensherinneringen: ${JSON.stringify(sent)}`); })
       .catch((error) => console.error('Seizoensherinneringen mislukt:', error.message));

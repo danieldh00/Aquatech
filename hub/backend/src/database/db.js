@@ -1461,6 +1461,17 @@ const MIGRATIONS = [
     PRIMARY KEY (tenant_id, day, step)
   );
   `,
+  // 79: werkorder aan een klantrecord (work_orders.customer_id, een klantaccount zoals bij offertes). De losse naam- en adresvelden in de data blijven
+  // staan (momentopname voor de werkbon); de koppeling komt uit de offerte, de melding of de keuze in het formulier. Bestaande werkorders worden
+  // hier gekoppeld via hun offerte of melding; de rest koppelt `workorders.autoLink` (alleen bij een eenduidige naam) of de gebruiker.
+  `
+  ALTER TABLE work_orders ADD COLUMN customer_id TEXT REFERENCES users(id);
+  CREATE INDEX work_orders_customer ON work_orders (tenant_id, customer_id);
+  UPDATE work_orders SET customer_id = (SELECT q.customer_id FROM quotes q WHERE q.id = work_orders.quote_id AND q.tenant_id = work_orders.tenant_id
+    AND q.customer_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = q.customer_id)) WHERE quote_id IS NOT NULL;
+  UPDATE work_orders SET customer_id = (SELECT sr.customer_id FROM service_requests sr WHERE sr.tenant_id = work_orders.tenant_id AND sr.work_order_id = work_orders.id
+    AND sr.customer_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = sr.customer_id) ORDER BY sr.created_at LIMIT 1) WHERE customer_id IS NULL;
+  `,
 ];
 
 /**
