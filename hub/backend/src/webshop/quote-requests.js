@@ -7,8 +7,10 @@ const { validEmail, mailFailure } = require('../platform/mailer');
 /** Binnen hoeveel minuten dezelfde winkelwagen niet opnieuw een offerte aanmaakt (dubbelklik, herladen). */
 const DUPLICATE_MINUTES = 10;
 
-/** Vanaf welk bedrag (excl. btw) de knop Offerte aanvragen bij de winkelwagen staat. */
-const QUOTE_REQUEST_MIN_EXCL = 500;
+const { sanitizePayment, DEFAULT_QUOTE_REQUEST_MIN } = require('./mollie');
+
+/** Vanaf welk bedrag (excl. btw) de knop Offerte aanvragen standaard bij de winkelwagen staat (instelbaar in Beheer > Webshop > Betalen). */
+const QUOTE_REQUEST_MIN_EXCL = DEFAULT_QUOTE_REQUEST_MIN;
 
 /**
  * Het bedrag excl. btw van de regels in een geprijsde winkelwagen.
@@ -22,18 +24,30 @@ function cartExcl(cart) {
 /**
  * Of een winkelwagen in aanmerking komt voor een offerteaanvraag: zakelijke prijzen, alles bestelbaar en vanaf het drempelbedrag.
  * @param {{ pricesExcl?: boolean, ok?: boolean, lines: object[] }} cart De winkelwagen uit priceCart.
+ * @param {number} [minimum] Het drempelbedrag excl. btw (standaard 500).
  * @returns {boolean} true als de knop Offerte aanvragen getoond en geaccepteerd wordt.
  */
-function qualifies(cart) {
-  return Boolean(cart && cart.pricesExcl && cart.ok && cart.lines.length && cartExcl(cart) >= QUOTE_REQUEST_MIN_EXCL);
+function qualifies(cart, minimum = QUOTE_REQUEST_MIN_EXCL) {
+  return Boolean(cart && cart.pricesExcl && cart.ok && cart.lines.length && cartExcl(cart) >= minimum);
 }
 
 /**
  * Maakt de offerteaanvragen vanuit de winkelwagen.
  * @param {{ createDraft: Function, findRecent: Function, settingsFor: Function, mailerFor: Function, mailBody: Function }} deps createDraft(user, data, customerId) maakt een conceptofferte, findRecent(tenantId, ownerId, marker, since) zoekt een offerte van deze klant met dat merkteken sinds dat moment (beide server.js), settingsFor(tenantId) de instellingen, mailerFor de mailserver en mailBody de opmaak van de mail.
- * @returns {{ qualifies: Function, request: Function }} De functies.
+ * @returns {{ offered: Function, request: Function }} De functies.
  */
 function createQuoteRequests({ createDraft, findRecent, settingsFor, mailerFor, mailBody }) {
+  /**
+   * Of een zakelijke winkelwagen in deze omgeving een offerte mag aanvragen: de instelling staat aan en het bedrag haalt de drempel.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} cart De geprijsde winkelwagen (zie qualifies).
+   * @returns {boolean} true als de knop Offerte aanvragen getoond en geaccepteerd wordt.
+   */
+  const offered = (tenantId, cart) => {
+    const config = sanitizePayment(settingsFor(tenantId).get('shopPayment'));
+    return config.quoteRequest && qualifies(cart, config.quoteRequestMin);
+  };
+
   /**
    * Maakt een tekst van één regel met een maximale lengte.
    * @param {*} value De invoer.
@@ -51,7 +65,7 @@ function createQuoteRequests({ createDraft, findRecent, settingsFor, mailerFor, 
    * @returns {Promise<{ quote: object, mailed: boolean, duplicate?: boolean }|{ error: string, status: number }>} De offerte en of de melding is verstuurd (`duplicate`: dezelfde winkelwagen kreeg minder dan tien minuten geleden al een offerte; er wordt niets nieuws gemaakt), of de fout.
    */
   async function request(tenantId, viewer, profile, cart) {
-    if (!qualifies(cart)) return { error: 'Een offerte aanvragen kan bij een winkelwagen vanaf een bepaald bedrag.', status: 409 };
+    if (!offered(tenantId, cart)) return { error: 'Een offerte aanvragen kan niet bij deze winkelwagen.', status: 409 };
     // Dezelfde wagen (codes en aantallen) binnen tien minuten: de bestaande offerte terug, geen tweede concept of mail.
     const marker = `[aanvraag:${crypto.createHash('sha256').update(cart.lines.map((line) => `${line.code}:${line.qty}`).sort().join('|')).digest('hex').slice(0, 24)}]`;
     const recent = findRecent(tenantId, viewer.id, marker, new Date(Date.now() - DUPLICATE_MINUTES * 60 * 1000).toISOString());
@@ -83,7 +97,7 @@ function createQuoteRequests({ createDraft, findRecent, settingsFor, mailerFor, 
     return { quote, mailed };
   }
 
-  return { qualifies, request };
+  return { offered, request };
 }
 
 module.exports = { createQuoteRequests, qualifies, cartExcl, QUOTE_REQUEST_MIN_EXCL };

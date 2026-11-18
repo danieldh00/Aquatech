@@ -942,6 +942,8 @@
     form.publicUrl.value = payment.publicUrl || '';
     form.guestCheckout.checked = payment.guestCheckout !== false;
     form.paymentReminder.checked = payment.paymentReminder !== false;
+    form.quoteRequest.checked = payment.quoteRequest !== false;
+    form.quoteRequestMin.value = payment.quoteRequestMin || 500;
     form.onAccount.value = payment.onAccount || 'iedereen';
     form.holdHours.value = payment.holdHours || 24;
     form.accountHoldDays.value = payment.accountHoldDays == null ? 14 : payment.accountHoldDays;
@@ -1186,7 +1188,7 @@
      */
     paymentForm.onsubmit = (event) => {
       event.preventDefault();
-      const patch = { shopPayment: { online: paymentForm.online.checked, publicUrl: paymentForm.publicUrl.value.trim(), onAccount: paymentForm.onAccount.value, guestCheckout: paymentForm.guestCheckout.checked, paymentReminder: paymentForm.paymentReminder.checked, holdHours: Number(paymentForm.holdHours.value), accountHoldDays: paymentForm.accountHoldDays.value.trim() === '' ? '' : Number(paymentForm.accountHoldDays.value) } };
+      const patch = { shopPayment: { online: paymentForm.online.checked, publicUrl: paymentForm.publicUrl.value.trim(), onAccount: paymentForm.onAccount.value, guestCheckout: paymentForm.guestCheckout.checked, paymentReminder: paymentForm.paymentReminder.checked, quoteRequest: paymentForm.quoteRequest.checked, quoteRequestMin: Number(paymentForm.quoteRequestMin.value), holdHours: Number(paymentForm.holdHours.value), accountHoldDays: paymentForm.accountHoldDays.value.trim() === '' ? '' : Number(paymentForm.accountHoldDays.value) } };
       if (paymentForm.mollieApiKey.value.trim()) patch.mollieApiKey = paymentForm.mollieApiKey.value.trim();
       saveSettings(paymentForm, patch, 'Betalen opgeslagen');
     };

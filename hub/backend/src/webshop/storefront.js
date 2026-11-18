@@ -683,7 +683,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
        */
       const quoteOffered = (req, cart) => {
         const viewer = accounts.viewer(req);
-        return Boolean(quoteRequests && viewer && viewer.isCustomer && viewer.customerGroup === 'zakelijk' && quoteRequests.qualifies(cart));
+        return Boolean(quoteRequests && viewer && viewer.isCustomer && viewer.customerGroup === 'zakelijk' && quoteRequests.offered(tenantId, cart));
       };
       const quoteLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 5, keyFn: (req) => `offerte:${(accounts.viewer(req) || {}).id || clientKey(req)}` });
       // Een zakelijke klant vraagt een offerte aan voor zijn winkelwagen: dat maakt een concept in Offertes (nooit verstuurd) en meldt het aan het bedrijf.
@@ -695,7 +695,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
           if (!viewer) return res.redirect(303, '../../inloggen/');
           if (!quoteRequests || !viewer.isCustomer || viewer.customerGroup !== 'zakelijk') return res.redirect(303, '../');
           const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
-          if (!quoteRequests.qualifies(cart)) return res.redirect(303, '../');
+          if (!quoteRequests.offered(tenantId, cart)) return res.redirect(303, '../');
           const made = await quoteRequests.request(tenantId, viewer, accounts.businessProfile(viewer), cart);
           if (made.quote && !made.duplicate) onQuoteRequest(req, made.quote, viewer, made.mailed);
           res.redirect(303, '../?offerte=ja');
