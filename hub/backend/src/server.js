@@ -3532,21 +3532,6 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Inkooporders, ook voor de uurlijkse bestelvoorstellen hieronder (tests kunnen autoPropose hier vervangen).
   app.locals.purchaseOrders = purchaseOrderStore;
   /**
-   * Koppelt werkorders zonder klantrecord aan een klant waar de naam eenduidig is (elk uur vanuit main): per actieve omgeving
-   * `workOrderStore.autoLink`. Een fout in één omgeving stopt de rest niet.
-   * @returns {{ linked: number }} Het totaal aantal gekoppelde werkorders.
-   */
-  app.locals.workOrdersLinkCustomers = () => asSystem(() => {
-    const activeIds = inScopeOnly(store.listTenants()).filter((live) => !live.disabled)
-      .flatMap((live) => [live, ...live.environments.filter((environment) => !environment.disabled)])
-      .map((environment) => environment.id);
-    let linked = 0;
-    for (const tenantId of activeIds) {
-      try { linked += workOrderStore.autoLink(tenantId).linked; } catch (error) { console.error(`Werkorders koppelen in omgeving ${tenantId} mislukt:`, error.message); }
-    }
-    return { linked };
-  });
-  /**
    * Automatische bestelvoorstellen (elk uur vanuit main en kort na het opstarten): per actieve omgeving waar de instelling
    * en de module Artikelen aan staan, werkt `purchaseOrders.autoPropose` de concept-inkooporders met herkomst 'voorstel'
    * bij. Er wordt nooit besteld: de beheerder keurt een voorstel zelf goed. Een fout in één omgeving stopt de rest niet.
@@ -3668,12 +3653,6 @@ if (require.main === module) {
       .catch((error) => console.error('Oude funneltellingen wissen mislukt:', error.message));
     slowLog.trackTask('oude zoektermen', async () => app.locals.searchMissesPurge())
       .catch((error) => console.error('Oude zoektermen wissen mislukt:', error.message));
-    try {
-      const linked = slowLog.trackTask('werkorders aan klanten koppelen', () => app.locals.workOrdersLinkCustomers());
-      if (linked.linked) console.log(`Werkorders aan een klantrecord gekoppeld: ${linked.linked}`);
-    } catch (error) {
-      console.error('Werkorders aan klanten koppelen mislukt:', error.message);
-    }
     slowLog.trackTask('seizoensherinneringen', () => app.locals.seasonRemindersAll())
       .then((sent) => { if (Object.keys(sent).length) console.log(`Seizoensherinneringen: ${JSON.stringify(sent)}`); })
       .catch((error) => console.error('Seizoensherinneringen mislukt:', error.message));
