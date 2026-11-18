@@ -363,6 +363,40 @@ function productHref(root, product, variant) {
   return `${root}product/${escapeHtml(product.slug)}/${variant ? `?v=${encodeURIComponent(variant.code)}` : ''}`;
 }
 
+/** Tot en met dit aantal toont de shop "Nog N op voorraad" in plaats van "Op voorraad". */
+const LOW_STOCK_MAX = 5;
+
+/**
+ * De voorraadtekst bij een artikel: "Nog 3 op voorraad" bij een kleine voorraad, anders "Op voorraad" of "Niet op voorraad".
+ * @param {boolean} inStock Of het artikel te bestellen is.
+ * @param {?number} [quantity] Het aantal te bestellen stuks, of null als dat onbekend is (geen voorraadbeheer).
+ * @returns {string} De tekst.
+ */
+function stockText(inStock, quantity = null) {
+  if (!inStock) return 'Niet op voorraad';
+  return quantity !== null && quantity >= 1 && quantity <= LOW_STOCK_MAX ? `Nog ${quantity} op voorraad` : 'Op voorraad';
+}
+
+/**
+ * Het formulier "Mail mij als hij weer binnen is" bij een artikel dat niet op voorraad is.
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @param {string} code Artikelcode (van de gekozen variant).
+ * @param {string} status De uitkomst van een eerdere aanmelding: `ja`, `fout` of leeg.
+ * @returns {string} HTML van het blok.
+ */
+function stockAlertForm(root, code, status) {
+  const message = status === 'ja' ? '<p class="form-info" role="status">Gelukt: je krijgt één mail zodra dit artikel weer te bestellen is.</p>'
+    : status === 'fout' ? '<p class="form-error" role="alert">Aanmelden is niet gelukt. Controleer je e-mailadres en probeer het opnieuw.</p>' : '';
+  return `<form class="stock-alert" id="voorraadmelding" method="post" action="${root}voorraadmelding/">
+<h2>Mail mij als hij weer binnen is</h2>${message}
+<input type="hidden" name="code" value="${escapeHtml(code)}">
+<label class="trap" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
+<label class="form-field"><span>E-mailadres</span><input name="email" type="email" required maxlength="200" autocomplete="email"><small>We mailen je één keer en wissen je adres daarna.</small></label>
+${captchaFields('stock_alert')}
+<button class="button" type="submit">Mail mij</button>
+</form>`;
+}
+
 /**
  * De vertrouwensstrook op de beslismomenten (productpagina, winkelwagen, afrekenen): levertijd, gratis verzenden, retour, advies en
  * betalen. Alleen wat klopt: een punt zonder gegevens (geen drempel, geen telefoonnummer, geen online betalen) blijft weg.
@@ -794,10 +828,10 @@ function detailsSection(details) {
  * @param {object[]} groups Alle hoofdcategorieën.
  * @param {string} [chosenCode] Artikelnummer van de gekozen variant (alleen bij een hoofdartikel; anders de eerste op voorraad).
  * @param {Map<string, { description: string, specifications: object[] }>} [details] Omschrijving en specificaties per artikelcode (storefront-data.detailsOf).
- * @param {{ packagingsFor?: Function, packCode?: string, leadTextFor?: Function, trust?: { freeFrom?: number, online?: boolean } }} [packaging] packagingsFor(artikelcode) = de verpakkingen die de bezoeker mag kiezen (zie storefront.js) en packCode = de gekozen verpakking (leeg = per stuk).
+ * @param {{ packagingsFor?: Function, packCode?: string, leadTextFor?: Function, trust?: { freeFrom?: number, online?: boolean }, stockAlert?: ?{ status: string } }} [packaging] `stockAlert` zet het formulier voor de voorraadmelding bij een artikel dat niet op voorraad is (met de uitkomst van een eerdere aanmelding in `status`) packagingsFor(artikelcode) = de verpakkingen die de bezoeker mag kiezen (zie storefront.js) en packCode = de gekozen verpakking (leeg = per stuk).
  * @returns {string} De HTML-pagina.
  */
-function productPage(product, groups, chosenCode = '', details = new Map(), { packagingsFor = () => [], packCode = '', leadTextFor = () => '', trust = {} } = {}) {
+function productPage(product, groups, chosenCode = '', details = new Map(), { packagingsFor = () => [], packCode = '', leadTextFor = () => '', trust = {}, stockAlert = null } = {}) {
   const root = '../../';
   const variants = product.variants || [];
   const chosen = variants.length ? (variants.find((variant) => variant.code === chosenCode) || variants.find((variant) => variant.inStock) || variants[0]) : null;
@@ -829,9 +863,10 @@ function productPage(product, groups, chosenCode = '', details = new Map(), { pa
     <p class="sku">Artikelnummer: ${escapeHtml(shown.code)}${chosen && chosen.meta ? ` | ${escapeHtml(chosen.meta)}` : ''}</p>
     ${packagingPicker}
     <p class="price">${escapeHtml(formatPrice(pack ? pack.price : shownPrice(shown)))} <small>${activeShop.business ? `excl. ${shown.vatRate}% btw · per ${escapeHtml(pack ? `${pack.name} (${pack.factor} ${product.unit})` : product.unit)}<br><span class="price-incl">incl. btw ${escapeHtml(formatPrice(pack ? pack.priceIncl : shown.priceBusinessIncl))}</span>` : `incl. ${shown.vatRate}% btw · per ${escapeHtml(pack ? `${pack.name} (${pack.factor} ${product.unit})` : product.unit)}`}</small></p>
-    <p class="stock ${(pack ? pack.inStock : shown.inStock) ? 'in' : 'out'}">${(pack ? pack.inStock : shown.inStock) ? 'Op voorraad' : 'Niet op voorraad'}</p>
+    <p class="stock ${(pack ? pack.inStock : shown.inStock) ? 'in' : 'out'}">${stockText(pack ? pack.inStock : shown.inStock, pack ? null : (shown.stockQty === undefined ? null : shown.stockQty))}</p>
     ${leadTextFor(shown.code, pack ? pack.inStock : shown.inStock) ? `<p class="lead-time">${escapeHtml(leadTextFor(shown.code, pack ? pack.inStock : shown.inStock))}</p>` : ''}
     ${activeShop.ordering ? orderForm(root, pack ? pack.cartCode : shown.code, pack ? pack.inStock : shown.inStock, 'product-order', viewedItem) : '<button class="button" type="button" disabled>In winkelwagen</button>\n    <p class="note">Online bestellen volgt binnenkort.</p>'}
+    ${stockAlert && !(pack ? pack.inStock : shown.inStock) ? stockAlertForm(root, shown.code, stockAlert.status) : ''}
     ${parentLink}
     ${trustStrip(root, { freeFrom: trust.freeFrom || 0, online: Boolean(trust.online), business: activeShop.business })}
   </div>
@@ -991,4 +1026,4 @@ function notFoundPage(root, groups) {
   return layout({ root, groups, title: `Pagina niet gevonden – ${SHOP_NAME}`, description: 'Deze pagina bestaat niet.', body: `<h1>Pagina niet gevonden</h1><p><a href="${root || './'}">Terug naar de shop</a></p>` });
 }
 
-module.exports = { layout, renderWith, captchaFields, trustStrip, contentPage, homePage, aboutPage, groupPage, categoryPage, searchPage, productPage, notFoundPage, escapeHtml, formatPrice };
+module.exports = { layout, renderWith, captchaFields, trustStrip, stockText, contentPage, homePage, aboutPage, groupPage, categoryPage, searchPage, productPage, notFoundPage, escapeHtml, formatPrice };

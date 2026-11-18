@@ -20,7 +20,7 @@ const backups = require('./backup');
 const { createDriveBackup, sanitizeDriveBackup, DriveError, CALLBACK_PATH: DRIVE_CALLBACK_PATH } = require('./platform/drive-backup');
 const { createQuoteStore, registerQuoteRoutes, validShareBase, mailBody, Core: QuoteCore } = require('./verkoop/quotes');
 const { createCustomerStore, registerCustomerRoutes } = require('./verkoop/customers');
-const { createMailer } = require('./platform/mailer');
+const { createMailer, mailFailure } = require('./platform/mailer');
 const { createWanIp } = require('./platform/wan-ip');
 const { createAddressLookup, createAddressGuard, registerAddressRoute } = require('./platform/address-lookup');
 const { createWorkOrderStore, registerWorkOrderRoutes } = require('./uitvoering/workorders');
@@ -51,6 +51,7 @@ const { createQuoteOrders, registerQuoteOrderRoutes } = require('./verkoop/quote
 const { createWebOrderInvoices } = require('./verkoop/web-order-invoices');
 const { createOrderMailer } = require('./webshop/web-orders-mail');
 const { createGuestOrders } = require('./webshop/guest-orders');
+const { createStockAlerts } = require('./webshop/stock-alerts');
 const { createMollie, cleanPublicUrl } = require('./webshop/mollie');
 const { createWebPayments } = require('./webshop/web-payments');
 const { createWebReturnStore, registerWebReturnRoutes } = require('./webshop/web-returns');
@@ -2826,6 +2827,35 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Bestellen als gast: de toegang van een gast tot zijn bestelling (persoonlijke link, zie webshop/guest-orders.js).
   const guestOrders = createGuestOrders({ orders: webOrders, vault });
   const webOrderMail = createOrderMailer({ orders: webOrders, settingsFor: (id) => settingsFor(id), mailerFor, mailBody, guestLinkOf: guestOrders.linkOf });
+  // Voorraadmeldingen: een bezoeker laat zijn adres achter bij een artikel dat niet op voorraad is en krijgt één mail zodra het terug is.
+  const stockAlerts = createStockAlerts(database);
+  let stockAlertsBusy = false;
+  /**
+   * Mailt de voorraadmeldingen waarvan het artikel weer te bestellen is en wist ze daarna; een melding met een mislukte mail blijft staan voor de volgende ronde (elk uur).
+   * @returns {Promise<{ sent: number, purged: number }>} Het aantal verstuurde en verlopen meldingen.
+   */
+  app.locals.stockAlertsRun = async () => {
+    const result = { sent: 0, purged: 0 };
+    if (stockAlertsBusy) return result;
+    stockAlertsBusy = true;
+    try {
+      result.purged = stockAlerts.purgeOld(tenant.id);
+      for (const alert of stockAlerts.due(tenant.id)) {
+        try {
+          if (await webOrderMail.sendStockAlert(tenant.id, alert)) {
+            stockAlerts.remove(tenant.id, alert.id);
+            result.sent += 1;
+          }
+        } catch (failure) {
+          console.error(`Voorraadmelding niet verstuurd voor ${alert.code}: ${mailFailure(failure)}`);
+        }
+      }
+    } finally {
+      stockAlertsBusy = false;
+    }
+    return result;
+  };
+  app.locals.stockAlerts = stockAlerts;
   const webReturns = createWebReturnStore(database, { orders: webOrders, stock: stockStore });
   const webReturnMail = createReturnMailer({ returns: webReturns, settingsFor: (id) => settingsFor(id), mailerFor, mailBody });
   const webOrderInvoices = createWebOrderInvoices({ orders: webOrders, invoices: invoiceStore, returns: webReturns, debtors: debtorStore, stock: stockStore, sender: invoiceSender, settingsFor: (id) => settingsFor(id) });
@@ -3250,7 +3280,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, loginGuard, twoFactor, tokens: accountTokens, mailerFor, settingsFor: (id) => settingsFor(id), mailBody });
   storefrontRouter = createStorefront({
     addressLookup, addressGuard, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore, data: storefrontData, itemImages: itemImageStore,
-    orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, orderSlips, returns: webReturns, guestOrders, payments: webPayments,
+    orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, orderSlips, returns: webReturns, guestOrders, stockAlerts, payments: webPayments,
     vies, captcha, captchaGate,
     onOrder: (req, order) => audit(req, 'webshop_bestelling_geplaatst', { number: order.number, total: order.total, ...(order.guest ? { gast: true } : {}) }, order.userId, tenant.id),
     onGuestAccount: (req, order, user) => audit(req, 'webshop_gastbestelling_gekoppeld', { number: order.number }, user.id, tenant.id),
@@ -3543,6 +3573,9 @@ if (require.main === module) {
     slowLog.trackTask('onbetaalde bestellingen laten vervallen', () => app.locals.webPaymentsExpire())
       .then((out) => { if (out.expired) console.log(`Onbetaalde webshopbestellingen vervallen: ${out.expired}`); })
       .catch((error) => console.error('Onbetaalde webshopbestellingen laten vervallen mislukt:', error.message));
+    slowLog.trackTask('voorraadmeldingen', () => app.locals.stockAlertsRun())
+      .then((out) => { if (out.sent || out.purged) console.log(`Voorraadmeldingen: ${out.sent} verstuurd, ${out.purged} verlopen`); })
+      .catch((error) => console.error('Voorraadmeldingen mislukt:', error.message));
     slowLog.trackTask('seizoensherinneringen', () => app.locals.seasonRemindersAll())
       .then((sent) => { if (Object.keys(sent).length) console.log(`Seizoensherinneringen: ${JSON.stringify(sent)}`); })
       .catch((error) => console.error('Seizoensherinneringen mislukt:', error.message));

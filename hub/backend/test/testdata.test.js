@@ -279,6 +279,7 @@ test('testdata vult alle features: klantlinks, akkoord met handtekening, werkord
       purchase_proposal_dismissals: 'een afgewezen regel uit een automatisch bestelvoorstel is een keuze van de beheerder; nep-afwijzingen zouden voorstellen verbergen',
       price_proposal_rejections: 'een afgewezen prijsvoorstel is een keuze van de beheerder bij een nieuwe inkoopprijs; nep-afwijzingen zouden voorstellen verbergen',
       item_text_drafts: 'een concept van producttekst is het resultaat van een betaalde AI-aanroep met de eigen sleutel en wacht op goedkeuring van de beheerder; een nep-concept zou in het goedkeuringsscherm als echt voorstel verschijnen',
+      stock_alerts: 'een voorraadmelding is het e-mailadres van een bezoeker van de eigen webshop (hoofdtenant) en wordt na de mail gewist; een nep-adres zou echte mail veroorzaken',
       account_tokens: 'eenmalige links voor wachtwoord vergeten en e-mail bevestigen ontstaan alleen per mail in de eigen webshop (hoofdtenant), met een korte geldigheid',
     };
     const tables = listTables(db).filter((table) => tableColumns(db, table).some((column) => column.name === 'tenant_id'));
