@@ -52,9 +52,8 @@ function parseRecipients(value) {
 function createPurchaseOrderMailer({ purchaseOrders, suppliers, settingsFor, mailerFor, mailBody, colorsOf = () => ({}) }) {
   /** Orders waarvan nu een mail onderweg is (tegen een dubbele klik of twee schermen). */
   const sending = new Set();
-  /** Orders die net met succes zijn verstuurd (sleutel → { to, at }): houdt `already_sent` overeind als het vastleggen in de database faalde. */
+  /** Orders die met succes zijn verstuurd maar waarvan het vastleggen in de database nog niet lukte (sleutel → { to, at }): houdt `already_sent` overeind. */
   const recentlySent = new Map();
-  const RECENT_MS = 10 * 60 * 1000;
 
   /**
    * Zoekt de order en de leverancier van een omgeving.
@@ -125,7 +124,7 @@ function createPurchaseOrderMailer({ purchaseOrders, suppliers, settingsFor, mai
     const { order, supplier } = load(tenantId, id);
     if (!SENDABLE_STATUSES.includes(order.status)) throw failure('not_sendable', 'Alleen een bestelde order is naar de leverancier te sturen.');
     const recent = recentlySent.get(`${tenantId}:${order.id}`);
-    const earlierTo = order.mail.sentAt ? order.mail.sentTo : (recent && Date.now() - recent.at < RECENT_MS ? recent.to : '');
+    const earlierTo = order.mail.sentAt ? order.mail.sentTo : (recent ? recent.to : '');
     if (earlierTo && resend !== true) throw failure('already_sent', `Deze order is al verstuurd naar ${earlierTo}. Open het paneel opnieuw als je hem nog een keer wilt sturen.`);
     const settings = settingsFor(tenantId);
     const mailer = mailerFor(settings);
@@ -149,18 +148,24 @@ function createPurchaseOrderMailer({ purchaseOrders, suppliers, settingsFor, mai
         });
       } catch (error) {
         const reason = mailFailure(error);
-        purchaseOrders.markMail(tenantId, order.id, { error: reason });
+        try { purchaseOrders.markMail(tenantId, order.id, { error: reason }); } catch (recordError) { console.error(`Mailfout van inkooporder ${order.number} niet vastgelegd: ${recordError.message}`); }
         throw failure('send_failed', reason, error);
       }
-      recentlySent.set(key, { to: addresses.join(', '), at: Date.now() });
-      for (const [recentKey, entry] of recentlySent) if (Date.now() - entry.at >= RECENT_MS) recentlySent.delete(recentKey);
+      const sentTo = addresses.join(', ');
+      const sentBy = user.display_name || user.name || '';
+      // Pas weghalen uit het geheugen als het vastleggen gelukt is: zo blijft `already_sent` gelden (tot een herstart) als de database even faalt.
+      recentlySent.set(key, { to: sentTo, at: Date.now() });
       // De mail is weg: een databasefout bij het vastleggen mag er geen fout van maken (dan klikt iemand opnieuw en gaat hij dubbel).
-      try {
-        return purchaseOrders.markMail(tenantId, order.id, { to: addresses.join(', '), by: user.display_name || user.name || '' });
-      } catch (error) {
-        console.error(`Inkooporder ${order.number} verstuurd, maar vastleggen mislukte: ${error.message}`);
-        return purchaseOrders.get(tenantId, order.id) || order;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const recorded = purchaseOrders.markMail(tenantId, order.id, { to: sentTo, by: sentBy });
+          recentlySent.delete(key);
+          return recorded;
+        } catch (error) {
+          console.error(`Inkooporder ${order.number} verstuurd, maar vastleggen mislukte (poging ${attempt + 1}): ${error.message}`);
+        }
       }
+      return { ...order, mail: { sentAt: new Date().toISOString(), sentTo, sentBy, error: '' } };
     } finally {
       sending.delete(key);
     }
