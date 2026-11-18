@@ -539,6 +539,25 @@ function homeJsonLd(heroReference) {
 }
 
 /**
+ * Het blok dat de gratis planner aanprijst: ontwerp de beregening en bestel de complete lijst in één keer. De server vervangt het
+ * merkteken door het blok als de planner aan staat (anders blijft er niets over), zodat de pagina's er niet van afhangen.
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @returns {string} Het merkteken `<!--planner-promo:…-->`.
+ */
+function plannerPromoMark(root) {
+  return `<!--planner-promo:${root}-->`;
+}
+
+/**
+ * Of een hoofdcategorie over beregening gaat (daar past de plannerpromotie): de naam of het adres bevat "beregening".
+ * @param {{ slug?: string, name?: string }} group De hoofdcategorie.
+ * @returns {boolean} true als het een beregeningscategorie is.
+ */
+function isIrrigationGroup(group) {
+  return /beregening/i.test(`${group.slug || ''} ${group.name || ''}`);
+}
+
+/**
  * Startpagina in de opzet van aquatechshop.nl: foto met kop, assortimentsbalk,
  * populaire producten, producten per hoofdcategorie, voordelen, merken en een
  * oproep voor een zakelijk account.
@@ -595,7 +614,7 @@ function homePage(catalog) {
   const businessHref = linkHref(businessBlock.link, root, `${root}registreren/`);
   const withForm = Boolean(businessBlock.form && activeShop.businessForm);
   const business = businessBlock.enabled ? `<section class="business${withForm ? ' with-form' : ''}">${businessImage ? `<img src="${businessImage}" alt="" loading="lazy">` : ''}<div class="business-text"><h2>${escapeHtml(businessBlock.title)}</h2>${businessBlock.text ? `<p>${escapeHtml(businessBlock.text)}</p>` : ''}${businessBlock.button && !withForm ? `<a class="button" href="${businessHref}">${escapeHtml(businessBlock.button)}</a>` : ''}</div>${withForm ? businessForm(root, activeShop.businessSent) : ''}</section>` : '';
-  return layout({ root, wide: true, canonicalPath: '', variantScript: [...catalog.bestsellers, ...catalog.featured].some((product) => product.variants), jsonLd: homeJsonLd(hero.image), ogImage: homeImage(hero.image), title: `${SHOP_NAME} – alles voor uw tuinberegening`, description: 'Sproeiers, druppelslang, leidingen en pompen voor tuinberegening van AquaTech Service.', body: `${intro}\n${assortment}\n${popular}\n${banners}\n${perGroup}\n${benefits}\n${brands}\n${quote}\n${business}`, groups: catalog.groups });
+  return layout({ root, wide: true, canonicalPath: '', variantScript: [...catalog.bestsellers, ...catalog.featured].some((product) => product.variants), jsonLd: homeJsonLd(hero.image), ogImage: homeImage(hero.image), title: `${SHOP_NAME} – alles voor uw tuinberegening`, description: 'Sproeiers, druppelslang, leidingen en pompen voor tuinberegening van AquaTech Service.', body: `${intro}\n${assortment}\n${plannerPromoMark(root)}\n${popular}\n${banners}\n${perGroup}\n${benefits}\n${brands}\n${quote}\n${business}`, groups: catalog.groups });
 }
 
 /**
@@ -724,6 +743,7 @@ ${side}
 <section class="browse-main">
 <h1>${escapeHtml(subject.name)}</h1>
 <div class="browse-intro">${introHtml(subject.intro)}</div>
+${isIrrigationGroup(group) ? plannerPromoMark(root) : ''}
 ${blocks}
 ${list}
 </section>
