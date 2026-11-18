@@ -1216,11 +1216,11 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
    * @param {string} before Tijdstip (ISO): alleen bestellingen die daarvoor zijn geplaatst.
    * @param {number} [limit] Hoogstens zoveel bestellingen (standaard 100).
    * @param {number} [skip] Zoveel oudste bestellingen overslaan (voor wie ze laat staan).
-   * @param {{ withoutReminder?: boolean }} [options] `withoutReminder`: alleen bestellingen die nog geen betalingsherinnering kregen.
+   * @param {{ withoutReminder?: boolean }} [options] `withoutReminder`: alleen bestellingen van een account die nog geen betalingsherinnering kregen (een gast krijgt er nooit een).
    * @returns {string[]} De id's van de bestellingen.
    */
   function unpaidOnline(tenantId, before, limit = 100, skip = 0, { withoutReminder = false } = {}) {
-    const reminderFilter = withoutReminder ? " AND data NOT LIKE '%\"reminderAt\"%'" : '';
+    const reminderFilter = withoutReminder ? " AND user_id IS NOT NULL AND data NOT LIKE '%\"reminderAt\"%'" : '';
     return prepare("SELECT id FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND created_at < ? AND data LIKE '%\"payment\":\"online\"%' AND data NOT LIKE '%\"status\":\"betaald\"%'" + reminderFilter + " ORDER BY created_at, id LIMIT ? OFFSET ?")
       .all(tenantId, String(before), Math.max(1, Math.floor(limit)), Math.max(0, Math.floor(skip))).map((row) => row.id);
   }
