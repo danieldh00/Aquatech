@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.18.0',
+      date: '2026-11-18',
+      title: 'Levermethode en levertijd per artikel',
+      items: [
+        { text: 'Per artikel of productcategorie bepaal je welke bezorgmethodes mogen, met een aantalgrens (bijvoorbeeld vanaf 100 stuks alleen pallet). Een bestelling met artikelen die verschillende methodes vragen gaat met de zwaarste methode (pallet) mee.', for: ['beheer', 'voorraad'] },
+        { text: 'Pallet en eigen transport kunnen een aantalstaffel krijgen naast de weegklassen. Per methode stel je de levertijd in, in kalender- of werkdagen.', for: ['beheer'] },
+        { text: 'De webshop toont een indicatieve levertijd bij het product en bij het afrekenen; is die niet bekend, dan staat er "Levertijd op aanvraag". Een artikel kan een eigen levertijd hebben, en als het niet op voorraad is volgt de levertijd uit de inkooporder of de levertijd van de leverancier.' },
+      ],
+    },
+    {
       version: '1.17.3',
       date: '2026-11-18',
       title: 'SEO-opties voor de webshop',
