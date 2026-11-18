@@ -42,7 +42,7 @@ function normalize(text) {
 }
 
 /**
- * Het enkelvoud van een woord, grof: een meervoud op -en of -s valt weg (sproeiers → sproeier, kranen → kraan niet, maar dat vangt de synoniemenlijst op).
+ * Een grove stam van een woord: een meervoud op -en of -s valt weg (sproeiers → sproeier, kranen → kran). Afwijkende vormen vangt de synoniemenlijst op.
  * @param {string} word Een genormaliseerd woord.
  * @returns {string} De stam.
  */

@@ -1301,7 +1301,9 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     sendPage(req, res, 200, () => groupPage(group, catalog.groups));
   });
 
-  router.get('/zoeken', (req, res) => {
+  // Zoeken doorloopt de hele catalogus: een eigen, strengere limiet per bezoeker dan de algemene.
+  const searchLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 40, keyFn: (req) => `zoeken:${clientKey(req)}` });
+  router.get('/zoeken', searchLimiter, (req, res) => {
     const pathname = req.originalUrl.split('?')[0];
     if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/${req.originalUrl.slice(pathname.length)}`);
     const catalog = catalogOf(req);

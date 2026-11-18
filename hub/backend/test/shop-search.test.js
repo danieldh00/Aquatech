@@ -107,4 +107,8 @@ test('zoekpagina: code, tikfout en melding bij ruimer zoeken', async () => {
   assert.match(typo.text, /search-widened/);
   const none = await client.request('GET', '/zoeken/?q=bestaatechtniet');
   assert.doesNotMatch(none.text, /magneetklep-24v-magneet/);
+  // De zoekroute heeft een eigen limiet per bezoeker (40 per minuut).
+  let limited = false;
+  for (let attempt = 0; attempt < 45 && !limited; attempt += 1) limited = (await client.request('GET', `/zoeken/?q=term${attempt}`)).status === 429;
+  assert.ok(limited, 'na 40 zoekopdrachten per minuut volgt 429');
 });
