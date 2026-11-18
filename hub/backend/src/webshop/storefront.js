@@ -10,6 +10,7 @@ const path = require('path');
 const express = require('express');
 const { FRONTEND_DIR } = require('../paths');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
+const { searchProducts } = require('./search');
 const { registerAddressRoute, normalizePostcode } = require('../platform/address-lookup');
 const { clientKey } = require('../beveiliging/auth');
 const { catchAsync } = require('../platform/error-report');
@@ -1300,25 +1301,16 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     sendPage(req, res, 200, () => groupPage(group, catalog.groups));
   });
 
-  router.get('/zoeken', (req, res) => {
+  // Zoeken doorloopt de hele catalogus: een eigen, strengere limiet per bezoeker dan de algemene.
+  const searchLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 40, keyFn: (req) => `zoeken:${clientKey(req)}` });
+  router.get('/zoeken', searchLimiter, (req, res) => {
     const pathname = req.originalUrl.split('?')[0];
     if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/${req.originalUrl.slice(pathname.length)}`);
     const catalog = catalogOf(req);
     const query = typeof req.query.q === 'string' ? Array.from(req.query.q.trim()).slice(0, 80).join('') : '';
-    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
     const onlyInStock = req.query.voorraad === '1';
-    const found = words.length
-      ? catalog.products.filter((product) => {
-        const base = `${product.name} ${product.code} ${product.categoryName}`;
-        // Alle woorden moeten bij het hoofdartikel samen met één variant passen, niet verspreid over meerdere varianten;
-        // bij het voorraadfilter moet diezelfde variant ook op voorraad zijn.
-        const candidates = (product.variants || []).length
-          ? product.variants.map((variant) => ({ haystack: `${base} ${variant.code} ${variant.label}`, inStock: variant.inStock }))
-          : [{ haystack: base, inStock: product.inStock }];
-        return candidates.some((candidate) => (!onlyInStock || candidate.inStock) && words.every((word) => candidate.haystack.toLowerCase().includes(word)));
-      })
-      : [];
-    sendPage(req, res, 200, () => searchPage(query, found, catalog.groups, onlyInStock, isPreview(req)));
+    const { products: found, widened } = searchProducts(catalog.products, query, { onlyInStock });
+    sendPage(req, res, 200, () => searchPage(query, found, catalog.groups, onlyInStock, isPreview(req), widened));
   });
 
   router.get('/categorie/:slug', (req, res) => {

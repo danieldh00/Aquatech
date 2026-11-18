@@ -769,19 +769,21 @@ function noResults(root, groups) {
 }
 
 /**
- * Zoekpagina: producten waarvan naam of artikelnummer de zoekterm bevat.
+ * Zoekpagina: producten waarvan naam, artikelnummer of categorie bij de zoekterm passen, beste treffer eerst.
  * @param {string} query De zoekterm.
  * @param {object[]} products De producten die passen (al gefilterd).
  * @param {object[]} groups Alle hoofdcategorieën.
  * @param {boolean} [onlyInStock] Of alleen producten op voorraad getoond worden.
  * @param {boolean} [preview] Of het conceptvoorbeeld in de filterlinks behouden blijft.
+ * @param {boolean} [widened] Of er ruimer is gezocht (verwante woorden, tikfouten) omdat er geen exacte treffers waren.
  * @returns {string} De HTML-pagina.
  */
-function searchPage(query, products, groups, onlyInStock = false, preview = false) {
+function searchPage(query, products, groups, onlyInStock = false, preview = false, widened = false) {
   const root = '../';
   const shown = products.slice(0, MAX_SEARCH_RESULTS);
   const body = `<h1>Zoeken</h1>
 ${query ? `<p class="muted">${productCount(products.length)} voor “${escapeHtml(query)}”${products.length > shown.length ? ` (de eerste ${shown.length} getoond)` : ''}.</p>` : '<p class="muted">Typ een productnaam of artikelnummer.</p>'}
+${query && widened && products.length ? '<p class="muted search-widened">Geen exacte treffers: we zochten ook op verwante woorden en andere schrijfwijzen.</p>' : ''}
 ${query ? stockFilter(onlyInStock, `q=${encodeURIComponent(query)}`, `q=${encodeURIComponent(query)}&amp;voorraad=1`, preview) : ''}
 ${query && !products.length ? noResults(root, groups) : ''}
 <div class="product-grid">
