@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.20.2
+
+- Betalingsherinnering (#262) geldt nu ook voor gastbestellingen: `webOrders.unpaidOnline` filtert niet meer op `user_id` en `reminderAllowed` eist alleen voor een account een bevestigd, gelijk adres. Limieten ongewijzigd: één per bestelling (`pay.reminderAt`), één per adres per 24 uur (ook over gasten en accounts heen), alleen zolang de reservering loopt, alleen met mailserver en webadres, naam opgeschoond. De mail bevat de persoonlijke gastlink (`?k=`).
+- Inkooporder per e-mail naar de leverancier (migratie 80: `purchase_orders.mail_sent_at|mail_sent_to|mail_sent_by|mail_error`): `artikelen/purchase-order-mail.js` (`draft`, `send`), `artikelen/purchase-order-pdf.js` (PDF met de documentopmaak van de organisatie), routes `GET /api/purchase-orders/:id/pdf`, `GET …/mail-draft` en `POST …/send` (recht `voorraad`, 30 per 10 minuten per gebruiker, audit `inkooporder_naar_leverancier_gemaild`). Alleen orders met status besteld of deels ontvangen; één adres tot drie, geen stuurtekens in onderwerp of adres, een lopende verzending blokkeert een tweede klik (409 `busy`) en een al verstuurde order vraagt `resend: true` (409 `already_sent`; het scherm meldt dat hij al is verstuurd), een databasefout bij het vastleggen na een geslaagde verzending geeft geen fout, een mislukte poging komt als leesbare melding op de order en wordt bij een geslaagde poging gewist. Opmaak via de bestaande `mailBody`; instelbare mailopmaak volgt later.
+
 ## 1.20.1
 
 - Gedeeld tabelpatroon (`beheer/beheer.css`): `.tablewrap` krijgt `max-width: 100%`, kaarten/panelen/rasterkinderen mogen krimpen (`min-width: 0`), en rasterkolommen met `minmax(Npx, 1fr)` (N ≥ 200) in alle CSS gebruiken `minmax(min(100%, Npx), 1fr)` zodat ze een telefoon niet verbreden. `test/mobile-tables.test.js` bewaakt dit.

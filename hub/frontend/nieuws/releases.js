@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.20.2',
+      date: '2026-11-18',
+      title: 'Betalingsherinnering ook voor gasten en inkooporders mailen',
+      items: [
+        { text: 'Een bestelde inkooporder stuur je met één knop (*Versturen naar leverancier*) per e-mail naar de leverancier. Je ziet eerst de ontvanger, het onderwerp en de tekst en kunt ze aanpassen; de inkooporder gaat als PDF mee. Er gaat nooit iets vanzelf weg, en op de order staat wanneer en naar wie hij is verstuurd.', for: ['voorraad'] },
+        { text: 'Ook wie als gast bestelt en de online betaling niet afrondt, krijgt na een uur één herinnering met een link om af te rekenen, op het adres dat bij het afrekenen is ingevuld.' },
+      ],
+    },
+    {
       version: '1.20.1',
       date: '2026-11-18',
       title: 'Tabellen kloppen op de telefoon en producttekst bij het artikel',
