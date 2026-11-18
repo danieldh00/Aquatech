@@ -174,6 +174,11 @@
    */
   async function approve(ids, flags = {}) {
     const out = await context.api('stock/item-texts/approve', { method: 'POST', body: { itemIds: ids, ...flags } });
+    /**
+     * Telt de uitkomsten met een status.
+     * @param {string} status De status.
+     * @returns {number} Het aantal.
+     */
     const count = (status) => out.results.filter((result) => result.status === status).length;
     const parts = [];
     if (count('approved')) parts.push(`${count('approved')} goedgekeurd en geplaatst`);
@@ -208,13 +213,13 @@
       const id = event.target.dataset && event.target.dataset.open;
       if (id) openDetail(id).catch((error) => context.toast(error.message, true));
     });
-    $('#tx-write').onclick = () => { writeSelected(); };
-    $('#tx-approve').onclick = async () => {
+    $('#tx-write').addEventListener('click', () => { writeSelected(); });
+    $('#tx-approve').addEventListener('click', async () => {
       const ids = state.data.items.filter((item) => item.draft && state.selected.has(item.id)).map((item) => item.id);
       if (!ids.length) { context.toast('Kies artikelen met een concept.', true); return; }
       try { await approve(ids); await load(); } catch (error) { context.toast(error.message, true); }
-    };
-    $('#tx-reject').onclick = async () => {
+    });
+    $('#tx-reject').addEventListener('click', async () => {
       const ids = state.data.items.filter((item) => item.draft && state.selected.has(item.id)).map((item) => item.id);
       if (!ids.length) { context.toast('Kies artikelen met een concept.', true); return; }
       try {
@@ -222,10 +227,10 @@
         context.toast(`${out.rejected} concept${out.rejected === 1 ? '' : 'en'} afgewezen.`);
         await load();
       } catch (error) { context.toast(error.message, true); }
-    };
-    $('#tx-close').onclick = () => { $('#tx-detail').hidden = true; state.openId = null; };
-    $('#tx-save').onclick = async () => { if (await saveDraft()) { context.toast('Concept bewaard.'); await load(); } };
-    $('#tx-publish').onclick = async () => {
+    });
+    $('#tx-close').addEventListener('click', () => { $('#tx-detail').hidden = true; state.openId = null; });
+    $('#tx-save').addEventListener('click', async () => { if (await saveDraft()) { context.toast('Concept bewaard.'); await load(); } });
+    $('#tx-publish').addEventListener('click', async () => {
       try {
         if (!(await saveDraft())) return;
         const warnings = state.detail.draft.warnings;
@@ -236,16 +241,16 @@
         await load();
         if (result.status === 'approved') await openDetail(state.openId);
       } catch (error) { context.toast(error.message, true); }
-    };
-    $('#tx-discard').onclick = async () => {
+    });
+    $('#tx-discard').addEventListener('click', async () => {
       try {
         await context.api(`stock/item-texts/${encodeURIComponent(state.openId)}`, { method: 'DELETE' });
         context.toast('Concept afgewezen.');
         await load();
         await openDetail(state.openId);
       } catch (error) { context.toast(error.message, true); }
-    };
-    $('#tx-redo').onclick = async () => {
+    });
+    $('#tx-redo').addEventListener('click', async () => {
       if (state.busy) return;
       state.busy = true;
       progress('Schrijven…');
@@ -259,7 +264,7 @@
       progress('');
       await load();
       await openDetail(state.openId);
-    };
+    });
   }
 
   window.ArtikelenTexts = { setup, load };

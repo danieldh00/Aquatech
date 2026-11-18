@@ -64,6 +64,11 @@ function numbersIn(text) {
  */
 function buildFacts(row, categoryName = '') {
   const details = ItemDetails.shownDetails(row);
+  /**
+   * Kort een bron in.
+   * @param {*} value De tekst.
+   * @returns {string} De tekst zonder randspaties, hoogstens MAX_SOURCE_TEXT tekens.
+   */
   const clip = (value) => String(value || '').trim().slice(0, MAX_SOURCE_TEXT);
   let attributes = [];
   try { attributes = JSON.parse(row.attributes || '[]'); } catch { attributes = []; }

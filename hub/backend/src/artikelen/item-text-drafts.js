@@ -111,17 +111,17 @@ function createItemTextDraftStore(db) {
   /**
    * Overzicht van de artikelen waarvoor een tekst geschreven kan worden, met de stand van de tekst en het concept.
    * @param {string} tenantId Id van de omgeving.
-   * @param {{ q?: string, filter?: string, category?: string }} [options] Zoekterm, filter (alle, ontbreekt, concept, zonderconcept) en categorie.
+   * @param {{ search?: string, filter?: string, category?: string }} [options] Zoekterm, filter (alle, ontbreekt, concept, zonderconcept) en categorie.
    * @returns {{ items: object[], total: number, categories: string[], truncated: boolean }} De artikelen (hoogstens MAX_LIST), het totaal en de categorieën.
    */
-  function list(tenantId, { q = '', filter = 'alle', category = '' } = {}) {
+  function list(tenantId, { search = '', filter = 'alle', category = '' } = {}) {
     const rows = prepare(`SELECT i.id, i.code, i.name, LENGTH(i.description) AS description_length, LENGTH(p.description) AS shop_description_length, i.seo_title, i.seo_description, p.categories,
         d.updated_at AS draft_updated, d.warnings AS draft_warnings, d.edited AS draft_edited
       FROM stock_items i
       LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
       LEFT JOIN item_text_drafts d ON d.tenant_id = i.tenant_id AND d.item_id = i.id
       WHERE i.tenant_id = ? AND i.archived = 0 AND i.parent_id IS NULL ORDER BY i.name, i.code`).all(tenantId);
-    const term = String(q || '').trim().toLowerCase();
+    const term = String(search || '').trim().toLowerCase();
     const categories = new Set();
     const matching = [];
     for (const row of rows) {
@@ -292,7 +292,7 @@ function registerItemTextRoutes(app, ctx) {
     const writer = currentItemTextWriter(tenantOf(req));
     const filter = ['alle', 'ontbreekt', 'concept', 'zonderconcept'].includes(req.query.filter) ? req.query.filter : 'alle';
     res.json({
-      ...drafts.list(tenantOf(req), { q: String(req.query.q || '').slice(0, 80), filter, category: String(req.query.category || '').slice(0, 120) }),
+      ...drafts.list(tenantOf(req), { search: String(req.query.q || '').slice(0, 80), filter, category: String(req.query.category || '').slice(0, 120) }),
       ai: { enabled: Boolean(settings.get('aiEnabled')), configured: writer.available, remainingToday: Math.max(0, settings.get('aiDailyLimit') - dailyFor(tenantOf(req)).count), batchSize: GENERATE_BATCH },
     });
   });

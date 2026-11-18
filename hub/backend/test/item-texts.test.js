@@ -13,7 +13,11 @@ const { createLogin, listen } = require('./helpers/http-client');
 const SECRET = 's'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
 
-/** Een artikelrij zoals de opslag hem geeft, met overschrijfbare velden. */
+/**
+ * Een artikelrij zoals de opslag hem geeft, met overschrijfbare velden.
+ * @param {object} [extra] Velden die de standaardrij overschrijven.
+ * @returns {object} De rij.
+ */
 const row = (extra = {}) => ({ name: 'PE-buis 25 mm', code: 'PE25', unit: 'm', brand: 'Rainpro', ean: '', description: '', specifications: JSON.stringify([{ name: 'Materiaal', value: 'Polyetheen' }, { name: 'Druk', value: 'PN10' }, { name: 'Lengte rol', value: '100 m' }]), seo_title: '', seo_description: '', ...extra });
 
 test('feitencontrole: getallen en eenheden uit de bron zijn goed, afwijkingen worden gemeld', () => {
