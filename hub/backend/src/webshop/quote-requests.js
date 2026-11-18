@@ -1,7 +1,11 @@
 // Offerte aanvragen vanuit de winkelwagen van een zakelijke klant: bij een grote winkelwagen kan de klant eerst een offerte vragen in
 // plaats van af te rekenen. Dat maakt een concept in Offertes (nooit verstuurd, een medewerker controleert en verstuurt het zelf) en
 // meldt het aan het bedrijf. De prijzen en btw komen uit dezelfde berekening als de winkelwagen (priceCart), dus nooit uit de browser.
+const crypto = require('node:crypto');
 const { validEmail } = require('../platform/mailer');
+
+/** Binnen hoeveel minuten dezelfde winkelwagen niet opnieuw een offerte aanmaakt (dubbelklik, herladen). */
+const DUPLICATE_MINUTES = 10;
 
 /** Vanaf welk bedrag (excl. btw) de knop Offerte aanvragen bij de winkelwagen staat. */
 const QUOTE_REQUEST_MIN_EXCL = 500;
@@ -26,10 +30,10 @@ function qualifies(cart) {
 
 /**
  * Maakt de offerteaanvragen vanuit de winkelwagen.
- * @param {{ createDraft: Function, settingsFor: Function, mailerFor: Function, mailBody: Function }} deps createDraft(user, data, customerId) maakt een conceptofferte (server.js), settingsFor(tenantId) de instellingen, mailerFor de mailserver en mailBody de opmaak van de mail.
+ * @param {{ createDraft: Function, findRecent: Function, settingsFor: Function, mailerFor: Function, mailBody: Function }} deps createDraft(user, data, customerId) maakt een conceptofferte, findRecent(tenantId, ownerId, marker, since) zoekt een offerte van deze klant met dat merkteken sinds dat moment (beide server.js), settingsFor(tenantId) de instellingen, mailerFor de mailserver en mailBody de opmaak van de mail.
  * @returns {{ qualifies: Function, request: Function }} De functies.
  */
-function createQuoteRequests({ createDraft, settingsFor, mailerFor, mailBody }) {
+function createQuoteRequests({ createDraft, findRecent, settingsFor, mailerFor, mailBody }) {
   /**
    * Maakt een tekst van één regel met een maximale lengte.
    * @param {*} value De invoer.
@@ -44,10 +48,14 @@ function createQuoteRequests({ createDraft, settingsFor, mailerFor, mailBody }) 
    * @param {{ id: string, displayName: string, email: string }} viewer De ingelogde zakelijke klant.
    * @param {{ companyName?: string, kvkNumber?: string, vatNumber?: string }} profile De bedrijfsgegevens van de klant.
    * @param {object} cart De geprijsde winkelwagen (zie qualifies).
-   * @returns {Promise<{ quote: object, mailed: boolean }|{ error: string, status: number }>} De offerte en of de melding is verstuurd, of de fout.
+   * @returns {Promise<{ quote: object, mailed: boolean, duplicate?: boolean }|{ error: string, status: number }>} De offerte en of de melding is verstuurd (`duplicate`: dezelfde winkelwagen kreeg minder dan tien minuten geleden al een offerte; er wordt niets nieuws gemaakt), of de fout.
    */
   async function request(tenantId, viewer, profile, cart) {
     if (!qualifies(cart)) return { error: 'Een offerte aanvragen kan bij een winkelwagen vanaf een bepaald bedrag.', status: 409 };
+    // Dezelfde wagen (codes en aantallen) binnen tien minuten: de bestaande offerte terug, geen tweede concept of mail.
+    const marker = `[aanvraag:${crypto.createHash('sha256').update(cart.lines.map((line) => `${line.code}:${line.qty}`).sort().join('|')).digest('hex').slice(0, 24)}]`;
+    const recent = findRecent(tenantId, viewer.id, marker, new Date(Date.now() - DUPLICATE_MINUTES * 60 * 1000).toISOString());
+    if (recent) return { quote: recent, mailed: false, duplicate: true };
     const settings = settingsFor(tenantId);
     const quoteProfile = settings.get('quoteProfile') || {};
     const lines = cart.lines.map((line) => ({ section: 'materiaal', code: oneLine(line.baseCode || line.code, 40), description: oneLine(line.name, 500), qty: line.qty, unit: oneLine(line.unit || 'st', 12), price: line.unitExcl, vat: line.vatRate }));
@@ -57,7 +65,7 @@ function createQuoteRequests({ createDraft, settingsFor, mailerFor, mailBody }) 
     const date = new Date().toISOString().slice(0, 10);
     const quote = createDraft({ id: viewer.id, tenant_id: tenantId }, {
       title: company ? `Aanvraag webshop – ${company}` : 'Aanvraag via de webshop', intro: quoteProfile.intro || '', terms: quoteProfile.terms || '', customer, lines, date,
-      internalNote: `Aangevraagd door de klant vanuit de webshopwinkelwagen (${date}). Prijzen zijn de zakelijke webshopprijzen excl. btw; controleer ze, vul het adres aan en verstuur de offerte zelf.${details ? `\n${details}` : ''}`,
+      internalNote: `Aangevraagd door de klant vanuit de webshopwinkelwagen (${date}). Prijzen zijn de zakelijke webshopprijzen excl. btw; controleer ze, vul het adres aan en verstuur de offerte zelf.${details ? `\n${details}` : ''}\n${marker}`,
     }, viewer.id);
     let mailed = false;
     const mailer = mailerFor(settings);

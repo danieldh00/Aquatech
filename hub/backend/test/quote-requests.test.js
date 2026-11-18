@@ -53,6 +53,11 @@ test('offerte aanvragen: knop vanaf 500 euro excl. btw voor een zakelijke klant,
   const data = JSON.parse(quote.data);
   assert.deepStrictEqual(data.lines.map((line) => [line.code, line.qty, line.price, line.section]), [['BUS', 50, 10, 'materiaal']]);
   assert.match(data.internalNote, /Aangevraagd door de klant/);
+  // Een dubbelklik of herlaad met dezelfde wagen maakt geen tweede concept en geen tweede mail.
+  assert.strictEqual((await postForm(world.base, shopper.client, '/winkelwagen/offerte/', {})).status, 303);
+  assert.strictEqual(world.db.prepare('SELECT COUNT(*) AS n FROM quotes').get().n, 1);
+  assert.strictEqual(mailsWith(world.sent, /Offerteaanvraag via de webshop/).length, 1);
+  assert.strictEqual(world.db.prepare("SELECT COUNT(*) AS n FROM audit WHERE action = 'webshop_offerte_aangevraagd'").get().n, 1, 'één auditregel');
   assert.ok(data.validUntil && data.title);
   // De wagen blijft bewaard en een medewerker ziet de offerte in Offertes.
   assert.match((await shopper.client.get('/winkelwagen/')).text, /Sproeier/);
@@ -79,4 +84,5 @@ test('offerte aanvragen: niet ingelogd gaat naar inloggen en meer dan vijf per u
   const statuses = [];
   for (let attempt = 0; attempt < 7; attempt += 1) statuses.push((await postForm(world.base, shopper.client, '/winkelwagen/offerte/', {})).status);
   assert.deepStrictEqual(statuses, [303, 303, 303, 303, 303, 429, 429]);
+  assert.strictEqual(world.db.prepare('SELECT COUNT(*) AS n FROM quotes').get().n, 1, 'steeds dezelfde wagen: één concept');
 });

@@ -2846,6 +2846,15 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       const profile = settingsFor(user.tenant_id).get('quoteProfile');
       return quoteStore.create(user, { ...data, validUntil: QuoteCore.addDays(data.date, profile.validDays || 30) }, { status: 'concept', prefix: profile.numberPrefix, customerId });
     },
+    /**
+     * Zoekt een offerte van deze klant met het merkteken van een eerdere aanvraag (zelfde winkelwagen) sinds een moment.
+     * @param {string} tenantId Id van de omgeving.
+     * @param {string} ownerId Het klantaccount dat aanvroeg.
+     * @param {string} marker Het merkteken in de interne notitie.
+     * @param {string} since Tijdstip (ISO).
+     * @returns {?{ id: string, number: string }} De offerte, of niets.
+     */
+    findRecent: (tenantId, ownerId, marker, since) => database.prepare("SELECT id, number FROM quotes WHERE tenant_id = ? AND owner_id = ? AND deleted_at IS NULL AND created_at > ? AND data LIKE ? LIMIT 1").get(tenantId, String(ownerId), since, `%${marker}%`) || null,
     settingsFor: (id) => settingsFor(id), mailerFor, mailBody,
   });
   /**
@@ -3313,6 +3322,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, orderSlips, returns: webReturns, guestOrders, stockAlerts, searchMisses, quoteRequests, payments: webPayments,
     vies, captcha, captchaGate,
     onOrder: (req, order) => audit(req, 'webshop_bestelling_geplaatst', { number: order.number, total: order.total, ...(order.guest ? { gast: true } : {}) }, order.userId, tenant.id),
+    onQuoteRequest: (req, quote, viewer) => audit(req, 'webshop_offerte_aangevraagd', { number: quote.number }, viewer.id, tenant.id),
     onGuestAccount: (req, order, user) => audit(req, 'webshop_gastbestelling_gekoppeld', { number: order.number }, user.id, tenant.id),
     onReturn: (req, record) => audit(req, 'webshop_retour_aangevraagd', { number: record.number }, record.userId, tenant.id),
     onSlip: (req, order, action) => audit(req, `webshop_pakbon_${action}`, { number: order.number }, order.userId, tenant.id),
