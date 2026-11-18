@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.21.4
+
+- `webshop/assets/`: WebP-varianten van `hero-tuin`, `banner-druppelslang`, `banner-pomp` en `zakelijk-achtergrond` (met `-klein` voor smalle schermen), gemaakt met `tools/shop-webp.py`; de JPEG's blijven staan (terugval en bestaande verwijzingen in Beheer).
+- `storefront-pages.js` `imageHtml`: een standaardafbeelding met WebP-variant wordt een `picture` met `srcset`/`sizes` en de JPEG als `img`; geüploade afbeeldingen (`media:`) en bestanden zonder WebP blijven een gewone `img`. De standaard hero krijgt `fetchpriority="high"` (bovenaan de pagina, al met afmetingen); de rest laadt lazy. CSS: `picture { display: contents; }` zodat de opmaak gelijk blijft.
+- Gewicht van de afbeeldingen op de startpagina: ongeveer 443 kB JPEG naar ongeveer 126 kB (breed scherm) of 63 kB (smal scherm) WebP.
+
+## 1.21.3
+
+- Migratie 81 (`item_images.thumb`, ook in `PG_MIGRATIONS`): versleutelde WebP-miniatuur (hoogstens 480 px en 100 kB, AAD `<tenant>:artikel-afbeelding-klein:<id>`).
+- `artikelen/item-images.js`: `setThumb` (controle op inhoud: alleen WebP binnen de grenzen), `thumbFile` (valt terug op de gewone afbeelding), `thumbsPending` en `thumbCandidates`; routes `PUT /api/stock/images/:id/thumb` en `GET /api/stock/images-thumbs` (recht `voorraad`, tenant-gebonden); een upload kan `thumb` meesturen (een ongeldige miniatuur laat de upload wel slagen).
+- Shop: `artikelfoto/<id>/klein` (zelfde limiet en `immutable` cache als de foto); kaartjes (productlijst, assortimentstegels) gebruiken `productImageSrc(root, image, { small: true })`, de productpagina blijft de grote foto tonen.
+- Browser (`artikelen/item-images.js`): maakt de miniatuur met een canvas (geen native npm-module); de knop *Afbeeldingen en miniaturen* neemt eerst de afbeeldingen uit de oude webshop over en maakt daarna de ontbrekende miniaturen in porties van 25.
+- `deploy/apps01/README.md`: stappen voor de Cloudflare-cacheregel voor `/artikelfoto/` en `/media/` (dashboardinstelling).
+
 ## 1.21.2
 
 - `webshop/warm-up.js`: twee seconden na het starten haalt de server één voor één de startpagina, de winkelwagen en een paar groepen, categorieën en producten op via 127.0.0.1 (User-Agent met "bot": geen koopfunneltelling, geen medewerkersweergave). Dat vult de catalogus en de omschrijvingen in het geheugen. Een fout of een uitgeschakelde shop stopt niets; uitzetten kan met `WARM_UP=0`. Er wordt niets bewaard behalve wat de pagina's al cachen (geen klantgegevens, geen gerenderde pagina's).

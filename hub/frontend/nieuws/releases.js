@@ -13,6 +13,22 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.21.4',
+      date: '2026-11-18',
+      title: 'Startpagina van de webshop laadt veel lichter',
+      items: [
+        { text: 'De grote afbeeldingen op de startpagina van de webshop (hoofdbanner, banners en het zakelijke blok) zijn nu ongeveer 70 procent kleiner, op een telefoon nog meer. De pagina laadt daardoor merkbaar sneller.' },
+      ],
+    },
+    {
+      version: '1.21.3',
+      date: '2026-11-18',
+      title: 'Snellere productkaartjes met miniaturen',
+      items: [
+        { text: 'Productkaartjes in de webshop gebruiken nu een kleine miniatuur van de foto (ongeveer een tiende van de grootte), zodat overzichten sneller laden, vooral op een telefoon. Nieuwe foto\'s krijgen er automatisch een. Voor bestaande foto\'s klik je onder Artikelen op *Afbeeldingen en miniaturen*.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.21.2',
       date: '2026-11-18',
       title: 'Webshop is na een update meteen snel',
