@@ -39,7 +39,7 @@ function formatPrice(amount) {
 /** De inhoud (blokken en pagina's uit Beheer) waarmee de pagina's die nu worden opgebouwd, worden getekend. */
 let activeContent = { site: DEFAULT_SITE, pages: [] };
 /** Of bestellen aan staat, hoeveel regels er in de winkelwagen van de bezoeker zitten en of hij een groothandelsklant is, met het kopje Groothandel (voor de pagina's die nu worden opgebouwd). */
-let activeShop = { ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '', analytics: '', captcha: '' };
+let activeShop = { indexing: false, ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '', analytics: '', captcha: '' };
 
 /**
  * De velden die een formulier nodig heeft voor de onzichtbare captcha: het verborgen veld waar het script een token in zet en de
@@ -61,7 +61,7 @@ function captchaFields(action) {
  * @param {{ ordering: boolean, cartCount: number, business?: boolean, wholesale?: boolean, baseUrl?: string }} [shop] Het volledige webadres van de shop (met slash achteraan; leeg = geen canonical-link en OpenGraph), of bestellen aan staat, het aantal regels in de winkelwagen, of de bezoeker een zakelijke klant is (prijzen excl. btw) en of hij groothandelsklant is (kopje Groothandel).
  * @returns {*} Wat `render` teruggeeft.
  */
-function renderWith(content, render, shop = { ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '', analytics: '', captcha: '' }) {
+function renderWith(content, render, shop = { indexing: false, ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '', analytics: '', captcha: '' }) {
   const previous = activeContent;
   const previousShop = activeShop;
   activeContent = content;
@@ -200,14 +200,16 @@ function navigation(groups, root) {
 /**
  * De kopregels voor zoekmachines en delen: canonical-link, OpenGraph, Twitter-kaart, robots en JSON-LD.
  * Zonder webadres van de shop (activeShop.baseUrl) of zonder canonicalPath is er geen canonical en OpenGraph;
- * een pagina zonder canonicalPath (account, winkelwagen, zoeken, niet gevonden) krijgt noindex.
+ * een pagina zonder canonicalPath (account, winkelwagen, zoeken, niet gevonden) krijgt noindex, en elke pagina zolang
+ * de shop niet is vrijgegeven voor zoekmachines (activeShop.indexing, instelling shopSeo).
  * @param {{ title: string, description: string, canonicalPath: ?string, ogImage: string, ogType: string, jsonLd: object[], root: string }} input De gegevens van de pagina (zie layout).
  * @returns {string} De HTML-regels (leeg als er niets te zetten is).
  */
 function seoHead({ title, description, canonicalPath, ogImage, ogType, jsonLd, root }) {
   const { baseUrl } = activeShop;
-  const robots = canonicalPath == null ? '<meta name="robots" content="noindex, follow">\n' : '';
-  if (!baseUrl || canonicalPath == null) return robots;
+  const robots = canonicalPath == null || !activeShop.indexing ? '<meta name="robots" content="noindex, follow">\n' : '';
+  // Zolang de shop niet is vrijgegeven voor zoekmachines: alleen noindex, geen canonical, OpenGraph of gestructureerde gegevens.
+  if (!baseUrl || canonicalPath == null || !activeShop.indexing) return robots;
   const url = Seo.absoluteUrl(baseUrl, canonicalPath);
   const image = ogImage || Seo.absoluteUrl(baseUrl, assetUrl(root, 'aquatechshop-logo.png').replace(/^(\.\.\/)+/, ''));
   return `<link rel="canonical" href="${escapeHtml(url)}">
@@ -667,7 +669,7 @@ ${list}
 </div>`;
   const browsePath = `${category ? `categorie/${category.slug}` : `groep/${group.slug}`}/${page > 1 ? `?pagina=${page}` : ''}`;
   const breadcrumbSteps = [{ name: 'Shop', path: '' }, { name: group.name, path: `groep/${group.slug}/` }, ...chain.map((item) => ({ name: item.name, path: `categorie/${item.slug}/` }))];
-  return layout({ root, wide: true, canonicalPath: browsePath, jsonLd: [Seo.breadcrumbJsonLd(breadcrumbSteps, activeShop.baseUrl)], events: listEventsOf(subject.name, shown), variantScript: shown.some((product) => product.variants), title: `${subject.name} – ${SHOP_NAME}`, description: `${subject.name} van AquaTech Service: ${productCount(subject.count)}.`, body, groups });
+  return layout({ root, wide: true, canonicalPath: browsePath, jsonLd: [Seo.breadcrumbJsonLd(breadcrumbSteps, activeShop.baseUrl)], events: listEventsOf(subject.name, shown), variantScript: shown.some((product) => product.variants), title: Seo.pageTitleOf(subject.seoTitle, `${subject.name} – ${SHOP_NAME}`), description: subject.seoDescription || `${subject.name} van AquaTech Service: ${productCount(subject.count)}.`, body, groups });
 }
 
 /**
@@ -775,7 +777,7 @@ function productPage(product, groups, chosenCode = '', details = new Map(), { pa
       <label>Verpakking<select name="p" data-autosubmit><option value="">Per ${escapeHtml(product.unit)} – ${escapeHtml(formatPrice(shownPrice(shown)))}</option>${packagings.map((packaging) => `<option value="${escapeHtml(packaging.packCode)}"${packaging === pack ? ' selected' : ''}>${escapeHtml(packaging.name)} (${packaging.factor} ${escapeHtml(product.unit)}) – ${escapeHtml(formatPrice(packaging.price))}</option>`).join('')}</select></label>
       <button class="button secondary variant-go" type="submit">Kies</button>
     </form>` : '';
-  const shownDetails = details.get(shown.code) || details.get(product.code) || { description: '', specifications: [] };
+  const shownDetails = details.get(shown.code) || details.get(product.code) || { description: '', specifications: [], seoTitle: '', seoDescription: '', brand: '', ean: '' };
   const parentLink = product.parentSlug ? `<p class="note"><a href="${root}product/${escapeHtml(product.parentSlug)}/?v=${encodeURIComponent(shown.code)}">Alle uitvoeringen van ${escapeHtml(product.parentName)}</a></p>` : '';
   const viewedItem = activeShop.analytics ? Analytics.itemOfProduct({ code: pack ? pack.cartCode : shown.code, name: product.name, categoryName: product.categoryName }, pack ? pack.price : shownPrice(shown), { variant: chosen ? chosen.label : '' }) : null;
   const body = `<nav class="crumbs" aria-label="Kruimelpad"><a href="${root}">Shop</a>${group ? ` › <a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a>` : ''} › <a href="${root}categorie/${escapeHtml(product.categorySlug)}/">${escapeHtml(product.categoryName)}</a> › <span>${escapeHtml(product.name)}</span></nav>
@@ -798,7 +800,7 @@ ${detailsSection(shownDetails)}`;
   const jsonProduct = product.parentSlug ? { ...product, variants: [] } : product;
   const productDescription = shownDetails.description ? shortText(shownDetails.description, 500) : `${product.name}, artikelnummer ${product.code}${product.categoryName ? `, uit de categorie ${product.categoryName}` : ''} bij ${SHOP_NAME}.`;
   const breadcrumbSteps = [{ name: 'Shop', path: '' }, ...(group ? [{ name: group.name, path: `groep/${group.slug}/` }] : []), { name: product.categoryName, path: `categorie/${product.categorySlug}/` }, { name: product.name, path: productPath }];
-  return layout({ root, events: viewedItem ? Analytics.viewItemEvents(viewedItem, { inStock: pack ? pack.inStock : shown.inStock }) : [], canonicalPath: productPath, ogType: 'product', ogImage: Seo.imageUrlOf(activeShop.baseUrl, imageUrl), variantScript: Boolean(chosen || packagings.length), jsonLd: [Seo.productJsonLd({ product: jsonProduct, baseUrl: activeShop.baseUrl, canonicalPath: productPath, shopName: SHOP_NAME, description: productDescription }), Seo.breadcrumbJsonLd(breadcrumbSteps, activeShop.baseUrl)], title: `${product.name} – ${SHOP_NAME}`, description: shownDetails.description ? shortText(shownDetails.description, 155) : `${product.name} (${formatPrice(shownPrice(shown))} ${activeShop.business ? 'excl.' : 'incl.'} btw) bij AquaTech Service.`, body, groups });
+  return layout({ root, events: viewedItem ? Analytics.viewItemEvents(viewedItem, { inStock: pack ? pack.inStock : shown.inStock }) : [], canonicalPath: productPath, ogType: 'product', ogImage: Seo.imageUrlOf(activeShop.baseUrl, imageUrl), variantScript: Boolean(chosen || packagings.length), jsonLd: [Seo.productJsonLd({ product: jsonProduct, baseUrl: activeShop.baseUrl, canonicalPath: productPath, shopName: SHOP_NAME, description: productDescription, brand: shownDetails.brand, ean: shownDetails.ean }), Seo.breadcrumbJsonLd(breadcrumbSteps, activeShop.baseUrl)], title: Seo.pageTitleOf(shownDetails.seoTitle, `${product.name} – ${SHOP_NAME}`), description: shownDetails.seoDescription || (shownDetails.description ? shortText(shownDetails.description, 155) : `${product.name} (${formatPrice(shownPrice(shown))} ${activeShop.business ? 'excl.' : 'incl.'} btw) bij AquaTech Service.`), body, groups });
 }
 
 /**
@@ -844,7 +846,7 @@ function contentPage(page, groups, root) {
 <article class="cms-page"><h1>${escapeHtml(page.title)}</h1>
 ${body}
 </article></div>`;
-  return layout({ root, groups, wide: true, canonicalPath: page.slug === 'over-ons' ? 'over-ons/' : `pagina/${page.slug}/`, jsonLd: page.slug === FAQ_SLUG ? [Seo.faqJsonLd(Seo.faqEntriesOf(page.body))] : [], title: `${page.title} – ${SHOP_NAME}`, description: page.description || `${page.title} bij ${SHOP_NAME}.`, body: html });
+  return layout({ root, groups, wide: true, canonicalPath: page.slug === 'over-ons' ? 'over-ons/' : `pagina/${page.slug}/`, jsonLd: page.slug === FAQ_SLUG ? [Seo.faqJsonLd(Seo.faqEntriesOf(page.body))] : [], title: Seo.pageTitleOf(page.seoTitle, `${page.title} – ${SHOP_NAME}`), description: page.description || `${page.title} bij ${SHOP_NAME}.`, body: html });
 }
 
 /**

@@ -25,10 +25,27 @@ test('omschrijving: regeleinden blijven, stuurtekens en meer dan één lege rege
 test('de shop toont eigen tekst, anders die van de webshop, anders die van het hoofdartikel', () => {
   const shopAttributes = JSON.stringify([{ name: 'Maat', visible: true, variation: false, options: ['25', '32'] }, { name: 'Verborgen', visible: false, options: ['x'] }]);
   const own = ItemDetails.shownDetails({ description: 'Eigen', specifications: '[{"name":"A","value":"B"}]', shop_description: 'Webshop', shop_attributes: shopAttributes });
-  assert.deepStrictEqual(own, { description: 'Eigen', specifications: [{ name: 'A', value: 'B' }] });
+  assert.deepStrictEqual({ description: own.description, specifications: own.specifications }, { description: 'Eigen', specifications: [{ name: 'A', value: 'B' }] });
   const shop = ItemDetails.shownDetails({ description: '', specifications: '[]', shop_description: 'Webshop', shop_attributes: shopAttributes });
-  assert.deepStrictEqual(shop, { description: 'Webshop', specifications: [{ name: 'Maat', value: '25, 32' }] });
+  assert.deepStrictEqual({ description: shop.description, specifications: shop.specifications }, { description: 'Webshop', specifications: [{ name: 'Maat', value: '25, 32' }] });
   assert.strictEqual(ItemDetails.shownDetails({ description: '', specifications: '[]', shop_description: 'Diameter < 20 mm > 10 mm' }).description, 'Diameter < 20 mm > 10 mm', 'opgeslagen platte tekst niet opnieuw als HTML');
   const variant = ItemDetails.shownDetails({ description: '', specifications: '[]' }, { description: 'Van het hoofdartikel', specifications: [{ name: 'X', value: 'Y' }] });
-  assert.deepStrictEqual(variant, { description: 'Van het hoofdartikel', specifications: [{ name: 'X', value: 'Y' }] });
+  assert.deepStrictEqual({ description: variant.description, specifications: variant.specifications }, { description: 'Van het hoofdartikel', specifications: [{ name: 'X', value: 'Y' }] });
+});
+
+test('zoekmachineteksten en merk: opgeschoond, afgekapt en een variant erft van het hoofdartikel', () => {
+  assert.strictEqual(ItemDetails.sanitizeSeoTitle('  Een <b>titel</b>\n met\ttabs  '), 'Een titel met tabs');
+  assert.strictEqual(ItemDetails.sanitizeSeoTitle('x'.repeat(100)).length, ItemDetails.MAX_SEO_TITLE);
+  assert.strictEqual(ItemDetails.sanitizeSeoDescription('y'.repeat(300)).length, ItemDetails.MAX_SEO_DESCRIPTION);
+  assert.strictEqual(ItemDetails.sanitizeSeoTitle(null), '');
+  assert.strictEqual(ItemDetails.sanitizeBrand(' Rain  Bird '), 'Rain Bird');
+  const parent = ItemDetails.shownDetails({ seo_title: 'Hoofd', seo_description: 'Hoofdtekst', brand: 'Hunter', ean: '' });
+  const inheriting = ItemDetails.shownDetails({ ean: '4006381333931' }, parent);
+  assert.strictEqual(inheriting.seoTitle, 'Hoofd');
+  assert.strictEqual(inheriting.brand, 'Hunter');
+  assert.strictEqual(inheriting.ean, '4006381333931', 'de EAN is altijd die van het artikel zelf');
+  const own = ItemDetails.shownDetails({ seo_title: 'Eigen', brand: 'Anders', ean: '' }, parent);
+  assert.strictEqual(own.seoTitle, 'Eigen');
+  assert.strictEqual(own.brand, 'Anders');
+  assert.strictEqual(own.seoDescription, 'Hoofdtekst', 'per veld teruggevallen');
 });

@@ -311,6 +311,7 @@
         <label>Naam in het adres<input data-slug="1" value="${esc(slug)}" maxlength="60" pattern="[a-z0-9][a-z0-9-]{1,58}[a-z0-9]" ${isNew && slug !== 'over-ons' && !(state.view.defaults.legal || {})[slug] ? '' : 'readonly'} placeholder="bijv. klantenservice">
           <span class="hint">Kleine letters, cijfers en streepjes: /pagina/<b>${esc(slug || 'naam')}</b>/</span></label>
       </div>
+      ${textField('Titel voor zoekmachines (leeg = de titel hierboven)', 'seoTitle', fields.seoTitle, { max: 70 })}
       ${textField('Korte omschrijving (voor zoekmachines)', 'description', fields.description, { max: 200 })}
       <div class="row">
         ${checkField('In het menu', 'menu', fields.menu)}${checkField('In de voet', 'footer', fields.footer)}
@@ -396,7 +397,7 @@
 
   /**
    * De velden van de pagina die wordt bewerkt, zoals ze nu in het formulier staan.
-   * @returns {object} title, description, body, menu, footer en order.
+   * @returns {object} title, description, seoTitle, body, menu, footer en order.
    */
   function collectPage() {
     const form = $('#sc-page');
@@ -466,9 +467,9 @@
   /**
    * De velden van een pagina voor de editor, met standaardwaarden voor ontbrekende velden.
    * @param {object} [page] De opgeslagen pagina.
-   * @returns {object} title, description, body, menu, footer en order.
+   * @returns {object} title, description, seoTitle, body, menu, footer en order.
    */
-  const pageFields = (page = {}) => ({ title: page.title || '', description: page.description || '', body: page.body || '', menu: page.menu === true, footer: page.footer !== false, order: page.order ?? 100 });
+  const pageFields = (page = {}) => ({ title: page.title || '', description: page.description || '', seoTitle: page.seoTitle || '', body: page.body || '', menu: page.menu === true, footer: page.footer !== false, order: page.order ?? 100 });
 
   /**
    * Verkleint een afbeelding indien nodig (groot bestand of grote zijden) en geeft hem als data-URL.

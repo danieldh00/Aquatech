@@ -115,6 +115,13 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     return cleanPublicUrl(payment && payment.publicUrl);
   };
   /**
+   * Staat de shop open voor zoekmachines? Alleen met de vrijgaveschakelaar (Beheer > Webshop > Zoekmachines) én een ingevuld webadres.
+   * Zolang dat niet zo is: noindex op elke pagina, robots.txt blokkeert alles en sitemap en feeds bestaan niet.
+   * @param {object} req Het verzoek.
+   * @returns {boolean} true als zoekmachines de shop mogen opnemen.
+   */
+  const indexingOpen = (req) => Seo.indexingOn(settingsFor(tenantId).get('shopSeo'), publicBaseUrl(req));
+  /**
    * De vaste pagina's van de shop (Over ons, de pagina's uit Beheer en de juridische pagina's) met slug en titel.
    * @param {object} req Het verzoek.
    * @returns {{ slug: string, title: string }[]} De pagina's.
@@ -150,7 +157,9 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     const preview = isPreview(req);
     const ordering = orderingOn();
     res.status(status);
-    if (preview) { res.setHeader('Cache-Control', 'no-store'); res.setHeader('X-Robots-Tag', 'noindex'); }
+    const indexing = !preview && indexingOpen(req);
+    if (!indexing) res.setHeader('X-Robots-Tag', 'noindex');
+    if (preview) res.setHeader('Cache-Control', 'no-store');
     else if (!res.getHeader('Cache-Control')) res.setHeader('Cache-Control', ordering ? 'private, no-cache' : 'no-cache');
     // Een zakelijke klant ziet overal prijzen excl. btw; die pagina's zijn persoonlijk en worden niet gedeeld.
     const viewer = accounts ? accounts.viewer(req) : null;
@@ -158,7 +167,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     // Een medewerker of beheerder krijgt de knop naar het beheer; die pagina's zijn persoonlijk en worden niet gedeeld.
     const staff = Boolean(viewer) && viewer.isStaff;
     if (business || (staff && !preview)) res.setHeader('Cache-Control', 'private, no-store');
-    const html = renderWith(contentOf(req), render, { baseUrl: preview ? '' : publicBaseUrl(req), analytics: preview ? '' : analyticsIdOf(), captcha: preview ? '' : captchaKeyOf(), ordering, cartCount: ordering ? (req.pendingCart || readCart(req)).reduce((total, line) => total + line.qty, 0) : 0, business, staff, wholesale: ordering && business && viewer.wholesale, businessForm: Boolean(orderMail && orderMail.businessRequestReady && orderMail.businessRequestReady(tenantId)), businessSent: ['ja', 'fout'].includes(req.query.aanvraag) ? req.query.aanvraag : '' });
+    const html = renderWith(contentOf(req), render, { indexing, baseUrl: preview ? '' : publicBaseUrl(req), analytics: preview ? '' : analyticsIdOf(), captcha: preview ? '' : captchaKeyOf(), ordering, cartCount: ordering ? (req.pendingCart || readCart(req)).reduce((total, line) => total + line.qty, 0) : 0, business, staff, wholesale: ordering && business && viewer.wholesale, businessForm: Boolean(orderMail && orderMail.businessRequestReady && orderMail.businessRequestReady(tenantId)), businessSent: ['ja', 'fout'].includes(req.query.aanvraag) ? req.query.aanvraag : '' });
     const withPlanner = html.replace(/<!--planner:([^>]*)-->/g, (_, root) => (plannerOn() ? `<li class="nav-planner"><a href="${root}planner/">Planner</a></li>` : ''));
     // In een voorbeeld blijven de menu- en categorielinks in het concept, ook voor categorieën die er alleen in staan.
     // Ook het zoekformulier houdt de voorbeeldstatus vast (verborgen veld), anders valt een zoekopdracht terug op de gepubliceerde boom.
@@ -265,21 +274,22 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
   });
 
   // Voor zoekmachines en AI-zoekers (seo.js): robots.txt, sitemap, llms.txt en de productfeed voor Google Merchant Center.
+  // Zolang de shop niet is vrijgegeven (Beheer > Webshop > Zoekmachines): robots.txt blokkeert alles, de rest bestaat niet.
   router.get('/robots.txt', (req, res) => {
     const baseUrl = publicBaseUrl(req);
-    sendSeoFile(res, 'text/plain; charset=utf-8', baseUrl ? Seo.robotsTxt(baseUrl) : null);
+    sendSeoFile(res, 'text/plain; charset=utf-8', indexingOpen(req) ? Seo.robotsTxt(baseUrl) : Seo.robotsBlockedTxt());
   });
   router.get('/sitemap.xml', (req, res) => {
-    const baseUrl = publicBaseUrl(req);
+    const baseUrl = indexingOpen(req) ? publicBaseUrl(req) : '';
     sendSeoFile(res, 'application/xml; charset=utf-8', baseUrl ? Seo.sitemapXml(Seo.sitemapEntriesOf({ catalog: data.catalogOf(tenantId), pages: infoPagesOf(req) }), baseUrl) : null);
   });
   router.get('/llms.txt', (req, res) => {
-    const baseUrl = publicBaseUrl(req);
+    const baseUrl = indexingOpen(req) ? publicBaseUrl(req) : '';
     const catalog = baseUrl ? data.catalogOf(tenantId) : null;
     sendSeoFile(res, 'text/plain; charset=utf-8', baseUrl ? Seo.llmsTxt({ shopName: 'Aquatechshop.nl', baseUrl, site: contentOf(req).site, groups: catalog.groups, pages: infoPagesOf(req) }) : null);
   });
   router.get('/productfeed.xml', (req, res) => {
-    const baseUrl = publicBaseUrl(req);
+    const baseUrl = indexingOpen(req) ? publicBaseUrl(req) : '';
     const catalog = baseUrl ? data.catalogOf(tenantId) : null;
     sendSeoFile(res, 'application/xml; charset=utf-8', baseUrl ? Seo.merchantFeedXml({ shopName: 'Aquatechshop.nl', baseUrl, products: catalog.products, groups: catalog.groups, details: data.detailsOf ? data.detailsOf(tenantId) : new Map() }) : null);
   });
