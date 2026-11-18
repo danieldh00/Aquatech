@@ -20,7 +20,7 @@ const POOL_SIZE = Math.min(50, Math.max(0, Math.floor(Number(process.env.PG_POOL
 /** Hoogstens zoveel milliseconden per query, net als in de werkthread (PG_STATEMENT_TIMEOUT_MS, 0 = geen grens). */
 const STATEMENT_TIMEOUT_MS = Math.max(0, Math.floor(Number(process.env.PG_STATEMENT_TIMEOUT_MS ?? 30000)) || 0);
 /** Na zoveel milliseconden zonder werk sluit een verbinding (en kan het proces stoppen als er niets meer loopt). */
-const IDLE_MS = 10000;
+const IDLE_MS = 5 * 60 * 1000;
 const SCHEMA_NAME = /^[a-z_][a-z0-9_]{0,62}$/;
 const CONN_CODES = new Set(['ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', '57P01', '57P02', '57P03', '08000', '08003', '08006']);
 
