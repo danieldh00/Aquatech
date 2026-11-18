@@ -296,3 +296,44 @@ test('faalt het vastleggen na een geslaagde verzending, dan is er geen fout en e
   await mailer.send('t1', 'o1', { resend: true }, { display_name: 'Kees' });
   assert.strictEqual(sent.length, 2);
 });
+
+/**
+ * Maakt een verzender met een opslag waarvan `markMail` per aanroep gedrag kan krijgen.
+ * @param {Function} markMail De vervanger van `markMail` (krijgt tenant, id en wat vastgelegd wordt).
+ * @param {object[]} sent Lijst waarin de verstuurde mails terechtkomen.
+ * @returns {object} De verzender.
+ */
+function mailerWithMarkMail(markMail, sent) {
+  const order = { id: 'o1', number: 'IO2026-0001', status: 'besteld', supplierId: 's1', supplierName: 'Tuintechniek', supplierReference: '', expectedDate: '', notes: '', createdAt: '2026-11-18T10:00:00Z', orderedAt: '2026-11-18T10:00:00Z', lines: [], mail: { sentAt: null, sentTo: '', sentBy: '', error: '' } };
+  return createPurchaseOrderMailer({
+    purchaseOrders: { get: () => order, markMail },
+    suppliers: { get: () => ({ id: 's1', name: 'Tuintechniek', email: 'orders@tuintechniek.nl', contactName: '' }) },
+    settingsFor: () => ({ get: () => ({ companyName: 'AquaTech' }) }),
+    mailerFor: () => ({ configured: () => true, send: async (message) => { sent.push(message); } }),
+    mailBody: (profile, paragraphs) => ({ text: paragraphs.join('\n\n'), html: paragraphs.join('<br>') }),
+  });
+}
+
+test('lukt het vastleggen pas bij de tweede poging, dan komt de vastgelegde order terug', async () => {
+  const sent = [];
+  let calls = 0;
+  const mailer = mailerWithMarkMail((tenantId, id, info) => {
+    calls += 1;
+    if (calls === 1) throw new Error('database even weg');
+    return { id, recorded: true, mail: { sentAt: '2026-11-18T11:00:00Z', sentTo: info.to, sentBy: info.by, error: '' } };
+  }, sent);
+  const result = await mailer.send('t1', 'o1', {}, { display_name: 'Kees' });
+  assert.strictEqual(calls, 2);
+  assert.strictEqual(result.recorded, true);
+  assert.strictEqual(sent.length, 1);
+});
+
+test('falen beide pogingen, dan meldt het antwoord toch het adres dat de mail kreeg', async () => {
+  const sent = [];
+  const mailer = mailerWithMarkMail(() => { throw new Error('database weg'); }, sent);
+  const result = await mailer.send('t1', 'o1', {}, { display_name: 'Kees' });
+  assert.strictEqual(result.mail.sentTo, 'orders@tuintechniek.nl');
+  assert.strictEqual(result.mail.sentBy, 'Kees');
+  assert.ok(result.mail.sentAt);
+  assert.strictEqual(sent.length, 1);
+});
