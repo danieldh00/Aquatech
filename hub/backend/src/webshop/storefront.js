@@ -73,6 +73,7 @@ const ACCOUNT_POSTS = /^\/(inloggen|registreren|uitloggen|planner|account\/zakel
 /** Paden waar de winkelwagen, het groothandelsvenster, het afrekenformulier, de webhook van Mollie en het retourformulier (met intrekken) naartoe posten. */
 const ORDER_POSTS = /^\/(winkelwagen(?:\/planner)?|afrekenen|groothandel|mollie\/webhook\/[^/]+|bestelling\/[^/]+\/(?:retour(?:\/[^/]+\/intrekken)?|pakbon|account))\/?$/;
 /** Pad van het aanvraagformulier voor een zakelijk account op de startpagina. */
+const { searchProducts } = require('./search');
 const REQUEST_POST = /^\/zakelijk-aanvraag\/?$/;
 /** Het formulier "Mail mij als hij weer binnen is" (voorraadmelding). */
 const ALERT_POST = /^\/voorraadmelding\/?$/;
@@ -1305,20 +1306,9 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/${req.originalUrl.slice(pathname.length)}`);
     const catalog = catalogOf(req);
     const query = typeof req.query.q === 'string' ? Array.from(req.query.q.trim()).slice(0, 80).join('') : '';
-    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
     const onlyInStock = req.query.voorraad === '1';
-    const found = words.length
-      ? catalog.products.filter((product) => {
-        const base = `${product.name} ${product.code} ${product.categoryName}`;
-        // Alle woorden moeten bij het hoofdartikel samen met één variant passen, niet verspreid over meerdere varianten;
-        // bij het voorraadfilter moet diezelfde variant ook op voorraad zijn.
-        const candidates = (product.variants || []).length
-          ? product.variants.map((variant) => ({ haystack: `${base} ${variant.code} ${variant.label}`, inStock: variant.inStock }))
-          : [{ haystack: base, inStock: product.inStock }];
-        return candidates.some((candidate) => (!onlyInStock || candidate.inStock) && words.every((word) => candidate.haystack.toLowerCase().includes(word)));
-      })
-      : [];
-    sendPage(req, res, 200, () => searchPage(query, found, catalog.groups, onlyInStock, isPreview(req)));
+    const { products: found, widened } = searchProducts(catalog.products, query, { onlyInStock });
+    sendPage(req, res, 200, () => searchPage(query, found, catalog.groups, onlyInStock, isPreview(req), widened));
   });
 
   router.get('/categorie/:slug', (req, res) => {
