@@ -52,6 +52,9 @@ function parseRecipients(value) {
 function createPurchaseOrderMailer({ purchaseOrders, suppliers, settingsFor, mailerFor, mailBody, colorsOf = () => ({}) }) {
   /** Orders waarvan nu een mail onderweg is (tegen een dubbele klik of twee schermen). */
   const sending = new Set();
+  /** Orders die net met succes zijn verstuurd (sleutel → { to, at }): houdt `already_sent` overeind als het vastleggen in de database faalde. */
+  const recentlySent = new Map();
+  const RECENT_MS = 10 * 60 * 1000;
 
   /**
    * Zoekt de order en de leverancier van een omgeving.
@@ -121,7 +124,9 @@ function createPurchaseOrderMailer({ purchaseOrders, suppliers, settingsFor, mai
   async function send(tenantId, id, { to, subject, message, resend = false } = {}, user = {}) {
     const { order, supplier } = load(tenantId, id);
     if (!SENDABLE_STATUSES.includes(order.status)) throw failure('not_sendable', 'Alleen een bestelde order is naar de leverancier te sturen.');
-    if (order.mail.sentAt && resend !== true) throw failure('already_sent', `Deze order is al verstuurd naar ${order.mail.sentTo}. Open het paneel opnieuw als je hem nog een keer wilt sturen.`);
+    const recent = recentlySent.get(`${tenantId}:${order.id}`);
+    const earlierTo = order.mail.sentAt ? order.mail.sentTo : (recent && Date.now() - recent.at < RECENT_MS ? recent.to : '');
+    if (earlierTo && resend !== true) throw failure('already_sent', `Deze order is al verstuurd naar ${earlierTo}. Open het paneel opnieuw als je hem nog een keer wilt sturen.`);
     const settings = settingsFor(tenantId);
     const mailer = mailerFor(settings);
     if (!mailer.configured()) throw failure('not_configured', 'Er is geen mailserver ingesteld (Beheer → Integraties → E-mail).');
@@ -147,6 +152,8 @@ function createPurchaseOrderMailer({ purchaseOrders, suppliers, settingsFor, mai
         purchaseOrders.markMail(tenantId, order.id, { error: reason });
         throw failure('send_failed', reason, error);
       }
+      recentlySent.set(key, { to: addresses.join(', '), at: Date.now() });
+      for (const [recentKey, entry] of recentlySent) if (Date.now() - entry.at >= RECENT_MS) recentlySent.delete(recentKey);
       // De mail is weg: een databasefout bij het vastleggen mag er geen fout van maken (dan klikt iemand opnieuw en gaat hij dubbel).
       try {
         return purchaseOrders.markMail(tenantId, order.id, { to: addresses.join(', '), by: user.display_name || user.name || '' });

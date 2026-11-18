@@ -6,7 +6,7 @@ const { createApp } = require('../src/server');
 const { createPdokFake } = require('./helpers/pdok-fake');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
-const { parseRecipients } = require('../src/artikelen/purchase-order-mail');
+const { parseRecipients, createPurchaseOrderMailer } = require('../src/artikelen/purchase-order-mail');
 const { createLogin, listen } = require('./helpers/http-client');
 
 const SECRET = 's'.repeat(64);
@@ -276,4 +276,23 @@ test('rechten en andere organisatie: klant 403, andere organisatie 404, en er ga
   } finally {
     server.close();
   }
+});
+
+test('faalt het vastleggen na een geslaagde verzending, dan is er geen fout en een tweede klik mailt niet nog eens', async () => {
+  const sent = [];
+  const order = { id: 'o1', number: 'IO2026-0001', status: 'besteld', supplierId: 's1', supplierName: 'Tuintechniek', supplierReference: '', expectedDate: '', notes: '', createdAt: '2026-11-18T10:00:00Z', orderedAt: '2026-11-18T10:00:00Z', lines: [], mail: { sentAt: null, sentTo: '', sentBy: '', error: '' } };
+  const mailer = createPurchaseOrderMailer({
+    purchaseOrders: { get: () => order, markMail: () => { throw new Error('database weg'); } },
+    suppliers: { get: () => ({ id: 's1', name: 'Tuintechniek', email: 'orders@tuintechniek.nl', contactName: '' }) },
+    settingsFor: () => ({ get: () => ({ companyName: 'AquaTech' }) }),
+    mailerFor: () => ({ configured: () => true, send: async (message) => { sent.push(message); } }),
+    mailBody: (profile, paragraphs) => ({ text: paragraphs.join('\n\n'), html: paragraphs.join('<br>') }),
+  });
+  const result = await mailer.send('t1', 'o1', {}, { display_name: 'Kees' });
+  assert.strictEqual(result.id, 'o1');
+  assert.strictEqual(sent.length, 1);
+  await assert.rejects(() => mailer.send('t1', 'o1', {}, { display_name: 'Kees' }), (error) => error.code === 'already_sent');
+  assert.strictEqual(sent.length, 1);
+  await mailer.send('t1', 'o1', { resend: true }, { display_name: 'Kees' });
+  assert.strictEqual(sent.length, 2);
 });
