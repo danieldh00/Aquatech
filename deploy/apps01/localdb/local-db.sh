@@ -284,8 +284,14 @@ SQL
   if [[ "$connections" -lt 1 ]]; then
     log "Verbindingen in de eigen database (gebruiker, programma, toestand, aantal):"
     local_psql postgres -F ' | ' -c "SELECT usename, application_name, state, count(*) FROM pg_stat_activity WHERE datname = 'aquatech' GROUP BY 1, 2, 3 ORDER BY 1, 2" || true
+    log "Toestand van de app-container (status, exitcode, herstarts, geheugen vol, gestart, gestopt):"
+    docker inspect -f '{{.State.Status}} | exit {{.State.ExitCode}} | herstarts {{.RestartCount}} | oom {{.State.OOMKilled}} | {{.State.StartedAt}} | {{.State.FinishedAt}}' aquatech 2>&1 || true
+    log "Wie stopte of startte containers de laatste minuten (docker events):"
+    timeout 5 docker events --since 5m --until 0s --filter container=aquatech --format '{{.Time}} {{.Action}} {{.Actor.Attributes.signal}} {{.Actor.Attributes.exitCode}}' 2>&1 | tail -20 || true
+    log "Update-timer en -service de laatste 10 minuten:"
+    journalctl -u aquatech-update.service --since '10 min ago' --no-pager 2>&1 | tail -8 | cut -c1-200 || true
     log "Laatste regels van de app:"
-    dc_now logs --no-log-prefix --tail 15 aquatech 2>&1 | cut -c1-300 || true
+    dc_now logs --no-log-prefix --tail 40 aquatech 2>&1 | cut -c1-300 || true
     die "De app verbindt niet met de eigen database; terug naar Supabase."
   fi
   [[ "$(local_psql postgres -c "SELECT pg_has_role('aquatech', 'aquatech_app', 'MEMBER')")" == "t" ]] || die "Rol aquatech mag aquatech_app niet aannemen (RLS); terug naar Supabase."
