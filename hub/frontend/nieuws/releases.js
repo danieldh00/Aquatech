@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.17.2',
+      date: '2026-11-18',
+      title: 'Pagina\'s openen niet meer vast tijdens de back-up',
+      items: [
+        { text: 'De dagelijkse back-up draait voortaan los van de app, zodat pagina\'s niet meer tientallen seconden kunnen blijven hangen terwijl de database wordt gekopieerd.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.17.1',
       date: '2026-11-14',
       title: 'Bestellen in de webshop zonder account',
