@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.19.0',
+      date: '2026-11-18',
+      title: 'Producttekst laten schrijven door de AI',
+      items: [
+        { text: 'Nieuw tabblad Teksten bij Artikelen: de AI schrijft een concept van de omschrijving en de zoekmachineteksten, alleen met de gegevens die bij het artikel staan. Jij controleert en keurt goed; niets gaat vanzelf live.', for: ['voorraad'] },
+        { text: 'Getallen, eenheden en beweringen (zoals keuren of garantie) in een concept die niet in de artikelgegevens staan worden gemarkeerd. Goedkeuren vraagt dan een uitdrukkelijke bevestiging.', for: ['voorraad'] },
+        { text: 'Concepten schrijven kan voor één artikel of voor een selectie (bijvoorbeeld een categorie of alle artikelen zonder tekst); je keurt ze één voor één of in bulk goed of wijst ze af.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.18.1',
       date: '2026-11-18',
       title: 'Webshoppagina\'s bouwen met blokken',
