@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.19.7',
+      date: '2026-11-18',
+      title: 'Offerte aanvragen en opnieuw bestellen in de webshop',
+      items: [
+        { text: 'Een zakelijke klant met een winkelwagen vanaf 500 euro excl. btw kan een offerte aanvragen in plaats van af te rekenen. Dat maakt een concept in Offertes (alleen zichtbaar voor medewerkers, bij "alle offertes") en je krijgt een mail. Je controleert het concept en verstuurt de offerte zelf.', for: ['beheer'] },
+        { text: 'Klanten kunnen een eerdere bestelling met één klik opnieuw bestellen: de artikelen komen in de winkelwagen met de actuele prijzen en voorraad; wat niet meer te koop is wordt gemeld.' },
+      ],
+    },
+    {
       version: '1.19.6',
       date: '2026-11-18',
       title: 'Planner promoten in de webshop',

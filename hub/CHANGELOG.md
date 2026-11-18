@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.19.7
+
+- Dezelfde winkelwagen binnen tien minuten geeft geen tweede concept of mail (merkteken in de interne notitie) en elke aanvraag staat in het auditlog (`webshop_offerte_aangevraagd`).
+- `webshop/quote-requests.js` (`qualifies`, `request`; drempel `QUOTE_REQUEST_MIN_EXCL` = 500 excl. btw, een constante, geen instelling): `POST /winkelwagen/offerte/` (alleen ingelogde zakelijke klant, 5 per uur per klant, prijzen en btw uit `priceCart`, nooit uit de browser) maakt via `quoteStore.create` een concept met `customer_id` = de klant, een interne notitie met de herkomst en de bedrijfsgegevens, en mailt `quoteProfile.email` (mislukt de mail, dan staat het concept er toch). Geen migratie.
+- `POST /bestelling/:id/opnieuw/` (via `orderAccessOf`: eigenaar of gast met toegang; `addCartLines` telt op bij de wagen, onbekende codes in `?niet=`). Een afronding op groothandelsvoorwaarden gebeurt zoals altijd in de winkelwagen zelf.
+
 ## 1.19.6
 
 - `plannerPromoMark`/`isIrrigationGroup` in storefront-pages.js (merkteken `<!--planner-promo:…-->` op de startpagina en boven de producten van een hoofdcategorie met "beregening" in naam of adres); `storefront.js` vervangt het door het blok als `shopPlanner` aan staat (zoals het kopje Planner) en haalt het anders weg. De knop leidt naar `planner/` (ingelogd direct door naar de planner). Stijl `.planner-promo` in storefront.css via de `--at-shop-*`-variabelen. Geen migratie; de meting `planner_to_cart` bestond al.
