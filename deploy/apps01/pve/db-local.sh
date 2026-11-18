@@ -21,7 +21,9 @@
 #   APPS01_NAME   naam van het gast-systeem in Proxmox (standaard apps01)
 #   APPS01_CTID   vaste LXC-id (anders gezocht met `pct list`)
 #   APPS01_VMID   vaste VM-id (anders gezocht met `qm list`); verbinding via ssh
-#   APPS01_SSH    ssh-doel, bijvoorbeeld root@192.168.1.20 (standaard root@<naam>, anders het IP via de guest agent)
+#   APPS01_SSH    ssh-doel, bijvoorbeeld root@192.168.1.20 (standaard root@<naam>, anders het IP via de guest agent);
+#                 bij een andere gebruiker dan root (bijv. daniel@apps01) draaien alle opdrachten met `sudo -n`
+#                 (sudo zonder wachtwoord nodig; root-ssh staat op apps01 uit)
 #   APP_DIR       map op de server (standaard /opt/apps/aquatech)
 #   REF           branch of tag op GitHub (standaard master)
 #   SRC_DIR       map deploy/apps01 van een lokale checkout (in plaats van GitHub)
@@ -83,18 +85,21 @@ for nic in json.load(sys.stdin):
 fi
 
 SSH_OPTS=(-o ServerAliveInterval=30 -o ServerAliveCountMax=20 -o ConnectTimeout=15)
+# Als de ssh-gebruiker geen root is, gaat elke opdracht via sudo (zonder wachtwoord, want er is geen terminal).
+SUDO=()
+if [[ "$MODE" == "ssh" && "${SSH_TARGET%%@*}" != "root" && "$SSH_TARGET" == *@* ]]; then SUDO=(sudo -n); fi
 # Voert een opdracht uit op de server; argumenten worden veilig doorgegeven. Stdin gaat mee (voor tar).
 guest() {
   if [[ "$MODE" == "pct" ]]; then
     pct exec "$GUEST_ID" -- "$@"
   else
     local command_line
-    printf -v command_line '%q ' "$@"
+    printf -v command_line '%q ' "${SUDO[@]}" "$@"
     ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "$command_line"
   fi
 }
 if [[ "$MODE" == "pct" ]]; then log "Server: LXC $GUEST_ID ($NAME), via pct exec"; else log "Server: $SSH_TARGET, via ssh"; fi
-guest true || die "Geen verbinding met de server. Controleer ssh (sleutel/wachtwoord) of zet APPS01_SSH / APPS01_CTID."
+guest true || die "Geen verbinding met de server. Controleer ssh (sleutel/wachtwoord; root-login kan uitstaan: gebruik dan APPS01_SSH=<gebruiker>@<server> met sudo zonder wachtwoord) of zet APPS01_SSH / APPS01_CTID."
 
 # ---------- Bestanden verzamelen en naar de server brengen ----------
 STAGE="$(mktemp -d)"

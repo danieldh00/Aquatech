@@ -29,7 +29,7 @@
 #
 # Instellingen (omgevingsvariabelen, allemaal optioneel):
 #   APPS01_NAME  naam van het gast-systeem in Proxmox (standaard apps01)
-#   APPS01_CTID  vaste LXC-id          APPS01_VMID  vaste VM-id          APPS01_SSH  ssh-doel, bijv. root@192.168.1.20
+#   APPS01_CTID  vaste LXC-id          APPS01_VMID  vaste VM-id          APPS01_SSH  ssh-doel, bijv. daniel@apps01 (sudo -n)
 #   APP_DIR      map op de server (standaard /opt/apps/aquatech)
 #   LOG_SINCE    hoe ver terug de app-log wordt gelezen bij status (standaard 24h)
 #   YES=1        geen bevestigingsvraag
@@ -369,6 +369,9 @@ for nic in json.load(sys.stdin):
 fi
 
 SSH_OPTS=(-o ServerAliveInterval=30 -o ServerAliveCountMax=20 -o ConnectTimeout=15)
+# Als de ssh-gebruiker geen root is (bijv. APPS01_SSH=daniel@apps01), gaat elke opdracht via sudo zonder wachtwoord.
+SUDO=()
+if [[ "$MODE" == "ssh" && "$SSH_TARGET" == *@* && "${SSH_TARGET%%@*}" != "root" ]]; then SUDO=(sudo -n); fi
 # Voert dit bestand op de server uit met een opdracht (het bestand gaat via stdin mee).
 remote() { # <opdracht> [argumenten...]
   local environment=(SERVERTAKEN_REMOTE=1 "APP_DIR=$APP_DIR" "LOG_SINCE=${LOG_SINCE:-24h}")
@@ -376,7 +379,7 @@ remote() { # <opdracht> [argumenten...]
     pct exec "$GUEST_ID" -- env "${environment[@]}" bash -s -- "$@" <"$0"
   else
     local command_line
-    printf -v command_line '%q ' env "${environment[@]}" bash -s -- "$@"
+    printf -v command_line '%q ' "${SUDO[@]}" env "${environment[@]}" bash -s -- "$@"
     # shellcheck disable=SC2029  # bewust: de opdracht wordt hier opgebouwd en op de server uitgevoerd
     ssh "${SSH_OPTS[@]}" "$SSH_TARGET" "$command_line" <"$0"
   fi

@@ -31,7 +31,14 @@ log() { echo "[$(date '+%F %T')] $*"; }
 die() { echo "FOUT: $*" >&2; exit 1; }
 now() { date -u '+%Y-%m-%dT%H:%M:%SZ'; }
 env_get() { sed -n "s/^$1=//p" .env 2>/dev/null | tail -n1; }
-env_set() { if grep -q "^$1=" .env; then sed -i "s|^$1=.*|$1=$2|" .env; else echo "$1=$2" >> .env; fi; }
+# Een .env zonder slotregeleinde zou anders met de nieuwe regel aan elkaar plakken (AQUATECH_TAG=1.2.3COMPOSE_FILE=…).
+env_set() {
+  if grep -q "^$1=" .env; then sed -i "s|^$1=.*|$1=$2|" .env
+  else
+    [[ ! -s .env || -z "$(tail -c1 .env)" ]] || echo >> .env
+    echo "$1=$2" >> .env
+  fi
+}
 env_unset() { sed -i "/^$1=/d" .env; }
 
 # docker compose met expliciet gekozen bestanden (los van wat in .env staat).
@@ -76,7 +83,8 @@ prepare_source() {
   if [[ -f "$SRC_DIR/supabase-root-2021.crt" ]]; then
     # Systeemcertificaten + de root-CA van Supabase (zoals de app zelf doet).
     docker cp "$SRC_DIR/supabase-root-2021.crt" "$PG_CONTAINER:/tmp/supabase-ca.crt" >/dev/null
-    docker exec "$PG_CONTAINER" sh -c 'cat /etc/ssl/certs/ca-certificates.crt /tmp/supabase-ca.crt > /tmp/supabase-bundle.crt'
+    # Niet elk postgres-image heeft een systeembundel (postgres:17 op Debian trixie niet): dan volstaat de root-CA van Supabase.
+    docker exec "$PG_CONTAINER" sh -c 'if [ -f /etc/ssl/certs/ca-certificates.crt ]; then cat /etc/ssl/certs/ca-certificates.crt /tmp/supabase-ca.crt; else cat /tmp/supabase-ca.crt; fi > /tmp/supabase-bundle.crt'
   else
     log "Waarschuwing: root-CA van Supabase niet meegekomen; verbinding met sslmode=require (versleuteld, certificaat niet gecontroleerd)."
     sslmode="require"
@@ -259,14 +267,34 @@ SQL
   cp -a .env "$ENV_BACKUP"
   env_set COMPOSE_FILE "$COMPOSE_VALUE"
   SWITCHED=1
-  dc_now config --services | grep -qx postgres || die "docker compose ziet COMPOSE_FILE in .env niet; omgezet terug."
-  dc_now up -d aquatech
+  local services; services="$(dc_now config --services 2>&1 || true)"
+  grep -qx postgres <<<"$services" || die "docker compose ziet COMPOSE_FILE in .env niet; omgezet terug. docker compose meldt: $(head -c 400 <<<"$services" | tr '\n' ' ') | sleutels in .env: $(sed 's/=.*//' .env | tr '\n' ' ')| bestanden: $(ls compose*.yml 2>&1 | tr '\n' ' ')"
+  # --force-recreate: docker compose ziet een ander geheimenbestand (database-url) niet als wijziging en zou de oude container met de oude verbinding laten staan.
+  dc_now up -d --force-recreate aquatech
   wait_health app_health 180 || { dc_now logs --tail 40 aquatech || true; die "De app werd niet healthy op de eigen database; terug naar Supabase."; }
   local logs; logs="$(dc_now logs --no-log-prefix aquatech 2>&1 || true)"
   grep -q 'Database: PostgreSQL' <<<"$logs" || die "De app meldt geen PostgreSQL; terug naar Supabase."
   ! grep -q 'Tenantafscherming in PostgreSQL niet actief' <<<"$logs" || die "De tenantafscherming (RLS) is niet actief op de eigen database; terug naar Supabase."
-  local connections; connections="$(local_psql postgres -c "SELECT count(*) FROM pg_stat_activity WHERE application_name = 'aquatech' AND usename = 'aquatech'")"
-  [[ "$connections" -ge 1 ]] || die "De app verbindt niet met de eigen database; terug naar Supabase."
+  # De app maakt zijn verbindingen pas bij het eerste verzoek: tot 30 seconden wachten, dan pas oordelen.
+  local connections=0 waited=0
+  while (( waited < 30 )); do
+    connections="$(local_psql postgres -c "SELECT count(*) FROM pg_stat_activity WHERE application_name = 'aquatech' AND usename = 'aquatech'" || echo 0)"
+    [[ "$connections" -ge 1 ]] && break
+    sleep 3; waited=$((waited + 3))
+  done
+  if [[ "$connections" -lt 1 ]]; then
+    log "Verbindingen in de eigen database (gebruiker, programma, toestand, aantal):"
+    local_psql postgres -F ' | ' -c "SELECT usename, application_name, state, count(*) FROM pg_stat_activity WHERE datname = 'aquatech' GROUP BY 1, 2, 3 ORDER BY 1, 2" || true
+    log "Toestand van de app-container (status, exitcode, herstarts, geheugen vol, gestart, gestopt):"
+    docker inspect -f '{{.State.Status}} | exit {{.State.ExitCode}} | herstarts {{.RestartCount}} | oom {{.State.OOMKilled}} | {{.State.StartedAt}} | {{.State.FinishedAt}}' aquatech 2>&1 || true
+    log "Wie stopte of startte containers de laatste minuten (docker events):"
+    timeout 5 docker events --since 5m --until 0s --filter container=aquatech --format '{{.Time}} {{.Action}} {{.Actor.Attributes.signal}} {{.Actor.Attributes.exitCode}}' 2>&1 | tail -20 || true
+    log "Update-timer en -service de laatste 10 minuten:"
+    journalctl -u aquatech-update.service --since '10 min ago' --no-pager 2>&1 | tail -8 | cut -c1-200 || true
+    log "Laatste regels van de app:"
+    dc_now logs --no-log-prefix --tail 40 aquatech 2>&1 | cut -c1-300 || true
+    die "De app verbindt niet met de eigen database; terug naar Supabase."
+  fi
   [[ "$(local_psql postgres -c "SELECT pg_has_role('aquatech', 'aquatech_app', 'MEMBER')")" == "t" ]] || die "Rol aquatech mag aquatech_app niet aannemen (RLS); terug naar Supabase."
 
   log "Back-ups inschakelen"
@@ -296,7 +324,7 @@ on_migrate_exit() {
     echo "FOUT: migratie afgebroken (code $code). Terugdraaien naar Supabase..." >&2
     if (( SWITCHED )) && [[ -n "$ENV_BACKUP" && -f "$ENV_BACKUP" ]]; then cp -a "$ENV_BACKUP" .env; fi
     if (( APP_STOPPED )) || (( SWITCHED )); then
-      COMPOSE_FILE="compose.yml" docker compose up -d aquatech || echo "Starten van de app lukte niet: controleer 'docker compose logs aquatech'." >&2
+      COMPOSE_FILE="compose.yml" docker compose up -d --force-recreate aquatech || echo "Starten van de app lukte niet: controleer 'docker compose logs aquatech'." >&2
     fi
     echo "De app draait weer op Supabase (gegevens ongewijzigd). Opnieuw proberen kan: db-local.sh migrate" >&2
   fi
@@ -343,7 +371,7 @@ cmd_rollback() {
   fi
   cp -a .env "$ENV_BACKUP"
   env_unset COMPOSE_FILE
-  dc_supabase up -d aquatech
+  dc_supabase up -d --force-recreate aquatech
   wait_health app_health 180 || { dc_supabase logs --tail 40 aquatech || true; die "De app werd niet healthy op Supabase."; }
   grep -q 'Database: PostgreSQL' <<<"$(dc_supabase logs --no-log-prefix aquatech 2>&1 || true)" || die "De app meldt geen PostgreSQL."
   trap - EXIT
