@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.19.4',
+      date: '2026-11-18',
+      title: 'Zoeksuggesties en zoektermen zonder resultaat',
+      items: [
+        { text: 'In de webshop verschijnen onder het zoekveld na twee tekens een paar passende producten. Bezoekers komen zo sneller bij het goede artikel.', for: ['beheer'] },
+        { text: 'Bij Webshopbestellingen staat een nieuw tabblad Zoektermen: wat bezoekers zochten zonder iets te vinden, met een Excel-export. Zo zie je welk artikel ontbreekt.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.19.3',
       date: '2026-11-18',
       title: 'Beter zoeken in de webshop',
