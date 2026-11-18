@@ -4,6 +4,8 @@
 // '', '../' of '../../'), zodat de shop ook onder een padprefix achter een
 // proxy werkt.
 
+const fs = require('fs');
+const path = require('path');
 const { version: SHOP_VERSION } = require('../../package.json');
 const { DEFAULT_SITE } = require('./shop-content');
 const { LEGAL_SLUGS, LEGAL_TITLES } = require('./legal-pages');
@@ -81,6 +83,35 @@ function imageSrc(root, reference) {
   if (kind === 'asset' && name) return assetUrl(root, name);
   return kind === 'media' && name ? `${root}media/${escapeHtml(name)}` : '';
 }
+
+/** Namen van de bestanden in de map assets/ (om te weten van welke afbeeldingen een WebP-variant bestaat). */
+const ASSET_NAMES = new Set(fs.readdirSync(path.join(__dirname, 'assets')));
+
+/**
+ * Een afbeelding uit Beheer als img, met een WebP-variant als picture als die bestaat. Een standaardbestand `<naam>.jpg|png` krijgt
+ * `<naam>.webp` (en `<naam>-klein.webp` voor smalle schermen) als die in assets/ staan (zie tools/shop-webp.py); geüploade
+ * afbeeldingen en bestanden zonder WebP blijven een gewone img.
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @param {string} reference 'asset:<bestand>' of 'media:<id>' (zie imageSrc).
+ * @param {{ attributes?: string, sizes?: string }} [options] attributes = extra attributen voor de img (al ontsnapt, bijv. alt en loading), sizes = de sizes-waarde als er een kleine variant is.
+ * @returns {string} De HTML, of een lege tekst als er geen afbeelding is.
+ */
+function imageHtml(root, reference, { attributes = '', sizes = '100vw' } = {}) {
+  const source = imageSrc(root, reference);
+  if (!source) return '';
+  const img = `<img src="${source}"${attributes ? ` ${attributes}` : ''}>`;
+  const [kind, name] = String(reference || '').split(':');
+  const stem = kind === 'asset' ? /^([a-z0-9-]+)\.(?:jpg|png)$/i.exec(name || '') : null;
+  if (!stem || !ASSET_NAMES.has(`${stem[1]}.webp`)) return img;
+  const large = assetUrl(root, `${stem[1]}.webp`);
+  const small = ASSET_NAMES.has(`${stem[1]}-klein.webp`) ? assetUrl(root, `${stem[1]}-klein.webp`) : '';
+  const widths = IMAGE_WIDTHS[stem[1]] || [];
+  const srcset = small && widths.length === 2 ? `${small} ${widths[0]}w, ${large} ${widths[1]}w` : large;
+  return `<picture><source type="image/webp" srcset="${srcset}"${small && widths.length === 2 ? ` sizes="${sizes}"` : ''}>${img}</picture>`;
+}
+
+/** Breedte in pixels van de kleine en de grote WebP per standaardafbeelding (voor srcset). */
+const IMAGE_WIDTHS = { 'hero-tuin': [720, 1440], 'banner-druppelslang': [600, 1000], 'banner-pomp': [600, 1000] };
 
 /**
  * Het adres van een productafbeelding: een eigen afbeelding ('own:<id>') komt van
@@ -572,7 +603,7 @@ function homePage(catalog) {
   const heroButton = hero.button || (hero.title && first ? `Bekijk ${first.name.toLowerCase()}` : '');
   const heroHref = linkHref(hero.link, root, first ? `groep/${escapeHtml(first.slug)}/` : '');
   const heroImage = imageSrc(root, hero.image);
-  const intro = `<section class="home-hero">${heroImage ? `<img src="${heroImage}" alt=""${hero.image === DEFAULT_SITE.hero.image ? ' width="1440" height="419"' : ''}>` : ''}${hero.title || hero.text || heroButton ? `<div class="home-hero-text">${hero.title ? `<h1>${escapeHtml(hero.title)}</h1>` : ''}${hero.text ? `<p>${escapeHtml(hero.text)}</p>` : ''}${heroButton && heroHref ? `<a class="button" href="${heroHref}">${escapeHtml(heroButton)}</a>` : ''}</div>` : ''}</section>`;
+  const intro = `<section class="home-hero">${heroImage ? imageHtml(root, hero.image, { attributes: `alt=""${hero.image === DEFAULT_SITE.hero.image ? ' width="1440" height="419" fetchpriority="high"' : ''}` }) : ''}${hero.title || hero.text || heroButton ? `<div class="home-hero-text">${hero.title ? `<h1>${escapeHtml(hero.title)}</h1>` : ''}${hero.text ? `<p>${escapeHtml(hero.text)}</p>` : ''}${heroButton && heroHref ? `<a class="button" href="${heroHref}">${escapeHtml(heroButton)}</a>` : ''}</div>` : ''}</section>`;
   if (!catalog.products.length) return layout({ root, groups: catalog.groups, wide: true, canonicalPath: '', jsonLd: homeJsonLd(hero.image), ogImage: homeImage(hero.image), title: `${SHOP_NAME} – alles voor uw tuinberegening`, description: 'Sproeiers, druppelslang, leidingen en pompen voor tuinberegening van AquaTech Service.', body: `${intro}<div class="wrap"><p class="muted">De webshop wordt gevuld. Kom snel terug.</p></div>` });
   const tiles = catalog.groups.map((group) => {
     const showcase = groupShowcase(group, catalog.products);
@@ -591,7 +622,7 @@ function homePage(catalog) {
     : catalog.featured.length ? `<section class="wrap"><h2 class="centered">Populaire producten</h2>\n${grid(catalog.featured)}</section>` : '';
   const banners = bannerBlock.enabled && bannerBlock.items.length ? `<section class="home-banners">${bannerBlock.items.map((item) => {
     const href = linkHref(item.link, root, '');
-    const inner = `<img src="${imageSrc(root, item.image)}" alt="" loading="lazy"><span class="home-banner-text">${item.title ? `<strong>${escapeHtml(item.title)}</strong>` : ''}${item.button ? `<span class="button">${escapeHtml(item.button)}</span>` : ''}</span>`;
+    const inner = `${imageHtml(root, item.image, { attributes: 'alt="" loading="lazy"', sizes: '(max-width: 800px) 100vw, 50vw' })}<span class="home-banner-text">${item.title ? `<strong>${escapeHtml(item.title)}</strong>` : ''}${item.button ? `<span class="button">${escapeHtml(item.button)}</span>` : ''}</span>`;
     return href ? `<a class="home-banner" href="${href}">${inner}</a>` : `<div class="home-banner">${inner}</div>`;
   }).join('')}</section>` : '';
   // Een variantcode verwijst naar het hoofdartikel waar de variant onder valt.
@@ -614,7 +645,7 @@ function homePage(catalog) {
   const businessImage = imageSrc(root, businessBlock.image);
   const businessHref = linkHref(businessBlock.link, root, `${root}registreren/`);
   const withForm = Boolean(businessBlock.form && activeShop.businessForm);
-  const business = businessBlock.enabled ? `<section class="business${withForm ? ' with-form' : ''}">${businessImage ? `<img src="${businessImage}" alt="" loading="lazy">` : ''}<div class="business-text"><h2>${escapeHtml(businessBlock.title)}</h2>${businessBlock.text ? `<p>${escapeHtml(businessBlock.text)}</p>` : ''}${businessBlock.button && !withForm ? `<a class="button" href="${businessHref}">${escapeHtml(businessBlock.button)}</a>` : ''}</div>${withForm ? businessForm(root, activeShop.businessSent) : ''}</section>` : '';
+  const business = businessBlock.enabled ? `<section class="business${withForm ? ' with-form' : ''}">${businessImage ? imageHtml(root, businessBlock.image, { attributes: 'alt="" loading="lazy"' }) : ''}<div class="business-text"><h2>${escapeHtml(businessBlock.title)}</h2>${businessBlock.text ? `<p>${escapeHtml(businessBlock.text)}</p>` : ''}${businessBlock.button && !withForm ? `<a class="button" href="${businessHref}">${escapeHtml(businessBlock.button)}</a>` : ''}</div>${withForm ? businessForm(root, activeShop.businessSent) : ''}</section>` : '';
   return layout({ root, wide: true, canonicalPath: '', variantScript: [...catalog.bestsellers, ...catalog.featured].some((product) => product.variants), jsonLd: homeJsonLd(hero.image), ogImage: homeImage(hero.image), title: `${SHOP_NAME} – alles voor uw tuinberegening`, description: 'Sproeiers, druppelslang, leidingen en pompen voor tuinberegening van AquaTech Service.', body: `${intro}\n${assortment}\n${plannerPromoMark(root)}\n${popular}\n${banners}\n${perGroup}\n${benefits}\n${brands}\n${quote}\n${business}`, groups: catalog.groups });
 }
 
