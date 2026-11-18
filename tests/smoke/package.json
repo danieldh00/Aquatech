@@ -1,0 +1,12 @@
+{
+  "name": "aquatech-rooktests",
+  "private": true,
+  "description": "Rooktests tegen de live omgeving na elke uitrol (alleen lezen).",
+  "scripts": {
+    "wacht": "node wait-for-version.js",
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.1"
+  }
+}
