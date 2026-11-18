@@ -6,6 +6,7 @@ const { createRateLimiter } = require('../beveiliging/rate-limit');
 const { clientKey } = require('../beveiliging/auth');
 const { sanitizeBusinessProfile, wantsBusiness } = require('./business-profile');
 const { validEmail } = require('../platform/mailer');
+const { mailStyleOf, composeFor } = require('../platform/mail-layout');
 const { passwordProblem } = require('../platform/store');
 const { cleanPublicUrl } = require('./mollie');
 
@@ -159,13 +160,9 @@ function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impe
     const profile = settings.get('quoteProfile') || {};
     const name = user.display_name || user.displayName || '';
     const url = `${link}#t=${issued.token}`;
-    const lines = invitation
-      ? [`Beste ${name},`, `${profile.companyName || 'We'} hebben een klantaccount voor je klaargezet. Kies een wachtwoord via deze link (hij werkt zeven dagen en één keer); daarna kun je inloggen in de webshop en het klantportaal:`, url, 'Verwacht je deze mail niet? Dan kun je hem negeren.']
-      : purpose === 'wachtwoord'
-      ? [`Beste ${name},`, 'Je hebt gevraagd om een nieuw wachtwoord voor je account bij de webshop. Kies een nieuw wachtwoord via deze link (hij werkt één uur en één keer):', url, 'Heb je dit niet zelf gevraagd? Dan kun je deze mail negeren; je wachtwoord blijft zoals het is.']
-      : [`Beste ${name},`, 'Bevestig je e-mailadres voor je account bij de webshop via deze link (hij werkt zeven dagen):', url, 'Heb je geen account aangemaakt? Dan kun je deze mail negeren.'];
-    const body = mailBody(profile, lines);
-    await mailerFor(settings).send({ to: user.email, subject: invitation ? 'Je klantaccount staat klaar' : purpose === 'wachtwoord' ? 'Nieuw wachtwoord kiezen' : 'Bevestig je e-mailadres', text: body.text, html: body.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
+    const composed = composeFor(settings, invitation ? 'account_uitnodiging' : purpose === 'wachtwoord' ? 'account_wachtwoord' : 'account_bevestigen', { klant: name, bedrijf: profile.companyName || 'ons bedrijf', link: url });
+    const body = mailBody(profile, composed.paragraphs, undefined, mailStyleOf(settings));
+    await mailerFor(settings).send({ to: user.email, subject: composed.subject, text: body.text, html: body.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
     return true;
   }
 

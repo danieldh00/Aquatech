@@ -8,6 +8,7 @@ const { transaction, jsonField } = require('../database/db');
 const { createVault } = require('../beveiliging/vault');
 const { createMailer, validEmail, mailFailure } = require('../platform/mailer');
 const { withCause } = require('../platform/error-report');
+const { renderMail, mailStyleOf } = require('../platform/mail-layout');
 const { preferencesOf } = require('../platform/store');
 const { requireVerifiedAddress } = require('../platform/address-lookup');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
@@ -611,28 +612,15 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
 const escHtml = (value) => String(value == null ? '' : value).replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
 
 /**
- * Stelt een e-mail in huisstijl op: platte tekst en HTML met alinea's, ondertekening en optioneel een knop.
+ * Stelt een e-mail in huisstijl op (zie platform/mail-layout.js): platte tekst en HTML met alinea's, ondertekening en optioneel een knop.
  * @param {object} profile Het bedrijfsprofiel (naam, telefoon, e-mail, website).
  * @param {string[]} paragraphs De alinea's (lege vallen weg).
- * @param {{ label: string, href: string }|null} button De knop, of null.
+ * @param {{ label: string, href: string }|null} [button] De knop, of null.
+ * @param {object} [style] De opmaak van de organisatie (`mailStyleOf(settings)`); zonder opmaak de vaste standaard.
  * @returns {{ text: string, html: string }} De twee versies van het bericht.
  */
-function mailBody(profile, paragraphs, button) {
-  const paras = paragraphs.map((paragraph) => String(paragraph || '').trim()).filter(Boolean);
-  const sign = [profile.companyName, profile.phone, profile.email, profile.website].filter(Boolean);
-  const text = [...paras, button ? `${button.label}: ${button.href}` : '', '', ...sign].filter((line, i, allLines) => line || (i > 0 && allLines[i - 1])).join('\n\n');
-  const href = button && /^https?:\/\//.test(button.href) ? button.href : null;
-  const html = `<!doctype html><html lang="nl"><body style="margin:0;background:#f4f6f9;font-family:Montserrat,Arial,sans-serif;color:#1d2733">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:24px 12px">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:8px;overflow:hidden">
-<tr><td style="background:#172f5e;color:#ffffff;padding:18px 24px;font-size:18px;font-weight:700">${escHtml(profile.companyName)}</td></tr>
-<tr><td style="padding:24px;font-size:15px;line-height:1.5">
-${paras.map((paragraph) => `<p style="margin:0 0 14px">${escHtml(paragraph).replace(/\n/g, '<br>')}</p>`).join('')}
-${href ? `<p style="margin:22px 0"><a href="${escHtml(href)}" style="background:#19924f;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:6px;font-weight:600;display:inline-block">${escHtml(button.label)}</a></p>` : ''}
-</td></tr>
-<tr><td style="padding:14px 24px;border-top:3px solid #2cb0c0;font-size:12px;color:#6b7785">${sign.map(escHtml).join(' · ')}</td></tr>
-</table></td></tr></table></body></html>`;
-  return { text, html };
+function mailBody(profile, paragraphs, button, style) {
+  return renderMail(profile, paragraphs, button, style);
 }
 
 /**
@@ -959,14 +947,14 @@ function registerQuoteRoutes(app, ctx) {
           translate('mail.confirmThanks', { number: row.number, about: data.title ? ` (${data.title})` : '', when: customerWhen, amount: customerTotal }),
           link ? translate('mail.confirmLink') : '',
           translate('mail.confirmNext'),
-        ], link ? { label: translate('mail.confirmButton'), href: link } : null),
+        ], link ? { label: translate('mail.confirmButton'), href: link } : null, mailStyleOf(settings)),
       }));
     }
     if (validEmail(profile.email)) {
       const lines = acceptance.answer === 'akkoord'
         ? [`${acceptance.name} heeft offerte ${row.number}${data.customer.name ? ` voor ${data.customer.name}` : ''} geaccordeerd op ${when}, voor ${total} incl. btw.`]
         : [`${acceptance.name || 'De klant'} heeft offerte ${row.number}${data.customer.name ? ` voor ${data.customer.name}` : ''} afgewezen op ${when}.`, acceptance.reason ? `Reden: ${acceptance.reason}` : ''];
-      jobs.push(mailer.send({ to: profile.email, subject: `Offerte ${row.number} ${acceptance.answer === 'akkoord' ? 'geaccordeerd' : 'afgewezen'}`, ...mailBody(profile, lines, link ? { label: 'Offerte bekijken', href: link } : null) }));
+      jobs.push(mailer.send({ to: profile.email, subject: `Offerte ${row.number} ${acceptance.answer === 'akkoord' ? 'geaccordeerd' : 'afgewezen'}`, ...mailBody(profile, lines, link ? { label: 'Offerte bekijken', href: link } : null, mailStyleOf(settings)) }));
     }
     return Promise.allSettled(jobs).then((results) => {
       for (const result of results) if (result.status === 'rejected') console.warn(`Bevestiging offerte ${row.number} niet verstuurd: ${result.reason?.message || result.reason}`);
@@ -1020,7 +1008,7 @@ function registerQuoteRoutes(app, ctx) {
       await mailer.send({
         to: list, replyTo: profile.email, bcc: copyTo(req.user),
         subject: String(subject || `Offerte ${quote.number} van ${profile.companyName}`).slice(0, 300),
-        ...mailBody(profile, text.split(/\n{2,}/), { label: DocText.text(quote.data && quote.data.language, 'mail.sendButton'), href: quote.share.url }),
+        ...mailBody(profile, text.split(/\n{2,}/), { label: DocText.text(quote.data && quote.data.language, 'mail.sendButton'), href: quote.share.url }, mailStyleOf(settings)),
       });
     } catch (error) {
       console.warn(`Offerte ${quote.number} niet verstuurd: ${error.code || ''} ${error.message}`);
@@ -1107,7 +1095,7 @@ function registerQuoteRoutes(app, ctx) {
     const mailer = mailerFor(settings);
     if (!mailer.configured()) return res.status(409).json({ error: 'not_configured', message: 'Vul eerst de mailserver en het afzenderadres in.' });
     try {
-      await mailer.send({ to, subject: 'Testbericht van de mailinstellingen', ...mailBody(settings.get('quoteProfile'), ['Dit is een testbericht. De mailserver is goed ingesteld.'], null) });
+      await mailer.send({ to, subject: 'Testbericht van de mailinstellingen', ...mailBody(settings.get('quoteProfile'), ['Dit is een testbericht. De mailserver is goed ingesteld.'], null, mailStyleOf(settings)) });
     } catch (error) {
       return withCause(res, error).status(502).json({ error: 'send_failed', message: mailFailure(error) });
     }

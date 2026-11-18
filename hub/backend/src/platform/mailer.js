@@ -52,6 +52,28 @@ const validEmail = (value) => {
 };
 
 /**
+ * Zet ingebedde PNG-afbeeldingen (data-adressen, zoals het logo in de mailopmaak) om in bijlagen die de HTML met cid: aanroept:
+ * mailprogramma's tonen een data-adres vaak niet, een ingebedde bijlage wel.
+ * @param {string} [html] De HTML van de mail.
+ * @returns {{ html: string|undefined, attachments: object[] }} De HTML met cid-adressen en de bijlagen (hoogstens 2 afbeeldingen).
+ */
+function inlineImages(html) {
+  if (typeof html !== 'string') return { html, attachments: [] };
+  const attachments = [];
+  const known = new Map();
+  const converted = html.replace(/src="data:image\/png;base64,([A-Za-z0-9+/]+={0,2})"/g, (match, data) => {
+    if (!known.has(data)) {
+      if (known.size >= 2) return match;
+      const cid = `afbeelding${known.size + 1}@aquatech`;
+      known.set(data, cid);
+      attachments.push({ filename: `afbeelding${known.size}.png`, content: Buffer.from(data, 'base64'), contentType: 'image/png', cid, contentDisposition: 'inline' });
+    }
+    return `src="cid:${known.get(data)}"`;
+  });
+  return { html: converted, attachments };
+}
+
+/**
  * Maakt de mailer van een tenant. De mailserver moet een openbaar adres hebben
  * (zie netguard.js); er wordt verbonden met het gevonden adres, het certificaat
  * blijft op naam gecontroleerd.
@@ -113,12 +135,13 @@ function createMailer(settings, { createTransport = nodemailer.createTransport, 
     const list = (Array.isArray(to) ? to : [to]).filter(validEmail);
     if (!list.length) throw Object.assign(new Error('Geen geldig e-mailadres.'), { code: 'invalid_to' });
     const { transport, server } = await openTransport();
+    const inline = inlineImages(html);
     return transport.sendMail({
       from: server.from, to: list.join(', '), bcc: bcc && validEmail(bcc) ? bcc.trim() : undefined, replyTo: replyTo && validEmail(replyTo) ? replyTo : server.replyTo || undefined,
-      subject: String(subject || '').replace(/[\r\n]/g, ' ').slice(0, 300), text, html,
+      subject: String(subject || '').replace(/[\r\n]/g, ' ').slice(0, 300), text, html: inline.html,
       attachments: Array.isArray(attachments) && attachments.length ? attachments.slice(0, 5).map((attachment) => ({
         filename: String(attachment.filename || 'bijlage').replace(/[\r\n"\\/]/g, '').slice(0, 120), content: attachment.content, contentType: attachment.contentType,
-      })) : undefined,
+      })).concat(inline.attachments) : (inline.attachments.length ? inline.attachments : undefined),
     });
   }
   /**
@@ -194,4 +217,4 @@ function mailFailure(error) {
 // Melding als de mailinstellingen zelf niet te lezen zijn (een interne fout: de oorzaak gaat naar het serverlog).
 const MAIL_SETUP_FAILED = 'Versturen mislukt: de mailinstellingen konden niet worden gelezen.';
 
-module.exports = { createMailer, sanitizeMail, validEmail, mailFailure, MAIL_SETUP_FAILED, MAIL_DEFAULTS };
+module.exports = { inlineImages, createMailer, sanitizeMail, validEmail, mailFailure, MAIL_SETUP_FAILED, MAIL_DEFAULTS };

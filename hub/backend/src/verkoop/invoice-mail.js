@@ -4,6 +4,7 @@
 // factuur definitief wordt (instelling invoicing.autoSend; ook voor facturen
 // uit webshopbestellingen). Een mislukte verzending blijft zichtbaar op de
 // factuur (send_error); de factuur zelf blijft gewoon definitief.
+const { mailStyleOf } = require('../platform/mail-layout');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const { validEmail, mailFailure } = require('../platform/mailer');
@@ -113,7 +114,7 @@ function createInvoiceSender({ invoices, settingsFor, mailerFor, colorsOf = () =
       await mailer.send({
         to, replyTo: profile.email, bcc: options.bcc,
         subject: String(options.subject || defaults.subject).slice(0, 300),
-        ...mailBody(profile, message.split(/\n{2,}/)),
+        ...mailBody(profile, message.split(/\n{2,}/), undefined, mailStyleOf(settings)),
         attachments: [{ filename: invoiceFileName(invoice), content: pdfOf(tenantId, invoice), contentType: 'application/pdf' }],
       });
     } catch (error) {

@@ -12,6 +12,7 @@
 //   items; daarvoor houdt de server per omgeving de laatste berichten (alleen
 //   tijdstip, doelgroep en auteur) 30 s in het geheugen, zodat api/me op elke
 //   pagina geen extra query kost.
+const { mailStyleOf } = require('../platform/mail-layout');
 const crypto = require('crypto');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
@@ -270,7 +271,7 @@ function registerNewsRoutes(app, context) {
       isCustomerRole: (role) => store.roles.get(tenantOf(req), role)?.kind === 'klant',
     }).slice(0, MAIL_LIMIT);
     const profile = settings.get('quoteProfile');
-    const { text, html } = mailBody(profile, [item.title, item.body, `— ${item.authorName}`, 'Dit bericht staat ook in de app onder Nieuws.'], null);
+    const { text, html } = mailBody(profile, [item.title, item.body, `— ${item.authorName}`, 'Dit bericht staat ook in de app onder Nieuws.'], null, mailStyleOf(settings));
     for (const address of to) {
       mailer.send({ to: address, replyTo: req.user.email || profile.email, subject: `Nieuws: ${item.title}`, text, html })
         .catch((err) => console.warn(`Nieuwsbericht niet verstuurd: ${err.message}`));
