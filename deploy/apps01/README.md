@@ -113,7 +113,7 @@ bash /tmp/db-local.sh restore <bestand>   # een back-up terugzetten
 bash /tmp/db-local.sh rollback         # terug naar Supabase (met de nieuwe gegevens)
 ```
 
-Andere naam of id: `APPS01_NAME`, `APPS01_CTID` (LXC), `APPS01_VMID` (VM) of `APPS01_SSH=root@<ip>`; verder `POSTGRES_TAG`
+Andere naam of id: `APPS01_NAME`, `APPS01_CTID` (LXC), `APPS01_VMID` (VM) of `APPS01_SSH=root@<ip>` (of `daniel@apps01` als root-ssh uitstaat: dan draait alles met `sudo -n`, sudo zonder wachtwoord nodig); verder `POSTGRES_TAG`
 (standaard 17), `SKIP_HASH=1` (alleen aantallen controleren), `YES=1` (geen bevestigingsvraag), `SRC_DIR` (map
 `deploy/apps01` van een lokale checkout in plaats van GitHub).
 
