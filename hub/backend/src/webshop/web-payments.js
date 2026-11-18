@@ -245,12 +245,12 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
    * de reservering loopt. Elke bestelling krijgt hoogstens één herinnering (`pay.reminderAt`); een mail die niet lukt wordt de
    * volgende ronde opnieuw geprobeerd. Wat intussen toch betaald bleek bij Mollie wordt eerst bijgewerkt en krijgt niets.
    * @param {string} tenantId Id van de omgeving.
-   * @param {{ send: Function }} mailer `send(order)` stuurt de herinnering en geeft true als dat gelukt is.
+   * @param {{ send: Function, canSend?: Function }} mailer `send(order)` stuurt de herinnering en geeft true als dat gelukt is; `canSend()` meldt vooraf of er een mailserver is (zo niet, dan ook geen Mollie-opvragingen).
    * @returns {Promise<{ sent: number }>} Het aantal verstuurde herinneringen.
    */
-  async function remindUnpaid(tenantId, { send }) {
+  async function remindUnpaid(tenantId, { send, canSend = () => true }) {
     const config = configOf(settingsFor(tenantId));
-    if (!config.online || !config.paymentReminder) return { sent: 0 };
+    if (!config.online || !config.paymentReminder || !canSend()) return { sent: 0 };
     const nowIso = new Date().toISOString();
     const cutoff = new Date(Date.now() - REMINDER_AFTER_HOURS * 3600 * 1000).toISOString();
     const fallback = new Date(Date.now() - config.holdHours * 3600 * 1000).toISOString();

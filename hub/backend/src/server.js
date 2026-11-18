@@ -2886,7 +2886,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    * Stuurt de eenmalige betalingsherinnering bij online bestellingen die na een uur niet betaald zijn (elk uur).
    * @returns {Promise<{ sent: number }>} Het aantal verstuurde herinneringen.
    */
-  app.locals.webPaymentsRemind = () => webPayments.remindUnpaid(tenant.id, { send: (order) => webOrderMail.sendPaymentReminder(tenant.id, order) });
+  app.locals.webPaymentsRemind = () => webPayments.remindUnpaid(tenant.id, { send: (order) => webOrderMail.sendPaymentReminder(tenant.id, order), canSend: () => webOrderMail.mailReady(tenant.id) });
   /**
    * Geeft de voorraad vrij van webshopbestellingen op rekening waarvan de reserveringstermijn voorbij is (elk uur).
    * @returns {{ released: number }} Het aantal vrijgegeven bestellingen.

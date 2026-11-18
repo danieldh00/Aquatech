@@ -102,3 +102,15 @@ test('een gastbestelling krijgt de persoonlijke link, zonder webadres in Beheer 
   assert.match(mail.text, new RegExp(`https://winkel\\.example/bestelling/${id}/\\?k=`));
   assert.strictEqual(mail.to, PERSON.email);
 });
+
+test('een bestelling die al een herinnering kreeg blokkeert de selectie niet: een latere bestelling komt toch aan de beurt', async () => {
+  const world = await setup({ mollie: true });
+  const [first, second] = world.shoppers;
+  const early = await placeOpen(world, first);
+  const late = await placeOpen(world, second);
+  backdate(world, early.id, 3);
+  assert.deepStrictEqual(await world.app.locals.webPaymentsRemind(), { sent: 1 });
+  backdate(world, late.id, 2);
+  assert.deepStrictEqual(await world.app.locals.webPaymentsRemind(), { sent: 1 }, 'alleen de nieuwe bestelling');
+  assert.strictEqual(mailsWith(world.sent, SUBJECT).length, 2);
+});
