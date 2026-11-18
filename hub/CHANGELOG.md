@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.19.3
+
+- Nieuw `webshop/search.js` (zuivere functies): normaliseren zonder accenten en leestekens, relevantiescore (exacte code, beginnende code, begin van de naam, alle woorden in de naam, voorraad als tiebreak), en een ruimere tweede ronde met stam, verwante woorden (`SYNONYM_GROUPS`) en tikfouten (Damerau-Levenshtein, 1 fout vanaf 5 tekens, 2 vanaf 8). Varianten blijven één eenheid met het hoofdartikel. De zoekpagina meldt het bij ruimer zoeken.
+
 ## 1.19.2
 
 - Voorraadmelding (migratie 76, `stock_alerts`, `webshop/stock-alerts.js`): formulier op de productpagina (alleen met bestellen aan en een mailserver), captcha-actie `stock_alert`, limiet per bezoeker en per adres (10 open), honeypot; elk uur mailt `stockAlertsRun` de meldingen waarvan het artikel weer te bestellen is en wist ze, na 180 dagen of bij een gearchiveerd artikel vervalt een melding.

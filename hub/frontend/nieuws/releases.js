@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.19.3',
+      date: '2026-11-18',
+      title: 'Beter zoeken in de webshop',
+      items: [
+        { text: 'Zoeken in de webshop zet de juiste treffer bovenaan: een exacte artikelnummer (ook met streepje of spatie) komt eerst. Vind je niets precies, dan zoekt de webshop ook op meervouden, verwante woorden (sproeier en sprinkler) en kleine typefouten.' },
+      ],
+    },
+    {
       version: '1.19.2',
       date: '2026-11-18',
       title: 'Voorraad in de webshop en voorraadmelding',
