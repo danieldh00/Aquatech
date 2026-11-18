@@ -31,7 +31,14 @@ log() { echo "[$(date '+%F %T')] $*"; }
 die() { echo "FOUT: $*" >&2; exit 1; }
 now() { date -u '+%Y-%m-%dT%H:%M:%SZ'; }
 env_get() { sed -n "s/^$1=//p" .env 2>/dev/null | tail -n1; }
-env_set() { if grep -q "^$1=" .env; then sed -i "s|^$1=.*|$1=$2|" .env; else echo "$1=$2" >> .env; fi; }
+# Een .env zonder slotregeleinde zou anders met de nieuwe regel aan elkaar plakken (AQUATECH_TAG=1.2.3COMPOSE_FILE=…).
+env_set() {
+  if grep -q "^$1=" .env; then sed -i "s|^$1=.*|$1=$2|" .env
+  else
+    [[ ! -s .env || -z "$(tail -c1 .env)" ]] || echo >> .env
+    echo "$1=$2" >> .env
+  fi
+}
 env_unset() { sed -i "/^$1=/d" .env; }
 
 # docker compose met expliciet gekozen bestanden (los van wat in .env staat).
@@ -260,7 +267,8 @@ SQL
   cp -a .env "$ENV_BACKUP"
   env_set COMPOSE_FILE "$COMPOSE_VALUE"
   SWITCHED=1
-  dc_now config --services | grep -qx postgres || die "docker compose ziet COMPOSE_FILE in .env niet; omgezet terug."
+  local services; services="$(dc_now config --services 2>&1 || true)"
+  grep -qx postgres <<<"$services" || die "docker compose ziet COMPOSE_FILE in .env niet; omgezet terug. docker compose meldt: $(head -c 400 <<<"$services" | tr '\n' ' ') | sleutels in .env: $(sed 's/=.*//' .env | tr '\n' ' ')| bestanden: $(ls compose*.yml 2>&1 | tr '\n' ' ')"
   dc_now up -d aquatech
   wait_health app_health 180 || { dc_now logs --tail 40 aquatech || true; die "De app werd niet healthy op de eigen database; terug naar Supabase."; }
   local logs; logs="$(dc_now logs --no-log-prefix aquatech 2>&1 || true)"
