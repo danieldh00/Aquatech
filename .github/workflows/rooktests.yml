@@ -1,0 +1,80 @@
+name: Rooktests
+
+# Na elke geslaagde Release: wacht tot de live omgeving de nieuwe versie draait (de server rolt binnen ~15 minuten
+# uit, zie deploy/apps01/update.sh) en voer dan de Playwright-rooktests uit (tests/smoke, alleen lezen).
+# Bij een fout faalt de run en komt er een GitHub-issue met label `rooktest` (of een opmerking bij het open issue).
+# Secrets en uitleg: tests/smoke/README.md. Ingelogde tests worden overgeslagen zonder SMOKE_USERNAME/SMOKE_PASSWORD.
+
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      wait_for_version:
+        description: "Wachten tot de live versie gelijk is aan package.json op master"
+        type: boolean
+        default: true
+
+concurrency:
+  group: rooktests
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  SMOKE_BASE_URL: ${{ vars.SMOKE_BASE_URL || 'https://aquatech.den-hollander.com' }}
+
+jobs:
+  rooktests:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: tests/smoke
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: tests/smoke/package-lock.json
+
+      - name: Verwachte versie bepalen
+        run: echo "EXPECTED_VERSION=$(jq -r .version ../../hub/backend/package.json)" >> "$GITHUB_ENV"
+
+      - name: Wachten op de uitrol
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.wait_for_version }}
+        run: node wait-for-version.js
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+
+      - name: Rooktests
+        env:
+          SMOKE_USERNAME: ${{ secrets.SMOKE_USERNAME }}
+          SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+          SMOKE_ORG: ${{ secrets.SMOKE_ORG }}
+        run: npx playwright test
+
+      - name: Melden bij een fout
+        if: ${{ failure() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Rooktests mislukt na uitrol"
+          body="De rooktests faalden voor versie ${EXPECTED_VERSION} op ${SMOKE_BASE_URL}. Zie de run: ${RUN_URL}"
+          gh label create rooktest --color d93f0b --description "Rooktests na uitrol" --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --label rooktest --state open --limit 1 --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --label rooktest --body "$body"
+          fi

@@ -180,6 +180,7 @@ TEST_DATABASE_URL=postgres://… npm test         # dezelfde suite tegen Postgre
 - Een PR merget pas als de tests (SQLite en PostgreSQL), de releasenotes-controle en de verplichte controles **Claude code
   review** en **Claude security review** (`.github/workflows/claude-review.yml`) groen zijn. CodeRabbit is uitgeschakeld;
   vóór go-live volgt eenmalig een handmatige deep scan met CodeRabbit.
+- **Rooktests na elke uitrol** (`tests/smoke`, workflow `rooktests.yml`): Playwright tegen de live omgeving, alleen lezen; secrets en werking in `tests/smoke/README.md`.
 - Na het mergen verhoogt `release.yml` de versie (+1 patch) en bouwt het image `ghcr.io/danieldh00/aquatech:<versie>`; de server
   (`deploy/apps01/`) rolt het binnen 15 minuten uit (of meteen met *Nu updaten* in Beheer; automatisch bijwerken kan
   daar uit), met onderhoudsmodus, een back-up vooraf en rollback bij een fout.
