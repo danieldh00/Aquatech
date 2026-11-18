@@ -232,16 +232,25 @@ test('back-up in een eigen proces: een script dat niets teruggeeft wordt een fou
   }
 });
 
-test('back-up in een eigen proces: een hangend proces wordt na de maximale duur gestopt', async () => {
+test('back-up in een eigen proces: een hangend proces wordt gestopt en alleen zijn eigen restbestanden verdwijnen', async () => {
   const script = path.join(os.tmpdir(), `aquatech-hang-${process.pid}.js`);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aquatech-hang-dir-'));
-  fs.writeFileSync(script, 'setInterval(() => {}, 1000);');
-  const plaintext = path.join(dir, '.tmp-0f8fad5b-d9cb-469f-a165-70867728950e.db');
-  fs.writeFileSync(plaintext, 'onversleutelde kopie');
-  fs.writeFileSync(path.join(dir, 'aquatech-20261118-040000.db.enc.part'), 'half');
+  // Het nepscript legt de tijdelijke bestanden aan zoals createBackup (met het run-id uit de omgeving) en blijft hangen.
+  fs.writeFileSync(script, [
+    "const fs = require('fs'); const path = require('path');",
+    "const run = process.env.AQUATECH_BACKUP_RUN; const dir = process.argv[3];",
+    "fs.writeFileSync(path.join(dir, `.tmp-${run}-0f8fad5b.db`), 'onversleutelde kopie');",
+    "fs.writeFileSync(path.join(dir, `aquatech-20261118-040000.db.enc.${run}.part`), 'half');",
+    "setInterval(() => {}, 1000);",
+  ].join('\n'));
+  // Bestanden van een andere back-up in dezelfde map (bijvoorbeeld die van update.sh) moeten blijven staan.
+  const foreignTemp = path.join(dir, '.tmp-11111111-2222-3333-4444-555555555555-aaaa.db');
+  const foreignPart = path.join(dir, 'aquatech-20261118-030000.db.enc.99999999-aaaa-bbbb-cccc-dddddddddddd.part');
+  fs.writeFileSync(foreignTemp, 'van een ander');
+  fs.writeFileSync(foreignPart, 'van een ander');
   try {
-    await assert.rejects(createBackupInChild({ dir, script, timeoutMs: 200 }), /gestopt na/);
-    assert.deepStrictEqual(fs.readdirSync(dir), [], 'na een time-out blijven er geen tijdelijke bestanden achter');
+    await assert.rejects(createBackupInChild({ dir, script, timeoutMs: 1500 }), /gestopt na/);
+    assert.deepStrictEqual(fs.readdirSync(dir).sort(), [path.basename(foreignPart), path.basename(foreignTemp)].sort());
   } finally {
     fs.rmSync(script, { force: true });
     fs.rmSync(dir, { recursive: true, force: true });

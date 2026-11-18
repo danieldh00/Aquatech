@@ -105,14 +105,15 @@ async function decryptFile(source, target, key) {
 
 /**
  * Maakt een versleutelde back-up van de database (ook terwijl de app draait).
- * @param {{ db: object, dir: string, vault: object }} options De database, de map voor back-ups en de kluis.
+ * @param {{ db: object, dir: string, vault: object, runId?: string }} options De database, de map voor back-ups, de kluis en optioneel een run-id dat in de namen van de tijdelijke bestanden komt (zo kan alleen de eigenaar ze opruimen).
  * @returns {Promise<{ name: string, size: number, createdAt: string }>} Naam, grootte en tijdstip van de back-up.
  */
-async function createBackup({ db, dir, vault }) {
+async function createBackup({ db, dir, vault, runId = '' }) {
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   const name = `aquatech-${stamp()}.db.enc`;
-  const tempFile = path.join(dir, `.tmp-${crypto.randomUUID()}.db`);
-  const part = path.join(dir, `${name}.part`);
+  const tag = runId ? `${runId}-` : '';
+  const tempFile = path.join(dir, `.tmp-${tag}${crypto.randomUUID()}.db`);
+  const part = path.join(dir, `${name}.${runId ? `${runId}.` : ''}part`);
   try {
     if (isPg(db)) {
       // PostgreSQL: alle rijen naar een nieuw SQLite-bestand (zelfde schema),
@@ -138,16 +139,19 @@ const CHILD_NICE = 10;
 const CHILD_TIMEOUT_MS = 30 * 60 * 1000;
 
 /**
- * Ruimt de tijdelijke bestanden op die een afgebroken back-up achterlaat (de onversleutelde kopie `.tmp-<uuid>.db` en
- * `<naam>.db.enc.part`). Alleen veilig als er geen andere back-up tegelijk loopt (de server maakt er één tegelijk).
+ * Ruimt de tijdelijke bestanden op die één afgebroken back-up (herkenbaar aan zijn run-id) achterliet: de onversleutelde
+ * kopie `.tmp-<run-id>-<uuid>.db` en `<naam>.<run-id>.part`. Bestanden van andere back-ups (bijvoorbeeld die van update.sh) blijven staan.
  * @param {string} dir De map met back-ups.
+ * @param {string} runId Het run-id van het gestopte proces.
  * @returns {void}
  */
-function removeLeftovers(dir) {
+function removeLeftovers(dir, runId) {
   let entries = [];
   try { entries = fs.readdirSync(dir); } catch { return; }
   for (const entry of entries) {
-    if (/^\.tmp-[0-9a-f-]+\.db$/.test(entry) || /\.db\.enc\.part$/.test(entry)) fs.rmSync(path.join(dir, entry), { force: true });
+    if ((entry.startsWith(`.tmp-${runId}-`) && entry.endsWith('.db')) || (entry.startsWith('aquatech-') && entry.endsWith(`.db.enc.${runId}.part`))) {
+      fs.rmSync(path.join(dir, entry), { force: true });
+    }
   }
 }
 
@@ -161,7 +165,8 @@ function removeLeftovers(dir) {
  */
 function createBackupInChild({ dir, env = process.env, script = __filename, timeoutMs = CHILD_TIMEOUT_MS }) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [script, 'create', dir], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+    const runId = crypto.randomUUID();
+    const child = spawn(process.execPath, [script, 'create', dir], { env: { ...env, AQUATECH_BACKUP_RUN: runId }, stdio: ['ignore', 'pipe', 'pipe'] });
     let output = '';
     let errors = '';
     let timedOut = false;
@@ -177,7 +182,7 @@ function createBackupInChild({ dir, env = process.env, script = __filename, time
     child.on('close', (code) => {
       clearTimeout(timer);
       if (timedOut) {
-        removeLeftovers(dir);
+        removeLeftovers(dir, runId);
         return reject(new Error(`Back-upproces gestopt na ${Math.round(timeoutMs / 1000)} seconden zonder resultaat.`));
       }
       if (code !== 0) return reject(new Error(`Back-upproces mislukt (code ${code}): ${errors.trim() || output.trim()}`));
@@ -257,7 +262,7 @@ if (require.main === module) {
   if (command === 'create') {
     const { openDatabase } = require('./database/db');
     const dir = source || process.env.BACKUP_DIR || path.join(dataDir, 'backups');
-    createBackup({ db: openDatabase(dataDir), dir, vault })
+    createBackup({ db: openDatabase(dataDir), dir, vault, runId: /^[0-9a-f-]{36}$/.test(process.env.AQUATECH_BACKUP_RUN || '') ? process.env.AQUATECH_BACKUP_RUN : '' })
       .then((backup) => { console.log(`Back-up gemaakt: ${path.join(dir, backup.name)} (${backup.size} bytes)`); process.exit(0); })
       .catch((err) => { console.error(`Back-up mislukt: ${err.message}`); process.exit(1); });
   } else if (fs.existsSync(target)) {
