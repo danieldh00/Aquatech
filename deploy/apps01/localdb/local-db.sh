@@ -274,8 +274,20 @@ SQL
   local logs; logs="$(dc_now logs --no-log-prefix aquatech 2>&1 || true)"
   grep -q 'Database: PostgreSQL' <<<"$logs" || die "De app meldt geen PostgreSQL; terug naar Supabase."
   ! grep -q 'Tenantafscherming in PostgreSQL niet actief' <<<"$logs" || die "De tenantafscherming (RLS) is niet actief op de eigen database; terug naar Supabase."
-  local connections; connections="$(local_psql postgres -c "SELECT count(*) FROM pg_stat_activity WHERE application_name = 'aquatech' AND usename = 'aquatech'")"
-  [[ "$connections" -ge 1 ]] || die "De app verbindt niet met de eigen database; terug naar Supabase."
+  # De app maakt zijn verbindingen pas bij het eerste verzoek: tot 30 seconden wachten, dan pas oordelen.
+  local connections=0 waited=0
+  while (( waited < 30 )); do
+    connections="$(local_psql postgres -c "SELECT count(*) FROM pg_stat_activity WHERE application_name = 'aquatech' AND usename = 'aquatech'")"
+    [[ "$connections" -ge 1 ]] && break
+    sleep 3; waited=$((waited + 3))
+  done
+  if [[ "$connections" -lt 1 ]]; then
+    log "Verbindingen in de eigen database (gebruiker, programma, toestand, aantal):"
+    local_psql postgres -F ' | ' -c "SELECT usename, application_name, state, count(*) FROM pg_stat_activity WHERE datname = 'aquatech' GROUP BY 1, 2, 3 ORDER BY 1, 2" || true
+    log "Laatste regels van de app:"
+    dc_now logs --no-log-prefix --tail 15 aquatech 2>&1 | cut -c1-300 || true
+    die "De app verbindt niet met de eigen database; terug naar Supabase."
+  fi
   [[ "$(local_psql postgres -c "SELECT pg_has_role('aquatech', 'aquatech_app', 'MEMBER')")" == "t" ]] || die "Rol aquatech mag aquatech_app niet aannemen (RLS); terug naar Supabase."
 
   log "Back-ups inschakelen"
