@@ -13,6 +13,89 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.25.1',
+      date: '2026-11-19',
+      title: 'Bulkacties in de offertelijst',
+      items: [
+        { text: 'In het offerteoverzicht kun je meerdere offertes aanvinken: exporteer alleen de selectie naar Excel of sluit alle open offertes in één keer af als afgewezen.', for: ['offertes'] },
+      ],
+    },
+    {
+      version: '1.25.0',
+      date: '2026-11-19',
+      title: 'Beheer-code overzichtelijker opgedeeld',
+      items: [],
+    },
+    {
+      version: '1.24.9',
+      date: '2026-11-19',
+      title: 'MCP-tools in kleinere bestanden',
+      items: [],
+    },
+    {
+      version: '1.24.8',
+      date: '2026-11-19',
+      title: 'Webshop-kop netjes uitgelijnd',
+      items: [],
+    },
+    {
+      version: '1.24.7',
+      date: '2026-11-19',
+      title: 'Eén zoekveld voor alles',
+      items: [
+        { text: 'Bovenaan de zijbalk staat nu een zoekveld (sneltoets Ctrl+K of /) dat in één keer klanten, offertes, werkorders, facturen en artikelen doorzoekt, op naam, nummer, adres of artikelcode. Je ziet alleen de soorten waar je het recht voor hebt; een klik opent het item direct.', for: ['offertes', 'werkorders', 'facturen', 'voorraad', 'klanten'] },
+      ],
+    },
+    {
+      version: '1.24.6',
+      date: '2026-11-19',
+      title: 'Klanten zoeken houdt de server niet meer op',
+      items: [],
+    },
+    {
+      version: '1.24.5',
+      date: '2026-11-19',
+      title: 'Automatische betalingsherinneringen en aanmaningen',
+      items: [
+        { text: 'AquaTech mailt de klant nu automatisch een betalingsherinnering en aanmaningen als een factuur over de vervaldatum is. Je stelt het in onder Beheer > Modules > Facturen: betalingsherinneringen (aan/uit, na hoeveel dagen per stap). Standaard staat het uit.', for: ['facturen', 'beheer'] },
+        { text: 'Op de factuur zie je welke herinnering of aanmaning is verstuurd, en in de lijst staat de laatste stap bij de status.', for: ['facturen'] },
+        { text: 'Op de klantkaart zet je de automatische herinneringen voor één klant uit.', for: ['facturen', 'klanten'] },
+        { text: 'De teksten van de herinnering en aanmaningen pas je aan onder Mail-opmaak (groep Facturen).', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.24.4',
+      date: '2026-11-19',
+      title: 'Draaiboek voor de verhuizing naar een VPS',
+      items: [
+        { text: 'Beheer > Systeem heeft een afvinkbaar draaiboek voor de verhuizing naar een VPS: voorbereiden, inrichten, proefverhuizing, verhuisdag, controle en terugvallen.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.24.3',
+      date: '2026-11-19',
+      title: 'Kengetallen op het beheerdersdashboard',
+      items: [
+        { text: 'Het startscherm toont voor beheerders vier kengetallen: openstaand bedrag, vervallen facturen, open offertes en de bezetting van deze week.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.24.2',
+      date: '2026-11-19',
+      title: 'Betaallink in de factuurmail',
+      items: [
+        { text: 'De factuurmail bevat een link waarmee de klant de factuur direct online kan betalen (iDEAL en andere methodes via Mollie), ook zonder in te loggen. Na betaling staat de factuur automatisch op betaald.', for: ['facturen'] },
+      ],
+    },
+    {
+      version: '1.24.1',
+      date: '2026-11-19',
+      title: 'Mail versturen via Microsoft 365 (Graph)',
+      items: [
+        { text: 'Mail kan nu via Microsoft 365 (Graph) worden verstuurd in plaats van SMTP. Dat gaat over HTTPS, dus een geblokkeerde mailpoort bij de internetprovider is geen probleem meer. In Beheer > Instellingen > E-mail staat een stappenplan voor de app-registratie in Microsoft Entra, inclusief het beperken van de app tot één mailbox.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.24.0',
       date: '2026-11-19',
       title: 'Kleiner image en opgeschoonde documentatie',

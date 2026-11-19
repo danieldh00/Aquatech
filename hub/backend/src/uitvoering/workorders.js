@@ -797,9 +797,9 @@ function registerWorkOrderRoutes(app, ctx) {
   });
 
   // Klanten zoeken voor de klantkeuze in het werkorderformulier (tot 20, actieve klanten van de organisatie).
-  app.get('/api/workorder-customers', requireWo, requireCustomers, (req, res) => {
+  app.get('/api/workorder-customers', requireWo, requireCustomers, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    res.json({ items: ctx.searchCustomers ? ctx.searchCustomers(req, String(req.query.q || '').slice(0, 100)) : [] });
+    res.json({ items: ctx.searchCustomers ? await ctx.searchCustomers(req, String(req.query.q || '').slice(0, 100)) : [] });
   });
 
   // Koppelt werkorders zonder klantrecord aan een klant als de naam eenduidig is; de rest blijft ongekoppeld.

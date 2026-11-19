@@ -143,6 +143,7 @@
       icon: 'invoice',
       status: 'actief',
       right: 'facturen',
+      configuration: { sections: ['paymentreminders'], settings: ['paymentReminders'] },
     },
     {
       id: 'voorraad',

@@ -166,6 +166,8 @@ noemt de regel waarmee je bewust opnieuw begint.
 **Nieuwe hoofdversie van PostgreSQL**: niet automatisch (de image staat op `postgres:17`). Dump met `backup`, zet
 `POSTGRES_TAG` in `.env`, verplaats `pgdata/`, start een lege container en `restore` de back-up.
 
+**Verhuizen naar een VPS**: het afvinkbare draaiboek staat in de app (Beheer > Systeem > *Draaiboek VPS-verhuizing*).
+
 **Op de nieuwe webserver**: kopieer `/opt/apps/aquatech` (of zet een back-up terug met `restore`) en draai `db-local.sh status`
 om te controleren; er is niets aan het adres van Supabase of de host gebonden.
 

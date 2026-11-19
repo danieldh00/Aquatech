@@ -73,7 +73,7 @@ a.shop-action.shop-admin:hover { background: var(--at-shop-navy); }
 .shop-action.cart b { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--at-shop-teal); color: var(--at-white); font-size: 0.8rem; }
 
 .shop-nav { background: var(--at-white); border-top: 1px solid var(--at-line); border-bottom: 1px solid var(--at-line); }
-.nav-bar { list-style: none; margin: 0 auto; padding: 0 16px; max-width: 1200px; display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; }
+.nav-bar { list-style: none; margin: 0 auto; padding: 0 16px; max-width: 1200px; display: flex; flex-wrap: nowrap; align-items: center; justify-content: space-between; gap: 4px; }
 .nav-bar > li { flex: 0 1 auto; min-width: 0; white-space: nowrap; }
 .nav-about > a, .nav-planner > a, .nav-group > .nav-heading { overflow: hidden; text-overflow: ellipsis; }
 .nav-bar .nav-drop { white-space: normal; }
@@ -287,7 +287,7 @@ a.shop-action.shop-admin:hover { background: var(--at-shop-navy); }
 .button { border: 0; cursor: pointer; font: inherit; font-weight: 700; }
 .button.secondary { background: var(--at-white); color: var(--at-shop-navy); border: 1px solid var(--at-shop-navy); }
 .trap { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
-.nav-planner > a { display: block; margin: 6px 0; padding: 8px 18px; border-radius: 999px; color: var(--at-white); text-decoration: none; font-weight: 700; background: var(--at-shop-green-dark); }
+.nav-planner > a { display: block; margin: 6px 0; padding: 8px 18px; border-radius: 999px; color: var(--at-white); text-decoration: none; font-weight: 600; font-size: 0.85rem; letter-spacing: 0.03em; text-transform: uppercase; background: var(--at-shop-green-dark); }
 .nav-planner > a:hover { background: var(--at-shop-navy-dark); }
 
 /* Telefoon: twee producten naast elkaar. */

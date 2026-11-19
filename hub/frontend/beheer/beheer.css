@@ -354,6 +354,17 @@ dl.kv dd { margin: 0; }
 #ht-card { margin-bottom: 16px; }
 .ht-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
 .ht-item { padding: 8px 0; border-top: 1px solid var(--line); }
-.ht-item p { margin: 2px 0 0 26px; }
+.ht-check { display: flex; align-items: flex-start; justify-content: flex-start; gap: 10px; margin: 0; font-size: 14px; text-align: left; }
+.ht-check input { flex: none; width: auto; margin: 3px 0 0; }
+.ht-item p { margin: 2px 0 0 26px; text-align: left; }
+.ht-history { margin-bottom: 16px; font-size: 14px; }
+.ht-history summary { cursor: pointer; color: var(--muted); }
 .ht-item.done strong { text-decoration: line-through; color: var(--muted); }
 .ht-code { margin: 0 0 8px; padding: 8px 10px; overflow-x: auto; font-size: 12px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--at-preview-bg); border: 1px solid var(--line); border-radius: 6px; }
+
+/* Draaiboek VPS-verhuizing (beheer/vps-draaiboek.js) */
+.vps-plan h4 { margin: 18px 0 6px; }
+.vps-steps { list-style: none; margin: 0; padding: 0; }
+.vps-steps li { padding: 6px 0; border-top: 1px solid var(--line); font-size: 0.9rem; }
+.vps-steps .chk { align-items: flex-start; margin: 0; }
+.vps-steps code { overflow-wrap: anywhere; }

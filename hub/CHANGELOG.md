@@ -1,5 +1,60 @@
 # Changelog
 
+## 1.25.1
+
+Offertelijst (`frontend/offertes/`): selectiekolom met *alles selecteren* voor de zichtbare rijen, balk met bulkacties (*Afsluiten als afgewezen* voor concept en verzonden offertes die niet zijn omgezet, één bevestiging, per offerte `PUT /api/quotes/:id` met status; fouten per offerte worden gemeld en overgeslagen) en Excel-export van alleen de selectie. Geen nieuwe API of migratie; rechten en de vergrendeling bij een klantreactie blijven die van de bestaande route.
+
+## 1.25.0
+
+Doorlichtingspunt 34 (eerste stap): `frontend/beheer/beheer.js` (1729 regels) is verkleind door het e-mailformulier (`mail.js`, `window.BeheerMail`) en het verzendformulier (`verzending.js`, `window.BeheerVerzending`) in eigen bestanden te zetten, volgens het patroon van de andere Beheer-onderdelen. Geen gedragswijziging.
+
+## 1.24.9
+
+Doorlichtingspunt 35 (eerste stap): `mcp/mcp-tools.js` (1231 regels) is verkleind door de hulpfuncties en grenzen naar `mcp-tool-helpers.js`, de plantools (`plan_maken`, `plan_details`, `plan_omzetten`) naar `mcp-tools-plan.js` en `maak_rapport_excel` naar `mcp-tools-report.js` te verplaatsen. De volgorde van de tools en het gedrag zijn gelijk; de overige grote bestanden uit punt 35 volgen apart.
+
+## 1.24.8
+
+Navigatiebalk van de webshop verdeeld over de volle containerbreedte (Over ons links, Planner rechts, in lijn met de bovenste rij) en Planner gelijk aan Over ons qua lettergrootte en hoofdletters. Alleen `storefront.css`.
+
+## 1.24.7
+
+Globaal zoeken (`platform/global-search.js`, geen migratie): `GET /api/search?q=` (ingelogd, limiet 120 per minuut per gebruiker, `no-store`) zoekt per soort met hetzelfde recht als de module (`klanten`, `offertes` (eigen, of alle met `offertes.alle`), `werkorders`, `facturen`, `voorraad`), filtert altijd op de omgeving van de gebruiker, begrenst elke groep op 5 en geeft alleen titel, omschrijving en een `?id=`-link. Woorden (max. 5) zoeken zonder hoofdletters, `%`/`_` uit de invoer zijn onschadelijk, een exact gelijk nummer staat bovenaan. Frontend: zoekveld met resultatenpaneel in `shared/sidebar.js|.css` (pijltjestoetsen, Enter, Escape, Ctrl+K). Test: `test/global-search.test.js`.
+
+## 1.24.6
+
+Doorlichtingspunt 13 (synchrone databasebrug afbouwen), eerste stap: `store.listCustomerPageAsync` voert de totaal- en paginaquery van het klantenoverzicht tegelijk uit via `db.async` (pool bij PostgreSQL). `GET /api/customers`, `GET /api/quote-customers` en `GET /api/workorder-customers` gebruiken die; de hoofdthread staat tijdens de zoekopdracht (LIKE over zes kolommen) niet meer stil. De synchrone `listCustomerPage` blijft voor de AI-koppeling (MCP). Beide delen één querybouwer (`customerPageQueries`).
+
+## 1.24.5
+
+- Nieuw: `verkoop/payment-reminders.js` (instelling `paymentReminders`, `liveOnly`; store, uurlijkse runner `app.locals.paymentRemindersAll`). Stappen herinnering (7 dgn), aanmaning (21), laatste aanmaning (35, standaard uit); alleen de laatst passende stap, nooit dubbel (unieke rij per factuur+stap), niet bij betaald, gecrediteerd, klant uit, ouder dan `stopAfterDays` (90). Factuur-PDF als bijlage; Engelse facturen krijgen Engelse tekst (`DocText`).
+- Migratie: tabel `invoice_reminders` en kolom `users.reminders_off` (SQLite en PostgreSQL). Mailtypes `factuur_herinnering`, `factuur_aanmaning`, `factuur_laatste_aanmaning` in Mail-opmaak. `GET /api/invoices/:id` geeft `reminders`, de lijst `reminder`; `PATCH /api/customers/:id` accepteert `remindersOff`. Testdata en tests (`payment-reminders.test.js`).
+
+## 1.24.4
+
+Nieuwe sectie *Draaiboek VPS-verhuizing* (`beheer/index.html` formulier `s-vps`, `beheer/vps-draaiboek.js`, sectie `vps` in
+`beheer/indeling.js`, alleen zichtbaar voor wie Systeem > Updates mag zien): vaste tekst met zes fasen (tunnel, adres en
+hoofdsleutel blijven gelijk; database via back-up; proefrun met `local-db.sh restore`; oude server 14 dagen als terugval;
+mailconnector-IP, Drive, Visma en Mollie controleren; image alleen `amd64`). De vinkjes staan per browser in localStorage.
+Geen migratie, geen backend. `deploy/apps01/README.md` verwijst ernaar.
+
+## 1.24.3
+
+Blok *Kengetallen* op het dashboard (`dashboard/kpis.js`, `GET /api/kpis`, `platform/kpis.js`, geen migratie): alleen met recht
+`beheer`; elke tegel hoort bij een recht (`facturen`: openstaand bedrag incl. btw van definitieve facturen en credits, vervallen
+facturen; `offertes`: verzonden offertes zonder antwoord; `planning`: werkorders met een geplande datum in de huidige week
+(maandag-zondag, geannuleerde niet) en het aantal uitvoerders). Een aggregatiequery per tegel op `tenant_id`; de tegels linken
+naar de module. Test: `test/kpis.test.js`.
+
+## 1.24.2
+
+Betaallink in de factuurmail (geen migratie). `invoicePayments.linkFor` maakt een ondertekende link `/app/api/public/invoice-pay/<factuur>/<handtekening>` (HMAC met `vault.derive('factuur-betaallink')`, niets opgeslagen); `invoice-pay-routes.js` controleert de handtekening, de verloopdatum (`linkExpired`) en de status, start een Mollie-betaling en stuurt door; bij terugkeer (`?teruggekeerd=1`) volgt een opvraging bij Mollie. Alleen als online betalen aan staat; veld `{betaallink}` en een regel onder `{betaling}` in de standaardmail (`mail.payOnline`, nl en en). Limiet per bezoeker.
+
+## 1.24.1
+
+- `platform/mail-graph.js`: Graph-verzender (client credentials, `Mail.Send` als toepassingsmachtiging, `sendMail` met `saveToSentItems`, bericht met bijlagen tot ongeveer 3,5 MB (base64), inline afbeeldingen via `contentId`); vaste hosts `login.microsoftonline.com` en `graph.microsoft.com`, tenant- en client-ID gevalideerd, token per (tenant, app, geheim) kort onthouden.
+- `mailServer.mode` kent nu `graph` met `graphTenantId` en `graphClientId`; het clientgeheim is de versleutelde, `liveOnly` instelling `mailGraphSecret` (alleen via `/api/admin/mail`, veld `graphSecret`; `graphSecretSet` in het antwoord). Geen migratie.
+- `mailFailure` kent EGRAPH_AUTH/DENIED/MAILBOX/THROTTLED/SIZE/ERROR met advies; de bewaking controleert het token (`verify`). Tests: `createApp({ graphFetch })`.
+
 ## 1.24.0
 
 Het eindimage bevat alleen nog `backend/src` en `tools/release-info.js` (dat `update.sh` uit het image haalt); de tests en
