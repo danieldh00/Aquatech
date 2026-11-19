@@ -861,11 +861,11 @@ function registerQuoteRoutes(app, ctx) {
 
   // Klantaccounts om een offerte aan te koppelen.
   // Zoekt klanten voor de klantkeuze (tot 20, op naam, bedrijf, e-mail, telefoon of adres), met de gegevens die de offerte invult.
-  app.get('/api/quote-customers', requireQuotes, (req, res) => {
+  app.get('/api/quote-customers', requireQuotes, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     const defaultDays = defaultPaymentDays(req);
     // De betaaltermijn van de klant, of de standaard als die er niet is: de klantkeuze vult dat in op de offerte.
-    res.json({ items: ctx.searchCustomers(req, String(req.query.q || '').slice(0, 100)).map((customer) => ({ ...customer, paymentDays: customer.paymentDays ?? defaultDays })) });
+    res.json({ items: (await ctx.searchCustomers(req, String(req.query.q || '').slice(0, 100))).map((customer) => ({ ...customer, paymentDays: customer.paymentDays ?? defaultDays })) });
   });
 
   // Eigen offertes; beheerders en installateurs zien met ?all=1 die van

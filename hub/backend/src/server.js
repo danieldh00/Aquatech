@@ -2492,10 +2492,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
      * @param {string} search De zoektekst.
      * @returns {object[]} De klanten met id, gebruikersnaam, naam, bedrijf, e-mail, telefoon en adres.
      */
-    searchCustomers: (req, search) => {
+    searchCustomers: async (req, search) => {
       const tid = req.tenantId || tenant.id;
       const home = homeOf(tid);
-      return store.listCustomerPage(home === tid ? [tid] : [home, tid], { search, limit: 20, activeOnly: true }).items
+      return (await store.listCustomerPageAsync(home === tid ? [tid] : [home, tid], { search, limit: 20, activeOnly: true })).items
         .map((customer) => ({ id: customer.id, username: customer.username, displayName: customer.displayName, companyName: customer.companyName,
           email: customer.email, phone: customer.phone, address: customer.address, vatNumber: customer.vatNumber, paymentDays: customer.paymentDays, documentLanguage: customer.documentLanguage }));
     },
@@ -2512,10 +2512,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     outsourcingOf: (tid) => outsourcingStore.marks(tid),
     can: (user, right) => Roles.can(user, right),
     // Klantrecords voor de klantkeuze en de controle op een gekozen klant (zoals bij de offerte).
-    searchCustomers: (req, search) => {
+    searchCustomers: async (req, search) => {
       const tid = req.tenantId || tenant.id;
       const home = homeOf(tid);
-      return store.listCustomerPage(home === tid ? [tid] : [home, tid], { search, limit: 20, activeOnly: true }).items
+      return (await store.listCustomerPageAsync(home === tid ? [tid] : [home, tid], { search, limit: 20, activeOnly: true })).items
         .map((customer) => ({ id: customer.id, username: customer.username, displayName: customer.displayName, companyName: customer.companyName, email: customer.email, phone: customer.phone, address: customer.address }));
     },
     customerOf: (req, id) => {
