@@ -4,16 +4,17 @@
 // (voorwaardelijke update) en zet dan de factuur op betaald (invoices.setPaid, dus ook zichtbaar in de debiteuren), en roept de haken van onPaid aan.
 const crypto = require('crypto');
 const { configOf, validPaymentId, MollieError } = require('../webshop/mollie');
+const { linkExpired } = require('../platform/public-links');
 
 /** Hoe de Mollie-status bij ons heet: betaald, nog open of mislukt. */
 const MOLLIE_STATES = { paid: 'betaald', open: 'open', pending: 'open', authorized: 'open', canceled: 'mislukt', expired: 'mislukt', failed: 'mislukt' };
 
 /**
  * Maakt de betaalfuncties voor facturen.
- * @param {{ db: object, invoices: object, mollie: object, settingsFor: Function, log?: object }} deps De database, de factuuropslag, de Mollie-client en de instellingen per omgeving.
- * @returns {{ enabled: Function, payableState: Function, start: Function, sync: Function, onPaid: Function, listOwn: Function, own: Function, paymentsOf: Function }} De functies.
+ * @param {{ db: object, invoices: object, mollie: object, settingsFor: Function, linkKey?: Buffer, log?: object }} deps De database, de factuuropslag, de Mollie-client, de instellingen per omgeving en de sleutel voor de betaallinks (zonder sleutel geen links).
+ * @returns {{ enabled: Function, payableState: Function, start: Function, sync: Function, onPaid: Function, listOwn: Function, own: Function, paymentsOf: Function, linkFor: Function, publicLinkCheck: Function, appUrl: Function }} De functies.
  */
-function createInvoicePayments({ db, invoices, mollie, settingsFor, log = console }) {
+function createInvoicePayments({ db, invoices, mollie, settingsFor, linkKey = null, log = console }) {
   const paidHooks = [];
   /**
    * Bereidt een SQL-opdracht voor.
@@ -165,9 +166,10 @@ function createInvoicePayments({ db, invoices, mollie, settingsFor, log = consol
    * Zorgt dat de klant een betaalpagina heeft voor een factuur: de lopende betaling als die nog open is, anders een nieuwe.
    * @param {string} tenantId Id van de omgeving.
    * @param {object} invoice De factuur (van de klant, al gecontroleerd).
+   * @param {{ returnUrl?: string }} [options] Waar de klant na het betalen heen gaat (standaard het portaal).
    * @returns {Promise<{ checkoutUrl?: string, paid?: boolean, error?: string, status?: number }>} De betaalpagina, of paid als hij al betaald bleek, of een melding.
    */
-  async function start(tenantId, invoice) {
+  async function start(tenantId, invoice, { returnUrl = '' } = {}) {
     const config = configOf(settingsFor(tenantId));
     if (!config.online) return { error: 'Online betalen staat niet aan.', status: 409 };
     if (invoice.status === 'betaald') return { paid: true };
@@ -190,7 +192,7 @@ function createInvoicePayments({ db, invoices, mollie, settingsFor, log = consol
       const base = config.publicUrl;
       const created = await mollie.createPayment(config.apiKey, {
         amount: invoice.total, description: `Factuur ${invoice.number}`, idempotencyKey: `factuur:${invoice.id}:${attempts.length + 1}`,
-        redirectUrl: `${base}app/portaal/?betaald=${encodeURIComponent(invoice.id)}`,
+        redirectUrl: returnUrl || `${base}app/portaal/?betaald=${encodeURIComponent(invoice.id)}`,
         webhookUrl: `${base}app/api/public/invoice-payment/${encodeURIComponent(invoice.id)}/webhook`,
         metadata: { invoiceId: invoice.id, number: invoice.number },
       });
@@ -208,7 +210,52 @@ function createInvoicePayments({ db, invoices, mollie, settingsFor, log = consol
     }
   }
 
-  return { enabled, payableState, start, sync, onPaid, listOwn, own, paymentsOf };
+  /**
+   * De handtekening van een betaallink: HMAC over omgeving en factuur-id, zodat de link niet te raden is en niets hoeft te worden bewaard.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} invoiceId Id van de factuur.
+   * @returns {string} 32 tekens (base64url).
+   */
+  const signatureOf = (tenantId, invoiceId) => crypto.createHmac('sha256', linkKey).update(`${tenantId}:${invoiceId}`).digest('base64url').slice(0, 32);
+
+  /**
+   * Een adres in de app volgens het webadres uit Beheer.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} appPath Pad na `app/`, zonder slash vooraan.
+   * @returns {string} Het volledige adres.
+   */
+  const appUrl = (tenantId, appPath) => `${configOf(settingsFor(tenantId)).publicUrl}app/${appPath}`;
+
+  /**
+   * De persoonlijke betaallink voor in de factuurmail, alleen voor een factuur die nu online betaald kan worden en met het webadres uit Beheer.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} invoice De factuur.
+   * @returns {string} Het adres, of een lege tekst als er geen link kan zijn.
+   */
+  function linkFor(tenantId, invoice) {
+    if (!linkKey || !payableState(tenantId, invoice)) return '';
+    return appUrl(tenantId, `api/public/invoice-pay/${encodeURIComponent(invoice.id)}/${signatureOf(tenantId, invoice.id)}`);
+  }
+
+  /**
+   * Controleert een betaallink uit een mail en geeft de factuur terug.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} invoiceId Id van de factuur uit het adres.
+   * @param {string} signature De handtekening uit het adres.
+   * @returns {{ invoice?: object, error?: 'invalid'|'expired' }} De factuur, of waarom de link niet werkt.
+   */
+  function publicLinkCheck(tenantId, invoiceId, signature) {
+    if (!linkKey) return { error: 'invalid' };
+    const expected = Buffer.from(signatureOf(tenantId, String(invoiceId)));
+    const given = Buffer.from(String(signature));
+    if (expected.length !== given.length || !crypto.timingSafeEqual(expected, given)) return { error: 'invalid' };
+    const invoice = invoices.get(tenantId, String(invoiceId));
+    if (!invoice || invoice.kind !== 'factuur' || invoice.status === 'concept') return { error: 'invalid' };
+    if (linkExpired({ sharedAt: invoice.finalizedAt, referenceDate: invoice.dueDate })) return { error: 'expired' };
+    return { invoice };
+  }
+
+  return { enabled, payableState, start, sync, onPaid, listOwn, own, paymentsOf, linkFor, publicLinkCheck, appUrl };
 }
 
 module.exports = { createInvoicePayments };
