@@ -178,16 +178,16 @@
         renderBulkBar();
       };
     });
-    const all = table.querySelector('input[data-select-all]');
-    if (all) {
+    const selectAllBox = table.querySelector('input[data-select-all]');
+    if (selectAllBox) {
       /**
        * Voorkomt dat een klik op het vinkje iets anders doet.
        * @param {MouseEvent} event de klik
        */
-      all.onclick = (event) => { event.stopPropagation(); };
+      selectAllBox.onclick = (event) => { event.stopPropagation(); };
       /** Selecteert alle zichtbare facturen of heft de selectie op. */
-      all.onchange = () => {
-        for (const invoice of items) { if (all.checked) state.selected.add(invoice.id); else state.selected.delete(invoice.id); }
+      selectAllBox.onchange = () => {
+        for (const invoice of items) { if (selectAllBox.checked) state.selected.add(invoice.id); else state.selected.delete(invoice.id); }
         renderList();
       };
     }
@@ -255,7 +255,7 @@
       state.bulkBusy = false;
       $('#l-bulk-clear').disabled = false;
     }
-    await load();
+    try { await load(); } catch (error) { skipped.push(`overzicht verversen mislukt: ${error.message}`); renderList(); }
     toast(`${done} ${done === 1 ? 'factuur' : 'facturen'} verstuurd${skipped.length ? `; overgeslagen: ${skipped.join('; ')}` : ''}`, skipped.length > 0);
   }
 
