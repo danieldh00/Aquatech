@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.22.0',
+      date: '2026-11-19',
+      title: 'Tabellen op mobiel houden de artikelkolom in beeld',
+      items: [
+        { text: 'Op een telefoon blijft in alle tabellen de eerste kolom (artikel, nummer of naam) links staan als je de rest opzij schuift, zodat je altijd ziet om welk item het gaat.' },
+      ],
+    },
+    {
       version: '1.21.9',
       date: '2026-11-19',
       title: 'Levertijd zichtbaar in shop, mail en Beheer',

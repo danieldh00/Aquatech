@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.22.0
+
+Gedeelde oplossing in `shared/brand.css` (onder 700 px): in elke `.tablewrap`-tabel is de identificerende kolom sticky (de eerste, of de tweede als de eerste een selectievakje heeft), compact (max. 46vw/190 px, omschrijvingen wrappen) en met opake achtergrond en schaduw. `AquatechCommon.wrapWideTables` (`shared/common.js`) zet tabellen die buiten een `.tablewrap` te breed worden (planner, klantdossier, back-up terugzetten, enz.) in een scrollbare wikkel. Desktop ongewijzigd; geen migratie. De begrenzing van de vaste kolom (`max-width` op de cel) is gemeten in Chromium op 375 px met een lange artikelnaam. De selectors gebruiken `:has()`; in een browser zonder `:has` (Firefox vóór 121, Safari vóór 15.4) valt de regel weg en schuift de tabel zoals voorheen.
+
 ## 1.21.9
 
 Levertijd tonen (fase 3 van de levermethode-spec): `delivery-times.js` (`etaPhrase`, `etaSentence`) en `delivery-rules.js` (`describeRules`); nieuw invulveld `{levertijd}` in de mailtypes *Orderbevestiging* (online betaald en op rekening; leeg bij afhalen of zonder levertijd), aanvulling in de melding aan het bedrijf; blok *Verwachte levertijd* op de bestelpagina (alleen bij status nieuw, zonder volgcode); beperking per artikel op de productpagina (`leadInfoOf` geeft ook de regels van artikel en hoofdartikel); `GET /api/stock/items/:id/delivery-preview` (recht `voorraad`, `webshop/delivery-preview.js`) en overzicht in het artikelformulier; levermethode en levertijd bij een bestelling in Beheer en kolom *Levertijd bij bestellen* in de Excel. Geen migratie.
