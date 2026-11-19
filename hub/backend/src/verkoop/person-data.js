@@ -224,7 +224,7 @@ function createPersonData(db, store) {
         { topic: 'Organisatie', text: organization },
         { topic: 'Opgesteld op', text: new Date().toISOString().slice(0, 10) },
         { topic: 'Inhoud', text: 'Alle persoonsgegevens die onze administratie van deze persoon bevat: account, offertes, werkorders, facturen, bestellingen, retouren, meldingen, plannen, debiteurgegevens, voorraadmeldingen en inlogactiviteit.' },
-        { topic: 'Niet in dit bestand', text: 'Foto\'s bij werkorders en meldingen (die worden bij wissen wel verwijderd), en wachtwoorden en beveiligingsgegevens (die staan versleuteld of als hash en zijn niet leesbaar). Vraag de beheerder om foto\'s apart aan te leveren.' },
+        { topic: 'Niet in dit bestand', text: 'Foto\'s bij werkorders en meldingen (die worden bij wissen verwijderd; uren en materiaal blijven, zonder vrije tekst), en wachtwoorden en beveiligingsgegevens (die staan versleuteld of als hash en zijn niet leesbaar). Vraag de beheerder om foto\'s apart aan te leveren.' },
         { topic: 'Bewaarplicht', text: 'Definitieve facturen en de stukken waarop ze rusten bewaren we zeven jaar (fiscale bewaarplicht); die kunnen niet gewist worden.' },
         { topic: 'Gastbestellingen', text: 'Bestellingen zonder account zijn alleen aan deze persoon gekoppeld als het e-mailadres van de klant bevestigd is.' },
         { topic: 'Beperking', text: `Elk tabblad toont hoogstens ${EXPORT_LIMIT} regels (nieuwste eerst).` },
@@ -306,6 +306,8 @@ function createPersonData(db, store) {
       seenWorkOrders.add(row.id);
       if (keep.workOrderIds.has(row.id)) { counts.kept.workOrders += 1; continue; }
       prepare('DELETE FROM work_order_photos WHERE tenant_id = ? AND work_order_id = ?').run(tenantId, row.id);
+      // Uren en materiaal blijven (urenstaat, voorraad); alleen de vrije tekst gaat weg.
+      for (const table of ['work_order_hours', 'work_order_materials']) prepare(`UPDATE ${table} SET note = '' WHERE tenant_id = ? AND work_order_id = ?`).run(tenantId, row.id);
       prepare(`UPDATE work_orders SET customer = ?, address = '', customer_id = NULL, sent_to = NULL, share_hash = NULL, share_token = NULL, share_url = NULL, appointment = NULL, data = ?
         WHERE tenant_id = ? AND id = ?`).run(ANONYMOUS_NAME, scrubbed(row.data, scrubDocumentData), tenantId, row.id);
       counts.workOrders += 1;
