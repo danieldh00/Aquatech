@@ -233,6 +233,7 @@ test('servertaken.sh schijf: de draaiende en de twee nieuwste versies blijven, d
   assert.strictEqual(fs.readFileSync(path.join(setup.appDir, 'update.sh'), 'utf8'), fs.readFileSync(SCRIPT, 'utf8'), 'update.sh op de server is bijgewerkt');
   assert.ok(fs.readdirSync(setup.appDir).some((name) => name.startsWith('update.sh.bak-')), 'de oude blijft als back-up staan');
   assert.match(run.stdout, /update\.sh bijgewerkt/);
+  assert.strictEqual(run.status, 0, 'ook zonder eerdere update.sh.bak-bestanden gaat het opruimen door');
   const again = spawnSync('bash', [servertaken, 'schijf-run'], { env, encoding: 'utf8', timeout: 30000 });
   assert.match(again.stdout, /al de nieuwste/);
   const unpinned = spawnSync('bash', [servertaken, 'schijf-run'], { env: { ...env, UPDATE_SH_REF: '' }, encoding: 'utf8', timeout: 30000 });

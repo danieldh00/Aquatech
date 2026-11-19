@@ -345,7 +345,7 @@ refresh_update_script() {
   cp -a "$APP_DIR/update.sh" "$APP_DIR/update.sh.bak-$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
   install -m 755 "$tmp" "$APP_DIR/update.sh" && echo "  update.sh bijgewerkt (oude als update.sh.bak-<datum> bewaard)"
   # Alleen de laatste drie back-ups van update.sh bewaren.
-  ls -1t "$APP_DIR"/update.sh.bak-* 2>/dev/null | tail -n +4 | xargs -r rm -f --
+  { ls -1 "$APP_DIR"/update.sh.bak-* 2>/dev/null || true; } | sort | head -n -3 | xargs -r rm -f --
   rm -f "$tmp"
 }
 # Ruimt veilig op: oude app-images (de draaiende versie en de twee nieuwste blijven), ongebruikte images, build-cache,
