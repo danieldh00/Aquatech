@@ -79,6 +79,11 @@ test('zoeken: rechten per soort, eigen omgeving, geen resultaat bij te korte tek
     assert.deepStrictEqual((await anne.get('/app/api/search?q=g')).body.groups, []);
     assert.deepStrictEqual((await anne.get('/app/api/search?q=%25')).body.groups, []);
     assert.deepStrictEqual((await anne.get('/app/api/search?q=_____')).body.groups, []);
+    // Een uitgezette module wordt niet doorzocht: geen resultaten en geen links naar een onbereikbare module.
+    assert.strictEqual((await anne.put('/app/api/admin/settings', { modules: { voorraad: false, facturen: false } })).status, 200);
+    const reduced = groupsOf(await anne.get('/app/api/search?q=groen'));
+    assert.ok(!reduced.includes('artikelen') && !reduced.includes('facturen') && reduced.includes('offertes'), reduced.join());
+    assert.strictEqual((await anne.put('/app/api/admin/settings', { modules: { voorraad: true, facturen: true } })).status, 200);
     // Een andere omgeving ziet de resultaten van deze niet.
     await store.createAccount(other.id, { username: 'bram', displayName: 'Bram', role: 'beheerder', password: PW });
     const bram = await as('bram', 'blauw');

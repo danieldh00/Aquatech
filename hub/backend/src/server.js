@@ -2470,6 +2470,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // Globaal zoeken (platform/global-search.js): klanten, offertes, werkorders, facturen en artikelen in één zoekveld.
   const globalSearch = createGlobalSearch(database, {
+    // Een uitgezette module (Modules aan/uit) wordt niet doorzocht.
+    moduleOn: (tenantId, moduleId) => ModuleTools.isOn(moduleFlagsOf(tenantId), moduleId),
     // Klanten horen bij de live-tenant; in een testomgeving komen de testklanten daarvan erbij (zoals tenantsOf hierboven).
     searchCustomers: (user, text, limit) => {
       const home = homeOf(user.tenant_id);
