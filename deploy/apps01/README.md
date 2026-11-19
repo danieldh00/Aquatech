@@ -9,7 +9,7 @@ Productie draait op de VM `apps01` (Debian 13, Docker) in `/opt/apps/aquatech`:
 | `.env` | `AQUATECH_TAG`, `TZ`, `TUNNEL_TOKEN`, `COMPOSE_PROFILES=tunnel` (niet in git) |
 | `data/` | `/data` van de container (sessiesleutel, back-ups; `aquatech.db` alleen nog als SQLite-terugval) |
 | `secrets/master-key` | hoofdsleutel (uid 1000, mode 400; kopie in wachtwoordkluis) |
-| `secrets/database-url` | verbindings-URL van Supabase met wachtwoord (uid 1000, mode 400) |
+| `secrets/database-url` | terugvaloptie: verbindings-URL van Supabase met wachtwoord (uid 1000, mode 400); productie gebruikt `database-url-local` |
 | `compose.localdb.yml` | alleen met eigen PostgreSQL: de database-container naast de app (`.env`: `COMPOSE_FILE=compose.yml:compose.localdb.yml`) |
 | `pgdata/` | alleen met eigen PostgreSQL: de databasebestanden (root/uid 999) |
 | `secrets/database-url-local` | alleen met eigen PostgreSQL: verbindings-URL van de app naar de eigen database (uid 1000, mode 400) |
@@ -25,7 +25,7 @@ Productie draait op de VM `apps01` (Debian 13, Docker) in `/opt/apps/aquatech`:
 2. `.github/workflows/release.yml`: tests → image bouwen → smoketest →
    push naar `ghcr.io/danieldh00/aquatech:<versie>` en `:latest`.
 3. Op de VM draait `aquatech-update.timer` elke 15 minuten `update.sh`:
-   nieuwere versie op `:latest` → back-up (Supabase: `backup.js create` naar
+   nieuwere versie op `:latest` → back-up (PostgreSQL: `backup.js create` naar
    `data/backups`; SQLite: kopie in `pre-update/`) → container vervangen →
    wachten op healthy, anders automatisch terug naar de vorige versie.
 
@@ -169,10 +169,10 @@ noemt de regel waarmee je bewust opnieuw begint.
 **Op de nieuwe webserver**: kopieer `/opt/apps/aquatech` (of zet een back-up terug met `restore`) en draai `db-local.sh status`
 om te controleren; er is niets aan het adres van Supabase of de host gebonden.
 
-## Supabase (PostgreSQL)
+## Supabase (PostgreSQL, terugvaloptie)
 
-Productie draaide sinds 2026-10-20 op Supabase (schema `aquatech`, Session
-pooler). `compose.yml` hierboven heeft `DATABASE_URL_FILE` daarom aan.
+Productie draaide van 2026-10-20 tot de overstap naar de eigen PostgreSQL-container op Supabase (schema `aquatech`, Session
+pooler); dit blijft een terugvaloptie (zie *Eigen PostgreSQL* hierboven). `compose.yml` heeft `DATABASE_URL_FILE`.
 
 Overstap (al gedaan; voor een nieuwe server): vanaf de Proxmox-host, of zonder
 `ssh` in de console van de VM. Vraagt host van de Session pooler en het
