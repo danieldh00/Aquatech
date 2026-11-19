@@ -1530,6 +1530,11 @@ const MIGRATIONS = [
   CREATE UNIQUE INDEX invoice_payments_mollie ON invoice_payments (tenant_id, mollie_id);
   CREATE INDEX invoice_payments_invoice ON invoice_payments (tenant_id, invoice_id, created_at);
   `,
+  // 85: opvolging van offertes zonder reactie (verkoop/quote-follow-up.js): hoeveel herinneringen er zijn verstuurd en wanneer de laatste ging.
+  `
+  ALTER TABLE quotes ADD COLUMN followup_count INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE quotes ADD COLUMN followup_at TEXT;
+  `,
 ];
 
 /**

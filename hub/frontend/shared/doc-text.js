@@ -61,6 +61,8 @@
       'mail.confirmNext': 'Wij nemen contact met u op om de werkzaamheden in te plannen.', 'mail.confirmButton': 'Geaccordeerde offerte bekijken',
       'mail.quoteQuestions': 'Heeft u vragen, neem dan gerust contact met ons op.', 'mail.quoteAboutLower': ' voor {title}',
       'mail.greeting': 'Beste {name},', 'mail.closing': 'Met vriendelijke groet,', 'mail.sendButton': 'Offerte bekijken en accorderen',
+      'mail.followUpSubject': 'Herinnering: offerte {number}', 'mail.followUpBody': 'Enkele dagen geleden stuurden wij u onze offerte {number}{about}. Wij hebben nog geen reactie van u ontvangen en vragen ons af of u de offerte al heeft kunnen bekijken. Via de knop hieronder opent u de offerte online en kunt u direct digitaal akkoord geven.',
+      'mail.followUpValid': 'De offerte is geldig tot {date}.',
     },
     en: {
       'section.materiaal': 'Materials', 'section.arbeid': 'Labour', 'section.overig': 'Other',
@@ -110,6 +112,8 @@
       'mail.confirmNext': 'We will contact you to schedule the work.', 'mail.confirmButton': 'View approved quotation',
       'mail.quoteQuestions': 'If you have any questions, please do not hesitate to contact us.', 'mail.quoteAboutLower': ' for {title}',
       'mail.greeting': 'Dear {name},', 'mail.closing': 'Kind regards,', 'mail.sendButton': 'View and approve quotation',
+      'mail.followUpSubject': 'Reminder: quotation {number}', 'mail.followUpBody': 'A few days ago we sent you our quotation {number}{about}. We have not received a reply yet and wonder whether you have had a chance to look at it. Use the button below to open the quotation online and approve it digitally right away.',
+      'mail.followUpValid': 'The quotation is valid until {date}.',
     },
   };
 
