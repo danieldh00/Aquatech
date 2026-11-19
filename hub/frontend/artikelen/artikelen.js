@@ -406,7 +406,7 @@
   }
 
   /** De tabbladen, ook als #-adres (de zijbalk onder Inkoop wijst naar moves, reorder, suppliers en orders). */
-  const TABS = ['stock', 'reserved', 'moves', 'reorder', 'suppliers', 'orders', 'pricefactor', 'media', 'texts'];
+  const TABS = ['stock', 'reserved', 'moves', 'reorder', 'suppliers', 'orders', 'pricefactor', 'counts', 'media', 'texts'];
 
   /**
    * Tekent het bestelvoorstel op het scherm: per leverancier de artikelen die onder het minimum zitten.
@@ -440,6 +440,7 @@
     if (name === 'suppliers') window.ArtikelenSuppliers.load().catch((error) => toast(error.message, true));
     if (name === 'orders') window.ArtikelenOrders.load().catch((error) => toast(error.message, true));
     if (name === 'pricefactor') window.ArtikelenPriceFactor.load().catch((error) => toast(error.message, true));
+    if (name === 'counts') window.ArtikelenCounts.load().catch((error) => toast(error.message, true));
     if (name === 'texts') window.ArtikelenTexts.load().catch((error) => toast(error.message, true));
     if (name === 'media') loadMedia().catch((error) => toast(error.message, true));
     try { history.replaceState(null, '', `./#${name}`); } catch { /* file:// */ }
@@ -1606,6 +1607,7 @@
       pricingForm.addEventListener('reset', () => setTimeout(() => syncPricing(pricingForm)));
     }
     window.ArtikelenTexts.setup({ api, toast, esc, openItem: (id) => openItem(id, true), reloadItem: () => reloadItem() });
+    window.ArtikelenCounts.setup({ api, toast, esc, nl, eur, workbook, save, stamp });
     window.ArtikelenPriceFactor.setup({ api, toast, esc, nl, eur, workbook, save, stamp });
     window.ArtikelenOrders.setup({ api, toast, esc, nl, eur, getItems: () => state.items, workbook, save, stamp, afterProposal: () => loadReorder().catch((error) => toast(error.message, true)) });
     window.ArtikelenProposals.setup({
