@@ -1510,6 +1510,7 @@ const MIGRATIONS = [
   // `first_at` = eerste keer (leeg = één keer voorgekomen).
   `
   ALTER TABLE app_logs ADD COLUMN first_at TEXT;
+  `,
   // 84: automatische betalingsherinneringen en aanmaningen (verkoop/payment-reminders.js): per factuur welke stap is verstuurd (of bewust
   // overgeslagen) en per klant een schakelaar om ze uit te zetten (users.reminders_off, 1 = geen herinneringen voor deze klant).
   `
