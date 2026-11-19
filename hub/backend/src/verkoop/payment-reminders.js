@@ -326,10 +326,10 @@ function createPaymentReminderRunner(reminders, { invoices, sender, settingsFor,
         // Eerst reserveren: pas mailen als deze stap echt van ons is (nooit dubbel, ook niet bij een databasefout of herstart na het mailen).
         if (!reminders.claim(tenantId, invoice.id, target.key, daysOverdue)) continue;
         budget--;
-        const values = { ...sender.values(tenantId, invoice), dagen_te_laat: String(daysOverdue) };
-        const language = DocText.clean(invoice.data.language);
-        const composed = compose(settings, target, language, values);
         try {
+          // Ook het samenstellen valt binnen de try: een fout bij één factuur geeft de reservering vrij en laat de rest van de ronde doorgaan.
+          const values = { ...sender.values(tenantId, invoice), dagen_te_laat: String(daysOverdue) };
+          const composed = compose(settings, target, DocText.clean(invoice.data.language), values);
           await mailer.send({
             to: [to], replyTo: profile.email, subject: composed.subject,
             ...mailBody(profile, composed.paragraphs, undefined, mailStyleOf(settings)),
