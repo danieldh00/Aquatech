@@ -129,7 +129,7 @@ function validSignature(dataUrl) {
  * Maakt de opslag voor offertes, met de openbare link en het akkoord van de klant.
  * @param {object} db De database.
  * @param {{ vault?: object }} [options] De kluis voor het versleutelde linktoken.
- * @returns {object} list, get, create, update, respond, decide, share, unshare, markSent, byToken, markViewed, publicView, shareLink, remove, purge, acceptedNumber en nextNumber.
+ * @returns {object} list, get, create, update, respond, decide, share, unshare, markSent, followUpDue, claimFollowUp, releaseFollowUp, byToken, markViewed, publicView, shareLink, remove, purge, acceptedNumber en nextNumber.
  */
 function createQuoteStore(db, { vault = createVault() } = {}) {
   /**
@@ -288,7 +288,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
   // De volledige rij (met de naam van het klantaccount) in één query.
   const FULL_SQL = `SELECT q.id, q.tenant_id, q.owner_id, q.plan_id, q.number, q.status, q.title, q.customer, q.total_excl, q.total_incl,
       q.data, q.created_at, q.updated_at, q.customer_id, q.share_hash, q.share_token, q.share_url, q.shared_at, q.viewed_at,
-      q.last_viewed_at, q.view_count, q.sent_at, q.sent_to, q.responded_at, q.acceptance, q.order_id, q.converted_at, o.number AS order_number, c.display_name AS customer_name
+      q.last_viewed_at, q.view_count, q.sent_at, q.sent_to, q.followup_count, q.followup_at, q.responded_at, q.acceptance, q.order_id, q.converted_at, o.number AS order_number, c.display_name AS customer_name
     FROM quotes q LEFT JOIN users c ON c.id = q.customer_id LEFT JOIN web_orders o ON o.tenant_id = q.tenant_id AND o.id = q.order_id`;
   /**
    * De volledige offerterij (met de naam van het klantaccount).
@@ -509,7 +509,48 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
    * @param {string} to De ontvangers.
    */
   function markSent(id, to) {
-    prepare("UPDATE quotes SET sent_at = ?, sent_to = ?, status = CASE WHEN status = 'concept' THEN 'verzonden' ELSE status END WHERE id = ?").run(currentTimestamp(), String(to).slice(0, 400), id);
+    // Opnieuw mailen start de opvolging opnieuw (aantal en tijdstip van de herinneringen terug op nul).
+    prepare("UPDATE quotes SET sent_at = ?, sent_to = ?, followup_count = 0, followup_at = NULL, status = CASE WHEN status = 'concept' THEN 'verzonden' ELSE status END WHERE id = ?").run(currentTimestamp(), String(to).slice(0, 400), id);
+  }
+
+  /**
+   * Verzonden offertes zonder antwoord waarvan de laatste mail (of herinnering) lang genoeg geleden is voor een herinnering.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} cutoff Tijdstip (ISO): alleen offertes waarvan de laatste mail op of voor dit moment ging.
+   * @param {number} maxReminders Hoogstens zoveel herinneringen per offerte.
+   * @param {number} limit Maximaal aantal offertes.
+   * @param {string} [oldest] Tijdstip (ISO): offertes die vóór dit moment zijn verstuurd krijgen geen herinnering meer (voorkomt een bulkmail naar oude offertes bij het aanzetten).
+   * @returns {object[]} De volledige offerterijen, oudste eerst.
+   */
+  function followUpDue(tenantId, cutoff, maxReminders, limit, oldest = '') {
+    return prepare(`${FULL_SQL} WHERE q.tenant_id = ? AND q.deleted_at IS NULL AND q.status = 'verzonden' AND q.acceptance IS NULL
+      AND q.sent_at IS NOT NULL AND q.sent_to IS NOT NULL AND q.followup_count < ? AND COALESCE(q.followup_at, q.sent_at) <= ? AND q.sent_at >= ?
+      ORDER BY COALESCE(q.followup_at, q.sent_at) LIMIT ?`).all(tenantId, maxReminders, cutoff, oldest, limit);
+  }
+
+  /**
+   * Legt een herinnering vast voordat hij wordt verstuurd; lukt dat niet (een andere ronde was eerst, of de offerte is intussen
+   * beantwoord), dan wordt er niets verstuurd.
+   * @param {object} quoteRow De rij uit followUpDue.
+   * @param {string} at Tijdstip van de herinnering (ISO).
+   * @param {number} [finalCount] Zet het aantal direct op dit getal (offerte voorgoed overslaan) in plaats van één erbij.
+   * @returns {boolean} True als deze aanroep de herinnering heeft vastgelegd.
+   */
+  function claimFollowUp(quoteRow, at, finalCount) {
+    const count = Number(quoteRow.followup_count) || 0;
+    return prepare("UPDATE quotes SET followup_count = ?, followup_at = ? WHERE tenant_id = ? AND id = ? AND followup_count = ? AND status = 'verzonden' AND acceptance IS NULL")
+      .run(finalCount === undefined ? count + 1 : finalCount, at, quoteRow.tenant_id, quoteRow.id, count).changes > 0;
+  }
+
+  /**
+   * Draait een vastgelegde herinnering terug als het versturen mislukte.
+   * @param {object} quoteRow De rij uit followUpDue (met de oude stand).
+   * @returns {void}
+   */
+  function releaseFollowUp(quoteRow) {
+    const count = Number(quoteRow.followup_count) || 0;
+    prepare('UPDATE quotes SET followup_count = ?, followup_at = ? WHERE tenant_id = ? AND id = ? AND followup_count = ?')
+      .run(count, quoteRow.followup_at || null, quoteRow.tenant_id, quoteRow.id, count + 1);
   }
 
   /**
@@ -601,7 +642,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
     return prepare('DELETE FROM quotes WHERE tenant_id = ? AND id = ?').run(tenantId, String(id)).changes > 0;
   }
 
-  return { list, get, create, update, respond, decide, share, unshare, markSent, byToken, markViewed, publicView, shareLink, remove, purge, acceptedNumber, isConverted, nextNumber };
+  return { list, get, create, update, respond, decide, share, unshare, markSent, followUpDue, claimFollowUp, releaseFollowUp, byToken, markViewed, publicView, shareLink, remove, purge, acceptedNumber, isConverted, nextNumber };
 }
 
 /**
