@@ -325,3 +325,15 @@ test('buitenlandse klant: VIES onbereikbaar laat de adrescontrole gelden; een an
   const planner = await as('planner1');
   assert.strictEqual((await planner.post('/app/api/customers', { displayName: 'X' })).status, 403);
 });
+
+test('betalingsherinneringen per klant uitzetten: alleen met het recht klanten, niet bij een andere organisatie', async () => {
+  const { installer, as } = await setup();
+  const id = (await installer.post('/app/api/customers', { displayName: 'Herinnering Klant' })).body.customer.id;
+  assert.strictEqual((await installer.get(`/app/api/customers/${id}`)).body.customer.remindersOff, false);
+  const off = await installer.patch(`/app/api/customers/${id}`, { remindersOff: true });
+  assert.strictEqual(off.status, 200, JSON.stringify(off.body));
+  assert.strictEqual(off.body.customer.remindersOff, true);
+  assert.strictEqual((await installer.patch(`/app/api/customers/${id}`, { remindersOff: false })).body.customer.remindersOff, false);
+  assert.strictEqual((await (await as('planner1')).patch(`/app/api/customers/${id}`, { remindersOff: true })).status, 403, 'zonder recht klanten');
+  assert.strictEqual((await (await as('vreemd', 'ander')).patch(`/app/api/customers/${id}`, { remindersOff: true })).status, 404, 'andere organisatie');
+});

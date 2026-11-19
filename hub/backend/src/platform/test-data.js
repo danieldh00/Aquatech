@@ -605,7 +605,7 @@ function sitePhotoPng(kind = 'oplevering', seed = 1, imageWidth = 480, imageHeig
  * @returns {object} Aantallen per soort aangemaakte gegevens.
  */
 function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
-  const { db, quotes, quoteOrders, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, suppliers, packagings, purchaseOrders, itemImages, requests, invoices, sprinklers, seasonReminders } = stores;
+  const { db, quotes, quoteOrders, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, suppliers, packagings, purchaseOrders, itemImages, requests, invoices, sprinklers, seasonReminders, paymentReminders } = stores;
   /**
    * Bereidt een SQL-opdracht voor.
    * @param {string} sql De SQL.
@@ -989,6 +989,12 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
         { workOrderId: workOrder.id, quoteId: quote ? quote.id : null, customerId: quote ? quote.customerId : null });
       if (invoiceIndex < 2) invoices.finalize(tenantId, admin, invoice.id, conf);
       if (invoiceIndex === 0) invoices.setPaid(tenantId, invoice.id, true, InvCore.addDays(date, 9));
+      // Online betalen (invoice-payments.js): de eerste factuur is via Mollie betaald, bij de tweede is een betaling niet gelukt.
+      if (invoiceIndex < 2) {
+        const total = invoices.get(tenantId, invoice.id).total;
+        prepare('INSERT INTO invoice_payments (id, tenant_id, invoice_id, mollie_id, status, amount, method, mode, created_at, paid_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .run(crypto.randomUUID(), tenantId, invoice.id, `tr_testdata${invoiceIndex}`, invoiceIndex === 0 ? 'betaald' : 'mislukt', total, invoiceIndex === 0 ? 'ideal' : '', 'test', `${date}T10:00:00.000Z`, invoiceIndex === 0 ? `${InvCore.addDays(date, 9)}T10:00:00.000Z` : null);
+      }
       made.push(invoice);
     });
     if (made[0]) invoices.credit(tenantId, admin, made[0].id, conf);
@@ -1012,6 +1018,8 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
     const shopInv = invoices.create(tenantId, admin, order.data, conf, { shopOrderId: '9001' });
     invoices.finalize(tenantId, admin, shopInv.id, conf, { skipStock: true });
     invoices.setPaid(tenantId, shopInv.id, true, order.paidOn);
+    // Een verstuurde betalingsherinnering bij de openstaande factuur over de vervaldatum.
+    if (paymentReminders && made[1]) paymentReminders.record(tenantId, made[1].id, 'herinnering', { sentTo: 'klant@voorbeeld.test', daysOverdue: 7 });
     counts.invoices = prepare('SELECT COUNT(*) AS n FROM invoices WHERE tenant_id = ?').get(tenantId).n;
     counts.debtors = prepare('SELECT COUNT(*) AS n FROM debtors WHERE tenant_id = ?').get(tenantId).n;
   }

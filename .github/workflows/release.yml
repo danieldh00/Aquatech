@@ -75,7 +75,7 @@ jobs:
           done
           echo "ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-  # Productie draait op Supabase: dezelfde tests ook tegen PostgreSQL.
+  # Productie draait op een eigen PostgreSQL-container: de tests draaien tegen PostgreSQL.
   test:
     needs: prepare
     runs-on: ubuntu-latest

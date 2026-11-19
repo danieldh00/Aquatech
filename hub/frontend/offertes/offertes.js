@@ -85,6 +85,7 @@
 
   const QuoteView = window.QuoteView;
   const state = {
+    selected: new Set(),
     me: null, admin: false, all: false, klant: false, profile: null, documentLayout: null, canEdit: false, mail: false,
     items: [], sort: { key: 'updatedAt', dir: -1 },
     quote: null, saveTimer: null, saving: null, dirty: false, warnings: [],
@@ -205,16 +206,19 @@
         ? '<tr><td class="empty">Er staan nog geen offertes voor u klaar.</td></tr>'
         : '<tr><td class="empty">Nog geen offertes. Kies <b>Nieuwe offerte uit plan</b> om de stuklijst van een beregeningsplan over te nemen.</td></tr>';
       $('#l-count').textContent = '';
+      $('#l-bulk').hidden = true;
       return;
     }
     const visibleColumns = columns();
-    const head = visibleColumns.map((column) => {
+    const selectable = !state.klant;
+    const allChecked = selectable && items.length > 0 && items.every((quote) => state.selected.has(quote.id));
+    const head = (selectable ? `<th class="c-select"><input type="checkbox" data-select-all aria-label="Alle zichtbare offertes selecteren"${allChecked ? ' checked' : ''}></th>` : '') + visibleColumns.map((column) => {
       const sorted = column.key === state.sort.key ? (state.sort.dir > 0 ? ' asc' : ' desc') : '';
       return `<th data-sort="${column.key}" class="${column.cls === 'num' ? 'num' : ''}${sorted}">${esc(column.label)}</th>`;
     }).join('');
     table.innerHTML = `<thead><tr>${head}</tr></thead><tbody>${items.map((quote) => `
-      <tr data-id="${esc(quote.id)}">${visibleColumns.map((column) => `<td class="${column.cls || ''}">${column.html(quote)}</td>`).join('')}</tr>`).join('')
-      || `<tr><td class="empty" colspan="${visibleColumns.length}">Geen offertes gevonden.</td></tr>`}</tbody>`;
+      <tr data-id="${esc(quote.id)}"${state.selected.has(quote.id) ? ' class="picked"' : ''}>${selectable ? `<td class="c-select"><input type="checkbox" data-select aria-label="Offerte ${esc(quote.number)} selecteren"${state.selected.has(quote.id) ? ' checked' : ''}></td>` : ''}${visibleColumns.map((column) => `<td class="${column.cls || ''}">${column.html(quote)}</td>`).join('')}</tr>`).join('')
+      || `<tr><td class="empty" colspan="${visibleColumns.length + 1}">Geen offertes gevonden.</td></tr>`}</tbody>`;
     table.querySelectorAll('th[data-sort]').forEach((header) => {
       /** Sorteert op deze kolom (nogmaals klikken draait de volgorde om). */
       header.onclick = () => {
@@ -227,6 +231,34 @@
       /** Opent de offerte. */
       row.onclick = () => { go(`id=${encodeURIComponent(row.dataset.id)}`); };
     });
+    table.querySelectorAll('input[data-select]').forEach((box) => {
+      /**
+       * Voorkomt dat een klik op het vinkje de offerte opent.
+       * @param {MouseEvent} event de klik
+       */
+      box.onclick = (event) => { event.stopPropagation(); };
+      /** Zet de offerte in of uit de selectie. */
+      box.onchange = () => {
+        const id = box.closest('tr').dataset.id;
+        if (box.checked) state.selected.add(id); else state.selected.delete(id);
+        box.closest('tr').classList.toggle('picked', box.checked);
+        renderBulkBar();
+      };
+    });
+    const all = table.querySelector('input[data-select-all]');
+    if (all) {
+      /**
+       * Voorkomt dat een klik op het vinkje de kolom sorteert.
+       * @param {MouseEvent} event de klik
+       */
+      all.onclick = (event) => { event.stopPropagation(); };
+      /** Selecteert alle zichtbare offertes of heft de selectie op. */
+      all.onchange = () => {
+        for (const quote of items) { if (all.checked) state.selected.add(quote.id); else state.selected.delete(quote.id); }
+        renderList();
+      };
+    }
+    renderBulkBar();
     $('#l-count').textContent = `${items.length} van ${state.items.length} offertes`;
   }
 
@@ -1539,13 +1571,66 @@
     }
   }
 
+  // ---------- Bulkacties ----------
+  /**
+   * Geeft de geselecteerde offertes die nu zichtbaar zijn (door zoekveld en statusfilter); verborgen offertes tellen niet mee in de bulkacties.
+   * @returns {object[]} de geselecteerde, zichtbare offertes
+   */
+  const selectedQuotes = () => visible().filter((quote) => state.selected.has(quote.id));
+
+  /**
+   * Of een offerte nog open is: concept of verzonden en niet omgezet (de server weigert het daarna als de klant al antwoordde).
+   * @param {object} quote de offerte uit de lijst
+   * @returns {boolean} true als hij open is
+   */
+  const isOpenQuote = (quote) => !quote.order && ['concept', 'verzonden'].includes(quote.status);
+
+  /** Toont of verbergt de balk met bulkacties en werkt het aantal bij. */
+  function renderBulkBar() {
+    for (const id of [...state.selected]) if (!state.items.some((quote) => quote.id === id)) state.selected.delete(id);
+    const chosen = selectedQuotes();
+    const bar = $('#l-bulk');
+    bar.hidden = !chosen.length;
+    $('#l-bulk-count').textContent = `${chosen.length} geselecteerd`;
+    const closable = chosen.filter(isOpenQuote);
+    $('#l-bulk-close').disabled = !closable.length;
+    $('#l-bulk-close').textContent = `Afsluiten als afgewezen (${closable.length})`;
+    $('#l-export').textContent = chosen.length ? `Exporteer selectie (${chosen.length}) naar Excel` : 'Exporteer naar Excel';
+  }
+
+  /**
+   * Zet de geselecteerde open offertes (concept of verzonden) op afgewezen; een offerte die de klant al beantwoordde of is omgezet blijft staan.
+   * @returns {Promise<void>}
+   */
+  async function closeSelected() {
+    const closable = selectedQuotes().filter(isOpenQuote);
+    if (!closable.length) return;
+    if (!confirm(`${closable.length} ${closable.length === 1 ? 'offerte' : 'offertes'} afsluiten als afgewezen? Je kunt de status per offerte weer aanpassen.`)) return;
+    const button = $('#l-bulk-close');
+    button.disabled = true;
+    let done = 0;
+    const skipped = [];
+    for (const quote of closable) {
+      try {
+        await api(`quotes/${encodeURIComponent(quote.id)}`, { method: 'PUT', body: { status: 'afgewezen' } });
+        done += 1;
+        state.selected.delete(quote.id);
+      } catch (error) {
+        skipped.push(`${quote.number}: ${error.message}`);
+      }
+    }
+    await loadList();
+    toast(`${done} ${done === 1 ? 'offerte' : 'offertes'} afgesloten${skipped.length ? `; overgeslagen: ${skipped.join('; ')}` : ''}`, skipped.length > 0);
+  }
+
   /**
    * Exporteert de zichtbare offertes als Excel-bestand.
    * @returns {Promise<void>}
    */
   async function exportListXlsx() {
     if (!window.ExcelJS && !(window.AquatechCommon && await window.AquatechCommon.excel())) { toast('Excel-export niet beschikbaar.', true); return; }
-    const items = visible();
+    const chosen = selectedQuotes();
+    const items = chosen.length ? chosen : visible();
     try {
       const workbook = new ExcelJS.Workbook();
       workbook.creator = 'AquaTech Service';
@@ -1714,6 +1799,9 @@
     $('#l-new-empty').onclick = () => { createEmpty(); };
     $('#l-profile').onclick = openProfile;
     $('#l-export').onclick = exportListXlsx;
+    $('#l-bulk-close').onclick = closeSelected;
+    /** Heft de selectie op. */
+    $('#l-bulk-clear').onclick = () => { state.selected.clear(); renderList(); };
     $('#pf').onsubmit = saveProfile;
     $('#sf').onsubmit = sendQuote;
     document.querySelectorAll('.modal').forEach((modal) => {

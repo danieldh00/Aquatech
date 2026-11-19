@@ -60,7 +60,7 @@ jobs:
       - run: npm test
       - run: npm audit --omit=dev --audit-level=high
 
-  # Dezelfde testsuite tegen PostgreSQL (zoals Supabase), plus de tests van
+  # Dezelfde testsuite tegen PostgreSQL (zoals productie), plus de tests van
   # het schema en de overstap van SQLite.
   test-postgres:
     needs: changes

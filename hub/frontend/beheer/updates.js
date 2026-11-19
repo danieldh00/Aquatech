@@ -229,6 +229,67 @@
     }
   }
 
+  /**
+   * Haalt de servertaken op en tekent de afvinklijst met het ene commando.
+   * @returns {Promise<void>}
+   */
+  async function loadHostTasks() {
+    const errorBox = byId('ht-err');
+    try {
+      const response = await fetch('api/admin/host-tasks', { cache: 'no-store' });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || window.AquatechCommon.statusMessage(response.status));
+      errorBox.textContent = '';
+      /**
+       * Eén taak als lijstregel: vinkje en titel links uitgelijnd, daaronder uitleg en stand.
+       * @param {object} task De taak uit de API.
+       * @returns {string} De HTML van de regel.
+       */
+      const itemHtml = (task) => `
+        <li class="ht-item${task.done ? ' done' : ''}">
+          <label class="ht-check"><input type="checkbox" data-task="${esc(task.id)}" ${task.done ? 'checked' : ''} ${task.doneBy === 'server' ? 'disabled' : ''}><strong>${esc(task.title)}</strong></label>
+          <p class="muted small">${esc(task.description)}</p>
+          <p class="muted small">${task.done ? `Gedaan ${esc(when(task.doneAt))} (${task.doneBy === 'server' ? 'gemeld door de server' : `afgevinkt door ${esc(task.doneByName || 'een beheerder')}`})` : `Toegevoegd ${esc(task.addedAt)}`}</p>
+        </li>`;
+      const open = body.tasks.filter((task) => !task.done);
+      const done = body.tasks.filter((task) => task.done);
+      byId('ht-card').hidden = open.length === 0;
+      byId('ht-list').innerHTML = open.map(itemHtml).join('');
+      byId('ht-history').hidden = done.length === 0;
+      byId('ht-done-list').innerHTML = done.map(itemHtml).join('');
+      byId('ht-command').textContent = body.command;
+      byId('ht-command-box').hidden = open.length === 0;
+    } catch (error) {
+      errorBox.textContent = error.message;
+    }
+  }
+
+  /**
+   * Vinkt een servertaak af of weer open.
+   * @param {Event} event De change-gebeurtenis van een vinkje.
+   * @returns {Promise<void>}
+   */
+  async function toggleHostTask(event) {
+    const box = event.target.closest('input[data-task]');
+    if (!box) return;
+    try {
+      const response = await fetch(`api/admin/host-tasks/${encodeURIComponent(box.dataset.task)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ done: box.checked }) });
+      if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message || window.AquatechCommon.statusMessage(response.status));
+    } catch (error) {
+      byId('ht-err').textContent = error.message;
+    }
+    loadHostTasks();
+  }
+
+  /**
+   * Kopieert het servercommando naar het klembord.
+   * @returns {Promise<void>}
+   */
+  async function copyHostCommand() {
+    const button = byId('ht-copy');
+    try { await navigator.clipboard.writeText(byId('ht-command').textContent); button.textContent = 'Gekopieerd'; } catch (error) { button.textContent = 'Selecteer en kopieer de tekst hierboven'; }
+  }
+
   let bound = false;
   /**
    * Opent de sectie: knoppen koppelen (één keer) en de stand laden.
@@ -241,7 +302,11 @@
       byId('up-check').addEventListener('click', checkNow);
       byId('up-cancel').addEventListener('click', cancelUpdate);
       byId('up-auto').addEventListener('change', saveAuto);
+      byId('ht-list').addEventListener('change', toggleHostTask);
+      byId('ht-done-list').addEventListener('change', toggleHostTask);
+      byId('ht-copy').addEventListener('click', copyHostCommand);
     }
+    loadHostTasks();
     started = true;
     refresh();
   }

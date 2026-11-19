@@ -370,7 +370,7 @@ function createMonitoringChecks(deps = {}) {
         const settings = settingsFor(ctx.tenantId);
         const mailer = mailerFor(settings);
         if (!mailer || typeof mailer.verify !== 'function' || !mailer.configured()) return SKIP;
-        const print = fingerprint([settings.get('mailServer'), settings.get('mailPassword')]);
+        const print = fingerprint([settings.get('mailServer'), settings.get('mailPassword'), settings.get('mailGraphSecret')]);
         return mailCache.get(ctx.tenantId, print, ctx.now(), async () => {
           try {
             await mailer.verify();

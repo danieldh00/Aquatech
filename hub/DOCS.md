@@ -1114,12 +1114,13 @@ Terugzetten: download het bestand uit Drive en volg *Back-ups terugzetten*.
   versleutelde opslag in de EU.
 - De versleutelde back-ups uit `/data/backups` (of `BACKUP_DIR` op een
   andere schijf) naar een andere locatie kopiëren: dat kan in de app zelf
-  naar Google Drive (zie *Back-ups naar Google Drive*); periodiek een
-  terugzettest; de hoofdsleutel apart bewaren.
+  naar Google Drive (zie *Back-ups naar Google Drive*, in de app onder
+  Beheer > Systeem); periodiek een terugzettest; de hoofdsleutel apart
+  bewaren.
 - HTTPS via de Cloudflare-tunnel of een reverse proxy; poort 3300 niet
   rechtstreeks open zetten naar internet (alleen de tunnel).
-- Host bijwerken (`git pull && docker compose up -d --build` voor de app,
-  en het besturingssysteem/Docker zelf).
+- App bijwerken gaat automatisch (`release.yml` bouwt het image, de updatetimer op de server rolt het uit, of *Nu updaten*
+  in Beheer > Systeem > Updates); alleen het besturingssysteem en Docker zelf blijven handwerk.
 - AVG: verwerkersovereenkomst met hosting- en AI-aanbieder (Anthropic, alleen
   als AI-herkenning aanstaat), privacyverklaring voor klanten en een
   register van verwerkingen.

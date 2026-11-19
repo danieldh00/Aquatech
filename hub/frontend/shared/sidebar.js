@@ -15,6 +15,7 @@
 //   onthoudt de gebruiker. Aantallen (Nieuws) staan als bolletje bij de link
 //   en, bij een ingeklapte groep, op de groepskop. Onderaan een compacte
 //   voetregel (webshop, Hoofdbeheer, profiel).
+// - Bovenaan staat een zoekveld (api/search): klanten, offertes, werkorders, facturen en artikelen in één keer; Ctrl+K of / focust het.
 // - Smal scherm (< 900px): lade van links via de menuknop in de kopbalk.
 (function (root) {
   const tools = root.AquatechModuleTools;
@@ -192,6 +193,7 @@
         if (open) saved[group.dataset.group] = true; else delete saved[group.dataset.group];
         store.set(OPEN_GROUPS, JSON.stringify(saved));
       });
+      attachSearch();
       /**
        * Sluit de lade met Escape.
        * @param {KeyboardEvent} event De toets.
@@ -205,6 +207,11 @@
           <img class="at-nav-mark" src="${esc(base)}shared/icons/logo-icon.png" alt="AquaTech Service">
         </a>
         <button type="button" class="at-nav-close" aria-label="Menu sluiten" title="Menu sluiten">✕</button>
+      </div>
+      <div class="at-nav-search" role="search">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input type="search" class="at-search-input" placeholder="Zoeken (Ctrl+K)" aria-label="Zoeken in klanten, offertes, werkorders, facturen en artikelen" autocomplete="off" spellcheck="false" maxlength="80" aria-controls="at-search-results" aria-expanded="false">
+        <div class="at-search-results" id="at-search-results" role="listbox" hidden></div>
       </div>
       ${mainHtml}
       ${footerLinks ? `<div class="at-nav-list at-nav-foot">${footerLinks}</div>` : ''}
@@ -226,6 +233,142 @@
     };
     body.classList.add('has-nav');
     body.classList.toggle('nav-compact', isCompact());
+  }
+
+  /**
+   * Globaal zoeken in de zijbalk (GET api/search): tikken zoekt na een korte pauze in klanten, offertes, werkorders,
+   * facturen en artikelen; pijltjestoetsen en Enter openen een resultaat; Ctrl+K of / zet de cursor in het veld.
+   * De handlers hangen aan de zijbalk zelf, zodat ze een nieuwe tekening van de zijbalk overleven.
+   * @returns {void}
+   */
+  function attachSearch() {
+    let timer = null;
+    let controller = null;
+    let shown = [];
+    let selected = -1;
+    /**
+     * Het zoekveld en het resultatenpaneel (opnieuw opgezocht, de zijbalk wordt soms opnieuw getekend).
+     * @returns {{ input: HTMLInputElement, panel: HTMLElement }|null} De elementen.
+     */
+    const parts = () => {
+      const input = nav && nav.querySelector('.at-search-input');
+      return input ? { input, panel: nav.querySelector('.at-search-results') } : null;
+    };
+    /**
+     * Sluit het resultatenpaneel.
+     * @returns {void}
+     */
+    const close = () => {
+      const found = parts();
+      if (!found) return;
+      found.panel.hidden = true;
+      found.input.setAttribute('aria-expanded', 'false');
+      shown = [];
+      selected = -1;
+    };
+    /**
+     * Markeert een resultaat als gekozen (pijltjestoetsen).
+     * @param {number} index Positie in de lijst (buiten de lijst = niets gekozen).
+     * @returns {void}
+     */
+    const select = (index) => {
+      selected = index;
+      shown.forEach((link, position) => {
+        link.classList.toggle('is-selected', position === index);
+        link.setAttribute('aria-selected', String(position === index));
+      });
+      if (shown[index]) shown[index].scrollIntoView({ block: 'nearest' });
+    };
+    /**
+     * Toont de groepen met resultaten (of de melding dat er niets is).
+     * @param {{ groups: object[] }} result Het antwoord van api/search.
+     * @returns {void}
+     */
+    const show = (result) => {
+      const found = parts();
+      if (!found) return;
+      const html = (result.groups || []).map((group) => `<div class="at-search-group" role="group" aria-label="${esc(group.title)}">
+        <div class="at-search-title">${esc(group.title)}</div>
+        ${group.items.map((entry) => `<a class="at-search-item" role="option" aria-selected="false" href="${esc(base + entry.href)}">
+          <span class="at-search-main">${esc(entry.title)}</span>${entry.subtitle ? `<span class="at-search-sub">${esc(entry.subtitle)}</span>` : ''}</a>`).join('')}
+      </div>`).join('');
+      found.panel.innerHTML = html || '<div class="at-search-empty">Niets gevonden.</div>';
+      found.panel.hidden = false;
+      found.input.setAttribute('aria-expanded', 'true');
+      shown = [...found.panel.querySelectorAll('.at-search-item')];
+      selected = -1;
+    };
+    /**
+     * Zoekt (na de pauze) en toont het resultaat; een nieuwere zoekopdracht breekt de vorige af.
+     * @param {string} text De zoektekst.
+     * @returns {void}
+     */
+    const run = (text) => {
+      if (controller) controller.abort();
+      controller = typeof AbortController === 'function' ? new AbortController() : null;
+      fetch(`${base}api/search?q=${encodeURIComponent(text)}`, { cache: 'no-store', credentials: 'same-origin', signal: controller ? controller.signal : undefined })
+        .then((response) => (response.ok ? response.json() : { groups: [], failed: true }))
+        .then((result) => {
+          const found = parts();
+          if (!found || found.input.value.trim() !== text) return;
+          if (result.failed) {
+            found.panel.innerHTML = '<div class="at-search-empty">Zoeken lukt nu niet.</div>';
+            found.panel.hidden = false;
+            return;
+          }
+          show(result);
+        })
+        .catch(() => { /* afgebroken of offline: laat het paneel zoals het was */ });
+    };
+    /**
+     * Zoekt na een korte pauze in het typen; minder dan twee tekens sluit het paneel.
+     * @param {Event} event Het invoer-event.
+     * @returns {void}
+     */
+    nav.addEventListener('input', (event) => {
+      if (!event.target.classList.contains('at-search-input')) return;
+      clearTimeout(timer);
+      const text = event.target.value.trim();
+      if (text.length < 2) { close(); return; }
+      timer = setTimeout(() => run(text), 250);
+    });
+    /**
+     * Pijltjestoetsen kiezen een resultaat, Enter opent het (of het eerste), Escape sluit.
+     * @param {KeyboardEvent} event De toets.
+     * @returns {void}
+     */
+    nav.addEventListener('keydown', (event) => {
+      if (!event.target.classList.contains('at-search-input')) return;
+      if (event.key === 'ArrowDown' && shown.length) { event.preventDefault(); select((selected + 1) % shown.length); }
+      else if (event.key === 'ArrowUp' && shown.length) { event.preventDefault(); select((selected - 1 + shown.length) % shown.length); }
+      else if (event.key === 'Enter' && shown.length) { event.preventDefault(); (shown[selected] || shown[0]).click(); }
+      else if (event.key === 'Escape') { if (event.target.value || shown.length) { event.stopPropagation(); event.target.value = ''; close(); } }
+    });
+    nav.addEventListener('focusin', (event) => {
+      if (event.target.classList.contains('at-search-input') && event.target.value.trim().length >= 2 && shown.length) parts().panel.hidden = false;
+    });
+    /**
+     * Sluit het paneel bij een klik buiten het zoekveld.
+     * @param {MouseEvent} event De klik.
+     * @returns {void}
+     */
+    document.addEventListener('click', (event) => { if (!event.target.closest('.at-nav-search')) close(); });
+    /**
+     * Ctrl+K (of Cmd+K) en / zetten de cursor in het zoekveld; een ingeklapte zijbalk of lade gaat daarvoor open.
+     * @param {KeyboardEvent} event De toets.
+     * @returns {void}
+     */
+    document.addEventListener('keydown', (event) => {
+      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName) || event.target.isContentEditable;
+      const wanted = ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') || (event.key === '/' && !typing && !event.ctrlKey && !event.metaKey && !event.altKey);
+      const found = parts();
+      if (!wanted || !found) return;
+      event.preventDefault();
+      if (body.classList.contains('nav-compact') && root.matchMedia('(min-width: 900px)').matches) body.classList.remove('nav-compact');
+      setOpen(true);
+      found.input.focus();
+      found.input.select();
+    });
   }
 
   /**

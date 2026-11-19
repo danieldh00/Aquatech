@@ -36,11 +36,18 @@ kill $(lsof -ti tcp:3300)                          # testserver stoppen (nooit p
 Docker is niet beschikbaar in de cloud-sandbox. Er is geen aparte linter; `codestyle` en `tenant-filter` zijn onderdeel van `npm test`.
 
 ## Werkwijze en PR
+- Algemene werkwijze: `docs/WERKWIJZE.md` (projectonafhankelijk); AquaTech-context: `docs/AQUATECH-CONTEXT.md`. **Wie de werkwijze verandert, werkt `docs/WERKWIJZE.md` bij in dezelfde PR** (de kopie in de projectbestanden, `werkwijze/WERKWIJZE.md`, wordt door de coördinator gelijkgehouden).
 - Nooit rechtstreeks op `master`. Branch vers vanaf `origin/master` (`feature/<naam>` of `claude/<naam>`), kleine PR's, één onderwerp per PR.
 - Volgorde: wijzigen → `npm test` → `changes/<naam>.md` (als `hub/` wijzigt) → `README.md` bijwerken bij features/setup → push → PR → CI groen + verplichte **Claude code review** en **Claude security review** → bevindingen oplossen vóór auto-merge.
 - **Versie, `CHANGELOG.md` en `frontend/nieuws/releases.js` nooit zelf aanraken**; `release.yml` doet dat na de merge. Alleen docs/CI zonder effect: PR-label `geen-releasenotes`.
 - Geen backwards-compatibiliteit nodig tijdens de ontwikkeling.
 - Geen modelnamen/-ID's in commits, PR's, code of docs. Geen secrets in repo of chat.
+
+## Servertaken (hosttaken)
+Moet Daniël na een PR iets op de server doen (een serverscript opnieuw draaien, een unit installeren), geef hem dan **nooit een los commando in de chat**. Voeg een genummerde taak toe:
+1. `HOST_TASKS` in `hub/backend/src/platform/host-tasks.js`: nieuwe id `NNN-korte-naam` (volgnummer erachter, een bestaande id verandert nooit), titel, uitleg, `addedAt`.
+2. In `deploy/apps01/pve/servertaken.sh`: dezelfde id in `HOST_TASK_IDS` en een functie `hosttask_NNN_korte_naam` (idempotent; haal bestanden op `$TASKS_REF` op via `fetch_task_file`).
+3. Klaar: de taak staat in Beheer > Systeem > Updates (afvinklijst, ook in het dashboardblok Openstaande taken) en Daniël voert het ene vaste commando uit (`HOST_COMMAND`, op de PVE-host als root; hij gebruikt `APPS01_SSH=daniel@apps01` + sudo). Gelukte taken worden door de server afgevinkt (`update/status/host-tasks.json`). `test/host-tasks.test.js` bewaakt dat app-lijst en script gelijk blijven.
 
 ## Codeconventies
 - Beschrijvende namen (geen namen van één letter behalve `i`/`j`/`x`/`y`, geen cryptische afkortingen) en een `/** … */`-blok in het Nederlands bij elke functie; bestand begint met een kopcommentaar. Bewaakt door `test/codestyle.test.js`.

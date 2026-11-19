@@ -199,10 +199,10 @@ function registerCustomerRoutes(app, ctx) {
     return address;
   }
 
-  app.get('/api/customers', requireCustomers, (req, res) => {
+  app.get('/api/customers', requireCustomers, async (req, res) => {
     const limit = Math.min(200, Math.max(1, Number.parseInt(req.query.limit, 10) || PAGE_SIZE));
     const offset = Math.max(0, Number.parseInt(req.query.offset, 10) || 0);
-    res.json({ ...store.listCustomerPage(tenantsOf(req), { search: String(req.query.q || '').slice(0, 100), group: String(req.query.group || ''), limit, offset }), limit, offset });
+    res.json({ ...(await store.listCustomerPageAsync(tenantsOf(req), { search: String(req.query.q || '').slice(0, 100), group: String(req.query.group || ''), limit, offset })), limit, offset });
   });
 
   app.post('/api/customers', requireJson, requireCustomers, limitInvitesIfAsked, checkForeignVat, requireVerifiedAddress(addressGuard, addressToVerify), async (req, res) => {
@@ -270,6 +270,7 @@ function registerCustomerRoutes(app, ctx) {
     }
     if (body.paymentDays !== undefined) input.paymentDays = body.paymentDays;
     if (body.documentLanguage !== undefined) input.documentLanguage = body.documentLanguage;
+    if (body.remindersOff !== undefined) input.remindersOff = body.remindersOff === true;
     // Prijsgevoelige instellingen (zakelijke prijzen excl. btw, groothandel) zijn voor beheerders.
     const pricing = ['customerGroup', 'wholesale', 'wholesaleDiscount'].filter((field) => body[field] !== undefined);
     if (pricing.length && !mayPrice(req)) return res.status(403).json({ error: 'forbidden', message: 'Alleen een beheerder wijzigt de klantgroep en de groothandelsinstellingen.' });
@@ -282,6 +283,7 @@ function registerCustomerRoutes(app, ctx) {
       ...(input.wholesale !== undefined ? { groothandel: Boolean(input.wholesale) } : {}),
       ...(input.paymentDays !== undefined ? { betaaltermijn: input.paymentDays } : {}),
       ...(input.documentLanguage !== undefined ? { documenttaal: input.documentLanguage } : {}),
+      ...(input.remindersOff !== undefined ? { betalingsherinneringen_uit: input.remindersOff } : {}),
       ...(input.wholesaleDiscount !== undefined ? { groothandelskorting: input.wholesaleDiscount } : {}) }, undefined, customer.tenantId);
     res.json({ customer: store.getCustomer([customer.tenantId], customer.id) });
   });
