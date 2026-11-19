@@ -82,8 +82,8 @@ a.shop-action.shop-admin:hover { background: var(--at-shop-navy); }
 .nav-about > a { cursor: pointer; }
 .nav-group > .nav-heading::after { content: ""; display: inline-block; width: 6px; height: 6px; margin: 0 0 3px 8px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); }
 .nav-about > a:hover, .nav-group:hover > .nav-heading, .nav-group:focus-within > .nav-heading { color: var(--at-shop-green-dark); }
-.nav-about:first-child > a { margin: 6px 0; padding: 8px 18px; border-radius: 999px; background: var(--at-shop-green); color: var(--at-white); }
-.nav-about:first-child > a:hover { background: var(--at-shop-green-dark); color: var(--at-white); }
+.nav-about:first-child > a { margin: 6px 0; padding: 8px 18px; border-radius: 999px; background: var(--at-shop-green-dark); color: var(--at-white); }
+.nav-about:first-child > a:hover { background: var(--at-shop-navy); color: var(--at-white); }
 
 .nav-drop { display: none; position: absolute; left: 0; top: 100%; z-index: 20; min-width: 280px; margin: 0; padding: 8px 0; list-style: none; background: var(--at-white); border: 1px solid var(--at-line); border-top: 3px solid var(--at-shop-teal); border-radius: 0 0 8px 8px; box-shadow: 0 10px 24px var(--at-shadow); }
 .nav-group:hover > .nav-drop, .nav-group:focus-within > .nav-drop, .has-sub:hover > .nav-fly, .has-sub:focus-within > .nav-fly { display: block; }
