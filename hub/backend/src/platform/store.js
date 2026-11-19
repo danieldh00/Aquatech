@@ -1560,16 +1560,15 @@ function createStore(db) {
   }
 
   /**
-   * Eén pagina met klanten voor de Klanten-pagina: zoeken over naam, bedrijf, e-mail, telefoon, adres en gebruikersnaam,
-   * eventueel op groep, in twee queries (de pagina en het totaal).
+   * Bouwt de twee queries (totaal en pagina) voor een klantenpagina; gedeeld door de synchrone en de asynchrone variant.
    * @param {string[]} tenantIds De tenants (live-tenant en eventueel de testomgeving).
-   * @param {{ search?: string, group?: string, limit?: number, offset?: number, activeOnly?: boolean }} [options] group: particulier | zakelijk | groothandel | aanvraag; activeOnly laat uitgeschakelde accounts weg.
-   * @returns {{ items: object[], total: number }} De klanten (met `hasLogin`) en het totaal aantal bij dit filter.
+   * @param {{ search?: string, group?: string, limit?: number, offset?: number, activeOnly?: boolean }} [options] Zie listCustomerPage.
+   * @returns {{ countSql: string, countArgs: Array, pageSql: string, pageArgs: Array }|null} De queries, of null als de organisatie geen klantrollen heeft.
    */
-  function listCustomerPage(tenantIds, { search = '', group = '', limit = 50, offset = 0, activeOnly = false } = {}) {
+  function customerPageQueries(tenantIds, { search = '', group = '', limit = 50, offset = 0, activeOnly = false } = {}) {
     const ids = [...new Set(tenantIds.map(String))];
     const keys = roles.keysOfKind(ids[0], 'klant');
-    if (!keys.length) return { items: [], total: 0 };
+    if (!keys.length) return null;
     const where = ["u.kind = 'account'", `u.role IN (${keys.map(() => '?').join(', ')})`];
     const args = [...keys];
     const filters = { particulier: "u.customer_group = ''", zakelijk: "u.customer_group = 'zakelijk'", groothandel: 'u.wholesale = 1', aanvraag: "u.business_request = 'aangevraagd'" };
@@ -1583,12 +1582,49 @@ function createStore(db) {
     }
     const clause = where.join(' AND ');
     const tenantPlaceholders = ids.map(() => '?').join(', ');
-    const total = Number(prepare(`SELECT COUNT(*) AS n FROM users u WHERE u.tenant_id IN (${tenantPlaceholders}) AND ${clause}`).get(...ids, ...args).n);
-    const items = prepare(`SELECT ${PUBLIC_USER_COLUMNS}, CASE WHEN u.password_hash IS NULL THEN 0 ELSE 1 END AS has_login
-      FROM users u WHERE u.tenant_id IN (${tenantPlaceholders}) AND ${clause} ORDER BY lower(u.display_name), u.id LIMIT ? OFFSET ?`)
-      .all(...ids, ...args, Math.min(200, Math.max(1, Number(limit) || 50)), Math.max(0, Number(offset) || 0))
-      .map((row) => ({ ...publicUser(row), hasLogin: Boolean(Number(row.has_login)) }));
-    return { items, total };
+    return {
+      countSql: `SELECT COUNT(*) AS n FROM users u WHERE u.tenant_id IN (${tenantPlaceholders}) AND ${clause}`,
+      countArgs: [...ids, ...args],
+      pageSql: `SELECT ${PUBLIC_USER_COLUMNS}, CASE WHEN u.password_hash IS NULL THEN 0 ELSE 1 END AS has_login
+      FROM users u WHERE u.tenant_id IN (${tenantPlaceholders}) AND ${clause} ORDER BY lower(u.display_name), u.id LIMIT ? OFFSET ?`,
+      pageArgs: [...ids, ...args, Math.min(200, Math.max(1, Number(limit) || 50)), Math.max(0, Number(offset) || 0)],
+    };
+  }
+
+  /**
+   * Zet de rijen van een klantenpagina om naar klanten.
+   * @param {object[]} rows De rijen van de paginaquery.
+   * @returns {object[]} De klanten (met `hasLogin`).
+   */
+  const customersFromRows = (rows) => rows.map((row) => ({ ...publicUser(row), hasLogin: Boolean(Number(row.has_login)) }));
+
+  /**
+   * Eén pagina met klanten voor de Klanten-pagina: zoeken over naam, bedrijf, e-mail, telefoon, adres en gebruikersnaam,
+   * eventueel op groep, in twee queries (de pagina en het totaal).
+   * @param {string[]} tenantIds De tenants (live-tenant en eventueel de testomgeving).
+   * @param {{ search?: string, group?: string, limit?: number, offset?: number, activeOnly?: boolean }} [options] group: particulier | zakelijk | groothandel | aanvraag; activeOnly laat uitgeschakelde accounts weg.
+   * @returns {{ items: object[], total: number }} De klanten (met `hasLogin`) en het totaal aantal bij dit filter.
+   */
+  function listCustomerPage(tenantIds, options = {}) {
+    const queries = customerPageQueries(tenantIds, options);
+    if (!queries) return { items: [], total: 0 };
+    const total = Number(prepare(queries.countSql).get(...queries.countArgs).n);
+    return { items: customersFromRows(prepare(queries.pageSql).all(...queries.pageArgs)), total };
+  }
+
+  /**
+   * Zelfde als listCustomerPage, maar via db.async: met PostgreSQL lopen beide queries tegelijk over de pool en staat de
+   * hoofdthread niet stil tijdens het zoeken (de LIKE over zes kolommen groeit mee met het aantal klanten).
+   * @param {string[]} tenantIds De tenants (live-tenant en eventueel de testomgeving).
+   * @param {object} [options] Zie listCustomerPage.
+   * @returns {Promise<{ items: object[], total: number }>} De klanten en het totaal.
+   */
+  async function listCustomerPageAsync(tenantIds, options = {}) {
+    if (!db.async) return listCustomerPage(tenantIds, options);
+    const queries = customerPageQueries(tenantIds, options);
+    if (!queries) return { items: [], total: 0 };
+    const [count, rows] = await Promise.all([db.async.get(queries.countSql, ...queries.countArgs), db.async.all(queries.pageSql, ...queries.pageArgs)]);
+    return { items: customersFromRows(rows), total: Number(count.n) };
   }
 
   /**
@@ -2000,7 +2036,7 @@ function createStore(db) {
   return {
     getTenant, getTenantBySlug, tenantRow, listTenants, createTenant, updateTenant, createEnvironment, resetEnvironment, deleteEnvironment, deleteTenant, seedEnvironment,
     roles, accessibleTenants, countPlatformAdmins, dropEmptyTenant, accountProblem, listCustomers,
-    ensureTenant, familyIds, systemUser, createGuest, createAccount, createCustomer, listCustomerPage, getCustomer, createShopCustomer, businessProfile, saveBusinessProfile, loginNameFor, accountIdsByEmail, markEmailVerified, updateAccount, deleteAccount, changeOwnPassword, updateProfile, countAdmins, authenticate, loginTenant, loginTenantOfTestAccount, getUser, touchUser, listUsers, publicUser,
+    ensureTenant, familyIds, systemUser, createGuest, createAccount, createCustomer, listCustomerPage, listCustomerPageAsync, getCustomer, createShopCustomer, businessProfile, saveBusinessProfile, loginNameFor, accountIdsByEmail, markEmailVerified, updateAccount, deleteAccount, changeOwnPassword, updateProfile, countAdmins, authenticate, loginTenant, loginTenantOfTestAccount, getUser, touchUser, listUsers, publicUser,
     createSession, findSessionWithUser, prefetchSession, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,
     record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan, purgePlan,
     planReviewStatus, requestReview, reviewPlan, getPlanReview, submitDrawing, pendingDrawingChars, purgeStaleDrawings,
