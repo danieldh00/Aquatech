@@ -144,6 +144,9 @@
     document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !popup.hidden) { setOpen(false); toggle.focus(); } });
   }
 
+  /** Ruimt het huidige belletje op (null zolang er geen is). */
+  let stopBell = null;
+
   /**
    * Zet het meldingenbelletje met teller links van het gebruikersmenu (alleen voor wie taken kan hebben).
    * De melding komt uit api/tasks (zelfde bron als het blok Openstaande taken); een klik gaat direct naar het scherm.
@@ -156,6 +159,8 @@
     const common = window.AquatechCommon;
     const rights = me.rights || [];
     if (!common || !(rights.includes('beheer') || rights.includes('voorraad'))) return;
+    // Bij opnieuw tekenen (bijv. na het opslaan van het profiel) eerst de vorige luisteraars en timer opruimen.
+    if (stopBell) stopBell();
     const wrap = document.createElement('div');
     wrap.className = 'bell-menu';
     wrap.innerHTML = `<button type="button" class="bell-btn" aria-haspopup="true" aria-expanded="false" title="Openstaande taken" aria-label="Openstaande taken">
@@ -208,10 +213,30 @@
      * @param {MouseEvent} event De klik.
      */
     toggle.onclick = (event) => { event.stopPropagation(); setOpen(popup.hidden); };
-    document.addEventListener('click', (event) => { if (!wrap.contains(event.target)) { popup.hidden = true; toggle.setAttribute('aria-expanded', 'false'); } });
-    document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !popup.hidden) { setOpen(false); toggle.focus(); } });
+    /**
+     * Klik buiten het venster sluit het.
+     * @param {MouseEvent} event De klik.
+     */
+    const onDocumentClick = (event) => { if (!wrap.contains(event.target)) { popup.hidden = true; toggle.setAttribute('aria-expanded', 'false'); } };
+    /**
+     * Escape sluit het venster.
+     * @param {KeyboardEvent} event De toets.
+     */
+    const onKeydown = (event) => { if (event.key === 'Escape' && !popup.hidden) { setOpen(false); toggle.focus(); } };
+    document.addEventListener('click', onDocumentClick);
+    document.addEventListener('keydown', onKeydown);
     refresh(false);
-    setInterval(() => { if (document.visibilityState === 'visible') refresh(true); }, 3 * 60 * 1000);
+    const timer = setInterval(() => { if (document.visibilityState === 'visible') refresh(true); }, 3 * 60 * 1000);
+    /**
+     * Ruimt luisteraars en timer van dit belletje op.
+     * @returns {void}
+     */
+    stopBell = () => {
+      clearInterval(timer);
+      document.removeEventListener('click', onDocumentClick);
+      document.removeEventListener('keydown', onKeydown);
+      stopBell = null;
+    };
   }
 
   /**
