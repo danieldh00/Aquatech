@@ -339,7 +339,11 @@ function createPaymentReminderRunner(reminders, { invoices, sender, settingsFor,
           result.failed++;
           // Adres definitief geweigerd: vastleggen, anders blokkeert deze factuur elke ronde.
           if (permanentFailure(error)) {
-            reminders.finish(tenantId, invoice.id, target.key, { status: 'overgeslagen', reason: mailFailure(error) });
+            try {
+              reminders.finish(tenantId, invoice.id, target.key, { status: 'overgeslagen', reason: mailFailure(error) });
+            } catch (finishError) {
+              console.error(`Betalingsherinnering ${invoice.number}: overslaan vastleggen mislukt:`, finishError.message);
+            }
             continue;
           }
           // Tijdelijke fout: de reservering vrijgeven, volgende ronde opnieuw.
