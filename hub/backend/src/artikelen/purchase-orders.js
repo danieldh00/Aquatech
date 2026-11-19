@@ -219,10 +219,11 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
    * @param {string} orderId Id van de order.
    * @returns {object[]} De regels.
    */
-  const linesOf = (tenantId, orderId) => linesWithPreferred(tenantId, orderId).map(lineOf);
+  const linesOf = (tenantId, orderId) => prepare(`SELECT ${LINE_COLS} FROM purchase_order_lines WHERE tenant_id = ? AND order_id = ? ORDER BY position, id`)
+    .all(tenantId, orderId).map(lineOf);
 
   /**
-   * De rijen van een order, elk met de voorkeursleverancier van het artikel (een query; voor het meerprijsverschil bij een backup).
+   * De rijen van een order, elk met de voorkeursleverancier van het artikel (een query; alleen voor het meerprijsverschil bij een backup in fullOrder; de index item_suppliers_pair dekt tenant + artikel).
    * @param {string} tenantId Id van de omgeving.
    * @param {string} orderId Id van de order.
    * @returns {object[]} De regelrijen met pref_supplier_id, pref_supplier_name, pref_cost en item_cost.
