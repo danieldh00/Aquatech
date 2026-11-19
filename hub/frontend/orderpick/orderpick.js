@@ -215,8 +215,7 @@
   function showList() {
     stopCamera();
     state.order = null;
-    $('#op-order').hidden = true;
-    $('#op-done').hidden = true;
+    for (const section of ['#op-order', '#op-done', '#rc-list', '#rc-order', '#rc-done']) $(section).hidden = true;
     $('#op-list').hidden = false;
     history.replaceState(null, '', location.pathname);
     loadList().catch((error) => toast(`Kan de bestellingen niet laden: ${error.message}`, true));
