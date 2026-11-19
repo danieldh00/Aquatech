@@ -1,5 +1,5 @@
 /* Offertes: overzicht, bewerken en de afdrukversie (PDF). Basis uit beheer.css en plannen.css. */
-textarea { font: inherit; font-family: var(--at-font); padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; resize: vertical; width: 100%; box-sizing: border-box; }
+textarea { font: inherit; font-family: var(--at-font); padding: 7px 10px; border: 1px solid color-mix(in srgb, var(--at-navy) 18%, var(--at-surface)); border-radius: 6px; background: #fff; resize: vertical; width: 100%; box-sizing: border-box; }
 .card-form label input, .card-form label select, .card-form label textarea { color: var(--text); }
 .card-form > label { margin-bottom: 8px; }
 .card-form label input:not([type=checkbox]) { width: 100%; box-sizing: border-box; }
@@ -21,7 +21,7 @@ input.full { width: 100%; box-sizing: border-box; margin: 6px 0 10px; }
 .edit-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; position: relative; }
 .edit-bar h1 { margin: 0 4px; font-size: 22px; color: var(--primary-dark); }
 .edit-bar .spacer { flex: 1; }
-.menu { position: absolute; right: 0; top: 44px; background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); z-index: 5; display: flex; flex-direction: column; min-width: 240px; padding: 4px; }
+.menu { position: absolute; right: 0; top: 44px; background: #fff; border: 1px solid color-mix(in srgb, var(--at-navy) 18%, var(--at-surface)); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); z-index: 5; display: flex; flex-direction: column; min-width: 240px; padding: 4px; }
 .menu[hidden] { display: none; }
 .menu button { font: inherit; font-family: var(--at-font); text-align: left; background: none; border: 0; padding: 8px 12px; border-radius: 6px; cursor: pointer; }
 .menu button:hover { background: #f1f5f8; }
@@ -72,7 +72,7 @@ table.totals td.num { text-align: right; white-space: nowrap; }
 table.totals tr.grand td { font-weight: 700; font-size: 16px; border-top: 2px solid var(--primary-dark); color: var(--primary-dark); }
 
 .pick-list { display: flex; flex-direction: column; gap: 6px; max-height: 55vh; overflow-y: auto; }
-.pick-list button { font: inherit; font-family: var(--at-font); text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; cursor: pointer; }
+.pick-list button { font: inherit; font-family: var(--at-font); text-align: left; background: var(--panel); border: 1px solid color-mix(in srgb, var(--at-navy) 18%, var(--at-surface)); border-radius: 8px; padding: 10px 12px; cursor: pointer; }
 .pick-list button:hover { border-color: var(--primary); background: var(--primary-soft); }
 .pick-list .sub { display: block; color: var(--muted); font-size: 13px; }
 
@@ -107,7 +107,7 @@ table.lines .c-kind { width: 112px; }
 
 /* Klantkeuze bovenaan het klantblok (kleuren via de --at-* variabelen en de gedeelde aliassen) */
 .cust-pick { position: relative; margin-bottom: 12px; }
-.cust-list { position: absolute; left: 0; right: 0; z-index: 5; margin: -2px 0 0; padding: 4px; list-style: none; background: var(--at-surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px var(--at-shadow); max-height: 280px; overflow: auto; }
+.cust-list { position: absolute; left: 0; right: 0; z-index: 5; margin: -2px 0 0; padding: 4px; list-style: none; background: var(--at-surface); border: 1px solid color-mix(in srgb, var(--at-navy) 18%, var(--at-surface)); border-radius: 8px; box-shadow: 0 8px 24px var(--at-shadow); max-height: 280px; overflow: auto; }
 .cust-list li { padding: 8px 10px; border-radius: 6px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
 .cust-list li.active, .cust-list li:hover { background: var(--at-green-soft); }
 .cust-list li.none { cursor: default; color: var(--muted); }
@@ -117,7 +117,7 @@ table.lines .c-kind { width: 112px; }
 
 /* Nieuwe klant vanuit de offerte en het blok Btw verlegd. */
 .cust-pick #e-cust-new { margin: 2px 0 0; }
-.newcust { margin: 10px 0 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--at-surface); }
+.newcust { margin: 10px 0 0; padding: 12px; border: 1px solid color-mix(in srgb, var(--at-navy) 18%, var(--at-surface)); border-radius: 8px; background: var(--at-surface); }
 .newcust[hidden] { display: none; }
 .newcust h4 { margin: 0 0 10px; font-size: 14px; }
 .vat-shift { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
@@ -137,7 +137,7 @@ table.lines .c-kind { width: 112px; }
 @media (max-width: 600px) { .tpl-row { grid-template-columns: 1fr; } }
 
 /* Bulkacties in het offerteoverzicht. */
-.bulk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--at-teal) 10%, var(--at-surface)); }
+.bulk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 8px; padding: 8px 12px; border: 1px solid color-mix(in srgb, var(--at-navy) 18%, var(--at-surface)); border-radius: 8px; background: color-mix(in srgb, var(--at-teal) 10%, var(--at-surface)); }
 .bulk-bar[hidden] { display: none; }
 .grid .c-select { width: 32px; text-align: center; }
 .grid tr.picked td { background: color-mix(in srgb, var(--at-teal) 10%, var(--at-surface)); }
