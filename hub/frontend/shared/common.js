@@ -317,9 +317,6 @@
     for (const table of tables) {
       // Een tabel in een verborgen deel (0 px breed) of met de focus erin laten we met rust; de volgende ronde kijkt opnieuw.
       if (table.getClientRects().length === 0 || table.contains(document.activeElement)) continue;
-      // Alleen opnieuw meten als de tabel van inhoud is veranderd (aantal rijen), zodat een wijziging elders geen layout kost.
-      if (table.dataset.wrapChecked === String(table.rows.length)) continue;
-      table.dataset.wrapChecked = String(table.rows.length);
       const parent = table.parentElement;
       if (!parent || parent.classList.contains('tablewrap') || table.closest('.tablewrap, .p-info, [data-no-wrap]')) continue;
       if (table.offsetWidth <= parent.clientWidth + 1) continue;
@@ -335,11 +332,9 @@
     const scheduleWrap = () => { clearTimeout(wrapTimer); wrapTimer = setTimeout(wrapWideTables, 80); };
     /** Start de waarneming van de pagina en doet de eerste controle. */
     const start = () => {
-      new MutationObserver(scheduleWrap).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class', 'style'] });
-      root.addEventListener('resize', () => {
-        for (const checked of document.querySelectorAll('table[data-wrap-checked]')) delete checked.dataset.wrapChecked;
-        scheduleWrap();
-      });
+      new MutationObserver(scheduleWrap).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
+      root.addEventListener('resize', scheduleWrap);
+      document.addEventListener('change', scheduleWrap);
       scheduleWrap();
     };
     if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
