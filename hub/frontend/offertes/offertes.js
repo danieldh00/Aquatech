@@ -206,6 +206,7 @@
         ? '<tr><td class="empty">Er staan nog geen offertes voor u klaar.</td></tr>'
         : '<tr><td class="empty">Nog geen offertes. Kies <b>Nieuwe offerte uit plan</b> om de stuklijst van een beregeningsplan over te nemen.</td></tr>';
       $('#l-count').textContent = '';
+      $('#l-bulk').hidden = true;
       return;
     }
     const visibleColumns = columns();
@@ -1572,10 +1573,17 @@
 
   // ---------- Bulkacties ----------
   /**
-   * Geeft de geselecteerde offertes die nog in de lijst staan.
-   * @returns {object[]} de geselecteerde offertes
+   * Geeft de geselecteerde offertes die nu zichtbaar zijn (door zoekveld en statusfilter); verborgen offertes tellen niet mee in de bulkacties.
+   * @returns {object[]} de geselecteerde, zichtbare offertes
    */
-  const selectedQuotes = () => state.items.filter((quote) => state.selected.has(quote.id));
+  const selectedQuotes = () => visible().filter((quote) => state.selected.has(quote.id));
+
+  /**
+   * Of een offerte nog open is: concept of verzonden en niet omgezet (de server weigert het daarna als de klant al antwoordde).
+   * @param {object} quote de offerte uit de lijst
+   * @returns {boolean} true als hij open is
+   */
+  const isOpenQuote = (quote) => !quote.order && ['concept', 'verzonden'].includes(quote.status);
 
   /** Toont of verbergt de balk met bulkacties en werkt het aantal bij. */
   function renderBulkBar() {
@@ -1584,11 +1592,10 @@
     const bar = $('#l-bulk');
     bar.hidden = !chosen.length;
     $('#l-bulk-count').textContent = `${chosen.length} geselecteerd`;
-    const closable = chosen.filter((quote) => !quote.order && ['concept', 'verzonden'].includes(quote.status));
-    const mailable = chosen.filter((quote) => !quote.order && ['concept', 'verzonden'].includes(quote.status));
+    const closable = chosen.filter(isOpenQuote);
     $('#l-bulk-mail').hidden = !state.mail;
-    $('#l-bulk-mail').disabled = !mailable.length;
-    $('#l-bulk-mail').textContent = `Versturen per e-mail (${mailable.length})`;
+    $('#l-bulk-mail').disabled = !closable.length;
+    $('#l-bulk-mail').textContent = `Versturen per e-mail (${closable.length})`;
     $('#l-bulk-close').disabled = !closable.length;
     $('#l-bulk-close').textContent = `Afsluiten als afgewezen (${closable.length})`;
     $('#l-export').textContent = chosen.length ? `Exporteer selectie (${chosen.length}) naar Excel` : 'Exporteer naar Excel';
@@ -1599,7 +1606,7 @@
    * @returns {Promise<void>}
    */
   async function mailSelected() {
-    const mailable = selectedQuotes().filter((quote) => !quote.order && ['concept', 'verzonden'].includes(quote.status));
+    const mailable = selectedQuotes().filter(isOpenQuote);
     if (!mailable.length) return;
     if (!confirm(`${mailable.length} ${mailable.length === 1 ? 'offerte' : 'offertes'} nu per e-mail versturen aan de klant? Elke klant krijgt het standaardbericht met de link om de offerte te bekijken en akkoord te geven. Offertes zonder geldig e-mailadres worden overgeslagen.`)) return;
     const button = $('#l-bulk-mail');
@@ -1621,7 +1628,7 @@
    * @returns {Promise<void>}
    */
   async function closeSelected() {
-    const closable = selectedQuotes().filter((quote) => !quote.order && ['concept', 'verzonden'].includes(quote.status));
+    const closable = selectedQuotes().filter(isOpenQuote);
     if (!closable.length) return;
     if (!confirm(`${closable.length} ${closable.length === 1 ? 'offerte' : 'offertes'} afsluiten als afgewezen? Je kunt de status per offerte weer aanpassen.`)) return;
     const button = $('#l-bulk-close');
@@ -1648,7 +1655,7 @@
   async function exportListXlsx() {
     if (!window.ExcelJS && !(window.AquatechCommon && await window.AquatechCommon.excel())) { toast('Excel-export niet beschikbaar.', true); return; }
     const chosen = selectedQuotes();
-    const items = chosen.length ? visible().filter((quote) => state.selected.has(quote.id)) : visible();
+    const items = chosen.length ? chosen : visible();
     try {
       const workbook = new ExcelJS.Workbook();
       workbook.creator = 'AquaTech Service';

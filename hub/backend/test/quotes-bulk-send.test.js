@@ -12,12 +12,13 @@ const URL_OK = 'https://aquatech.example/openbaar/offerte.html';
 
 test('bulk mailen: elke klant krijgt zijn bericht, de rest wordt overgeslagen', async () => {
   const sent = [];
+  let failNext = false;
   /**
    * Mailer die niets verstuurt maar elk bericht bewaart.
    * @param {object} settings Instellingen van de omgeving.
    * @returns {object} De mailer.
    */
-  const mailerFor = (settings) => createMailer(settings, { resolveHost: async (host) => host, createTransport: () => ({ sendMail: async (message) => { sent.push(message); return {}; } }) });
+  const mailerFor = (settings) => createMailer(settings, { resolveHost: async (host) => host, createTransport: () => ({ sendMail: async (message) => { if (failNext) { failNext = false; throw new Error('smtp weg'); } sent.push(message); return {}; } }) });
   const db = openDb();
   const store = createStore(db);
   const tid = store.ensureTenant().id;
@@ -45,9 +46,36 @@ test('bulk mailen: elke klant krijgt zijn bericht, de rest wordt overgeslagen', 
     assert.ok(sent.every((message) => /Offerte OF-/.test(message.subject)));
     assert.ok(sent.find((message) => /Beste Bert/.test(message.text || message.html)));
     assert.strictEqual((await kees.get(`/app/api/quotes/${ids[0]}`)).body.status, 'verzonden');
-    // Een tweede keer: de eerste twee zijn nog 'verzonden' en mogen opnieuw (herinnering), de derde blijft overgeslagen.
+    // Een tweede keer: een nog 'verzonden' offerte mag opnieuw (herinnering).
     const again = (await kees.post('/app/api/quotes-bulk/send', { ids: ids.slice(0, 1), url: URL_OK })).body;
     assert.strictEqual(again.sent.length, 1);
+    // Beantwoord (afgewezen door de klant) of afgesloten: overgeslagen en niet gemaild.
+    const closed = (await kees.post('/app/api/quotes', { data: { title: 'Dicht', customer: { name: 'Fam. D', email: 'd@klant.test' } } })).body.id;
+    await kees.put(`/app/api/quotes/${closed}`, { status: 'afgewezen' });
+    const before = sent.length;
+    const skippedClosed = (await kees.post('/app/api/quotes-bulk/send', { ids: [closed], url: URL_OK })).body;
+    assert.deepStrictEqual([skippedClosed.sent.length, skippedClosed.skipped[0].reason], [0, 'Is al beantwoord, omgezet of afgesloten.']);
+    assert.strictEqual(sent.length, before);
+    // Te veel offertes in één keer.
+    assert.strictEqual((await kees.post('/app/api/quotes-bulk/send', { ids: Array.from({ length: 11 }, (_, i) => `id-${i}`), url: URL_OK })).status, 400);
+    // Een offerte van een andere organisatie is voor deze gebruiker niet te vinden en wordt niet gemaild.
+    {
+      const otherTenant = store.createTenant({ name: 'Andere', slug: 'andere' }).tenant.id;
+      await store.createAccount(otherTenant, { username: 'ander', displayName: 'Ander', role: 'installateur', password: PASSWORD });
+      const foreign = await as('ander', 'andere');
+      const foreignId = (await foreign.post('/app/api/quotes', { data: { title: 'Vreemd', customer: { name: 'X', email: 'x@vreemd.test' } } })).body.id;
+      const mailCount = sent.length;
+      const result2 = (await kees.post('/app/api/quotes-bulk/send', { ids: [foreignId], url: URL_OK })).body;
+      assert.deepStrictEqual([result2.sent.length, result2.skipped[0].reason], [0, 'Niet gevonden.']);
+      assert.strictEqual(sent.length, mailCount);
+    }
+    // Een mislukte mail: gemeld, offerte blijft een concept.
+    failNext = true;
+    const draft = (await kees.post('/app/api/quotes', { data: { title: 'Mailfout', customer: { name: 'Fam. E', email: 'e@klant.test' } } })).body.id;
+    const failed = (await kees.post('/app/api/quotes-bulk/send', { ids: [draft], url: URL_OK })).body;
+    assert.strictEqual(failed.sent.length, 0);
+    assert.strictEqual(failed.skipped.length, 1);
+    assert.strictEqual((await kees.get(`/app/api/quotes/${draft}`)).body.status, 'verzonden', 'de link bestaat al, maar er is niets verstuurd');
   } finally {
     server.close();
   }

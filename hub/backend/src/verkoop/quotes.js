@@ -1029,7 +1029,7 @@ function registerQuoteRoutes(app, ctx) {
     ? new Date(`${iso}T12:00:00`).toLocaleDateString(DocText.localeOf(language), { day: 'numeric', month: 'long', year: 'numeric' }) : '');
   const bulkSendLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10, keyFn: (req) => `quote-bulk-send:${req.user.tenant_id}|${req.user.id}` });
   /** Hoeveel offertes in één keer verstuurd mogen worden. */
-  const MAX_BULK_SEND = 25;
+  const MAX_BULK_SEND = 10;
 
   // Meerdere offertes tegelijk mailen met het standaardbericht (zoals het venster Versturen het voorstelt), aan het e-mailadres van de klant op de offerte.
   app.post('/api/quotes-bulk/send', requireJson, requireQuotes, bulkSendLimiter, async (req, res) => {
