@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.24.4
+
+Nieuwe sectie *Draaiboek VPS-verhuizing* (`beheer/index.html` formulier `s-vps`, `beheer/vps-draaiboek.js`, sectie `vps` in
+`beheer/indeling.js`, alleen zichtbaar voor wie Systeem > Updates mag zien): vaste tekst met zes fasen (tunnel, adres en
+hoofdsleutel blijven gelijk; database via back-up; proefrun met `local-db.sh restore`; oude server 14 dagen als terugval;
+mailconnector-IP, Drive, Visma en Mollie controleren; image alleen `amd64`). De vinkjes staan per browser in localStorage.
+Geen migratie, geen backend. `deploy/apps01/README.md` verwijst ernaar.
+
+## 1.24.3
+
+Blok *Kengetallen* op het dashboard (`dashboard/kpis.js`, `GET /api/kpis`, `platform/kpis.js`, geen migratie): alleen met recht
+`beheer`; elke tegel hoort bij een recht (`facturen`: openstaand bedrag incl. btw van definitieve facturen en credits, vervallen
+facturen; `offertes`: verzonden offertes zonder antwoord; `planning`: werkorders met een geplande datum in de huidige week
+(maandag-zondag, geannuleerde niet) en het aantal uitvoerders). Een aggregatiequery per tegel op `tenant_id`; de tegels linken
+naar de module. Test: `test/kpis.test.js`.
+
+## 1.24.2
+
+Betaallink in de factuurmail (geen migratie). `invoicePayments.linkFor` maakt een ondertekende link `/app/api/public/invoice-pay/<factuur>/<handtekening>` (HMAC met `vault.derive('factuur-betaallink')`, niets opgeslagen); `invoice-pay-routes.js` controleert de handtekening, de verloopdatum (`linkExpired`) en de status, start een Mollie-betaling en stuurt door; bij terugkeer (`?teruggekeerd=1`) volgt een opvraging bij Mollie. Alleen als online betalen aan staat; veld `{betaallink}` en een regel onder `{betaling}` in de standaardmail (`mail.payOnline`, nl en en). Limiet per bezoeker.
+
+## 1.24.1
+
+- `platform/mail-graph.js`: Graph-verzender (client credentials, `Mail.Send` als toepassingsmachtiging, `sendMail` met `saveToSentItems`, bericht met bijlagen tot ongeveer 3,5 MB (base64), inline afbeeldingen via `contentId`); vaste hosts `login.microsoftonline.com` en `graph.microsoft.com`, tenant- en client-ID gevalideerd, token per (tenant, app, geheim) kort onthouden.
+- `mailServer.mode` kent nu `graph` met `graphTenantId` en `graphClientId`; het clientgeheim is de versleutelde, `liveOnly` instelling `mailGraphSecret` (alleen via `/api/admin/mail`, veld `graphSecret`; `graphSecretSet` in het antwoord). Geen migratie.
+- `mailFailure` kent EGRAPH_AUTH/DENIED/MAILBOX/THROTTLED/SIZE/ERROR met advies; de bewaking controleert het token (`verify`). Tests: `createApp({ graphFetch })`.
+
 ## 1.24.0
 
 Het eindimage bevat alleen nog `backend/src` en `tools/release-info.js` (dat `update.sh` uit het image haalt); de tests en
