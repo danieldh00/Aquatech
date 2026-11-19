@@ -269,7 +269,13 @@ test('modules aan/uit via /api/config', async () => {
 test('kengetallen kiezen: instelling bewaren, module uit verbergt de KPI, volgorde en uitzetten werken op het dashboard', async () => {
   const { server, base } = await start();
   try {
+    assert.strictEqual((await createClient(base).get('/app/api/admin/kpi-catalog')).status, 401);
     const adminClient = await admin(base);
+    await adminClient.post('/app/api/admin/users', { username: 'kees', displayName: 'Kees', role: 'gebruiker', password: 'Tuin-Plan-2026!', mustChangePassword: false });
+    const kees = createClient(base);
+    assert.strictEqual((await kees.post('/app/api/auth/login', { username: 'kees', password: 'Tuin-Plan-2026!' })).status, 200);
+    assert.strictEqual((await kees.get('/app/api/admin/kpi-catalog')).status, 403);
+    assert.strictEqual((await kees.get('/app/api/kpis')).status, 403);
     const catalog = (await adminClient.get('/app/api/admin/kpi-catalog')).body;
     assert.ok(catalog.items.length >= 10);
     assert.strictEqual(catalog.items.find((item) => item.key === 'bezetting').enabled, false, 'bezetting staat standaard uit');

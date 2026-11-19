@@ -3061,7 +3061,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Keuzescherm van de kengetallen in Beheer: alle KPI's, aan/uit en of hun module aan staat.
   app.get('/api/admin/kpi-catalog', (req, res) => {
     const user = identify(req);
-    if (!user || !Roles.can(user, 'beheer')) return res.status(403).json({ error: 'forbidden', message: 'Alleen voor beheerders.' });
+    if (!user) return res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
+    if (!Roles.can(user, 'beheer')) return res.status(403).json({ error: 'forbidden', message: 'Alleen voor beheerders.' });
     res.set('Cache-Control', 'no-store');
     res.json(describeKpiCatalog(settingsFor(req.tenantId).get('dashboardKpis'), (moduleId) => ModuleTools.isOn(moduleFlagsOf(req.tenantId), moduleId)));
   });
