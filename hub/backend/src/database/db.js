@@ -1548,6 +1548,11 @@ const MIGRATIONS = [
   );
   CREATE INDEX invoices_due ON invoices (tenant_id, status, due_date, id);
   `,
+  // 86: opvolging van offertes zonder reactie (verkoop/quote-follow-up.js): hoeveel herinneringen er zijn verstuurd en wanneer de laatste ging.
+  `
+  ALTER TABLE quotes ADD COLUMN followup_count INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE quotes ADD COLUMN followup_at TEXT;
+  `,
 ];
 
 /**
