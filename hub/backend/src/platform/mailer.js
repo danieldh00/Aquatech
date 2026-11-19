@@ -150,12 +150,12 @@ function createMailer(settings, { createTransport = nodemailer.createTransport, 
     const inline = inlineImages(html);
     try {
       return await transport.sendMail({
-      from: server.from, to: list.join(', '), bcc: bcc && validEmail(bcc) ? bcc.trim() : undefined, replyTo: replyTo && validEmail(replyTo) ? replyTo : server.replyTo || undefined,
-      subject: String(subject || '').replace(/[\r\n]/g, ' ').slice(0, 300), text, html: inline.html,
-      attachments: Array.isArray(attachments) && attachments.length ? attachments.slice(0, 5).map((attachment) => ({
-        filename: String(attachment.filename || 'bijlage').replace(/[\r\n"\\/]/g, '').slice(0, 120), content: attachment.content, contentType: attachment.contentType,
-      })).concat(inline.attachments) : (inline.attachments.length ? inline.attachments : undefined),
-      });
+        from: server.from, to: list.join(', '), bcc: bcc && validEmail(bcc) ? bcc.trim() : undefined, replyTo: replyTo && validEmail(replyTo) ? replyTo : server.replyTo || undefined,
+        subject: String(subject || '').replace(/[\r\n]/g, ' ').slice(0, 300), text, html: inline.html,
+        attachments: Array.isArray(attachments) && attachments.length ? attachments.slice(0, 5).map((attachment) => ({
+          filename: String(attachment.filename || 'bijlage').replace(/[\r\n"\\/]/g, '').slice(0, 120), content: attachment.content, contentType: attachment.contentType,
+        })).concat(inline.attachments) : (inline.attachments.length ? inline.attachments : undefined),
+        });
     } catch (error) {
       throw tagServer(error, server);
     }
