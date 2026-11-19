@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.26.2',
+      date: '2026-11-19',
+      title: 'Bulkacties in de factuurlijst',
+      items: [
+        { text: 'In het factuuroverzicht kun je meerdere facturen aanvinken, ze in één keer per e-mail versturen en de selectie naar Excel exporteren.', for: ['facturen'] },
+      ],
+    },
+    {
       version: '1.26.1',
       date: '2026-11-19',
       title: 'Conceptfactuur klaar zodra een werkorder Gereed is',
