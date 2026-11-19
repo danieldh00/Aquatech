@@ -30,6 +30,8 @@ const MAILS_PER_RUN = 50;
 // Na een mail aan deze factuur wacht een volgende minstens zoveel dagen.
 const MIN_DAYS_BETWEEN_MAILS = 3;
 const DAY_MS = 86400000;
+// Zo lang mag een reservering 'verzenden' zijn voor ze als onbekend getoond wordt.
+const STALE_CLAIM_MS = 60 * 60 * 1000;
 
 /**
  * Schoont de instelling paymentReminders op: stappen in vaste volgorde, de dagen strikt oplopend (minstens een week
@@ -215,10 +217,15 @@ function createPaymentReminderStore(db) {
    * @returns {{ stepKey: string, title: string, status: string, sentAt: string, sentTo: string, reason: string, daysOverdue: number }[]} De stappen, oudste eerst.
    */
   function forInvoice(tenantId, invoiceId) {
-    return prepare('SELECT step_key, status, sent_at, sent_to, reason, days_overdue FROM invoice_reminders WHERE tenant_id = ? AND invoice_id = ? AND status <> \'verzenden\' ORDER BY sent_at')
+    // Bewuste keuze: liever nooit dubbel mailen dan altijd bereiken. Een reservering die langer dan een uur 'verzenden' blijft (proces gestopt
+    // of vastleggen mislukt) wordt niet opnieuw verstuurd, maar hier zichtbaar als 'onbekend', zodat iemand hem zo nodig handmatig nastuurt.
+    const staleBefore = new Date(Date.now() - STALE_CLAIM_MS).toISOString();
+    return prepare('SELECT step_key, status, sent_at, sent_to, reason, days_overdue FROM invoice_reminders WHERE tenant_id = ? AND invoice_id = ? ORDER BY sent_at')
       .all(tenantId, String(invoiceId))
-      .map((row) => ({ stepKey: row.step_key, title: (STEPS.find((step) => step.key === row.step_key) || {}).title || row.step_key, status: row.status,
-        sentAt: row.sent_at, sentTo: row.sent_to, reason: row.reason, daysOverdue: Number(row.days_overdue) }));
+      .filter((row) => row.status !== 'verzenden' || row.sent_at < staleBefore)
+      .map((row) => ({ stepKey: row.step_key, title: (STEPS.find((step) => step.key === row.step_key) || {}).title || row.step_key,
+        status: row.status === 'verzenden' ? 'onbekend' : row.status, sentAt: row.sent_at, sentTo: row.sent_to,
+        reason: row.status === 'verzenden' ? 'Onderbroken tijdens het versturen: niet zeker of de mail is aangekomen. Stuur zo nodig zelf een herinnering.' : row.reason, daysOverdue: Number(row.days_overdue) }));
   }
 
   return { candidates, optedOut, byInvoice, latestByInvoice, record, claim, finish, release, forInvoice };
@@ -336,7 +343,11 @@ function createPaymentReminderRunner(reminders, { invoices, sender, settingsFor,
             continue;
           }
           // Tijdelijke fout: de reservering vrijgeven, volgende ronde opnieuw.
-          reminders.release(tenantId, invoice.id, target.key);
+          try {
+            reminders.release(tenantId, invoice.id, target.key);
+          } catch (releaseError) {
+            console.error(`Betalingsherinnering ${invoice.number}: reservering vrijgeven mislukt:`, releaseError.message);
+          }
           // Afzender geweigerd of de mailserver is weg: geldt voor elke factuur, dus deze ronde stoppen.
           if (error.command === 'MAIL FROM') return result;
           transientFailures++;
