@@ -254,6 +254,44 @@ test('wachtwoord vergeten, herstellen en e-mailadres bevestigen (A-02)', async (
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM account_tokens WHERE token_hash = ?').get(resetToken).n, 0);
 });
 
+test('herstelmail en bevestigingsmail: per adres en per account begrensd, zonder te verraden of een adres bestaat', async () => {
+  const db = openDb();
+  const store = createStore(db);
+  const main = store.ensureTenant().id;
+  await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
+  const sent = [];
+  /**
+   * Nep-mailserver die de berichten bewaart.
+   * @returns {{ configured: Function, send: Function }} De mailfuncties.
+   */
+  const mailerFor = () => ({ configured: () => true, send: async (message) => { sent.push(message); } });
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db, mailerFor, loginDelayMs: 0 }));
+  servers.push(server);
+  const admin = await createLogin(base, { password: PW })('baas');
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true, shopPayment: { online: false, publicUrl: `${base}/` } })).status, 200);
+  const visitor = createClient(base);
+  assert.strictEqual((await postForm(base, visitor, '/registreren/', { displayName: 'Els', email: 'els@voorbeeld.nl', password: PW, password2: PW, website: '' })).status, 303);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  sent.length = 0;
+  // De limiet van drie tokens per account zou het aantal mails al afkappen: wis de tokens na elke poging, zodat alleen de nieuwe limieten overblijven.
+  // Zeven aanvragen voor hetzelfde adres (steeds een andere bezoeker): altijd hetzelfde antwoord, maar precies vijf mails.
+  for (let round = 0; round < 7; round += 1) {
+    const out = await postForm(base, createClient(base), '/wachtwoord-vergeten/', { email: 'els@voorbeeld.nl' });
+    assert.strictEqual(out.status, 200);
+    assert.match(out.text, /Als er een account met dit e-mailadres is/);
+    db.prepare('DELETE FROM account_tokens WHERE tenant_id = ?').run(main);
+  }
+  assert.strictEqual(sent.filter((message) => message.subject === 'Nieuw wachtwoord kiezen').length, 5);
+  // Opnieuw bevestigen aanvragen: zeven pogingen van hetzelfde account, steeds een redirect, maar precies vijf mails.
+  sent.length = 0;
+  for (let round = 0; round < 7; round += 1) {
+    const out = await postForm(base, visitor, '/account/bevestigen/', {});
+    assert.strictEqual(out.status, 303);
+    db.prepare('DELETE FROM account_tokens WHERE tenant_id = ?').run(main);
+  }
+  assert.strictEqual(sent.filter((message) => message.subject === 'Bevestig je e-mailadres').length, 5);
+});
+
 test('knop naar het beheer in de shopkop: alleen voor medewerkers en beheerders, niet voor klanten of bezoekers', async () => {
   const { base, db, store, main, admin } = await setup();
   await store.createAccount(main, { username: 'jan.klant', displayName: 'Jan', role: 'klant', password: PW });
