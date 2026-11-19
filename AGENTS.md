@@ -36,6 +36,7 @@ kill $(lsof -ti tcp:3300)                          # testserver stoppen (nooit p
 Docker is niet beschikbaar in de cloud-sandbox. Er is geen aparte linter; `codestyle` en `tenant-filter` zijn onderdeel van `npm test`.
 
 ## Werkwijze en PR
+- Algemene werkwijze: `docs/WERKWIJZE.md` (projectonafhankelijk); AquaTech-context: `docs/AQUATECH-CONTEXT.md`. **Wie de werkwijze verandert, werkt `docs/WERKWIJZE.md` bij in dezelfde PR** (de kopie in de projectbestanden, `werkwijze/WERKWIJZE.md`, wordt door de coördinator gelijkgehouden).
 - Nooit rechtstreeks op `master`. Branch vers vanaf `origin/master` (`feature/<naam>` of `claude/<naam>`), kleine PR's, één onderwerp per PR.
 - Volgorde: wijzigen → `npm test` → `changes/<naam>.md` (als `hub/` wijzigt) → `README.md` bijwerken bij features/setup → push → PR → CI groen + verplichte **Claude code review** en **Claude security review** → bevindingen oplossen vóór auto-merge.
 - **Versie, `CHANGELOG.md` en `frontend/nieuws/releases.js` nooit zelf aanraken**; `release.yml` doet dat na de merge. Alleen docs/CI zonder effect: PR-label `geen-releasenotes`.
