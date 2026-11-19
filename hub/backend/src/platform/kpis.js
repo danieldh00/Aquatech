@@ -52,6 +52,7 @@ function registerKpiRoutes(app, { identify, db }) {
   app.get('/api/kpis', (req, res) => {
     const user = identify(req);
     if (!user) return res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
+    if (!Roles.can(user, 'beheer')) return res.status(403).json({ error: 'forbidden', message: 'Alleen voor beheerders.' });
     res.set('Cache-Control', 'no-store');
     res.json({ kpis: buildKpis({ user, tenantId: req.tenantId }, { db }) });
   });

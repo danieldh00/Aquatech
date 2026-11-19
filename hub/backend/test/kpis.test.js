@@ -1,9 +1,11 @@
 // Kengetallen voor het beheerdersdashboard: bedragen en aantallen per omgeving, en welk recht bij welke tegel hoort.
 const test = require('node:test');
+const express = require('express');
 const assert = require('node:assert');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
-const { buildKpis, weekOf } = require('../src/platform/kpis');
+const { buildKpis, weekOf, registerKpiRoutes } = require('../src/platform/kpis');
+const { createClient, listen } = require('./helpers/http-client');
 
 const TODAY = '2026-11-19'; // donderdag
 
@@ -109,4 +111,45 @@ test('elke tegel hoort bij een recht en zonder beheer is er niets', () => {
   assert.deepStrictEqual(keys(['beheer', 'offertes']), ['offertes']);
   assert.deepStrictEqual(keys(['beheer', 'planning']), ['bezetting']);
   assert.deepStrictEqual(keys(['facturen', 'offertes', 'planning']), [], 'zonder beheer geen kengetallen');
+});
+
+test('route: zonder inlog 401, zonder beheer 403, alleen de eigen omgeving, vier queries', async () => {
+  const { db, mainId, otherId } = setup();
+  let queries = 0;
+  const prepare = db.prepare.bind(db);
+  /**
+   * Telt elke query en geeft het statement door.
+   * @param {string} sql De SQL.
+   * @returns {object} Het statement.
+   */
+  db.prepare = (sql) => { queries += 1; return prepare(sql); };
+  const app = express();
+  app.use((req, _res, next) => { req.tenantId = req.headers['x-tenant']; next(); });
+  /**
+   * Nep-identificatie: de gebruiker komt uit de testkop.
+   * @param {object} req Het verzoek.
+   * @returns {object|null} De gebruiker met rechten, of null.
+   */
+  const identify = (req) => (req.headers['x-rights'] ? { rights: String(req.headers['x-rights']).split(',') } : null);
+  registerKpiRoutes(app, { identify, db });
+  const { server, base } = await listen(app);
+  try {
+    const http = createClient(base);
+    /**
+     * Vraagt de kengetallen op als een gebruiker met deze rechten.
+     * @param {string} tenant De omgeving.
+     * @param {string} [rights] De rechten, komma-gescheiden (leeg = niet ingelogd).
+     * @returns {Promise<object>} Het antwoord.
+     */
+    const get = (tenant, rights) => http.get('/api/kpis', { 'x-tenant': tenant, ...(rights ? { 'x-rights': rights } : {}) });
+    assert.strictEqual((await get(mainId)).status, 401);
+    assert.strictEqual((await get(mainId, 'facturen,offertes,planning')).status, 403, 'zonder beheer geen kengetallen');
+    queries = 0;
+    const main = await get(mainId, 'beheer,facturen,offertes,planning');
+    assert.strictEqual(main.status, 200);
+    assert.strictEqual(queries, 4, 'één query per tegel');
+    assert.deepStrictEqual(main.body.kpis.map((tile) => tile.key), ['openstaand', 'vervallen', 'offertes', 'bezetting']);
+    const other = await get(otherId, 'beheer,facturen');
+    assert.strictEqual(other.body.kpis.find((tile) => tile.key === 'openstaand').value, 7777, 'andere omgeving ziet alleen zijn eigen bedragen');
+  } finally { server.close(); }
 });
