@@ -691,6 +691,16 @@ function registerWorkOrderRoutes(app, ctx) {
     if (!ctx.onChange) return;
     try { ctx.onChange(tenantOf(req), id, req.user); } catch (error) { console.warn(`Voorraad bij werkorder ${id} niet bijgewerkt: ${error.message}`); }
   };
+  /**
+   * Na Gereed: een conceptfactuur klaarzetten (alleen als de facturenmodule dat aanbiedt). Een fout houdt het opslaan niet tegen.
+   * @param {object} req Het verzoek.
+   * @param {string} id Id van de werkorder.
+   * @returns {void}
+   */
+  const draftInvoice = (req, id) => {
+    if (!ctx.onDone) return;
+    try { ctx.onDone(req, id); } catch (error) { console.warn(`Conceptfactuur bij werkorder ${id} niet aangemaakt: ${error.message}`); }
+  };
   const loggedOf = ctx.loggedOf || (() => ({}));
   const requireWo = requireRight('werkorders');
   // Inplannen en de afspraak met de klant (planning of de werkorder zelf).
@@ -831,12 +841,14 @@ function registerWorkOrderRoutes(app, ctx) {
     if (assignee.error) return badAssignee(res);
     const customerPick = customerChoice(req, res);
     if (!customerPick) return;
+    const wasDone = status === 'gereed' && workorders.get(tenantOf(req), req.params.id)?.status === 'gereed';
     const workOrder = workorders.update(tenantOf(req), req.params.id, data, status, assignee.value, { ifBase: ifBaseOf(req), customerId: customerPick.value });
     if (!workOrder) return notFound(res);
     // Offline gemaakt terwijl een ander de werkorder wijzigde: de gebruiker kiest.
     if (workOrder.conflict) return res.status(409).json({ error: 'conflict', message: `Werkorder ${workOrder.current.number} is intussen door iemand anders gewijzigd.`, updatedAt: workOrder.current.updatedAt });
     if (customerPick.value !== undefined) audit(req, 'werkorder_klant_gekoppeld', { workOrderId: workOrder.id, number: workOrder.number, customerId: customerPick.value });
     changed(req, workOrder.id);
+    if (status === 'gereed' && !wasDone) draftInvoice(req, workOrder.id);
     res.json(workOrder);
   });
 
