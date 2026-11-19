@@ -43,10 +43,11 @@ const round = (value) => Math.round(value * 10) / 10;
  * @param {{ thresholdMs?: number, stallMs?: number, capacity?: number, write?: Function, now?: Function, onRecord?: Function, onTaskError?: Function }} [options]
  *   thresholdMs: vanaf hoeveel ms een verzoek of taak wordt vastgelegd; stallMs: vanaf hoeveel ms stilstand van de
  *   hoofdthread; capacity: aantal regels in het geheugen; write: schrijft een regel (standaard console.warn); now: klok in ms;
- *   onRecord(regel): krijgt elke vastgelegde regel (voor het centrale logboek); onTaskError(naam, fout): een taak die faalt.
+ *   onRecord(regel): krijgt elke vastgelegde regel (voor het centrale logboek); onTaskError(naam, fout): een taak die faalt;
+ *   ignoreRequest(verzoek, antwoord): geeft true voor een verzoek dat bewust traag is en niet gelogd hoeft te worden.
  * @returns {object} `middleware`, `trackTask`, `startStallWatch`, `entries`, `record`, `thresholdMs`.
  */
-function createSlowLog({ thresholdMs = 1000, stallMs = 1000, capacity = 500, write = (line) => console.warn(line), now = () => performance.now(), onRecord = null, onTaskError = null } = {}) {
+function createSlowLog({ thresholdMs = 1000, stallMs = 1000, capacity = 500, write = (line) => console.warn(line), now = () => performance.now(), onRecord = null, onTaskError = null, ignoreRequest = null } = {}) {
   const entries = [];
   const activeRequests = new Map();
   const activeTasks = new Map();
@@ -99,6 +100,7 @@ function createSlowLog({ thresholdMs = 1000, stallMs = 1000, capacity = 500, wri
       activeRequests.delete(id);
       const durationMs = now() - startedAt;
       if (durationMs < thresholdMs) return;
+      if (ignoreRequest && ignoreRequest(req, res)) return;
       const routePath = req.route && typeof req.route.path === 'string' ? `${req.baseUrl || ''}${req.route.path}` : null;
       record({
         kind: 'verzoek',

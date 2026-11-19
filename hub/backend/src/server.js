@@ -647,6 +647,15 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use(appLog.middleware);
   const slowLog = createSlowLog({
     thresholdMs: Number(env.SLOW_REQUEST_MS) || 1000, stallMs: Number(env.SLOW_STALL_MS) || 1000,
+    // Onder `node --test` (of met SLOW_LOG_QUIET=1) blijft het logboek in het geheugen, maar komt er niets op de console.
+    ...(env.SLOW_LOG_QUIET === '1' || (process.env.NODE_TEST_CONTEXT && env.SLOW_LOG_QUIET !== '0') ? { write: () => {} } : {}),
+    /**
+     * Een mislukte of afgeremde inlogpoging is bewust traag (wachtwoord-hash, loginvertraging) en is geen storing.
+     * @param {object} req Het verzoek.
+     * @param {object} res Het antwoord.
+     * @returns {boolean} true als het verzoek niet als traag gelogd hoeft te worden.
+     */
+    ignoreRequest: (req, res) => req.method === 'POST' && /\/api\/auth\/login$/.test(String(req.originalUrl || req.url).split('?')[0]) && [400, 401, 403, 429].includes(res.statusCode),
     /**
      * Zet een regel van het trage-verzoekenlog ook in het centrale logboek.
      * @param {object} entry De vastgelegde regel (soort, duur, pad, status enz.).

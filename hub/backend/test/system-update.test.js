@@ -366,3 +366,30 @@ test('onderhoudsmodus: lezen werkt, schrijven 503, in- en uitloggen en health bl
     server.close();
   }
 });
+
+test('createSystemUpdate: handmatig controleren zet een check-aanvraag klaar en loopt tot de host klaar is', () => {
+  const { statusDir, requestDir } = makeDirs();
+  let clock = Date.parse('2026-11-19T10:00:00.500Z');
+  const update = createSystemUpdate({ statusDir, requestDir, currentVersion: RUNNING, now: () => clock });
+  hostWrites(statusDir, { 'status.json': { current: RUNNING, available: RUNNING, checkedAt: '2026-11-19T09:00:00Z' } });
+  assert.strictEqual(update.view().checking, false);
+
+  assert.deepStrictEqual(update.requestCheck({ userId: 'u1', byName: 'Baas' }), { checking: true });
+  const written = JSON.parse(fs.readFileSync(path.join(requestDir, 'request.json'), 'utf8'));
+  assert.strictEqual(written.check, true);
+  assert.strictEqual(written.version, undefined);
+  assert.strictEqual(update.view().pending, null, 'een controle is geen update-aanvraag');
+  assert.strictEqual(update.view().checking, true);
+
+  hostWrites(statusDir, { 'status.json': { current: RUNNING, available: RUNNING, checkedAt: '2026-11-19T10:00:05Z' } });
+  assert.strictEqual(update.view().checking, false, 'de host heeft een nieuwe controle vastgelegd');
+
+  clock += 10 * 1000;
+  update.requestCheck({});
+  clock += 4 * 60 * 1000;
+  assert.strictEqual(update.view().checking, false, 'na drie minuten geven we het op');
+
+  hostWrites(statusDir, { 'run.json': { state: 'bezig', step: 'back-up', version: RUNNING, startedAt: new Date(clock).toISOString() } });
+  assert.strictEqual(update.requestCheck({}).error, 'busy');
+  assert.strictEqual(createSystemUpdate({ statusDir: '', requestDir: '', currentVersion: RUNNING }).requestCheck({}).error, 'not_configured');
+});
