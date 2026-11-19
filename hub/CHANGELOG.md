@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.24.0
+
+Het eindimage bevat alleen nog `backend/src` en `tools/release-info.js` (dat `update.sh` uit het image haalt); de tests en
+overige tools (codestijl, bench, minify, release-notes) blijven buiten het image (`hub/Dockerfile`, `hub/.dockerignore`,
+bewaakt door `test/dockerfile.test.js`). Verouderde verwijzingen naar Supabase als productiedatabase gecorrigeerd in
+`release.yml`, `ci.yml`, `compose.yml`, `deploy/apps01/README.md` en `DOCS.md` (Supabase is terugvaloptie; app-updates gaan
+via de updatetimer, Drive-back-ups zitten in de app).
+
+## 1.23.9
+
+Servertaken (`platform/host-tasks.js`, `host-tasks-routes.js`, `GET|PUT /api/admin/host-tasks`, alleen `canUpdate`): lijst `HOST_TASKS`, afvinken door de server via `update/status/host-tasks.json` of met de hand (instelling `hostTasks`). `servertaken.sh openstaand` voert open taken uit op een vaste commit (`TASKS_REF`) en legt ze vast; `setup-app-update.sh` accepteert `SETUP_REF`. Eerste taak: updaten vanuit de app opnieuw inrichten. Geen migratie.
+
+## 1.23.8
+
+- `mailFailure` onderscheidt time-out, geweigerd (ECONNREFUSED), DNS-fout en geen route; `createMailer` legt host en poort vast op de fout (`mailHost`, `mailPort`; nooit het wachtwoord).
+- `netguard.publicAddress` geeft bij meerdere adressen het IPv4-adres voorrang, zodat een container zonder IPv6 niet vastloopt op een IPv6-adres.
+- `deploy/apps01/pve/diagnose-mail.sh`: alleen-lezen test van poort 25/465/587 vanaf de Proxmox-host, apps01 en de app-container.
+
 ## 1.23.7
 
 Beheer > Systeem: `beheer/collapse-list.js` (`BeheerCollapse.render`) klapt lange lijsten in tot de eerste vijf regels met een knop *Toon alle (n)* / *Toon minder*. Gebruikt voor de back-uplijst, de Drive-bestanden en het Drive-logboek. Alleen frontend, geen migratie.
