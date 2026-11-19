@@ -4,17 +4,24 @@ Algemene afspraken voor samenwerken met Claude in een project met een coördinat
 
 **Onderhoud:** wie de werkwijze verandert, werkt dit bestand bij in dezelfde PR. De kopie in de projectbestanden (`werkwijze/WERKWIJZE.md`) blijft gelijk aan deze versie.
 
-## Zo neem je dit mee naar een nieuw project
-- **Claude Code op een repo:** kopieer dit bestand naar `docs/WERKWIJZE.md` in de nieuwe repo en gebruik `CLAUDE-sjabloon.md` als start van de `CLAUDE.md` (Claude Code leest die automatisch). Vul de projectspecifieke sectie in.
-- **Claude-project (claude.ai) of andere omgeving:** plak de inhoud van dit bestand plus een korte projectcontext in de projectinstructies.
-- Houd projectkennis (product, prijsregels, omgeving) gescheiden van dit bestand, zodat dit zonder aanpassing hergebruikt kan worden.
+## Zo start je een nieuw project
+1. **Claude Code op een repo:** kopieer dit bestand naar `docs/WERKWIJZE.md` in de nieuwe repo en maak `CLAUDE.md` van `CLAUDE-sjabloon.md` (Claude Code leest die automatisch en verwijst naar dit bestand).
+2. **Claude-project (claude.ai) of andere omgeving:** plak de inhoud van dit bestand in de projectinstructies, gevolgd door de projectcontext uit stap 3.
+3. **Vul per project in** (dit bestand bevat dat bewust niet):
+   - repo (naam, hoofdbranch, waar de applicatie staat) en CI/reviewregels;
+   - omgeving: hosting, database, deploy, servertoegang en wie wat op de server mag draaien;
+   - huisstijl (kleuren, logo) en taal/tijdzone van de gebruiker;
+   - product, doelgroep en wat nooit gebouwd wordt;
+   - bedrijfsregels die code moet kennen (prijzen, rechten, processen);
+   - persoonlijke voorkeuren van de gebruiker (zie *Standaardvoorkeuren*).
+4. Houd projectkennis buiten dit bestand, zodat het ongewijzigd hergebruikt kan worden. Verbeteringen aan de werkwijze zelf gaan wel hier in.
+
+**Onderhoud:** wie de werkwijze verandert, werkt dit bestand bij in dezelfde PR; de kopie in de projectbestanden blijft gelijk.
 
 ## Communicatie
-- Nederlands, kort en zakelijk. Tijden in Europe/Amsterdam.
-- Exports altijd als Excel (.xlsx), nooit CSV, tenzij daar expliciet om gevraagd wordt.
+- Kort en zakelijk, in de taal van de gebruiker; tijden in zijn tijdzone.
 - Benoem items bij naam, niet alleen bij nummer.
 - UX: zo min mogelijk handelingen voor de gebruiker; automatiseer op de achtergrond.
-- Gebruik de term "KPI's" (niet "kengetallen" of "cijfers").
 - Een antwoord begint met de uitkomst of de vraag; geen verslag van het werk eromheen.
 
 ## Coördinator en threads
@@ -47,9 +54,14 @@ Algemene afspraken voor samenwerken met Claude in een project met een coördinat
 - Geen modelnamen of -ID's in commits, PR's, code of docs. Nooit secrets, wachtwoorden of persoonsgegevens in repo, chat of geheugen (zeker niet in een publieke repo).
 - Een nieuwe externe koppeling: instelling in de app, status en logboek zichtbaar, nooit tokens in de uitvoer.
 
+## Standaardvoorkeuren (pas aan per gebruiker)
+- Taal en tijdzone: Nederlands, Europe/Amsterdam.
+- Exports als Excel (.xlsx), geen CSV, tenzij daar expliciet om gevraagd wordt.
+- Term "KPI's" in plaats van "kengetallen" of "cijfers".
+
 ## Servertaken en scripts
 - Geef de gebruiker nooit losse servercommando's in de chat. Heeft een wijziging iets op de server nodig, voeg dan een servertaak toe die als afvinklijst in de app verschijnt (alleen zichtbaar als er iets openstaat).
-- Eén vast commando draait alles, als root op de hypervisor-host (Proxmox). Gastmachines hebben root-login uit, dus scripts gaan via ssh als gewone gebruiker + sudo.
+- Eén vast commando draait alles, als root op de hypervisor-host (bijv. Proxmox). Gastmachines hebben root-login uit, dus scripts gaan via ssh als gewone gebruiker + sudo.
 - Ruwe bestanden van GitHub altijd op een vaste commit-SHA, nooit op een branch.
 - Thuisverbinding bij een consumentenprovider: uitgaande poort 25 is waarschijnlijk geblokkeerd; mail via een API (bijv. Microsoft Graph) of poort 587.
 - Back-ups instelbaar en zichtbaar in de app, met optioneel een externe kopie.
