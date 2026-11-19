@@ -1,9 +1,8 @@
 // Voorraadtelling (jaartelling voor de boekhouding en tussentijdse tellingen): een telling bevriest de tellijst op een peildatum, de tellers tellen
 // blind (geen verwachte aantallen, geen prijzen), de beheerder controleert de verschillen en sluit af. Afsluiten boekt alle verschillen in één
 // transactie als `telling`-mutaties via `stock.book` en vergrendelt de telling. Het verschil wordt gerekend ten opzichte van de stand op het
-// telmoment, dus een pick of ontvangst tijdens het tellen geeft nooit een vals verschil. Een ingave mag het tijdstip van de teller meesturen
-// (`countedAt`, nodig voor een ingave die later aankomt, zoals een latere offlinewachtrij); een tijdstip vóór het bevriezen of in de toekomst telt
-// als servertijd. Een afsluiting die tegelijk met een andere wijziging botst, geeft 409 en boekt niets. Alles loopt per omgeving (tenant).
+// telmoment, dus een pick of ontvangst tijdens het tellen geeft nooit een vals verschil. Het telmoment is altijd de servertijd van de ingave
+// (een tijdstip van de client wordt genegeerd: dat zou het verschil kunnen verschuiven; een offlinewachtrij krijgt een eigen ontwerp). Een afsluiting die tegelijk met een andere wijziging botst, geeft 409 en boekt niets. Alles loopt per omgeving (tenant).
 
 const crypto = require('crypto');
 const express = require('express');
@@ -94,22 +93,6 @@ function exceedsThreshold(line, threshold) {
     return base === 0 ? true : Math.abs(line.difference) / base * 100 >= threshold.pct;
   }
   return false;
-}
-
-/**
- * Het moment waarop de teller telde: het tijdstip van de client als dat een geldige tijd is, niet in de toekomst en niet vóór het bevriezen
- * (een ingave die later aankomt, bijvoorbeeld na een trage verbinding, telt dan toch voor het juiste moment); anders de servertijd.
- * @param {*} claimed Het tijdstip van de client (ISO-tekst).
- * @param {string} frozenAt Het bevriezingsmoment van de telling.
- * @param {string} now De servertijd nu (ISO-tekst).
- * @returns {string} Het tijdstip (ISO-tekst) dat wordt vastgelegd.
- */
-function countMoment(claimed, frozenAt, now) {
-  if (typeof claimed !== 'string' || claimed.length > 40) return now;
-  const parsed = new Date(claimed);
-  if (Number.isNaN(parsed.getTime())) return now;
-  const iso = parsed.toISOString();
-  return iso > now || iso < frozenAt ? now : iso;
 }
 
 /**
@@ -432,7 +415,7 @@ function createStockCounts(db, { stock }) {
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van de telling.
    * @param {string} lineId Id van de regel.
-   * @param {{ qty?: number, clientId?: string, countedAt?: string }} body De ingave (met optioneel het tijdstip waarop de teller telde).
+   * @param {{ qty?: number, clientId?: string }} body De ingave.
    * @param {object} user De teller.
    * @returns {{ line: object, repeated?: boolean }|{ error: string, code: string, status: number }} De blinde regel of een fout.
    */
@@ -455,7 +438,7 @@ function createStockCounts(db, { stock }) {
         }
         if (row.status !== 'tellen') return { error: 'Deze telling loopt niet meer.', code: 'closed', status: 409 };
         const now = new Date().toISOString();
-        const countedAt = countMoment(input.countedAt, row.frozen_at, now);
+        const countedAt = now;
         const userName = user ? cleanText(user.display_name || user.displayName, 120) : '';
         prepare('INSERT INTO stock_count_entries (id, tenant_id, count_id, line_id, client_id, qty, counted_at, user_id, user_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
           .run(crypto.randomUUID(), tenantId, row.id, line.id, clientId, qty, countedAt, user ? user.id : null, userName);
@@ -524,6 +507,10 @@ function createStockCounts(db, { stock }) {
       if (pendingRecount.length && input.acceptRecounts !== true) {
         return { error: `${pendingRecount.length} regels moeten nog worden herteld: tel ze opnieuw of accepteer het eerdere aantal.`, code: 'recount_open', status: 409, details: { recount: pendingRecount.length } };
       }
+      // Artikelrijen vergrendelen (vaste volgorde, geen deadlock) vóór de mutaties worden gelezen: een pick of ontvangst die nu committ,
+      // is dan al zichtbaar in de mutaties en een nieuwe wacht tot deze afsluiting klaar is.
+      prepare(`SELECT i.id FROM stock_items i JOIN stock_count_lines l ON l.tenant_id = i.tenant_id AND l.item_id = i.id
+        WHERE l.tenant_id = ? AND l.count_id = ? ORDER BY i.id FOR UPDATE OF i`).all(tenantId, row.id);
       const now = new Date().toISOString();
       const note = `Voorraadtelling ${row.number} (peildatum ${row.reference_date})`;
       // Mutaties sinds het bevriezen per artikel in één query (alleen nodig voor regels die niet geteld zijn).

@@ -167,23 +167,13 @@ test('voorraadtelling: annuleren, locatiebereik, invoer controleren, rechten en 
   assert.strictEqual(world.db.prepare('SELECT on_hand FROM stock_items WHERE id = ?').get(world.ids.PIJP).on_hand, 20, 'annuleren boekt niets');
 });
 
-test('ingave met het tijdstip van de teller: een late ingave telt voor het juiste moment, een onmogelijk tijdstip wordt servertijd', async () => {
+test('een tijdstip van de client wordt genegeerd: het telmoment is de servertijd', async () => {
   const world = await countWorld();
   const count = (await world.admin.post('/app/api/stock-counts', { kind: 'tussentijds', locations: ['A-2'] })).body.count;
   const line = (await world.admin.get(`/app/api/stock-counts/${count.id}/lines`)).body.lines[0];
-  const early = new Date(Date.now() - 1000).toISOString();
-  const frozen = new Date(Date.now() - 3600 * 1000).toISOString();
-  assert.ok(frozen < early);
-  // Een tijdstip vóór het bevriezen en een tijdstip in de toekomst worden genegeerd (servertijd).
-  await world.picker.post(`/app/api/orderpick/counts/${count.id}/lines/${line.id}/count`, { qty: 20, clientId: 'tel-moment-0001', countedAt: frozen });
-  let stored = world.db.prepare('SELECT counted_at FROM stock_count_lines WHERE id = ?').get(line.id).counted_at;
-  assert.ok(stored > early, 'tijdstip vóór het bevriezen wordt servertijd');
-  await world.picker.post(`/app/api/orderpick/counts/${count.id}/lines/${line.id}/count`, { qty: 20, clientId: 'tel-moment-0002', countedAt: '2999-01-01T00:00:00.000Z' });
-  stored = world.db.prepare('SELECT counted_at FROM stock_count_lines WHERE id = ?').get(line.id).counted_at;
-  assert.ok(stored < '2999', 'tijdstip in de toekomst wordt servertijd');
-  // Een geldig tijdstip tussen bevriezen en nu wordt overgenomen.
   const frozenAt = world.db.prepare('SELECT frozen_at FROM stock_counts WHERE id = ?').get(count.id).frozen_at;
   const middle = new Date(new Date(frozenAt).getTime() + 1).toISOString();
   await world.picker.post(`/app/api/orderpick/counts/${count.id}/lines/${line.id}/count`, { qty: 20, clientId: 'tel-moment-0003', countedAt: middle });
-  assert.strictEqual(world.db.prepare('SELECT counted_at FROM stock_count_lines WHERE id = ?').get(line.id).counted_at, middle);
+  const stored = world.db.prepare('SELECT counted_at FROM stock_count_lines WHERE id = ?').get(line.id).counted_at;
+  assert.ok(stored > middle, 'een opgegeven tijdstip telt niet');
 });
