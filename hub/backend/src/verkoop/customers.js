@@ -199,10 +199,10 @@ function registerCustomerRoutes(app, ctx) {
     return address;
   }
 
-  app.get('/api/customers', requireCustomers, (req, res) => {
+  app.get('/api/customers', requireCustomers, async (req, res) => {
     const limit = Math.min(200, Math.max(1, Number.parseInt(req.query.limit, 10) || PAGE_SIZE));
     const offset = Math.max(0, Number.parseInt(req.query.offset, 10) || 0);
-    res.json({ ...store.listCustomerPage(tenantsOf(req), { search: String(req.query.q || '').slice(0, 100), group: String(req.query.group || ''), limit, offset }), limit, offset });
+    res.json({ ...(await store.listCustomerPageAsync(tenantsOf(req), { search: String(req.query.q || '').slice(0, 100), group: String(req.query.group || ''), limit, offset })), limit, offset });
   });
 
   app.post('/api/customers', requireJson, requireCustomers, limitInvitesIfAsked, checkForeignVat, requireVerifiedAddress(addressGuard, addressToVerify), async (req, res) => {
