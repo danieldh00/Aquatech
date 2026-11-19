@@ -53,27 +53,41 @@
     document.getElementById('s-kpis-period-field').hidden = !state.items.some((item) => item.periodic);
   }
 
+  let saving = false;
+  let dirty = false;
+
   /**
-   * Bewaart de huidige keuze en tekent het antwoord van de server.
+   * Bewaart de huidige keuze. Er loopt hoogstens één opslag tegelijk; wijzigingen tijdens het opslaan worden daarna in één keer
+   * (met de laatste stand) bewaard, en de lijst wordt pas opnieuw opgehaald als alles bewaard is.
    * @returns {Promise<void>}
    */
   async function save() {
+    dirty = true;
+    if (saving) return;
+    saving = true;
     errorBox.textContent = '';
     try {
-      await request('../api/admin/settings', { dashboardKpis: { items: state.items.map((item) => ({ key: item.key, enabled: item.enabled })), period: state.period } });
-      await load();
+      while (dirty) {
+        dirty = false;
+        await request('../api/admin/settings', { dashboardKpis: { items: state.items.map((item) => ({ key: item.key, enabled: item.enabled })), period: state.period } });
+      }
     } catch (error) {
       errorBox.textContent = error.message;
     }
+    saving = false;
+    await load();
   }
 
   /**
-   * Haalt de catalogus op en tekent hem.
+   * Haalt de catalogus op en tekent hem (niet zolang er een wijziging wordt bewaard).
    * @returns {Promise<void>}
    */
   async function load() {
+    if (saving || dirty) return;
     try {
-      state = await request('../api/admin/kpi-catalog');
+      const fresh = await request('../api/admin/kpi-catalog');
+      if (saving || dirty) return;
+      state = fresh;
       render();
     } catch (error) {
       errorBox.textContent = error.message;
