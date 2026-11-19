@@ -23,7 +23,7 @@ webserver in Docker (poort 3300) met PostgreSQL (een eigen container naast de ap
 
 ### Beheer in het kort
 
-- **Instellingen** (Beheer → Instellingen) staan in de database en werken zonder herstart: AI-sleutel, mail (SMTP, Exchange-connector of Microsoft 365 via Graph met een app-registratie in Entra: HTTPS, dus geen SMTP-poorten nodig; stappenplan in de app),
+- **Instellingen** (Beheer → Instellingen) staan in de database en werken zonder herstart: AI-sleutel, mail (SMTP, Exchange-connector of Microsoft 365 via Graph: HTTPS, dus geen SMTP-poorten nodig; *Automatisch instellen* laat de beheerder inloggen met een Microsoft-code en maakt dan zelf de app-registratie, de machtiging Mail.Send en het geheim aan, met een stappenplan als terugval; Bewaking waarschuwt een maand voordat het clientgeheim verloopt),
   webshop, Mollie, seizoensherinneringen enz. (Visma staat onder Facturen → Visma). Docker-omgevingsvariabelen zijn alleen startwaarden.
   Geheimen worden versleuteld opgeslagen en nooit volledig getoond.
 - **Testomgeving**: elke organisatie kan een testomgeving maken met eigen gegevens en testdata. Koppelingen naar
