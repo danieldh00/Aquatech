@@ -45,6 +45,7 @@
         <button class="tab" data-tab="suppliers" data-purchasing role="tab">Leveranciers</button>
         <button class="tab" data-tab="orders" data-purchasing role="tab">Inkooporders</button>
         <button class="tab" data-tab="pricefactor" data-purchasing role="tab">Prijsfactor</button>
+        <button class="tab" data-tab="counts" role="tab">Telling</button>
         <button class="tab" data-tab="media" role="tab">Afbeeldingen</button>
         <button class="tab" data-tab="texts" role="tab">Teksten <span id="t-texts" class="count"></span></button>
       </nav>
@@ -275,6 +276,75 @@
           <div class="err" role="alert"></div>
         </form>
         <div class="tablewrap"><table class="grid" id="po-table"></table></div>
+      </section>
+
+      <section id="tab-counts" class="tabpane" hidden>
+        <div id="ct-list">
+          <div class="filters">
+            <p class="muted small">Een jaarlijkse of tussentijdse voorraadtelling: de tellijst wordt bevroren, de tellers tellen blind in de orderpick-app en jij sluit af met de verschillen.</p>
+            <span class="spacer"></span>
+            <button class="btn primary" id="b-ct-new" type="button">+ Telling starten</button>
+          </div>
+          <form id="ct-form" class="card-form" hidden novalidate>
+            <h3>Nieuwe telling</h3>
+            <div class="form-grid">
+              <label class="field">Soort
+                <select name="kind"><option value="jaar">Jaartelling (alle locaties)</option><option value="tussentijds">Tussentijdse telling</option></select>
+              </label>
+              <label class="field">Peildatum<input name="referenceDate" type="date"></label>
+              <label class="field span-2">Locaties (alleen tussentijds, gescheiden met komma's; leeg = alles)<input name="locations" maxlength="600" autocomplete="off"></label>
+              <label class="field">Hertellen boven bedrag (€)<input name="amount" type="number" min="0" step="1" value="50"></label>
+              <label class="field">Hertellen boven percentage (%)<input name="pct" type="number" min="0" step="1" value="10"></label>
+              <label class="field full">Notitie<input name="note" maxlength="300" autocomplete="off"></label>
+            </div>
+            <div class="row actions">
+              <button class="btn primary" type="submit">Telling starten</button>
+              <button class="btn" type="button" data-cancel>Sluiten</button>
+              <span class="err" role="alert"></span>
+            </div>
+          </form>
+          <div class="tablewrap"><table class="grid" id="ct-table"></table></div>
+        </div>
+        <div id="ct-detail" hidden>
+          <div class="filters">
+            <button class="btn" id="b-ct-back" type="button">&larr; Alle tellingen</button>
+            <h3 id="ct-title"></h3>
+            <span class="spacer"></span>
+            <button class="btn" id="b-ct-excel" type="button" title="Excel met samenvatting, alle regels en het logboek van de ingaven">Excel</button>
+            <button class="btn" id="b-ct-recount" type="button" title="Zet de regels boven de drempel terug naar de tellers">Regels boven drempel hertellen</button>
+            <button class="btn danger" id="b-ct-cancel" type="button">Annuleren</button>
+            <button class="btn primary" id="b-ct-close" type="button">Afsluiten</button>
+          </div>
+          <div id="ct-stats" class="stats"></div>
+          <form id="ct-close-form" class="card-form" hidden novalidate>
+            <h3>Telling afsluiten</h3>
+            <p class="muted small">Afsluiten boekt alle verschillen als mutaties en kan niet ongedaan worden gemaakt.</p>
+            <div class="form-grid">
+              <label class="field">Niet getelde regels
+                <select name="open"><option value="ongewijzigd">Voorraad blijft zoals hij is</option><option value="nul">Tellen als 0</option></select>
+              </label>
+              <label class="field">Regels die nog herteld moeten worden
+                <select name="acceptRecounts"><option value="nee">Eerst hertellen</option><option value="ja">Eerdere aantal accepteren</option></select>
+              </label>
+              <label class="field">Je wachtwoord<input name="password" type="password" autocomplete="current-password" required></label>
+            </div>
+            <div class="row actions">
+              <button class="btn primary" type="submit">Afsluiten en boeken</button>
+              <button class="btn" type="button" data-cancel>Sluiten</button>
+              <span class="err" role="alert"></span>
+            </div>
+          </form>
+          <h4>Voortgang per locatie</h4>
+          <div class="tablewrap"><table class="grid" id="ct-progress"></table></div>
+          <div class="filters">
+            <label>Toon
+              <select id="ct-filter"><option value="alle">Alle regels</option><option value="open">Nog niet geteld</option><option value="verschillen">Met verschil</option><option value="hertellen">Te hertellen</option></select>
+            </label>
+            <label>Locatie<select id="ct-location"><option value="">Alle locaties</option></select></label>
+          </div>
+          <div class="tablewrap"><table class="grid" id="ct-lines"></table></div>
+          <p><button class="btn" id="b-ct-more" type="button" hidden>Meer regels tonen</button></p>
+        </div>
       </section>
 
       <section id="tab-suppliers" class="tabpane" hidden>
@@ -627,6 +697,7 @@
   <script src="proposals.js"></script>
   <script src="price-factor.js"></script>
   <script src="item-texts.js"></script>
+  <script src="counts.js"></script>
   <script src="artikelen.js"></script>
 </body>
 </html>
