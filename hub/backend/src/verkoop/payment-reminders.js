@@ -93,14 +93,18 @@ function createPaymentReminderStore(db) {
    * @param {string} tenantId Id van de omgeving.
    * @param {string} newestDue Laatste vervaldatum (vóór vandaag).
    * @param {string} oldestDue Oudste vervaldatum die nog meedoet.
-   * @returns {{ id: string, number: string, customerId: string|null, dueDate: string }[]} De facturen, oudste vervaldatum eerst.
+   * @param {string} lastStepKey Sleutel van de laatste actieve stap: facturen die die al hebben vallen af.
+   * @param {{ dueDate: string, id: string }|null} [after] Cursor: alleen facturen na deze (vervaldatum, id).
+   * @returns {{ id: string, number: string, customerId: string|null, dueDate: string }[]} Hoogstens CANDIDATE_LIMIT facturen, oudste vervaldatum eerst.
    */
-  function candidates(tenantId, newestDue, oldestDue) {
+  function candidates(tenantId, newestDue, oldestDue, lastStepKey, after = null) {
+    const cursor = after ? 'AND (due_date > ? OR (due_date = ? AND id > ?))' : '';
     return prepare(`SELECT id, number, customer_id, due_date FROM invoices
       WHERE tenant_id = ? AND status = 'definitief' AND kind = 'factuur' AND credited_at IS NULL AND total > 0
-        AND due_date <= ? AND due_date >= ?
+        AND due_date <= ? AND due_date >= ? ${cursor}
+        AND NOT EXISTS (SELECT 1 FROM invoice_reminders r WHERE r.tenant_id = invoices.tenant_id AND r.invoice_id = invoices.id AND r.step_key = ?)
       ORDER BY due_date, id LIMIT ${CANDIDATE_LIMIT}`)
-      .all(tenantId, newestDue, oldestDue)
+      .all(tenantId, newestDue, oldestDue, ...(after ? [after.dueDate, after.dueDate, after.id] : []), lastStepKey)
       .map((row) => ({ id: row.id, number: row.number || '', customerId: row.customer_id || null, dueDate: row.due_date }));
   }
 
@@ -228,67 +232,74 @@ function createPaymentReminderRunner(reminders, { invoices, sender, settingsFor,
     const profile = settings.get('quoteProfile') || {};
     const newestDue = Core.addDays(today, -activeSteps[0].days);
     const oldestDue = Core.addDays(today, -config.stopAfterDays);
-    const candidates = reminders.candidates(tenantId, newestDue, oldestDue);
-    if (!candidates.length) return result;
-    const optedOut = reminders.optedOut(userTenantsOf(tenantId), candidates.map((candidate) => candidate.customerId));
-    const done = reminders.byInvoice(tenantId, candidates.map((candidate) => candidate.id));
+    const lastStepKey = activeSteps[activeSteps.length - 1].key;
     let budget = MAILS_PER_RUN;
     let transientFailures = 0;
-    for (const candidate of candidates) {
-      if (budget <= 0) break;
-      if (candidate.customerId && optedOut.has(candidate.customerId)) continue;
-      const daysOverdue = daysBetween(candidate.dueDate, today);
-      const due = activeSteps.filter((step) => step.days <= daysOverdue);
-      if (!due.length) continue;
-      const target = due[due.length - 1];
-      const history = done.get(candidate.id) || [];
-      if (history.some((entry) => entry.stepKey === target.key)) continue;
-      // Pas een volgende mail als de vorige een paar dagen geleden is (bijvoorbeeld na het aanpassen van de dagen).
-      const lastSent = history.filter((entry) => entry.status === 'verstuurd').pop();
-      if (lastSent && daysBetween(lastSent.sentAt.slice(0, 10), today) < MIN_DAYS_BETWEEN_MAILS) continue;
-      const invoice = invoices.get(tenantId, candidate.id);
-      if (!invoice || invoice.status !== 'definitief') continue;
-      /**
-       * Legt de eerdere stappen die al voorbij zijn vast als overgeslagen.
-       * @returns {void}
-       */
-      const skipEarlier = () => {
-        for (const step of due.slice(0, -1)) {
-          if (!history.some((entry) => entry.stepKey === step.key)) reminders.record(tenantId, invoice.id, step.key, { status: 'overgeslagen', reason: 'Factuur was al verder dan deze stap.', daysOverdue });
-        }
-      };
-      const to = (invoice.data.customer.email || '').trim();
-      if (!validEmail(to)) {
-        skipEarlier();
-        reminders.record(tenantId, invoice.id, target.key, { status: 'overgeslagen', reason: 'Geen geldig e-mailadres van de klant.', daysOverdue });
-        result.skipped++;
-        continue;
-      }
-      budget--;
-      const values = { ...sender.values(tenantId, invoice), dagen_te_laat: String(daysOverdue) };
-      const language = DocText.clean(invoice.data.language);
-      const composed = compose(settings, target, language, values);
-      try {
-        await mailer.send({
-          to: [to], replyTo: profile.email, subject: composed.subject,
-          ...mailBody(profile, composed.paragraphs, undefined, mailStyleOf(settings)),
-          attachments: [{ filename: `${invoice.number || 'factuur'}.pdf`, content: sender.pdfOf(tenantId, invoice), contentType: 'application/pdf' }],
-        });
-        skipEarlier();
-        reminders.record(tenantId, invoice.id, target.key, { status: 'verstuurd', sentTo: to, daysOverdue });
-        result.sent++;
-      } catch (error) {
-        result.failed++;
-        // Afzender geweigerd of de mailserver is weg: geldt voor elke factuur, dus deze ronde stoppen.
-        if (error.command === 'MAIL FROM') return result;
-        // Adres definitief geweigerd: vastleggen, anders blokkeert deze factuur elke ronde.
-        if (permanentFailure(error)) {
-          reminders.record(tenantId, invoice.id, target.key, { status: 'overgeslagen', reason: mailFailure(error), daysOverdue });
+    let cursor = null;
+    // Pagina's met een cursor, zodat afgehandelde of uitgezette facturen nieuwere niet verdringen.
+    for (;;) {
+      const candidates = reminders.candidates(tenantId, newestDue, oldestDue, lastStepKey, cursor);
+      if (!candidates.length || budget <= 0) break;
+      cursor = { dueDate: candidates[candidates.length - 1].dueDate, id: candidates[candidates.length - 1].id };
+      const optedOut = reminders.optedOut(userTenantsOf(tenantId), candidates.map((candidate) => candidate.customerId));
+      const done = reminders.byInvoice(tenantId, candidates.map((candidate) => candidate.id));
+      for (const candidate of candidates) {
+        if (budget <= 0) break;
+        if (candidate.customerId && optedOut.has(candidate.customerId)) continue;
+        const daysOverdue = daysBetween(candidate.dueDate, today);
+        const due = activeSteps.filter((step) => step.days <= daysOverdue);
+        if (!due.length) continue;
+        const target = due[due.length - 1];
+        const history = done.get(candidate.id) || [];
+        if (history.some((entry) => entry.stepKey === target.key)) continue;
+        // Pas een volgende mail als de vorige een paar dagen geleden is (bijvoorbeeld na het aanpassen van de dagen).
+        const lastSent = history.filter((entry) => entry.status === 'verstuurd').pop();
+        if (lastSent && daysBetween(lastSent.sentAt.slice(0, 10), today) < MIN_DAYS_BETWEEN_MAILS) continue;
+        const invoice = invoices.get(tenantId, candidate.id);
+        if (!invoice || invoice.status !== 'definitief') continue;
+        /**
+         * Legt de eerdere stappen die al voorbij zijn vast als overgeslagen.
+         * @returns {void}
+         */
+        const skipEarlier = () => {
+          for (const step of due.slice(0, -1)) {
+            if (!history.some((entry) => entry.stepKey === step.key)) reminders.record(tenantId, invoice.id, step.key, { status: 'overgeslagen', reason: 'Factuur was al verder dan deze stap.', daysOverdue });
+          }
+        };
+        const to = (invoice.data.customer.email || '').trim();
+        if (!validEmail(to)) {
+          skipEarlier();
+          reminders.record(tenantId, invoice.id, target.key, { status: 'overgeslagen', reason: 'Geen geldig e-mailadres van de klant.', daysOverdue });
+          result.skipped++;
           continue;
         }
-        transientFailures++;
-        if (transientFailures >= 3) return result;
+        budget--;
+        const values = { ...sender.values(tenantId, invoice), dagen_te_laat: String(daysOverdue) };
+        const language = DocText.clean(invoice.data.language);
+        const composed = compose(settings, target, language, values);
+        try {
+          await mailer.send({
+            to: [to], replyTo: profile.email, subject: composed.subject,
+            ...mailBody(profile, composed.paragraphs, undefined, mailStyleOf(settings)),
+            attachments: [{ filename: `${invoice.number || 'factuur'}.pdf`, content: sender.pdfOf(tenantId, invoice), contentType: 'application/pdf' }],
+          });
+          skipEarlier();
+          reminders.record(tenantId, invoice.id, target.key, { status: 'verstuurd', sentTo: to, daysOverdue });
+          result.sent++;
+        } catch (error) {
+          result.failed++;
+          // Afzender geweigerd of de mailserver is weg: geldt voor elke factuur, dus deze ronde stoppen.
+          if (error.command === 'MAIL FROM') return result;
+          // Adres definitief geweigerd: vastleggen, anders blokkeert deze factuur elke ronde.
+          if (permanentFailure(error)) {
+            reminders.record(tenantId, invoice.id, target.key, { status: 'overgeslagen', reason: mailFailure(error), daysOverdue });
+            continue;
+          }
+          transientFailures++;
+          if (transientFailures >= 3) return result;
+        }
       }
+      if (candidates.length < CANDIDATE_LIMIT) break;
     }
     return result;
   }
