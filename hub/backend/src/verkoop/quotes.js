@@ -515,10 +515,11 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
   /**
    * Zet een offerte die door het maken van de link op Verzonden kwam, maar waarvan de mail mislukte, terug naar concept (en trekt de link in).
    * Doet niets als er al een mail is verstuurd.
+   * @param {string} tenantId De organisatie van de gebruiker.
    * @param {string} id Id van de offerte.
    */
-  function restoreDraft(id) {
-    prepare("UPDATE quotes SET status = 'concept', share_hash = NULL, share_token = NULL, shared_at = NULL WHERE id = ? AND status = 'verzonden' AND sent_at IS NULL").run(id);
+  function restoreDraft(tenantId, id) {
+    prepare("UPDATE quotes SET status = 'concept', share_hash = NULL, share_token = NULL, shared_at = NULL WHERE tenant_id = ? AND id = ? AND status = 'verzonden' AND sent_at IS NULL").run(tenantId, id);
   }
 
   /**
@@ -1085,7 +1086,7 @@ function registerQuoteRoutes(app, ctx) {
         });
       } catch (error) {
         console.warn(`Offerte ${quote.number} niet verstuurd: ${error.code || ''} ${error.message}`);
-        if (current.status === 'concept') quotes.restoreDraft(quote.id);
+        if (current.status === 'concept') quotes.restoreDraft(req.tenantId, quote.id);
         skipped.push({ id, number: quote.number, reason: mailFailure(error) });
         continue;
       }
