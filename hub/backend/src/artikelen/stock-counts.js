@@ -9,6 +9,7 @@ const express = require('express');
 const { transaction } = require('../database/db');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
 const { verifyPassword } = require('../platform/store');
+const { stockCountReportPdf, stockCountFormPdf, stockCountFileName } = require('./stock-count-pdf');
 
 const KINDS = ['jaar', 'tussentijds'];
 const MAX_QTY = 1e6;
@@ -624,10 +625,10 @@ function createStockCounts(db, { stock }) {
  * Hangt de routes van de voorraadtelling aan de app. Beheer onder /api/stock-counts (recht `voorraad`); tellen onder /api/orderpick/counts
  * (de poort voor het recht `orderpick` staat al op /api/orderpick) en altijd blind.
  * @param {object} app De Express-app.
- * @param {{ counts: object, getUser: Function, requireRight: Function, requireJson: Function, audit: Function }} deps De opslag, het opzoeken van een account (voor het wachtwoord), de rechtencontrole, de JSON-controle en het auditlogboek.
+ * @param {{ counts: object, getUser: Function, requireRight: Function, requireJson: Function, audit: Function, documentOptionsOf?: Function }} deps De opslag, het opzoeken van een account (voor het wachtwoord), de rechtencontrole, de JSON-controle, het auditlogboek en de opmaak van documenten (tenantId → { profile, colors, layout }).
  * @returns {void}
  */
-function registerStockCountRoutes(app, { counts, getUser, requireRight, requireJson, audit }) {
+function registerStockCountRoutes(app, { counts, getUser, requireRight, requireJson, audit, documentOptionsOf = () => ({}) }) {
   const requireStock = requireRight('voorraad');
   /**
    * Stuurt de uitkomst van de opslag als antwoord: een fout met status en melding, anders de gegevens.
@@ -683,6 +684,35 @@ function registerStockCountRoutes(app, { counts, getUser, requireRight, requireJ
     if (!out) return res.status(404).json({ error: 'not_found', message: 'Telling niet gevonden.' });
     audit(req, 'voorraadtelling_verslag', { number: out.count.number });
     res.json(out);
+  });
+
+  /**
+   * Stuurt een PDF als download (geen cache, nooit door een tussenpartij te bewaren).
+   * @param {object} res Het Express-antwoord.
+   * @param {string} fileName De bestandsnaam.
+   * @param {Buffer} buffer De PDF.
+   * @returns {void}
+   */
+  const sendPdf = (res, fileName, buffer) => {
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(buffer);
+  };
+
+  app.get('/api/stock-counts/:id/telstaat.pdf', requireStock, readLimiter, (req, res) => {
+    const out = counts.report(req.tenantId, req.params.id);
+    if (!out) return res.status(404).json({ error: 'not_found', message: 'Telling niet gevonden.' });
+    audit(req, 'voorraadtelling_telstaat', { number: out.count.number });
+    sendPdf(res, stockCountFileName(out.count, 'telstaat'), stockCountReportPdf(out, { ...documentOptionsOf(req.tenantId), onlyDifferences: req.query.alleen === 'verschillen' }));
+  });
+
+  app.get('/api/stock-counts/:id/telformulier.pdf', requireStock, readLimiter, (req, res) => {
+    const out = counts.report(req.tenantId, req.params.id);
+    if (!out) return res.status(404).json({ error: 'not_found', message: 'Telling niet gevonden.' });
+    const location = typeof req.query.locatie === 'string' ? req.query.locatie.slice(0, 60) : undefined;
+    audit(req, 'voorraadtelling_telformulier', { number: out.count.number });
+    sendPdf(res, stockCountFileName(out.count, 'telformulier'), stockCountFormPdf(out, { ...documentOptionsOf(req.tenantId), location }));
   });
 
   app.post('/api/stock-counts/:id/recount', requireJson, requireStock, changeLimiter, (req, res) => {

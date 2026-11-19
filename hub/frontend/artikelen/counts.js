@@ -112,6 +112,11 @@
     const running = count.status === 'tellen';
     $('#ct-title').textContent = `${count.number} · ${KIND_NAMES[count.kind] || count.kind} · peildatum ${dateText(count.referenceDate)} · ${STATUS_NAMES[count.status] || count.status}`;
     for (const id of ['b-ct-recount', 'b-ct-cancel', 'b-ct-close']) $(`#${id}`).hidden = !running;
+    const base = `api/stock-counts/${encodeURIComponent(count.id)}`;
+    $('#b-ct-pdf').href = `${base}/telstaat.pdf`;
+    $('#b-ct-pdf-diff').href = `${base}/telstaat.pdf?alleen=verschillen`;
+    $('#b-ct-form').href = `${base}/telformulier.pdf`;
+    $('#b-ct-form').hidden = !running;
     $('#ct-stats').innerHTML = [
       [`${totals.counted || 0} / ${totals.lines || 0}`, 'regels geteld'],
       [totals.open || 0, 'nog niet geteld'],

@@ -3091,7 +3091,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     requireJson, audit,
   });
   // Voorraadtelling (artikelen/stock-counts.js): beheer onder recht voorraad, tellen blind onder recht orderpick.
-  registerStockCountRoutes(app, { counts: stockCounts, getUser: (userId) => store.getUser(userId), requireRight, requireJson, audit });
+  registerStockCountRoutes(app, {
+    counts: stockCounts, getUser: (userId) => store.getUser(userId), requireRight, requireJson, audit,
+    documentOptionsOf: (tenantId) => ({ profile: settingsFor(tenantId).get('quoteProfile'), colors: documentColorsOf(tenantId), layout: settingsFor(tenantId).get('documentLayout') }),
+  });
   // Openstaande taken op het dashboard (volgen de rechten van de gebruiker).
   // KPI's voor beheerders op het dashboard (platform/kpis.js).
   registerKpiRoutes(app, { identify, db: database, settingsFor, isModuleOn: (tenantId, moduleId) => ModuleTools.isOn(moduleFlagsOf(tenantId), moduleId) });

@@ -2,6 +2,7 @@
 // hertellen, afsluiten met wachtwoord en alles-of-niets boeken, een jaartelling per jaar, idempotente ingaven, rechten en andere organisatie.
 const test = require('node:test');
 const assert = require('node:assert');
+const zlib = require('node:zlib');
 const { createStockCounts } = require('../src/artikelen/stock-counts');
 const { createStore } = require('../src/platform/store');
 const { createLogin } = require('./helpers/http-client');
@@ -205,4 +206,63 @@ test('een botsing bij het afsluiten geeft 409 (item_missing of count_changed) en
   const again = await world.admin.post(`/app/api/stock-counts/${count.id}/close`, { password: PW, open: 'nul' });
   assert.strictEqual(again.status, 409);
   assert.strictEqual(world.db.prepare("SELECT COUNT(*) AS n FROM stock_movements WHERE source LIKE 'telling:%'").get().n, 1);
+});
+
+/**
+ * De tekst van alle pagina's van een PDF: de inhoudsstromen worden uitgepakt en de tekenreeksen (tussen haakjes) samengevoegd.
+ * @param {Buffer} pdf De PDF.
+ * @returns {string} Alle getoonde tekst, gescheiden door een spatie.
+ */
+function pdfText(pdf) {
+  const source = pdf.toString('latin1');
+  const parts = [];
+  let from = 0;
+  for (;;) {
+    const start = source.indexOf('>>\nstream\n', from);
+    if (start < 0) break;
+    const end = source.indexOf('\nendstream', start);
+    if (end < 0) break;
+    try {
+      const inflated = zlib.inflateSync(pdf.subarray(start + 10, end)).toString('latin1');
+      for (const match of inflated.matchAll(/\(((?:\\.|[^\\)])*)\) Tj/g)) parts.push(match[1]);
+    } catch (_) { /* geen tekststroom (bijvoorbeeld een afbeelding) */ }
+    from = end + 1;
+  }
+  return parts.join(' ');
+}
+
+test('telstaat en telformulier als PDF: rechten, andere organisatie, en het blanco formulier is blind', async () => {
+  const world = await countWorld();
+  const count = (await world.admin.post('/app/api/stock-counts', { kind: 'tussentijds' })).body.count;
+  const lines = (await world.admin.get(`/app/api/stock-counts/${count.id}/lines`)).body.lines;
+  const pijp = lines.find((line) => line.code === 'PIJP');
+  assert.strictEqual((await countLine(world, count.id, pijp, 17, 'tel-pdf-0001')).status, 200);
+
+  const report = await world.admin.get(`/app/api/stock-counts/${count.id}/telstaat.pdf`);
+  assert.strictEqual(report.status, 200);
+  assert.strictEqual(report.type, 'application/pdf');
+  assert.match(report.headers.get('content-disposition'), /Telstaat VT\d{4}-\d+\.pdf/);
+  assert.ok(report.raw.slice(0, 5).toString() === '%PDF-');
+  assert.ok(pdfText(report.raw).includes('Artikel PIJP'), 'de telstaat noemt de artikelen');
+  const differences = await world.admin.get(`/app/api/stock-counts/${count.id}/telstaat.pdf?alleen=verschillen`);
+  assert.strictEqual(differences.status, 200);
+  assert.ok(!pdfText(differences.raw).includes('Artikel KRAAN'), 'alleen regels met een verschil');
+
+  // Het blanco formulier toont wel artikelen en locaties, maar nooit het verwachte aantal of een prijs.
+  const form = await world.admin.get(`/app/api/stock-counts/${count.id}/telformulier.pdf`);
+  assert.strictEqual(form.status, 200);
+  const formText = pdfText(form.raw);
+  assert.match(form.headers.get('content-disposition'), /Telformulier/);
+  assert.ok(formText.includes('Artikel PIJP') && formText.includes('A-10'));
+  assert.ok(!/€|Verwacht|Waarde/.test(formText), formText, 'geen prijzen of verwachte aantallen op het formulier');
+  const oneLocation = await world.admin.get(`/app/api/stock-counts/${count.id}/telformulier.pdf?locatie=A-2`);
+  assert.strictEqual(oneLocation.status, 200);
+  assert.ok(!pdfText(oneLocation.raw).includes('Artikel KRAAN'));
+
+  // Rechten en andere organisatie.
+  assert.strictEqual((await world.picker.get(`/app/api/stock-counts/${count.id}/telstaat.pdf`)).status, 403);
+  assert.strictEqual((await world.picker.get(`/app/api/stock-counts/${count.id}/telformulier.pdf`)).status, 403);
+  assert.strictEqual((await world.vreemd.get(`/app/api/stock-counts/${count.id}/telstaat.pdf`)).status, 404);
+  assert.strictEqual((await world.vreemd.get(`/app/api/stock-counts/${count.id}/telformulier.pdf`)).status, 404);
+  assert.strictEqual((await world.admin.get('/app/api/stock-counts/onbekend/telstaat.pdf')).status, 404);
 });
