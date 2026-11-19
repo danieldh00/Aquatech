@@ -354,6 +354,9 @@ test('onderhoudsmodus: lezen werkt, schrijven 503, in- en uitloggen en health bl
     assert.strictEqual(shopForm.status, 503);
     assert.match(shopForm.headers.get('content-type'), /html/);
 
+    const invoiceWebhook = await fetch(`${base}/app/api/public/invoice-payment/onbekend/webhook`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'id=tr_onbekend0001' });
+    assert.notStrictEqual(invoiceWebhook.status, 503, 'de webhook van een factuurbetaling blijft werken');
+
     const logout = await bert.post('/app/api/auth/logout');
     assert.notStrictEqual(logout.status, 503);
 

@@ -45,6 +45,23 @@ test('de klant ziet eigen definitieve facturen met knop Nu betalen, een ander ni
   assert.strictEqual((await createClient(world.base).get(`/app/api/portal/invoices/${invoiceId}/pdf`)).status, 401);
 });
 
+test('zonder recht portaal 403 en een webhook voor een onbekende factuur doet niets', async () => {
+  const world = await setup({ mollie: true });
+  assert.strictEqual((await world.vreemd.get('/app/api/portal')).status, 403, 'een beheerder van een andere organisatie heeft het portaal niet');
+  assert.strictEqual((await world.vreemd.post('/app/api/portal/invoices/x/pay', {})).status, 403);
+  assert.strictEqual((await webhook(world, 'bestaat-niet', 'tr_onbekend0001')).status, 200);
+});
+
+test('twee gelijktijdige klikken geven dezelfde betaalpagina', async () => {
+  const world = await setup({ mollie: true });
+  const { invoiceId } = await finalInvoiceFor(world, 0);
+  const client = world.shoppers[0].client;
+  const [first, second] = await Promise.all([client.post(`/app/api/portal/invoices/${invoiceId}/pay`, {}), client.post(`/app/api/portal/invoices/${invoiceId}/pay`, {})]);
+  assert.deepStrictEqual([first.status, second.status], [200, 200]);
+  assert.strictEqual(first.body.checkoutUrl, second.body.checkoutUrl);
+  assert.strictEqual(world.mollie.payments.size, 1);
+});
+
 test('een concept of een creditfactuur staat niet in het portaal', async () => {
   const world = await setup({ mollie: true });
   const customerId = world.db.prepare('SELECT id FROM users WHERE email = ?').get('k1@voorbeeld.nl').id;

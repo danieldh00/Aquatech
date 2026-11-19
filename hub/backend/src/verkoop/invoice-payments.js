@@ -193,8 +193,13 @@ function createInvoicePayments({ db, invoices, mollie, settingsFor, log = consol
         webhookUrl: `${base}app/api/public/invoice-payment/${encodeURIComponent(invoice.id)}/webhook`,
         metadata: { invoiceId: invoice.id, number: invoice.number },
       });
-      prepare('INSERT INTO invoice_payments (id, tenant_id, invoice_id, mollie_id, status, amount, checkout_url, mode, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-        .run(crypto.randomUUID(), tenantId, invoice.id, created.id, 'open', round2(invoice.total), created.checkoutUrl, created.mode, new Date().toISOString());
+      try {
+        prepare('INSERT INTO invoice_payments (id, tenant_id, invoice_id, mollie_id, status, amount, checkout_url, mode, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .run(crypto.randomUUID(), tenantId, invoice.id, created.id, 'open', round2(invoice.total), created.checkoutUrl, created.mode, new Date().toISOString());
+      } catch (insertError) {
+        // Gelijktijdige tweede klik: dezelfde idempotentiesleutel gaf dezelfde betaling terug en de eerste aanroep legde hem al vast.
+        if (!paymentsOf(tenantId, invoice.id).some((attempt) => attempt.mollieId === created.id)) throw insertError;
+      }
       return { checkoutUrl: created.checkoutUrl };
     } catch (error) {
       log.warn(`Betaling starten voor factuur ${invoice.number} mislukt:`, error instanceof MollieError ? error.message : error, ...(error instanceof MollieError && error.cause ? [error.cause] : []));
