@@ -1613,7 +1613,7 @@
     $('#b-shop').onclick = () => importShop();
     /** Opent het venster om de afbeeldingen van de webshop over te nemen. */
     $('#b-images').onclick = () => { openImagesImport(); };
-    window.StockBulk.init({ api, toast, reload: load, rerender: renderStock });
+    window.StockBulk.init({ api, toast, reload: load, rerender: renderStock, items: () => state.items });
     /**
      * Exporteert de voorraad.
      * @returns {Promise<void>}

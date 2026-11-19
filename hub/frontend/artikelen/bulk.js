@@ -5,6 +5,9 @@
   const selected = new Set();
   let context = null;
   let visibleItems = [];
+  let templatesReady = false;
+  /** Hoeveel artikelen in één keer gearchiveerd mogen worden (elk een eigen verzoek). */
+  const MAX_ARCHIVE = 100;
 
   /**
    * Zoekt een element op id binnen de pagina.
@@ -74,7 +77,7 @@
     const toLabel = chosen.filter(labelable);
     byId('s-bulk-archive').disabled = !toArchive.length;
     byId('s-bulk-archive').textContent = `Archiveren (${toArchive.length})`;
-    byId('s-bulk-labels').disabled = !toLabel.length;
+    byId('s-bulk-labels').disabled = !toLabel.length || !templatesReady;
     byId('s-bulk-labels').textContent = `Etiketten printen (${toLabel.length})`;
   }
 
@@ -140,7 +143,11 @@
   async function archiveSelected() {
     const items = chosenItems().filter(archivable);
     if (!items.length) return;
-    if (!confirm(`${items.length} ${items.length === 1 ? 'artikel' : 'artikelen'} archiveren? Het logboek blijft bewaard en je kunt een artikel per stuk weer terugzetten. Een artikel op een open bestelling of werkorder blijft staan.`)) return;
+    if (items.length > MAX_ARCHIVE) { context.toast(`Hoogstens ${MAX_ARCHIVE} artikelen per keer archiveren; je hebt er ${items.length} gekozen.`, true); return; }
+    const selectedIds = new Set(items.map((item) => item.id));
+    const variantCount = context.items().filter((item) => item.parentId && !item.archived && !selectedIds.has(item.id) && selectedIds.has(item.parentId)).length;
+    const variantText = variantCount ? ` Van de gekozen hoofdartikelen worden ook ${variantCount} ${variantCount === 1 ? 'variant' : 'varianten'} gearchiveerd.` : '';
+    if (!confirm(`${items.length} ${items.length === 1 ? 'artikel' : 'artikelen'} archiveren?${variantText} Het logboek blijft bewaard en je kunt een artikel per stuk weer terugzetten. Een artikel op een open bestelling of werkorder blijft staan.`)) return;
     const button = byId('s-bulk-archive');
     button.disabled = true;
     const skipped = [];
@@ -155,7 +162,7 @@
           skipped.push(`${item.code}: ${error.message}`);
         }
       }
-      await context.reload();
+      try { await context.reload(); } catch (error) { skipped.push(`overzicht verversen mislukt: ${error.message}`); }
       context.toast(`${done} ${done === 1 ? 'artikel' : 'artikelen'} gearchiveerd${skipped.length ? `; niet gelukt: ${skipped.join('; ')}` : ''}`, skipped.length > 0);
     } catch (error) {
       context.toast(error.message, true);
@@ -185,7 +192,7 @@
   }
 
   /**
-   * Vult de keuzelijst met etiketsjablonen; zonder sjablonen blijft de knop voor etiketten uit.
+   * Vult de keuzelijst met etiketsjablonen; zonder sjablonen blijft de knop voor etiketten uit en staat de fout in de keuzelijst.
    * @returns {Promise<void>}
    */
   async function loadTemplates() {
@@ -194,14 +201,17 @@
       const config = await window.ItemLabels.templates();
       select.innerHTML = config.templates.map((template) => `<option value="${escapeHtml(template.key)}">${escapeHtml(template.name)}</option>`).join('');
       select.value = config.defaultKey;
+      templatesReady = config.templates.length > 0;
     } catch (error) {
-      select.innerHTML = '';
+      templatesReady = false;
+      select.innerHTML = `<option value="">${escapeHtml(error.message)}</option>`;
     }
+    renderBar();
   }
 
   /**
    * Koppelt de knoppen van de balk.
-   * @param {{ api: Function, toast: Function, reload: Function, rerender: Function }} given De hulpfuncties van de pagina.
+   * @param {{ api: Function, toast: Function, reload: Function, rerender: Function, items: Function }} given De hulpfuncties van de pagina.
    * @returns {void}
    */
   function init(given) {
