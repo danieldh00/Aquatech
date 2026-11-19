@@ -41,6 +41,7 @@ const { mailFailure } = require('./mailer');
 const { configOf: mollieConfigOf } = require('../webshop/mollie');
 
 const HOUR_MS = 3600 * 1000;
+const DAY_MS = 24 * HOUR_MS;
 const MB = 1024 * 1024;
 const MAX_MESSAGE = 500;
 const EXTERNAL_CACHE_MS = HOUR_MS;
@@ -371,7 +372,8 @@ function createMonitoringChecks(deps = {}) {
         const server = settingsFor(ctx.tenantId).get('mailServer') || {};
         if (server.mode !== 'graph') return SKIP;
         if (!server.graphSecretExpires) return problem('waarschuwing', 'De vervaldatum van het clientgeheim voor Microsoft Graph is niet ingevuld, dus je krijgt geen melding voordat het verloopt. Vul de datum in bij Beheer > Instellingen > E-mail.');
-        const days = Math.floor((Date.parse(server.graphSecretExpires) - ctx.now()) / (24 * 60 * 60 * 1000));
+        // De vervaldatum geldt tot het einde van die dag (UTC): pas daarna is het geheim verlopen.
+        const days = Math.floor((Date.parse(server.graphSecretExpires) + DAY_MS - ctx.now()) / DAY_MS);
         if (days < 0) return problem('fout', `Het clientgeheim voor Microsoft Graph is verlopen (uiterlijk ${server.graphSecretExpires}): er kan geen mail meer worden verstuurd. Maak een nieuw geheim aan (Beheer > Instellingen > E-mail, Automatisch instellen).`);
         if (days <= 30) return problem('waarschuwing', `Het clientgeheim voor Microsoft Graph verloopt uiterlijk over ${days} ${days === 1 ? 'dag' : 'dagen'} (${server.graphSecretExpires}). Vernieuw het op tijd in Beheer > Instellingen > E-mail, anders stopt het versturen van mail.`);
         return OK;

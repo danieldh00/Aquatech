@@ -154,10 +154,16 @@ function createGraphSetup({ fetchImpl = fetch, now = Date.now, clientId = proces
    * @param {object} session De sessie met het token van de beheerder.
    * @returns {Promise<{ status: string, result: object }>} Status done met de gegevens van de nieuwe app.
    */
-  async function provisionFor(session) {
-    session.result = { ...(await provision(session.token)), from: session.from };
-    session.token = null;
-    return { status: 'done', result: session.result };
+  function provisionFor(session) {
+    // Een tweede poll tijdens het inrichten wacht op dezelfde uitkomst en richt niets dubbel in.
+    if (!session.provisioning) {
+      session.provisioning = provision(session.token).then((result) => {
+        session.result = { ...result, from: session.from };
+        session.token = null;
+        return { status: 'done', result: session.result };
+      }).finally(() => { session.provisioning = null; });
+    }
+    return session.provisioning;
   }
 
   /**

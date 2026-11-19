@@ -87,6 +87,26 @@ test('inrichting: wachten op inlog, dan app, service principal, machtiging Mail.
   assert.strictEqual((await setup.poll({ id: login.id, ...owner })).status, 'expired', 'sessie is afgesloten');
 });
 
+test('inrichting: twee polls tegelijk richten niets dubbel in', async () => {
+  const microsoft = fakeMicrosoft({ failPassword: true });
+  let time = 1_000_000;
+  const setup = createGraphSetup({ fetchImpl: microsoft.fetchImpl, now: () => time });
+  const owner = { tenantKey: 't1', userId: 'u1' };
+  const login = await setup.start({ ...owner, from: 'offerte@bedrijf.nl' });
+  time += 6000;
+  await setup.poll({ id: login.id, ...owner }).catch(() => null);
+  /**
+   * Telt hoeveel apps er zijn aangemaakt.
+   * @returns {number} Het aantal aanroepen.
+   */
+  const created = () => microsoft.calls.filter((call) => call.method === 'POST' && call.url.endsWith('/applications')).length;
+  const before = created();
+  const both = await Promise.all([setup.poll({ id: login.id, ...owner }), setup.poll({ id: login.id, ...owner })]);
+  assert.deepStrictEqual(both.map((item) => item.status), ['done', 'done']);
+  assert.strictEqual(both[0].result.secret, both[1].result.secret);
+  assert.ok(created() - before <= 1, 'hoogstens één nieuwe app');
+});
+
 test('inrichting: slow_down vertraagt, geweigerde of verlopen inlog en een onbereikbaar Microsoft geven een leesbare uitkomst', async () => {
   let time = 1_000_000;
   const slow = createGraphSetup({ fetchImpl: fakeMicrosoft({ slowDown: true, pendingPolls: 1 }).fetchImpl, now: () => time });
