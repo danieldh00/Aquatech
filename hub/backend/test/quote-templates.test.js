@@ -88,3 +88,20 @@ test('API: sjablonen staan niet in de algemene instellingen', async () => {
     server.close();
   }
 });
+
+test('API: een andere organisatie ziet de sjablonen niet en kan ze niet verwijderen', async () => {
+  const { server, as, store } = await setup();
+  try {
+    const baas = await as('baas');
+    const saved = await baas.put('/app/api/quote-templates', { template: { name: 'Eigen', intro: 'x' } });
+    const templateId = saved.body.templates[0].id;
+    const otherTenant = store.createTenant({ name: 'Andere', slug: 'andere' }).tenant.id;
+    await store.createAccount(otherTenant, { username: 'ander', displayName: 'Ander', role: 'beheerder', password: PASSWORD });
+    const other = await as('ander', 'andere');
+    assert.deepStrictEqual((await other.get('/app/api/quote-templates')).body.templates, []);
+    assert.strictEqual((await other.del(`/app/api/quote-templates/${templateId}`)).status, 404);
+    assert.strictEqual((await baas.get('/app/api/quote-templates')).body.templates.length, 1, 'het sjabloon van de eerste organisatie staat er nog');
+  } finally {
+    server.close();
+  }
+});
