@@ -200,11 +200,11 @@
   const selectedInvoices = () => state.items.filter((invoice) => state.selected.has(invoice.id));
 
   /**
-   * Of een factuur per e-mail verstuurd kan worden: definitief en nog niet betaald.
+   * Of een factuur in de bulkronde per e-mail verstuurd wordt: definitief, nog niet betaald en nog niet eerder verstuurd (opnieuw sturen kan per factuur).
    * @param {object} invoice de factuur
    * @returns {boolean} true als versturen zin heeft
    */
-  const mailable = (invoice) => invoice.status === 'definitief';
+  const mailable = (invoice) => invoice.status === 'definitief' && !invoice.sentAt;
 
   /** Toont of verbergt de balk met bulkacties en werkt de tellers bij. */
   function renderBulkBar() {
@@ -222,25 +222,31 @@
    * @returns {Promise<void>}
    */
   async function mailSelected() {
+    if (state.bulkBusy) return;
     const sendable = selectedInvoices().filter(mailable);
     if (!sendable.length) return;
-    if (!confirm(`${sendable.length} ${sendable.length === 1 ? 'factuur' : 'facturen'} nu per e-mail versturen aan de klant, met de PDF als bijlage? Facturen zonder e-mailadres worden overgeslagen.`)) return;
-    const button = $('#l-bulk-mail');
-    button.disabled = true;
+    const already = selectedInvoices().filter((invoice) => invoice.status === 'definitief' && invoice.sentAt).length;
+    if (!confirm(`${sendable.length} ${sendable.length === 1 ? 'factuur' : 'facturen'} nu per e-mail versturen aan de klant, met de PDF als bijlage? Facturen zonder e-mailadres worden overgeslagen.${already ? ` ${already} al eerder verstuurde ${already === 1 ? 'factuur wordt' : 'facturen worden'} niet opnieuw gestuurd.` : ''}`)) return;
+    state.bulkBusy = true;
+    $('#l-bulk-mail').disabled = true;
     let done = 0;
     const skipped = [];
-    for (const invoice of sendable) {
-      const label = invoice.number || 'concept';
-      try {
-        const draft = await api(`invoices/${encodeURIComponent(invoice.id)}/mail`);
-        if (!draft.configured) { skipped.push(`${label}: geen mailserver ingesteld`); break; }
-        if (!draft.to) { skipped.push(`${label}: geen e-mailadres`); continue; }
-        await api(`invoices/${encodeURIComponent(invoice.id)}/send`, { method: 'POST', body: { to: draft.to, subject: draft.subject, message: draft.message } });
-        done += 1;
-        state.selected.delete(invoice.id);
-      } catch (error) {
-        skipped.push(`${label}: ${error.message}`);
+    try {
+      for (const invoice of sendable) {
+        const label = invoice.number || 'concept';
+        try {
+          const draft = await api(`invoices/${encodeURIComponent(invoice.id)}/mail`);
+          if (!draft.configured) { skipped.push(`${label}: geen mailserver ingesteld, de rest is niet verwerkt`); break; }
+          if (!draft.to) { skipped.push(`${label}: geen e-mailadres`); continue; }
+          await api(`invoices/${encodeURIComponent(invoice.id)}/send`, { method: 'POST', body: { to: draft.to, subject: draft.subject, message: draft.message } });
+          done += 1;
+          state.selected.delete(invoice.id);
+        } catch (error) {
+          skipped.push(`${label}: ${error.message}`);
+        }
       }
+    } finally {
+      state.bulkBusy = false;
     }
     await load();
     toast(`${done} ${done === 1 ? 'factuur' : 'facturen'} verstuurd${skipped.length ? `; overgeslagen: ${skipped.join('; ')}` : ''}`, skipped.length > 0);
