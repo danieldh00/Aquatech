@@ -246,3 +246,18 @@ test('prijsfactor: de webshop wordt opnieuw klaargezet en gearchiveerde artikele
   // Opnieuw opslaan zonder verschil wijzigt niets.
   assert.strictEqual((await admin.put('/app/api/stock/price-factors', { defaultFactor: 2, rounding: { mode: 'cent', direction: 'dichtstbij' } })).body.repriced, 0);
 });
+
+test('prijsfactor: een inkooporder met een nieuwe inkoopprijs zet de verkoopprijs goed en logt het', async () => {
+  const { db, main, admin } = await setup();
+  await admin.put('/app/api/stock/price-factors', { defaultFactor: 2, rounding: { mode: 'cent', direction: 'dichtstbij' } });
+  const supplier = (await admin.post('/app/api/suppliers', { name: 'Groothandel' })).body;
+  const item = (await admin.post('/app/api/stock/items', { code: 'IO1', name: 'IO1', costPrice: 5, priceMode: 'factor' })).body;
+  assert.strictEqual(item.salePrice, 10);
+  const order = (await admin.post('/app/api/purchase-orders', { supplierId: supplier.id, lines: [{ itemId: item.id, qty: 4, unitCost: 8 }] })).body;
+  const placed = (await admin.post(`/app/api/purchase-orders/${order.id}/place`)).body;
+  const received = await admin.post(`/app/api/purchase-orders/${order.id}/receive`, { lines: [{ lineId: placed.lines[0].id, qty: 4 }] });
+  assert.strictEqual(received.status, 200, JSON.stringify(received.body));
+  const after = (await admin.get(`/app/api/stock/items/${item.id}`)).body;
+  assert.deepStrictEqual([after.costPrice, after.salePrice], [8, 16]);
+  assert.ok(priceAudit(db, main).some((entry) => entry.artikel === 'IO1' && entry.oud === 10 && entry.nieuw === 16 && entry.bron === 'ontvangst'));
+});
