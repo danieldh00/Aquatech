@@ -491,7 +491,7 @@ function createStockCounts(db, { stock }) {
    * @param {{ open?: string, acceptRecounts?: boolean }} body De keuzes.
    * @returns {{ count: object }|{ error: string, code: string, status: number, details?: object }} De afgesloten telling of een fout.
    */
-  function close(tenantId, id, user, body) {
+  function closeCount(tenantId, id, user, body) {
     const input = body && typeof body === 'object' ? body : {};
     return transaction(db, () => {
       const row = findCount(tenantId, id);
@@ -561,6 +561,25 @@ function createStockCounts(db, { stock }) {
       if (!closed.changes) throw Object.assign(new Error('De telling is intussen gewijzigd.'), { code: 'count_changed' });
       return { count: get(tenantId, row.id), booked };
     });
+  }
+
+  /**
+   * Sluit een telling af (zie `closeCount`) en geeft een botsing met een gelijktijdige wijziging terug als 409-fout; er is dan niets geboekt.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} id Id van de telling.
+   * @param {object} user De beheerder.
+   * @param {{ open?: string, acceptRecounts?: boolean }} body De keuzes.
+   * @returns {{ count: object, booked: number }|{ error: string, code: string, status: number, details?: object }} De afgesloten telling of een fout.
+   */
+  function close(tenantId, id, user, body) {
+    try {
+      return closeCount(tenantId, id, user, body);
+    } catch (error) {
+      if (error && (error.code === 'count_changed' || error.code === 'item_missing')) {
+        return { error: 'De telling of een artikel is intussen gewijzigd; er is niets geboekt. Laad de telling opnieuw en probeer het nog eens.', code: error.code, status: 409 };
+      }
+      throw error;
+    }
   }
 
   /**
@@ -670,24 +689,17 @@ function registerStockCountRoutes(app, { counts, getUser, requireRight, requireJ
     res.json(out);
   });
 
-  app.post('/api/stock-counts/:id/close', requireJson, requireStock, closeLimiter, async (req, res, next) => {
-    try {
-      const account = getUser(req.user.id);
-      const password = String(req.body && req.body.password !== undefined ? req.body.password : '').slice(0, 200);
-      if (!account || !account.password_hash || !(await verifyPassword(password, account.password_hash))) {
-        audit(req, 'voorraadtelling_wachtwoord_fout', { id: req.params.id });
-        return res.status(401).json({ error: 'wrong_password', message: 'Je wachtwoord klopt niet.' });
-      }
-      const out = counts.close(req.tenantId, req.params.id, req.user, req.body);
-      if (out.error) return send(res, out);
-      audit(req, 'voorraadtelling_afgesloten', { number: out.count.number, referenceDate: out.count.referenceDate, booked: out.booked, totals: out.count.totals });
-      res.json({ count: out.count, booked: out.booked });
-    } catch (error) {
-      if (error && (error.code === 'count_changed' || error.code === 'item_missing')) {
-        return res.status(409).json({ error: error.code, message: 'De telling of een artikel is intussen gewijzigd; er is niets geboekt. Laad de telling opnieuw en probeer het nog eens.' });
-      }
-      next(error);
+  app.post('/api/stock-counts/:id/close', requireJson, requireStock, closeLimiter, async (req, res) => {
+    const account = getUser(req.user.id);
+    const password = String(req.body && req.body.password !== undefined ? req.body.password : '').slice(0, 200);
+    if (!account || !account.password_hash || !(await verifyPassword(password, account.password_hash))) {
+      audit(req, 'voorraadtelling_wachtwoord_fout', { id: req.params.id });
+      return res.status(401).json({ error: 'wrong_password', message: 'Je wachtwoord klopt niet.' });
     }
+    const out = counts.close(req.tenantId, req.params.id, req.user, req.body);
+    if (out.error) return send(res, out);
+    audit(req, 'voorraadtelling_afgesloten', { number: out.count.number, referenceDate: out.count.referenceDate, booked: out.booked, totals: out.count.totals });
+    res.json({ count: out.count, booked: out.booked });
   });
 
   app.post('/api/stock-counts/:id/cancel', requireJson, requireStock, changeLimiter, (req, res) => {
