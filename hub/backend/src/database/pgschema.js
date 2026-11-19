@@ -1296,6 +1296,73 @@ const PG_MIGRATIONS = [
   ALTER TABLE quotes ADD COLUMN followup_count INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE quotes ADD COLUMN followup_at ${TEXT_TYPE};
   `,
+  // 87: jaarlijkse voorraadtelling (zie artikelen/stock-counts.js).
+  `
+  CREATE TABLE stock_counts (
+    id             ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id      ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    number         ${TEXT_TYPE} NOT NULL,
+    kind           ${TEXT_TYPE} NOT NULL CHECK (kind IN ('jaar', 'tussentijds')),
+    status         ${TEXT_TYPE} NOT NULL CHECK (status IN ('tellen', 'afgesloten', 'geannuleerd')),
+    reference_date ${TEXT_TYPE} NOT NULL,
+    reference_year BIGINT NOT NULL,
+    frozen_at      ${TEXT_TYPE} NOT NULL,
+    scope          ${TEXT_TYPE} NOT NULL DEFAULT '[]',
+    threshold      ${TEXT_TYPE} NOT NULL DEFAULT '{}',
+    note           ${TEXT_TYPE} NOT NULL DEFAULT '',
+    summary        ${TEXT_TYPE} NOT NULL DEFAULT '{}',
+    created_by     ${TEXT_TYPE},
+    created_by_name ${TEXT_TYPE} NOT NULL DEFAULT '',
+    closed_at      ${TEXT_TYPE},
+    closed_by      ${TEXT_TYPE},
+    closed_by_name ${TEXT_TYPE} NOT NULL DEFAULT '',
+    created_at     ${TEXT_TYPE} NOT NULL,
+    UNIQUE (tenant_id, number)
+  );
+  CREATE UNIQUE INDEX stock_counts_open ON stock_counts (tenant_id) WHERE status = 'tellen';
+  CREATE UNIQUE INDEX stock_counts_year ON stock_counts (tenant_id, reference_year) WHERE status = 'afgesloten' AND kind = 'jaar';
+  CREATE INDEX stock_counts_list ON stock_counts (tenant_id, created_at);
+  CREATE TABLE stock_count_lines (
+    id                 ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id          ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    count_id           ${TEXT_TYPE} NOT NULL ${references('stock_counts(id)')},
+    item_id            ${TEXT_TYPE} NOT NULL ${references('stock_items(id)')},
+    code               ${TEXT_TYPE} NOT NULL,
+    name               ${TEXT_TYPE} NOT NULL,
+    unit               ${TEXT_TYPE} NOT NULL DEFAULT 'st',
+    ean                ${TEXT_TYPE} NOT NULL DEFAULT '',
+    location           ${TEXT_TYPE} NOT NULL DEFAULT '',
+    expected_qty       DOUBLE PRECISION NOT NULL,
+    unit_cost          DOUBLE PRECISION,
+    cost_source        ${TEXT_TYPE} NOT NULL DEFAULT 'onbekend',
+    counted_qty        DOUBLE PRECISION,
+    counted_at         ${TEXT_TYPE},
+    counted_by         ${TEXT_TYPE},
+    counted_by_name    ${TEXT_TYPE} NOT NULL DEFAULT '',
+    status             ${TEXT_TYPE} NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'geteld', 'hertellen')),
+    resolution         ${TEXT_TYPE},
+    expected_at_count  DOUBLE PRECISION,
+    moved_since        DOUBLE PRECISION,
+    difference         DOUBLE PRECISION,
+    movement_id        ${TEXT_TYPE},
+    UNIQUE (tenant_id, count_id, item_id)
+  );
+  CREATE INDEX stock_count_lines_location ON stock_count_lines (tenant_id, count_id, location, code);
+  CREATE INDEX stock_count_lines_item ON stock_count_lines (tenant_id, item_id);
+  CREATE TABLE stock_count_entries (
+    id         ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id  ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    count_id   ${TEXT_TYPE} NOT NULL ${references('stock_counts(id)')},
+    line_id    ${TEXT_TYPE} NOT NULL ${references('stock_count_lines(id)')},
+    client_id  ${TEXT_TYPE} NOT NULL,
+    qty        DOUBLE PRECISION NOT NULL,
+    counted_at ${TEXT_TYPE} NOT NULL,
+    user_id    ${TEXT_TYPE},
+    user_name  ${TEXT_TYPE} NOT NULL DEFAULT '',
+    UNIQUE (tenant_id, client_id)
+  );
+  CREATE INDEX stock_count_entries_line ON stock_count_entries (tenant_id, count_id, line_id, counted_at);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

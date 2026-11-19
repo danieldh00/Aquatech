@@ -50,6 +50,7 @@ const { registerMailLayoutRoutes, configure: configureMailLayout } = require('./
 const { invoicePdf } = require('./verkoop/invoice-pdf');
 const { createOrderpick, registerOrderpickRoutes } = require('./webshop/orderpick');
 const { createGoodsReceipt, registerGoodsReceiptRoutes } = require('./artikelen/goods-receipt');
+const { createStockCounts, registerStockCountRoutes } = require('./artikelen/stock-counts');
 const { createShippingLabels } = require('./webshop/shipping-labels');
 const { createOrderSlips } = require('./webshop/order-slips');
 const { createQuoteOrders, registerQuoteOrderRoutes } = require('./verkoop/quote-orders');
@@ -2382,6 +2383,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       return false;
     }
   };
+  const stockCounts = createStockCounts(database, { stock: stockStore });
   const purchaseOrderStore = createPurchaseOrderStore(database, { stock: stockStore, suppliers: supplierStore, proposalsEnabled });
   // Prijs en voorraad in twee richtingen met de webshop (shop-sync.js); na een
   // wijziging gaan de gewijzigde artikelen enkele seconden later mee.
@@ -3088,6 +3090,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     receipts: createGoodsReceipt(database, { purchaseOrders: purchaseOrderStore, release: (tenantId, itemIds) => webOrders.markBackorderReady(tenantId, itemIds) }),
     requireJson, audit,
   });
+  // Voorraadtelling (artikelen/stock-counts.js): beheer onder recht voorraad, tellen blind onder recht orderpick.
+  registerStockCountRoutes(app, { counts: stockCounts, getUser: (userId) => store.getUser(userId), requireRight, requireJson, audit });
   // Openstaande taken op het dashboard (volgen de rechten van de gebruiker).
   // KPI's voor beheerders op het dashboard (platform/kpis.js).
   registerKpiRoutes(app, { identify, db: database, settingsFor, isModuleOn: (tenantId, moduleId) => ModuleTools.isOn(moduleFlagsOf(tenantId), moduleId) });
@@ -3226,7 +3230,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     store, tenant, settings, settingsFor, settingsCache, dailyCounts, requirePlatformAdmin, requireJson, wrap, audit,
     inScope, inScopeOnly, multitenancyOn, itemImageStore, shopContentStore, database, quoteStore, quoteOrders,
     workOrderStore, shopStore, photoStore, workLogStore, outsourcingStore, newsStore, aiUsage, recognitions,
-    stockStore, supplierStore, packagingStore, purchaseOrderStore, serviceRequestStore, invoiceStore, sprinklerStore,
+    stockStore, stockCounts, supplierStore, packagingStore, purchaseOrderStore, serviceRequestStore, invoiceStore, sprinklerStore,
     seasonReminderStore, paymentReminderStore, impersonation, withMustChange, auditUserChange, deleteUser,
   });
 

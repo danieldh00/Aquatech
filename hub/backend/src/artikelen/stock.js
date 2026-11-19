@@ -907,7 +907,8 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   function removeRow(tenantId, row) {
     prepare('DELETE FROM stock_reservations WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
     const moved = prepare(`SELECT (EXISTS (SELECT 1 FROM stock_movements WHERE tenant_id = ? AND item_id = ?)
-      OR EXISTS (SELECT 1 FROM purchase_order_lines WHERE tenant_id = ? AND item_id = ?)) AS n`).get(tenantId, row.id, tenantId, row.id).n;
+      OR EXISTS (SELECT 1 FROM purchase_order_lines WHERE tenant_id = ? AND item_id = ?)
+      OR EXISTS (SELECT 1 FROM stock_count_lines WHERE tenant_id = ? AND item_id = ?)) AS n`).get(tenantId, row.id, tenantId, row.id, tenantId, row.id).n;
     if (moved) {
       prepare('UPDATE stock_items SET archived = 1, archived_by_parent = 0, updated_at = ? WHERE tenant_id = ? AND id = ?').run(currentTimestamp(), tenantId, row.id);
       return true;
