@@ -55,7 +55,7 @@ const { createWebOrderInvoices } = require('./verkoop/web-order-invoices');
 const { createOrderMailer } = require('./webshop/web-orders-mail');
 const { createGuestOrders } = require('./webshop/guest-orders');
 const { createStockAlerts } = require('./webshop/stock-alerts');
-const { createMollie, cleanPublicUrl } = require('./webshop/mollie');
+const { createMollie, cleanPublicUrl, validPaymentId } = require('./webshop/mollie');
 const { createWebPayments } = require('./webshop/web-payments');
 const { createWebReturnStore, registerWebReturnRoutes } = require('./webshop/web-returns');
 const { createWebSalesStore, registerWebSalesRoutes } = require('./webshop/web-sales');
@@ -65,6 +65,7 @@ const { createReturnMailer } = require('./webshop/web-returns-mail');
 const { createShopOrders } = require('./webshop/shop-orders');
 const { createDebtorStore, registerDebtorRoutes } = require('./verkoop/debtors');
 const { createInvoiceSender } = require('./verkoop/invoice-mail');
+const { createInvoicePayments } = require('./verkoop/invoice-payments');
 const { createInvoiceStore, registerInvoiceRoutes } = require('./verkoop/invoices');
 const { createVisma, registerVismaRoutes } = require('./verkoop/visma');
 const { createVismaLog } = require('./verkoop/visma-log');
@@ -2832,8 +2833,24 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const portalStore = createPortalStore(database);
   // Verstuurde seizoensherinneringen (season-reminders.js; de verzendronde staat onderaan).
   const seasonReminderStore = createSeasonReminderStore(database, { roles: store.roles });
+  // Facturen online betalen door de klant (Mollie, zie invoice-payments.js); de webhook is openbaar en vraagt de uitkomst zelf bij Mollie op.
+  const invoicePayments = createInvoicePayments({ db: database, invoices: invoiceStore, mollie: createMollie(mollieFetch ? { fetchImpl: mollieFetch } : {}), settingsFor: (id) => settingsFor(id) });
+  invoicePayments.onPaid((tenantId, invoice) => store.audit({ tenantId, userId: null, action: 'factuur_betaald_online', detail: { number: invoice.number, total: invoice.total } }));
+  const invoiceWebhookLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 120, keyFn: (req) => `mollie-factuur:${clientKey(req)}` });
+  app.post('/api/public/invoice-payment/:invoiceId/webhook', invoiceWebhookLimiter, express.urlencoded({ extended: false, limit: '2kb' }), async (req, res) => {
+    const paymentId = String(req.body && req.body.id || '');
+    if (!validPaymentId(paymentId)) return res.status(200).end();
+    try {
+      await invoicePayments.sync(tenant.id, String(req.params.invoiceId), { paymentId });
+    } catch (failure) {
+      console.error(`Webhook van Mollie voor factuurbetaling ${paymentId} mislukt: ${failure.message}`);
+      return res.status(502).end();
+    }
+    res.status(200).end();
+  });
   registerPortalRoutes(app, {
     portal: portalStore, store, quotes: quoteStore, workorders: workOrderStore, photos: photoStore, requests: serviceRequestStore,
+    invoicePayments, invoiceSender, payLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 40, keyFn: (req) => `factuur-betalen:${req.user ? req.user.id : clientKey(req)}` }),
     requireRight, requireJson, audit, remoteIp, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
   });
 

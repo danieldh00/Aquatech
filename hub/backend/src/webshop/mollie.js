@@ -156,7 +156,7 @@ function createMollie({ fetchImpl = fetch } = {}) {
    * Vraagt een betaling op.
    * @param {string} apiKey De API-sleutel.
    * @param {string} id Het Mollie-betaling-id (tr_…).
-   * @returns {Promise<{ id: string, status: string, method: string, paidAt: ?string, amount: number, orderId: string, checkoutUrl: string, mode: string, amountRefunded: number, amountChargedBack: number }>} De stand van de betaling, met wat er is terugbetaald en teruggeboekt (chargeback).
+   * @returns {Promise<{ id: string, status: string, method: string, paidAt: ?string, amount: number, orderId: string, invoiceId: string, checkoutUrl: string, mode: string, amountRefunded: number, amountChargedBack: number }>} De stand van de betaling, met wat er is terugbetaald en teruggeboekt (chargeback).
    */
   async function getPayment(apiKey, id) {
     if (!validPaymentId(id)) throw new MollieError('Ongeldig betaling-id.', 422);
@@ -165,6 +165,7 @@ function createMollie({ fetchImpl = fetch } = {}) {
     return {
       id: String(out.id || id), status: String(out.status || ''), method: String(out.method || ''), paidAt: out.paidAt ? String(out.paidAt) : null,
       amount: out.amount ? Number(out.amount.value) : NaN, orderId: out.metadata && typeof out.metadata === 'object' ? String(out.metadata.orderId || '') : '',
+      invoiceId: out.metadata && typeof out.metadata === 'object' ? String(out.metadata.invoiceId || '') : '',
       checkoutUrl: checkout ? String(checkout) : '', mode: String(out.mode || ''),
       amountRefunded: out.amountRefunded ? Number(out.amountRefunded.value) || 0 : 0, amountChargedBack: out.amountChargedBack ? Number(out.amountChargedBack.value) || 0 : 0,
     };
