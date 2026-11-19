@@ -558,13 +558,16 @@ function registerInvoiceRoutes(app, ctx) {
   /**
    * Zet bij Gereed een conceptfactuur klaar (instelling `draftOnDone`, standaard aan): alleen als de werkorder nog geen
    * factuur heeft en er regels zijn. Een concept, nooit definitief of verstuurd. Een fout hier houdt het opslaan van de werkorder niet tegen.
+   * Bewust zonder recht `facturen`: de uitvoerder die Gereed meldt heeft dat meestal niet, en het resultaat is alleen een concept dat de
+   * facturist controleert. Niets bij een uitgezette module Facturen. Controle en aanmaken lopen zonder `await` in één synchrone
+   * aanroep (één proces), dus twee gelijktijdige verzoeken maken niet allebei een concept.
    * @param {object} req Het verzoek van de medewerker die de werkorder op Gereed zette.
    * @param {string} workOrderId Id van de werkorder.
    * @returns {object|null} De conceptfactuur, of null als er niets is aangemaakt.
    */
   const draftOnDone = (req, workOrderId) => {
     const tenantId = tenantOf(req);
-    if (!invoicingOf(req).draftOnDone) return null;
+    if (!invoicingOf(req).draftOnDone || (ctx.invoicesEnabled && !ctx.invoicesEnabled(tenantId))) return null;
     const workOrder = invoices.workOrder(tenantId, String(workOrderId));
     if (!workOrder || invoices.list(tenantId, { workOrderId: workOrder.id }).some((candidate) => candidate.kind === 'factuur')) return null;
     const { created } = createDraftFromWorkOrder(req, workOrder, { skipEmpty: true });

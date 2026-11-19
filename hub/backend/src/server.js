@@ -2797,6 +2797,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
     loggedOf: (tid, woId) => workLogStore.list(tid, woId),
     articlesOf: (tid) => stockStore.saleInfo(tid),
+    invoicesEnabled: (tid) => ModuleTools.isOn(moduleFlagsOf(tid), 'facturen'),
     catalog: () => loadArticles(),
     sender: invoiceSender, shopOrders, paymentReminders: paymentReminderStore,
     mailConfigured: (req) => mailerFor(settingsFor(req.tenantId || tenant.id)).configured(),
