@@ -53,6 +53,7 @@
     document.getElementById('s-kpis-period-field').hidden = !state.items.some((item) => item.periodic);
   }
 
+  let loadSeq = 0;
   let saving = false;
   let dirty = false;
 
@@ -85,9 +86,11 @@
    */
   async function load() {
     if (saving || dirty) return;
+    loadSeq += 1;
+    const seq = loadSeq;
     try {
       const fresh = await request('../api/admin/kpi-catalog');
-      if (saving || dirty) return;
+      if (saving || dirty || seq !== loadSeq) return;
       state = fresh;
       render();
     } catch (error) {
