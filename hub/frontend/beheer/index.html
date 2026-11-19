@@ -201,8 +201,24 @@
               <label>Tenant-ID (map)<input name="graphTenantId" maxlength="100" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off" spellcheck="false"></label>
               <label>Client-ID (toepassing)<input name="graphClientId" maxlength="40" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off" spellcheck="false"></label>
             </div>
-            <label>Clientgeheim (waarde)<input name="graphSecret" type="password" maxlength="300" autocomplete="new-password" spellcheck="false"></label>
+            <div class="row">
+              <label>Clientgeheim (waarde)<input name="graphSecret" type="password" maxlength="300" autocomplete="new-password" spellcheck="false"></label>
+              <label>Geheim verloopt op<input name="graphSecretExpires" type="date"></label>
+            </div>
+            <span class="muted small">Vul de vervaldatum in: de app geeft een maand van tevoren een melding in Bewaking (en per mail als meldingen zijn ingesteld). Bij automatisch instellen wordt de datum zelf ingevuld.</span>
             <span class="muted small">De afzender hieronder moet het volledige e-mailadres zijn van een bestaande mailbox in je Microsoft 365-omgeving. Mail gaat via HTTPS (poort 443), dus een geblokkeerde SMTP-poort is geen probleem. Het geheim wordt versleuteld opgeslagen en nooit getoond.</span>
+            <div class="field" data-graph-auto>
+              <span class="label">Automatisch instellen</span>
+              <div class="row">
+                <button type="button" class="btn" id="m-graph-auto">Automatisch instellen via Microsoft-inlog</button>
+              </div>
+              <p class="muted small" id="m-graph-login" hidden>
+                Open <a id="m-graph-link" target="_blank" rel="noopener noreferrer">de Microsoft-inlogpagina</a> en voer deze code in: <code id="m-graph-code"></code>.
+                Log in als <b>Globale beheerder</b> van je Microsoft 365-omgeving en geef toestemming. Daarna maakt de app zelf de app-registratie, de machtiging en het geheim aan.
+              </p>
+              <p class="state" id="m-graph-state"></p>
+              <span class="muted small">De inlog wordt alleen hiervoor gebruikt en niet bewaard. Vul eerst de afzender in. Daarna beperk je de app tot die ene mailbox (zie stap 5 van de handleiding): zonder die stap mag de app in principe namens elke mailbox versturen. Lukt automatisch niet (bijvoorbeeld door beleid in je omgeving), gebruik dan de handleiding.</span>
+            </div>
             <details class="guide">
               <summary>Handleiding: app registreren in Microsoft Entra</summary>
               <ol>
@@ -460,6 +476,16 @@
           <label class="field">Niet meer automatisch mailen na (dagen over de vervaldatum)<input name="stopAfterDays" type="number" min="1" max="365" step="1" required><span class="hint">Oudere facturen pak je zelf op (bijvoorbeeld incasso); ze krijgen geen mails meer.</span></label>
           <p class="muted small">Zet je dit voor het eerst aan, dan krijgt een factuur die al lang open staat alleen de laatst passende stap, niet alle stappen achter elkaar.</p>
           <div class="row"><button class="btn primary" type="submit">Opslaan</button></div>
+          <div class="err" role="alert"></div>
+        </form>
+        <form id="s-kpis" class="card-form settings">
+          <h3>Dashboard: KPI's</h3>
+          <p class="muted small">Kies welke KPI's beheerders op het dashboard zien en in welke volgorde. Een wijziging geldt meteen. KPI's van een module die uit staat kun je niet kiezen. Je ziet er alleen die bij jouw rechten horen.</p>
+          <ul id="s-kpis-list" class="kpi-settings" aria-label="KPI's"></ul>
+          <label class="field" id="s-kpis-period-field">Periode voor KPI's over een tijdvak
+            <select name="period"></select>
+            <span class="hint">Geldt voor de KPI's met het label <em>periode</em>, zoals gefactureerd of webshop-omzet.</span>
+          </label>
           <div class="err" role="alert"></div>
         </form>
         <form id="s-quote-followup" class="card-form settings">
@@ -1104,6 +1130,7 @@
   <script src="collapse-list.js"></script>
   <script src="drive-backup.js"></script>
   <script src="vps-draaiboek.js"></script>
+  <script src="dashboard-kpis.js"></script>
   <script src="backup-restore.js"></script>
   <script src="mail.js"></script>
   <script src="verzending.js"></script>

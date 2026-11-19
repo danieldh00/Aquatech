@@ -5,6 +5,18 @@ const assert = require('node:assert');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { buildKpis, weekOf, registerKpiRoutes } = require('../src/platform/kpis');
+const { sanitizeDashboardKpis, describeCatalog, rangeOf } = require('../src/platform/kpi-catalog');
+
+/**
+ * Maakt een instelling waarin alleen deze KPI's aan staan, in deze volgorde.
+ * @param {string[]} keys De sleutels.
+ * @returns {object} De instelling.
+ */
+const only = (keys) => ({ items: [...keys.map((key) => ({ key, enabled: true })), ...sanitizeDashboardKpis({}).items.filter((item) => !keys.includes(item.key)).map((item) => ({ key: item.key, enabled: false }))], period: 'maand' });
+/** De vier tegels van de eerste versie (met bezetting). */
+const FIRST = only(['openstaand', 'vervallen', 'offertes', 'bezetting']);
+/** Instelling met alle KPI's aan (zoals een beheerder die alles aanzet). */
+const ALL_ON = { items: sanitizeDashboardKpis({}).items.map((item) => ({ key: item.key, enabled: true })), period: 'maand' };
 const { createClient, listen } = require('./helpers/http-client');
 
 const TODAY = '2026-11-19'; // donderdag
@@ -91,10 +103,10 @@ test('weekOf geeft maandag tot zondag', () => {
 test('kengetallen tellen alleen de eigen omgeving en negeren concepten, betaalde, verwijderde en geannuleerde', () => {
   const { db, mainId, otherId } = setup();
   const admin = { rights: ['beheer', 'facturen', 'offertes', 'planning'] };
-  const main = buildKpis({ user: admin, tenantId: mainId }, { db, today: TODAY });
+  const main = buildKpis({ user: admin, tenantId: mainId }, { db, today: TODAY, config: FIRST });
   assert.deepStrictEqual(values(main), { openstaand: 342, vervallen: 1, offertes: 2, bezetting: 2 });
   assert.match(main.find((tile) => tile.key === 'offertes').detail, /€ 1\.500,00/);
-  const other = buildKpis({ user: admin, tenantId: otherId }, { db, today: TODAY });
+  const other = buildKpis({ user: admin, tenantId: otherId }, { db, today: TODAY, config: FIRST });
   assert.deepStrictEqual(values(other), { openstaand: 7777, vervallen: 1, offertes: 1, bezetting: 1 });
 });
 
@@ -105,12 +117,71 @@ test('elke tegel hoort bij een recht en zonder beheer is er niets', () => {
    * @param {string[]} rights De rechten.
    * @returns {string[]} De sleutels.
    */
-  const keys = (rights) => buildKpis({ user: { rights }, tenantId: mainId }, { db, today: TODAY }).map((tile) => tile.key);
+  const keys = (rights) => buildKpis({ user: { rights }, tenantId: mainId }, { db, today: TODAY, config: FIRST }).map((tile) => tile.key);
   assert.deepStrictEqual(keys(['beheer']), []);
   assert.deepStrictEqual(keys(['beheer', 'facturen']), ['openstaand', 'vervallen']);
   assert.deepStrictEqual(keys(['beheer', 'offertes']), ['offertes']);
   assert.deepStrictEqual(keys(['beheer', 'planning']), ['bezetting']);
   assert.deepStrictEqual(keys(['facturen', 'offertes', 'planning']), [], 'zonder beheer geen kengetallen');
+});
+
+test('standaard staat bezetting uit en zijn de basiskengetallen aan', () => {
+  const { db, mainId } = setup();
+  const admin = { rights: ['beheer', 'facturen', 'offertes', 'planning', 'werkorders', 'voorraad'] };
+  const tiles = buildKpis({ user: admin, tenantId: mainId }, { db, today: TODAY });
+  assert.deepStrictEqual(tiles.map((tile) => tile.key), ['openstaand', 'vervallen', 'omzet', 'offertes']);
+  assert.strictEqual(tiles.find((tile) => tile.key === 'omzet').period, 'Deze maand');
+});
+
+test('instelling: volgorde, uitzetten, onbekende sleutels weg en nieuwe KPI achteraan', () => {
+  const clean = sanitizeDashboardKpis({ items: [{ key: 'offertes', enabled: true }, { key: 'bestaat-niet', enabled: true }, { key: 'offertes', enabled: false }, { key: 'openstaand', enabled: false }], period: 'kwartaal' });
+  assert.deepStrictEqual(clean.items.slice(0, 2), [{ key: 'offertes', enabled: true }, { key: 'openstaand', enabled: false }]);
+  assert.strictEqual(clean.period, 'maand', 'onbekende periode valt terug op de standaard');
+  assert.ok(clean.items.some((item) => item.key === 'bezetting' && item.enabled === false), 'ontbrekende KPI komt terug met zijn standaardstand');
+  assert.strictEqual(new Set(clean.items.map((item) => item.key)).size, clean.items.length);
+  const { db, mainId } = setup();
+  const admin = { rights: ['beheer', 'facturen', 'offertes'] };
+  const tiles = buildKpis({ user: admin, tenantId: mainId }, { db, today: TODAY, config: only(['offertes', 'openstaand']) });
+  assert.deepStrictEqual(tiles.map((tile) => tile.key), ['offertes', 'openstaand'], 'volgorde van de instelling');
+});
+
+test('een module die uit staat geeft geen tegels en is niet beschikbaar in het keuzescherm', () => {
+  const { db, mainId } = setup();
+  const admin = { rights: ['beheer', 'facturen', 'offertes'] };
+  /**
+   * Nep-moduleschakelaar: alleen facturen staat uit.
+   * @param {string} moduleId De module.
+   * @returns {boolean} Of de module aan staat.
+   */
+  const isModuleOn = (moduleId) => moduleId !== 'facturen';
+  const tiles = buildKpis({ user: admin, tenantId: mainId }, { db, today: TODAY, config: ALL_ON, isModuleOn });
+  assert.ok(tiles.length > 0 && tiles.every((tile) => !['openstaand', 'vervallen', 'omzet'].includes(tile.key)));
+  const described = describeCatalog(undefined, isModuleOn);
+  assert.strictEqual(described.items.find((item) => item.key === 'openstaand').available, false);
+  assert.strictEqual(described.items.find((item) => item.key === 'offertes').available, true);
+});
+
+test('periodes en nieuwe kengetallen rekenen per omgeving', () => {
+  assert.deepStrictEqual(rangeOf('maand', TODAY), { from: '2026-11-01', to: '2026-11-30' });
+  assert.deepStrictEqual(rangeOf('30dagen', TODAY), { from: '2026-10-21', to: '2026-11-19' });
+  assert.deepStrictEqual(rangeOf('jaar', TODAY), { from: '2026-01-01', to: '2026-12-31' });
+  const { db, mainId, otherId } = setup();
+  db.prepare("INSERT INTO invoices (id, tenant_id, number, status, kind, invoice_date, due_date, subtotal, total, data, created_at, updated_at) VALUES ('v1', ?, 'V1', 'definitief', 'factuur', '2026-11-05', '2026-12-05', 100, 121, '{}', '2026-11-05', '2026-11-05')").run(mainId);
+  db.prepare("INSERT INTO web_orders (id, tenant_id, number, status, customer_name, email, total, data, created_at, updated_at) VALUES ('w1', ?, 'W1', 'nieuw', 'A', 'a@example.nl', 50, '{}', '2026-11-10T10:00:00.000Z', '2026-11-10T10:00:00.000Z')").run(mainId);
+  db.prepare("INSERT INTO web_orders (id, tenant_id, number, status, customer_name, email, total, data, created_at, updated_at) VALUES ('w2', ?, 'W2', 'geannuleerd', 'B', 'b@example.nl', 70, '{}', '2026-11-11T10:00:00.000Z', '2026-11-11T10:00:00.000Z')").run(mainId);
+  db.prepare("INSERT INTO web_orders (id, tenant_id, number, status, customer_name, email, total, data, created_at, updated_at) VALUES ('w3', ?, 'W3', 'nieuw', 'C', 'c@example.nl', 999, '{}', '2026-11-10T10:00:00.000Z', '2026-11-10T10:00:00.000Z')").run(otherId);
+  const admin = { rights: ['beheer', 'facturen', 'offertes', 'werkorders', 'voorraad'] };
+  const tiles = buildKpis({ user: admin, tenantId: mainId }, { db, today: TODAY, config: ALL_ON });
+  const byKey = Object.fromEntries(tiles.map((tile) => [tile.key, tile]));
+  assert.strictEqual(byKey.omzet.value, 100, 'alleen de factuur van deze maand');
+  assert.strictEqual(byKey.webshop_omzet.value, 50, 'geannuleerd en andere omgeving tellen niet mee');
+  assert.strictEqual(byKey.webshop_nieuw.value, 1);
+  assert.strictEqual(byKey.werkorders_open.unit, 'aantal');
+  assert.strictEqual(byKey.voorraad_minimum.value, 0);
+  assert.strictEqual(byKey.inkooporders_open.value, 0);
+  assert.ok(!byKey.bezetting, 'zonder recht planning geen bezetting');
+  const year = buildKpis({ user: admin, tenantId: mainId }, { db, today: TODAY, config: { ...ALL_ON, period: 'jaar' } });
+  assert.match(year.find((tile) => tile.key === 'omzet').detail, /5 documenten/);
 });
 
 test('route: zonder inlog 401, zonder beheer 403, alleen de eigen omgeving, vier queries', async () => {
@@ -148,7 +219,7 @@ test('route: zonder inlog 401, zonder beheer 403, alleen de eigen omgeving, vier
     const main = await get(mainId, 'beheer,facturen,offertes,planning');
     assert.strictEqual(main.status, 200);
     assert.strictEqual(queries, 4, 'één query per tegel');
-    assert.deepStrictEqual(main.body.kpis.map((tile) => tile.key), ['openstaand', 'vervallen', 'offertes', 'bezetting']);
+    assert.deepStrictEqual(main.body.kpis.map((tile) => tile.key), ['openstaand', 'vervallen', 'omzet', 'offertes']);
     const other = await get(otherId, 'beheer,facturen');
     assert.strictEqual(other.body.kpis.find((tile) => tile.key === 'openstaand').value, 7777, 'andere omgeving ziet alleen zijn eigen bedragen');
   } finally { server.close(); }

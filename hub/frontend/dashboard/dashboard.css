@@ -226,7 +226,7 @@ h2 .h2-link:hover { text-decoration: underline; }
 .task-code { margin: 0; padding: 8px 10px; overflow-x: auto; font-size: 12px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--at-preview-bg); border: 1px solid var(--line); border-radius: 6px; }
 .task-more a { color: var(--primary); font-weight: 600; text-decoration: none; }
 
-/* Startscherm "Kengetallen" voor beheerders (dashboard/kpis.js) */
+/* Startscherm "Cijfers" voor beheerders (dashboard/kpis.js) */
 .kpis { margin-bottom: 16px; }
 .kpis h2 { margin: 0 0 10px; font-size: 18px; text-transform: none; letter-spacing: 0; color: var(--primary-dark); }
 .kpi-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }

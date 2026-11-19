@@ -452,6 +452,7 @@
     renderLines();
     renderLock();
     renderShare();
+    renderTemplates();
     window.scrollTo(0, 0);
   }
 
@@ -1292,6 +1293,9 @@
     });
     /** Sluit de lijst als het zoekveld de focus verliest. */
     $('#e-cust-search').addEventListener('blur', () => setTimeout(closeCustomerList, 120));
+    $('#e-tpl-apply').onclick = applyTemplate;
+    $('#e-tpl-delete').onclick = deleteTemplate;
+    $('#e-tpl-save').onsubmit = saveTemplate;
     $('#e-cust-new').onclick = openNewCustomer;
     $('#e-newcust-cancel').onclick = closeNewCustomer;
     $('#e-newcust').onsubmit = saveNewCustomer;
@@ -1662,6 +1666,99 @@
       toast(`${items.length} offertes geëxporteerd`);
     } catch (error) {
       toast(`Export mislukt: ${error.message}`, true);
+    }
+  }
+
+  // ---------- Sjablonen ----------
+  /**
+   * Haalt de offertesjablonen één keer op (alleen voor medewerkers) en tekent daarna de sjabloonkaart opnieuw.
+   * @returns {Promise<void>}
+   */
+  async function loadTemplates() {
+    if (state.klant || state.templatesRequested) return;
+    state.templatesRequested = true;
+    try {
+      state.templates = (await api('quote-templates')).templates || [];
+    } catch (error) {
+      state.templates = [];
+    }
+    if (state.quote) renderTemplates();
+  }
+
+  /** Toont de sjabloonkaart: keuzelijst en Toepassen voor medewerkers, bewaren en verwijderen voor de beheerder (niet bij een vergrendelde offerte). */
+  function renderTemplates() {
+    loadTemplates();
+    const templates = state.templates || [];
+    const open = Boolean(state.quote) && !locked() && !state.klant;
+    $('#e-tpl').hidden = !open || (!templates.length && !state.admin);
+    if ($('#e-tpl').hidden) return;
+    const select = $('#e-tpl-select');
+    const previous = select.value;
+    select.innerHTML = templates.length
+      ? templates.map((template) => `<option value="${esc(template.id)}">${esc(template.name)}</option>`).join('')
+      : '<option value="">Nog geen sjablonen</option>';
+    if (templates.some((template) => template.id === previous)) select.value = previous;
+    $('#e-tpl-apply').disabled = !templates.length;
+    $('#e-tpl-delete').hidden = !state.admin || !templates.length;
+    $('#e-tpl-save').hidden = !state.admin;
+    $('#e-tpl-hint').hidden = !templates.length;
+  }
+
+  /** Zet het gekozen sjabloon op de offerte: teksten vervangen (met vraag als er andere tekst staat), regels onderaan toevoegen. */
+  function applyTemplate() {
+    const quote = state.quote;
+    const template = (state.templates || []).find((entry) => entry.id === $('#e-tpl-select').value);
+    if (!quote || locked() || !template) return;
+    const data = quote.data;
+    const replaced = [['intro', template.intro], ['terms', template.terms]].filter(([field, text]) => text && text.trim() && text !== data[field]);
+    const overwrites = replaced.filter(([field]) => String(data[field] || '').trim());
+    if (overwrites.length && !confirm(`De bestaande ${overwrites.map(([field]) => (field === 'intro' ? 'inleiding' : 'voorwaarden')).join(' en ')} van deze offerte wordt vervangen door die van het sjabloon. Doorgaan?`)) return;
+    for (const [field, text] of replaced) data[field] = text;
+    const stamp = Date.now().toString(36);
+    const added = template.lines.map((line, index) => QuoteCore.sanitizeLine({ ...line, id: `t${stamp}${index}${Math.random().toString(36).slice(2, 5)}` }));
+    data.lines = [...data.lines, ...added];
+    document.querySelectorAll('#edit-view [data-f="intro"], #edit-view [data-f="terms"]').forEach((field) => { field.value = data[field.dataset.f] || ''; });
+    renderLines();
+    changed();
+    toast(`Sjabloon "${template.name}" toegepast${added.length ? `: ${added.length} regel${added.length === 1 ? '' : 's'} toegevoegd` : ''}`);
+  }
+
+  /**
+   * Bewaart de huidige offerte (inleiding, voorwaarden en regels) als sjabloon; dezelfde naam vervangt het bestaande.
+   * @param {SubmitEvent} event het verzenden van het formulier
+   * @returns {Promise<void>}
+   */
+  async function saveTemplate(event) {
+    event.preventDefault();
+    const quote = state.quote;
+    const name = $('#e-tpl-name').value.trim();
+    if (!quote || !name) return;
+    const { intro, terms, lines } = quote.data;
+    try {
+      const result = await api('quote-templates', { method: 'PUT', body: { template: { name, intro, terms, lines } } });
+      state.templates = result.templates;
+      renderTemplates();
+      $('#e-tpl-select').value = result.template.id;
+      $('#e-tpl-name').value = '';
+      toast(`Sjabloon "${result.template.name}" bewaard`);
+    } catch (error) {
+      toast(`Bewaren mislukt: ${error.message}`, true);
+    }
+  }
+
+  /**
+   * Verwijdert het gekozen sjabloon (bestaande offertes houden hun teksten en regels).
+   * @returns {Promise<void>}
+   */
+  async function deleteTemplate() {
+    const template = (state.templates || []).find((entry) => entry.id === $('#e-tpl-select').value);
+    if (!template || !confirm(`Sjabloon "${template.name}" verwijderen? Offertes die het al gebruiken veranderen niet.`)) return;
+    try {
+      state.templates = (await api(`quote-templates/${encodeURIComponent(template.id)}`, { method: 'DELETE' })).templates;
+      renderTemplates();
+      toast('Sjabloon verwijderd');
+    } catch (error) {
+      toast(`Verwijderen mislukt: ${error.message}`, true);
     }
   }
 
