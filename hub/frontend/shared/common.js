@@ -310,6 +310,9 @@
     if (!root.matchMedia || !root.matchMedia('(max-width: 700px)').matches) return;
     const tables = document.querySelectorAll('table:not(.kv):not(.totals):not(.a-facts):not(.p-lines):not(.p-totals):not(.product-specs)');
     for (const table of tables) {
+      // Alleen opnieuw meten als de tabel van inhoud is veranderd (aantal rijen), zodat een wijziging elders geen layout kost.
+      if (table.dataset.wrapChecked === String(table.rows.length)) continue;
+      table.dataset.wrapChecked = String(table.rows.length);
       const parent = table.parentElement;
       if (!parent || parent.classList.contains('tablewrap') || table.closest('.tablewrap, .p-info, [data-no-wrap]')) continue;
       if (table.offsetWidth <= parent.clientWidth + 1) continue;
@@ -326,7 +329,10 @@
     /** Start de waarneming van de pagina en doet de eerste controle. */
     const start = () => {
       new MutationObserver(scheduleWrap).observe(document.body, { childList: true, subtree: true });
-      root.addEventListener('resize', scheduleWrap);
+      root.addEventListener('resize', () => {
+        for (const checked of document.querySelectorAll('table[data-wrap-checked]')) delete checked.dataset.wrapChecked;
+        scheduleWrap();
+      });
       scheduleWrap();
     };
     if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
