@@ -215,3 +215,46 @@ test('valt de verwerking halverwege weg, dan herstelt de volgende melding de fac
   assert.strictEqual((await payments.sync(tenantId, 'inv-1', { paymentId })).becamePaid, false);
   assert.strictEqual(paidCalls, 1);
 });
+
+test('opnieuw klikken op Nu betalen na een halverwege weggevallen verwerking maakt geen tweede betaling', async () => {
+  const { createInvoicePayments } = require('../src/verkoop/invoice-payments');
+  const { createMollieFake } = require('./helpers/mollie-fake');
+  const { openDb } = require('../src/database/db');
+  const { createStore } = require('../src/platform/store');
+  const { createMollie } = require('../src/webshop/mollie');
+  const db = openDb();
+  const tenantId = createStore(db).ensureTenant().id;
+  const invoice = { id: 'inv-2', number: 'F2', status: 'definitief', kind: 'factuur', total: 50, customerId: 'c1' };
+  let failOnce = true;
+  const invoices = {
+    /**
+     * De factuur.
+     * @returns {object} Een kopie.
+     */
+    get: () => ({ ...invoice }),
+    /**
+     * Zet de factuur op betaald; faalt de eerste keer.
+     * @returns {{ invoice: object }} De factuur.
+     */
+    setPaid: () => {
+      if (failOnce) { failOnce = false; throw new Error('databasefout'); }
+      invoice.status = 'betaald';
+      return { invoice: { ...invoice } };
+    },
+  };
+  const fake = createMollieFake();
+  /**
+   * Instellingen met online betalen aan.
+   * @returns {{ get: Function }} De instellingen.
+   */
+  const settingsFor = () => ({ get: (name) => (name === 'mollieApiKey' ? 'test_abcdefghij1234567' : { online: true, publicUrl: 'https://winkel.example/' }) });
+  const payments = createInvoicePayments({ db, invoices, mollie: createMollie({ fetchImpl: fake.fetchImpl }), settingsFor, log: { warn() {} } });
+  await payments.start(tenantId, invoice);
+  const [paymentId] = [...fake.payments.keys()];
+  fake.set(paymentId, 'paid');
+  await assert.rejects(payments.sync(tenantId, 'inv-2', { paymentId }), /databasefout/);
+  const again = await payments.start(tenantId, invoice);
+  assert.deepStrictEqual(again, { paid: true });
+  assert.strictEqual(invoice.status, 'betaald');
+  assert.strictEqual(fake.payments.size, 1, 'geen tweede betaling bij Mollie');
+});

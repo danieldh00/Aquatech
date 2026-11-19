@@ -111,7 +111,7 @@ function createInvoicePayments({ db, invoices, mollie, settingsFor, log = consol
       prepare("UPDATE invoice_payments SET status = 'betaald', paid_at = ?, method = ? WHERE tenant_id = ? AND mollie_id = ? AND status <> 'betaald'")
         .run(paidAt, payment.method || '', tenantId, payment.id);
       // Ook als de rij al betaald was: staat de factuur nog open (een eerdere verwerking viel halverwege weg), dan herstelt deze aanroep dat.
-      // setPaid is voorwaardelijk op de status, zodat gelijktijdige aanroepen de factuur maar één keer betaald maken.
+      // De controle op de status en setPaid draaien synchroon achter elkaar (geen await ertussen), dus gelijktijdige aanroepen maken de factuur maar één keer betaald.
       let becamePaid = false;
       const current = invoices.get(tenantId, invoice.id);
       if (current && current.status === 'definitief') {
@@ -175,7 +175,8 @@ function createInvoicePayments({ db, invoices, mollie, settingsFor, log = consol
     try {
       const attempts = paymentsOf(tenantId, invoice.id);
       const last = attempts[attempts.length - 1];
-      if (last && last.status === 'open' && last.checkoutUrl) {
+      // Ook een rij die al betaald is maar waarvan de factuur nog openstaat (verwerking viel halverwege weg): eerst herstellen, nooit een tweede betaling maken.
+      if (last && (last.status === 'open' || last.status === 'betaald') && last.checkoutUrl) {
         const current = await mollie.getPayment(config.apiKey, last.mollieId);
         const state = MOLLIE_STATES[current.status];
         if (state === 'betaald') {
