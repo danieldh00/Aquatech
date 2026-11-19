@@ -1466,6 +1466,20 @@ function createStore(db) {
   }
 
   /**
+   * Schrijft meerdere regels in het auditlog met één INSERT (voor bulkwijzigingen).
+   * @param {object[]} entries Regels met tenantId, userId, action, detail (zonder geheimen) en ip.
+   * @returns {void}
+   */
+  function auditMany(entries) {
+    if (!entries.length) return;
+    const marks = entries.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ');
+    const timestamp = currentTimestamp();
+    const args = [];
+    for (const { tenantId, userId = null, action, detail = {}, ip = '' } of entries) args.push(newId(), tenantId, userId, action, JSON.stringify(detail || {}), String(ip).slice(0, 64), timestamp);
+    asSystem(() => prepare(`INSERT INTO audit (id, tenant_id, user_id, action, detail, ip, created_at) VALUES ${marks}`).run(...args));
+  }
+
+  /**
    * Bladert door het auditlog van een tenant, nieuwste eerst.
    * @param {string} tenantId Id van de tenant.
    * @param {object} [options] limit, offset en action (filter).
@@ -2038,7 +2052,7 @@ function createStore(db) {
     getTenant, getTenantBySlug, tenantRow, listTenants, createTenant, updateTenant, createEnvironment, resetEnvironment, deleteEnvironment, deleteTenant, seedEnvironment,
     roles, accessibleTenants, countPlatformAdmins, dropEmptyTenant, accountProblem, listCustomers,
     ensureTenant, familyIds, systemUser, createGuest, createAccount, createCustomer, listCustomerPage, listCustomerPageAsync, getCustomer, createShopCustomer, businessProfile, saveBusinessProfile, loginNameFor, accountIdsByEmail, markEmailVerified, updateAccount, deleteAccount, changeOwnPassword, updateProfile, countAdmins, authenticate, loginTenant, loginTenantOfTestAccount, getUser, touchUser, listUsers, publicUser,
-    createSession, findSessionWithUser, prefetchSession, touchSession, deleteSession, dropSession, revokeSessions, audit, listAudit, applyRetention,
+    createSession, findSessionWithUser, prefetchSession, touchSession, deleteSession, dropSession, revokeSessions, audit, auditMany, listAudit, applyRetention,
     record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan, purgePlan,
     planReviewStatus, requestReview, reviewPlan, getPlanReview, submitDrawing, pendingDrawingChars, purgeStaleDrawings,
   };

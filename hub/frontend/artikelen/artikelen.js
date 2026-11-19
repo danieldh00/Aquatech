@@ -70,8 +70,10 @@
   function syncPricing(form) {
     const byFactor = form.priceMode.value === 'factor';
     form.priceFactor.disabled = !byFactor;
-    form.salePrice.title = byFactor ? 'Wordt berekend uit de inkoopprijs zodra je de inkoopprijs of de factor wijzigt en opslaat. Zonder factor of inkoopprijs blijft deze prijs staan.' : '';
     const cost = num(form.costPrice.value);
+    // In de modus factor is de verkoopprijs het resultaat van de berekening (ook elk uur bijgewerkt): alleen-lezen zodra er een inkoopprijs is.
+    form.salePrice.readOnly = byFactor && cost != null;
+    form.salePrice.title = byFactor ? 'Wordt automatisch berekend uit de inkoopprijs en de factor; wijzig de factor of de inkoopprijs om de prijs te veranderen. Zonder inkoopprijs blijft deze prijs staan.' : '';
     const sale = num(form.salePrice.value);
     const hint = form.querySelector('[data-margin]');
     hint.textContent = cost != null && sale ? `Marge nu: ${nl(Math.round(((sale - cost) / sale) * 1000) / 10)}% (op ${eur(sale)} excl. btw)` : '';

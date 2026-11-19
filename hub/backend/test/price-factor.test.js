@@ -213,6 +213,9 @@ test('prijsfactor: de prijs volgt de instelling met alle niveaus, zonder goedkeu
   assert.ok(priceAudit(db, main).some((entry) => entry.artikel === 'STD' && entry.oud === 17.95 && entry.nieuw === 36.95 && entry.bron === 'inkoopprijs'));
   // Een andere naam verandert niets; een eigen factor rekent meteen.
   assert.strictEqual((await admin.put(`/app/api/stock/items/${byDefault.id}`, { name: 'Andere naam' })).body.salePrice, 36.95);
+  // Een handmatige verkoopprijs bij modus factor (met inkoopprijs) wordt genegeerd; de berekende prijs blijft.
+  assert.strictEqual((await admin.put(`/app/api/stock/items/${byDefault.id}`, { salePrice: 5 })).body.salePrice, 36.95);
+  assert.strictEqual((await admin.get(`/app/api/stock/items/${byDefault.id}`)).body.salePrice, 36.95);
   assert.strictEqual((await admin.put(`/app/api/stock/items/${byDefault.id}`, { priceFactor: 2 })).body.salePrice, 40.95);
   // Een inkoopprijs via de prijshistorie en een ontvangst werken ook door.
   assert.strictEqual((await admin.post(`/app/api/stock/items/${byDefault.id}/cost-prices`, { price: 10 })).status, 201, 'inkoopprijs toevoegen');

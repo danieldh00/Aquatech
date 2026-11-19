@@ -411,12 +411,14 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @param {number} newPrice De nieuwe prijs.
    * @param {string} source Waardoor de prijs wijzigde (inkoopprijs, ontvangst, factor enzovoort).
    * @param {object|null} user Wie de aanleiding gaf (leeg = systeem).
+   * @param {object[]|null} [collect] Lijst waarin de auditregel wordt verzameld (voor één schrijfactie per blok); leeg = meteen schrijven.
    * @returns {void}
    */
-  function logPriceChange(tenantId, item, oldPrice, newPrice, source, user) {
+  function logPriceChange(tenantId, item, oldPrice, newPrice, source, user, collect = null) {
     const before = oldPrice == null ? null : Number(oldPrice);
     if (!priceLogger || (before !== null && Math.abs(before - newPrice) < 0.005)) return;
-    priceLogger({ tenantId, userId: user && user.id ? user.id : null, action: 'verkoopprijs_automatisch', detail: { artikel: item.code, oud: before, nieuw: newPrice, bron: source } });
+    const entry = { tenantId, userId: user && user.id ? user.id : null, action: 'verkoopprijs_automatisch', detail: { artikel: item.code, oud: before, nieuw: newPrice, bron: source } };
+    if (collect) collect.push(entry); else priceLogger([entry]);
   }
   /**
    * Webshop: meldt een wijziging van prijs of stand (shop-sync.js meldt zich aan via onDirty()).
@@ -799,6 +801,12 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
           merged.salePrice = factorPrice;
           logPriceChange(tenantId, existing, existing.sale_price, factorPrice, costChanged ? 'inkoopprijs' : 'artikelinstelling', user);
         }
+      }
+      // Een handmatig gewijzigde verkoopprijs bij modus factor (zonder wijziging van modus, factor of inkoopprijs) zou binnen een uur
+      // worden teruggezet: de berekende prijs blijft staan (het formulier toont het veld dan alleen-lezen).
+      if (!factorChanged && merged.priceMode === 'factor' && fields.salePrice !== undefined && pricer && !Number(existing.has_variants)
+        && pricer(tenantId, { id: existing.id, costPrice: merged.costPrice, priceFactor: merged.priceFactor }) !== null) {
+        merged.salePrice = existing.sale_price;
       }
       const mergedTerms = Wholesale.sanitizeTerms(merged);
       if (mergedTerms.error) return { error: mergedTerms.error, field: mergedTerms.field, status: 400 };
@@ -2057,16 +2065,26 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   function applyAutoPrices(tenantId, changes, source, user = null) {
     let changed = 0;
     for (let start = 0; start < changes.length; start += 200) {
+      const audits = [];
       transaction(db, () => {
-        const update = prepare(`UPDATE stock_items SET sale_price = ?, updated_at = ?, shop_dirty = CASE WHEN shop_sync = 1 AND shop_product_id IS NOT NULL THEN 1 ELSE shop_dirty END
-          WHERE tenant_id = ? AND id = ? AND has_variants = 0 AND archived = 0 AND price_mode = 'factor'`);
+        const block = [];
         for (const change of changes.slice(start, start + 200)) {
           const price = Math.round(Number(change.newPrice) * 100) / 100;
-          if (!Number.isFinite(price) || price < 0 || price > MAX_QTY) continue;
-          if (!Number(update.run(price, currentTimestamp(), tenantId, change.id).changes)) continue;
-          logPriceChange(tenantId, change, change.oldPrice, price, source, user);
-          changed += 1;
+          if (Number.isFinite(price) && price >= 0 && price <= MAX_QTY) block.push({ change, price });
         }
+        if (!block.length) return;
+        // Eén UPDATE per blok: CASE per artikel, alleen artikelen die nog in de modus factor staan.
+        const whens = block.map(() => 'WHEN ? THEN CAST(? AS DOUBLE PRECISION)').join(' ');
+        const marks = block.map(() => '?').join(', ');
+        const args = [];
+        for (const { change, price } of block) args.push(change.id, price);
+        const result = prepare(`UPDATE stock_items SET sale_price = CASE id ${whens} END, updated_at = ?,
+          shop_dirty = CASE WHEN shop_sync = 1 AND shop_product_id IS NOT NULL THEN 1 ELSE shop_dirty END
+          WHERE tenant_id = ? AND id IN (${marks}) AND has_variants = 0 AND archived = 0 AND price_mode = 'factor'`)
+          .run(...args, currentTimestamp(), tenantId, ...block.map(({ change }) => change.id));
+        changed += Number(result.changes);
+        for (const { change, price } of block) logPriceChange(tenantId, change, change.oldPrice, price, source, user, audits);
+        if (audits.length && priceLogger) priceLogger(audits);
       });
     }
     if (changed) dirty(tenantId);
