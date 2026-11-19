@@ -42,6 +42,12 @@ Docker is niet beschikbaar in de cloud-sandbox. Er is geen aparte linter; `codes
 - Geen backwards-compatibiliteit nodig tijdens de ontwikkeling.
 - Geen modelnamen/-ID's in commits, PR's, code of docs. Geen secrets in repo of chat.
 
+## Servertaken (hosttaken)
+Moet Daniël na een PR iets op de server doen (een serverscript opnieuw draaien, een unit installeren), geef hem dan **nooit een los commando in de chat**. Voeg een genummerde taak toe:
+1. `HOST_TASKS` in `hub/backend/src/platform/host-tasks.js`: nieuwe id `NNN-korte-naam` (volgnummer erachter, een bestaande id verandert nooit), titel, uitleg, `addedAt`.
+2. In `deploy/apps01/pve/servertaken.sh`: dezelfde id in `HOST_TASK_IDS` en een functie `hosttask_NNN_korte_naam` (idempotent; haal bestanden op `$TASKS_REF` op via `fetch_task_file`).
+3. Klaar: de taak staat in Beheer > Systeem > Updates (afvinklijst, ook in het dashboardblok Openstaande taken) en Daniël voert het ene vaste commando uit (`HOST_COMMAND`, op de PVE-host als root; hij gebruikt `APPS01_SSH=daniel@apps01` + sudo). Gelukte taken worden door de server afgevinkt (`update/status/host-tasks.json`). `test/host-tasks.test.js` bewaakt dat app-lijst en script gelijk blijven.
+
 ## Codeconventies
 - Beschrijvende namen (geen namen van één letter behalve `i`/`j`/`x`/`y`, geen cryptische afkortingen) en een `/** … */`-blok in het Nederlands bij elke functie; bestand begint met een kopcommentaar. Bewaakt door `test/codestyle.test.js`.
 - Backend: geen `SELECT *`/`t.*`, geen N+1, elke query op een tabel met `tenant_id` filtert daarop, parameters altijd via `?`. SQL moet in SQLite én PostgreSQL werken.

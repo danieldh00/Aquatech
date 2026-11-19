@@ -207,4 +207,6 @@ h2 .h2-link:hover { text-decoration: underline; }
 .task-label { overflow-wrap: anywhere; }
 .task-meta { font-size: 13px; color: var(--muted); }
 .task-more { margin: 0; padding: 0 14px 10px; font-size: 14px; }
+.task-command { display: grid; gap: 6px; padding: 0 14px 12px; }
+.task-code { margin: 0; padding: 8px 10px; overflow-x: auto; font-size: 12px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--at-preview-bg); border: 1px solid var(--line); border-radius: 6px; }
 .task-more a { color: var(--primary); font-weight: 600; text-decoration: none; }
