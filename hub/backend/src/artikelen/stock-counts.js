@@ -1,7 +1,9 @@
 // Voorraadtelling (jaartelling voor de boekhouding en tussentijdse tellingen): een telling bevriest de tellijst op een peildatum, de tellers tellen
 // blind (geen verwachte aantallen, geen prijzen), de beheerder controleert de verschillen en sluit af. Afsluiten boekt alle verschillen in één
 // transactie als `telling`-mutaties via `stock.book` en vergrendelt de telling. Het verschil wordt gerekend ten opzichte van de stand op het
-// telmoment, dus een pick of ontvangst tijdens het tellen geeft nooit een vals verschil. Alles loopt per omgeving (tenant).
+// telmoment, dus een pick of ontvangst tijdens het tellen geeft nooit een vals verschil. Een ingave mag het tijdstip van de teller meesturen
+// (`countedAt`, nodig voor een ingave die later aankomt, zoals een latere offlinewachtrij); een tijdstip vóór het bevriezen of in de toekomst telt
+// als servertijd. Een afsluiting die tegelijk met een andere wijziging botst, geeft 409 en boekt niets. Alles loopt per omgeving (tenant).
 
 const crypto = require('crypto');
 const express = require('express');
