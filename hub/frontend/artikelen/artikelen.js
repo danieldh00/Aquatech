@@ -456,8 +456,10 @@
    * @returns {Promise<void>}
    */
   async function load() {
-    const [stock, reservations] = await Promise.all([api(`stock${$('#f-archived').checked ? '?archived=1' : ''}`), api('stock/reservations'), loadProposals()]);
+    const [stock, reservations] = await Promise.all([api(`stock${$('#f-archived').checked ? '?archived=1' : ''}`), api('stock/reservations')]);
     state.items = stock.items;
+    // Voorstellen alleen ophalen als er artikelen met prijs volgens factor zijn (anders is er niets te berekenen).
+    if (state.items.some((item) => item.priceMode === 'factor')) await loadProposals(); else state.proposals = new Map();
     state.reservations = reservations.items;
     renderStats();
     renderStock();
@@ -518,6 +520,7 @@
     if (done) toast(action === 'apply' ? `Verkoopprijs gezet op ${eur(proposal.newPrice)}` : 'Voorstel genegeerd');
     else toast('Het voorstel is intussen gewijzigd; bekijk het nieuwe voorstel.', true);
     await reloadItem();
+    renderStock();
   }
 
   // ---------- Eenheden ----------

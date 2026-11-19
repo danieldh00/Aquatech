@@ -317,7 +317,8 @@ test('prijsvoorstel: nieuwe inkoopprijs geeft een voorstel dat je goedkeurt of a
 });
 
 test('prijsvoorstel: open voorstellen voor artikelscherm en lijst', async () => {
-  const { admin, staff, vreemd } = await setup();
+  const { admin, staff, klant, vreemd } = await setup();
+  assert.strictEqual((await klant.get('/app/api/stock/price-proposals')).status, 403);
   await admin.put('/app/api/stock/price-factors', { defaultFactor: 2, rounding: { mode: 'cent', direction: 'dichtstbij' } });
   const factorItem = (await admin.post('/app/api/stock/items', { code: 'P1', name: 'P1', costPrice: 5, priceMode: 'factor' })).body;
   const fixedItem = (await admin.post('/app/api/stock/items', { code: 'P2', name: 'P2', costPrice: 5, salePrice: 50 })).body;
