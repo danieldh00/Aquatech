@@ -240,9 +240,10 @@ const errorCounter = createErrorCounter();
  * @param {(req: object) => boolean} options.debugFor Of dit verzoek details mag krijgen (debugmodus aan + beheerder).
  * @param {(line: string, detail: string) => void} [options.log] Schrijft een fout naar het log (standaard console.error); detail = de stacktrace of melding, zonder geheimen.
  * @param {{ add: Function }} [options.counter] Teller van 500-antwoorden (standaard `errorCounter` van dit proces).
+ * @param {(info: { req: object, errorId: string, error: Error }) => void} [options.onError] Krijgt elke 500-fout (voor het centrale logboek).
  * @returns {{ attach: Function, handler: Function, counter: object }} Middleware (vroeg plaatsen), foutafhandelaar (als laatste) en de teller.
  */
-function createErrorReport({ debugFor, log = (line, detail) => console.error(line, detail), counter = errorCounter }) {
+function createErrorReport({ debugFor, log = (line, detail) => console.error(line, detail), counter = errorCounter, onError = null }) {
   /**
    * Of dit verzoek details mag zien; een fout bij die controle betekent nee.
    * @param {object} req Het verzoek.
@@ -316,10 +317,12 @@ function createErrorReport({ debugFor, log = (line, detail) => console.error(lin
     try { counter.add(); } catch { /* tellen mag de foutafhandeling nooit breken */ }
     const who = req.user ? ` gebruiker ${req.user.id}` : '';
     const where = req.tenantId ? ` omgeving ${req.tenantId}` : '';
-    log(`[fout ${errorId}] ${req.method} ${requestPath(req)}${who}${where}`, redact(error && error.stack ? error.stack : error, 8000));
+    log(`[fout ${errorId}] ${req.method} ${requestPath(req)}${who}${where}${req.requestId ? ` verzoek ${req.requestId}` : ''}`, redact(error && error.stack ? error.stack : error, 8000));
+    if (onError) { try { onError({ req, errorId, error }); } catch { /* het logboek mag de foutafhandeling nooit breken */ } }
     return res.status(500).json({
       error: 'internal_error',
       errorId,
+      ...(req.requestId ? { requestId: req.requestId } : {}),
       message: `Er ging iets mis op de server (foutcode ${errorId}). Probeer het opnieuw; blijft het gebeuren, geef de foutcode door aan de beheerder.`,
     });
   }

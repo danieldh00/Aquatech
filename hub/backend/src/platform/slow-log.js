@@ -40,12 +40,13 @@ const round = (value) => Math.round(value * 10) / 10;
 
 /**
  * Maakt het logboek voor trage verzoeken, taken en stilstand.
- * @param {{ thresholdMs?: number, stallMs?: number, capacity?: number, write?: Function, now?: Function }} [options]
+ * @param {{ thresholdMs?: number, stallMs?: number, capacity?: number, write?: Function, now?: Function, onRecord?: Function, onTaskError?: Function }} [options]
  *   thresholdMs: vanaf hoeveel ms een verzoek of taak wordt vastgelegd; stallMs: vanaf hoeveel ms stilstand van de
- *   hoofdthread; capacity: aantal regels in het geheugen; write: schrijft een regel (standaard console.warn); now: klok in ms.
+ *   hoofdthread; capacity: aantal regels in het geheugen; write: schrijft een regel (standaard console.warn); now: klok in ms;
+ *   onRecord(regel): krijgt elke vastgelegde regel (voor het centrale logboek); onTaskError(naam, fout): een taak die faalt.
  * @returns {object} `middleware`, `trackTask`, `startStallWatch`, `entries`, `record`, `thresholdMs`.
  */
-function createSlowLog({ thresholdMs = 1000, stallMs = 1000, capacity = 500, write = (line) => console.warn(line), now = () => performance.now() } = {}) {
+function createSlowLog({ thresholdMs = 1000, stallMs = 1000, capacity = 500, write = (line) => console.warn(line), now = () => performance.now(), onRecord = null, onTaskError = null } = {}) {
   const entries = [];
   const activeRequests = new Map();
   const activeTasks = new Map();
@@ -62,6 +63,7 @@ function createSlowLog({ thresholdMs = 1000, stallMs = 1000, capacity = 500, wri
     if (entries.length > capacity) entries.splice(0, entries.length - capacity);
     const { at, kind, ...details } = stored;
     write(`[${kind === 'stilstand' ? 'stilstand' : 'traag'}] ${at} ${kind} ${JSON.stringify(details)}`);
+    if (onRecord) { try { onRecord(stored); } catch { /* het centrale logboek mag dit log nooit breken */ } }
     return stored;
   }
 
@@ -106,6 +108,7 @@ function createSlowLog({ thresholdMs = 1000, stallMs = 1000, capacity = 500, wri
         aborted: !res.writableFinished,
         durationMs: round(durationMs),
         tenantId: req.tenantId || null,
+        requestId: req.requestId || undefined,
         queries: stats.queries,
         dbMs: round(stats.dbMs),
         externalCalls: stats.externalCalls,
@@ -140,15 +143,24 @@ function createSlowLog({ thresholdMs = 1000, stallMs = 1000, capacity = 500, wri
         record({ kind: 'taak', task: name, durationMs: round(durationMs), queries: stats.queries, dbMs: round(stats.dbMs), externalCalls: stats.externalCalls, externalMs: round(stats.externalMs) });
       }
     };
+    /**
+     * Meldt een mislukte taak aan het centrale logboek.
+     * @param {Error} error De fout.
+     * @returns {void}
+     */
+    const failed = (error) => {
+      if (onTaskError) { try { onTaskError(name, error); } catch { /* negeren */ } }
+    };
     let result;
     try {
       result = runWithStats(stats, task);
     } catch (error) {
       done();
+      failed(error);
       throw error;
     }
     if (result && typeof result.then === 'function') {
-      return result.then((value) => { done(); return value; }, (error) => { done(); throw error; });
+      return result.then((value) => { done(); return value; }, (error) => { done(); failed(error); throw error; });
     }
     done();
     return result;

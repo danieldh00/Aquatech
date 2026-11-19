@@ -183,7 +183,7 @@ function createIncidentStore({ db }) {
  */
 function createMonitor({
   db, settingsFor, mainTenantId, listTenantIds = () => [], mailerFor, publicUrl = () => '', tenantLabel = (tenantId) => tenantId,
-  fetchImpl = null, resolveHost, now = Date.now, log = console, startGraceMs = 120000, checkTimeoutMs = CHECK_TIMEOUT_MS,
+  fetchImpl = null, resolveHost, now = Date.now, log = console, startGraceMs = 120000, checkTimeoutMs = CHECK_TIMEOUT_MS, appLog = null,
 }) {
   const incidents = createIncidentStore({ db });
   const notifier = createNotifier({ mailerFor, fetchImpl, log, ...(resolveHost ? { resolveHost } : {}) });
@@ -303,6 +303,7 @@ function createMonitor({
       if (result.skip || result.ok) {
         if (!open) return { incident: null, opened: false, resolved: false };
         let row = incidents.resolve(owner, open.id, at);
+        if (appLog) appLog.info('bewaking', `Opgelost: ${open.title}`, { tenantId: scope === 'platform' ? null : owner, data: { controle: key } });
         if (!result.skip && settingsConfig.notifyRecovery && !silent && open.notified_at) {
           const outcome = await notify(owner, row, 'opgelost', settingsConfig);
           row = incidents.update(owner, open.id, { resolved_notified_at: outcome.sent ? nowIso() : '', notify_error: outcome.error });
@@ -320,6 +321,7 @@ function createMonitor({
           row = incidents.insert({ tenantId: owner, scope, checkKey: key, severity, title: cleanTitle, message, at });
           opened = true;
           kind = 'open';
+          if (appLog) appLog[severity === 'fout' ? 'error' : 'warn']('bewaking', `${cleanTitle}: ${message}`, { tenantId: scope === 'platform' ? null : owner, data: { controle: key } });
         } catch (error) {
           // Een ander proces was net eerder (unieke index op het open incident): dan dat incident bijwerken.
           const raced = incidents.findOpen(owner, key);
@@ -330,6 +332,7 @@ function createMonitor({
         const escalated = open.severity === 'waarschuwing' && severity === 'fout';
         row = incidents.update(owner, open.id, { severity, last_at: at, occurrences: (Number(open.occurrences) || 0) + 1, message, title: cleanTitle });
         const lastNotice = Math.max(Date.parse(open.notified_at || '') || 0, Date.parse(open.reminded_at || '') || 0);
+        if (escalated && appLog) appLog.error('bewaking', `${cleanTitle}: ${message}`, { tenantId: scope === 'platform' ? null : owner, data: { controle: key } });
         if (escalated || !open.notified_at) kind = 'open';
         else if (settingsConfig.reminderHours > 0 && now() - lastNotice >= settingsConfig.reminderHours * 3600000) kind = 'herinnering';
       }

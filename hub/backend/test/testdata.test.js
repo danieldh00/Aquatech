@@ -264,6 +264,7 @@ test('testdata vult alle features: klantlinks, akkoord met handtekening, werkord
     const NO_TESTDATA = {
       sessions: 'ontstaan bij inloggen',
       audit: 'ontstaat vanzelf bij handelingen',
+      app_logs: 'logregels ontstaan vanzelf bij fouten en traagheid',
       settings: 'instellingen kiest de beheerder zelf (alleen de nepwebshop wordt gezet)',
       support_grants: 'meekijken is een handeling, geen data',
       impersonations: 'meekijken is een handeling, geen data',

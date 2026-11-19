@@ -11,7 +11,7 @@ const { loadOrCreateSecret } = require('./beveiliging/session-secret');
 const { createPlanAnalyzer, AnalyzeError, PROMPT_VERSION } = require('./beregening/plan-analyzer');
 const { createRecognitionStore, sanitizeSamples, sanitizeFinalPlan, imageHash } = require('./beregening/recognitions');
 const { openDb, openDatabase, isPg } = require('./database/db');
-const { createSlowLog, timedFetch } = require('./platform/slow-log');
+const { createSlowLog, timedFetch, normalizePath } = require('./platform/slow-log');
 const { createStore, withRequestCache, hashPassword, passwordProblem, preferencesOf, fingerprintOf } = require('./platform/store');
 const { withScope, limitTo, bindStream, asSystem } = require('./database/tenant-scope');
 const testdata = require('./platform/test-data');
@@ -92,6 +92,7 @@ const { createSprinklerStore, registerSprinklerRoutes } = require('./beregening/
 const { runPlanTask } = require('./beregening/plan-runner');
 const { registerDrawingRoutes, RETENTION_DAYS: DRAWING_RETENTION_DAYS } = require('./beregening/drawings');
 const { createAiUsageStore } = require('./platform/ai-usage');
+const { createAppLog } = require('./platform/app-log');
 const { createErrorReport, catchAsync, withCause, errorCounter } = require('./platform/error-report');
 const { createSystemUpdate } = require('./platform/system-update');
 const { registerBackupRestoreRoutes } = require('./platform/backup-restore-routes');
@@ -638,12 +639,43 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Per verzoek een eigen geheugen voor gegevens die binnen één verzoek
   // meermaals nodig zijn (zoals de tenant); zie withRequestCache in store.js.
   // Log van trage verzoeken en achtergrondtaken (platform/slow-log.js); eerste in de keten, zodat ook de rest meetelt.
-  const slowLog = createSlowLog({ thresholdMs: Number(env.SLOW_REQUEST_MS) || 1000, stallMs: Number(env.SLOW_STALL_MS) || 1000 });
+  // Centraal logboek (platform/app-log.js): request-id per verzoek en gebufferde opslag van fouten, trage verzoeken, stilstand en taken.
+  const appLog = createAppLog({ db: database, mainTenantId: tenant.id });
+  app.locals.appLog = appLog;
+  app.use(appLog.middleware);
+  const slowLog = createSlowLog({
+    thresholdMs: Number(env.SLOW_REQUEST_MS) || 1000, stallMs: Number(env.SLOW_STALL_MS) || 1000,
+    /**
+     * Zet een regel van het trage-verzoekenlog ook in het centrale logboek.
+     * @param {object} entry De vastgelegde regel (soort, duur, pad, status enz.).
+     * @returns {void}
+     */
+    onRecord: (entry) => {
+      if (entry.kind === 'stilstand') appLog.warn('stilstand', `Hoofdthread stond ${entry.stalledMs} ms stil`, { durationMs: entry.stalledMs, data: { runningDuring: entry.runningDuring } });
+      else if (entry.kind === 'taak') appLog.warn('taak', `Trage taak: ${entry.task}`, { durationMs: entry.durationMs, data: { queries: entry.queries, dbMs: entry.dbMs, externalCalls: entry.externalCalls, externalMs: entry.externalMs } });
+      else appLog.warn('traag', `${entry.method} ${entry.path} (${entry.status}${entry.aborted ? ', afgebroken' : ''})`, { tenantId: entry.tenantId, requestId: entry.requestId, durationMs: entry.durationMs, data: { queries: entry.queries, dbMs: entry.dbMs, externalCalls: entry.externalCalls, externalMs: entry.externalMs } });
+    },
+    /**
+     * Legt een mislukte achtergrondtaak vast.
+     * @param {string} name Naam van de taak.
+     * @param {Error} error De fout.
+     * @returns {void}
+     */
+    onTaskError: (name, error) => appLog.error('taak', `Taak mislukt: ${name}`, { data: { fout: error && error.message } }),
+  });
   app.locals.slowLog = slowLog;
   app.use(slowLog.middleware);
   app.use((req, res, next) => withRequestCache(() => withScope(() => { bindStream(req); next(); })));
   // Foutmeldingen met foutcode, en details voor beheerders met de debugmodus aan (platform/error-report.js).
   const errorReport = createErrorReport({
+    /**
+     * Zet een 500-fout in het centrale logboek (met foutcode en request-id; de stacktrace wordt geschoond).
+     * @param {{ req: object, errorId: string, error: Error }} info De fout en het verzoek.
+     * @returns {void}
+     */
+    onError: ({ req, errorId, error }) => appLog.error('fout', `${req.method} ${normalizePath(req.originalUrl || req.url)}`, {
+      tenantId: req.tenantId || null, requestId: req.requestId, errorCode: errorId, data: { stack: String((error && error.stack) || error).slice(0, 1200) },
+    }),
     /**
      * Of dit verzoek foutdetails mag krijgen: debugmodus van de actieve omgeving aan en de gebruiker is beheerder.
      * @param {object} req Het verzoek.
@@ -1789,7 +1821,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // ---------- Beheer: bewaking en meldingen (platform/monitoring.js) ----------
   // Controles en incidenten; de controles zelf worden onderaan geregistreerd (ze hebben stores nodig die hier nog niet bestaan).
   const monitor = createMonitor({
-    db: database, settingsFor: (id) => settingsFor(id), mainTenantId: tenant.id, mailerFor,
+    appLog, db: database, settingsFor: (id) => settingsFor(id), mainTenantId: tenant.id, mailerFor,
     listTenantIds: () => allEnvironmentIds(),
     /**
      * Link naar Beheer > Bewaking voor in een melding.
@@ -3490,6 +3522,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     for (const environment of allEnvironments()) {
       const environmentSettings = settingsFor(environment.id);
       const removed = store.applyRetention(environment.id, { ipDays: environmentSettings.get('ipRetentionDays'), auditDays: environmentSettings.get('auditRetentionDays') });
+      removed.appLogs = appLog.prune(environment.id, environmentSettings.get('logRetentionDays'), environmentSettings.get('logErrorRetentionDays'));
       removed.aiUsage = aiUsage.prune(environment.id, environmentSettings.get('auditRetentionDays'));
       removed.drawings = store.purgeStaleDrawings(environment.id, DRAWING_RETENTION_DAYS);
       removed.accountTokens = accountTokens.purgeExpired(environment.id);
@@ -3705,6 +3738,7 @@ if (require.main === module) {
   for (const sig of ['SIGTERM', 'SIGINT']) {
     process.on(sig, () => {
       server.close(() => {
+        try { app.locals.appLog.stop(); } catch { /* het logboek mag het afsluiten niet breken */ }
         try { db.close(); } catch { /* al dicht */ }
         process.exit(0);
       });

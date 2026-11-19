@@ -1485,6 +1485,27 @@ const MIGRATIONS = [
   `
   ALTER TABLE item_images ADD COLUMN thumb TEXT;
   `,
+  // 82: centraal applicatielogboek (platform/app-log.js): fouten, trage verzoeken, stilstand, mislukte taken en bewakingsincidenten per
+  // omgeving, met request-id en foutcode. scope 'platform' = regel zonder omgeving (staat onder de hoofdtenant). Geen persoonsgegevens of geheimen.
+  `
+  CREATE TABLE app_logs (
+    id           TEXT PRIMARY KEY,
+    tenant_id    TEXT NOT NULL REFERENCES tenants(id),
+    scope        TEXT NOT NULL DEFAULT 'tenant',
+    created_at   TEXT NOT NULL,
+    level        TEXT NOT NULL DEFAULT 'info',
+    source       TEXT NOT NULL,
+    request_id   TEXT NOT NULL DEFAULT '',
+    error_code   TEXT NOT NULL DEFAULT '',
+    message      TEXT NOT NULL DEFAULT '',
+    data         TEXT NOT NULL DEFAULT '{}',
+    duration_ms  INTEGER NOT NULL DEFAULT 0,
+    repeat_count INTEGER NOT NULL DEFAULT 1
+  );
+  CREATE INDEX app_logs_tenant_time ON app_logs (tenant_id, created_at);
+  CREATE INDEX app_logs_tenant_level ON app_logs (tenant_id, level, created_at);
+  CREATE INDEX app_logs_request ON app_logs (tenant_id, request_id);
+  `,
 ];
 
 /**
