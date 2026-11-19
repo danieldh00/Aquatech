@@ -98,6 +98,8 @@
     $('#ct-detail').hidden = false;
     $('#ct-close-form').hidden = true;
     $('#ct-filter').value = 'alle';
+    state.lines = [];
+    $('#b-ct-more').hidden = true;
     renderHeader();
     await loadLines(false);
   }
