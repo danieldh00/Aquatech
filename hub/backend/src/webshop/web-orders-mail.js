@@ -5,8 +5,10 @@
 // Bij Verzonden volgt een mail met de volgcode van DPD (of: klaar om op te
 // halen); komt de volgcode later, dan volgt één mail met die code (data.shipMail).
 const { validEmail, mailFailure, MAIL_SETUP_FAILED } = require('../platform/mailer');
+const { mailStyleOf, composeFor } = require('../platform/mail-layout');
 const { WITHDRAWAL_DAYS } = require('./legal-pages');
 const { cleanPublicUrl } = require('./mollie');
+const DeliveryTimes = require('./delivery-times');
 
 /**
  * Een ISO-datum als dd-mm-jjjj voor in een mail.
@@ -23,7 +25,7 @@ const EUR = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' 
 /**
  * Maakt de verzender van bestelmails.
  * @param {{ orders: object, settingsFor: Function, mailerFor: Function, mailBody: Function, guestLinkOf?: Function }} deps De bestelopslag, de instellingen per omgeving, de mailserver en de opmaak van de mail, en `guestLinkOf(tenantId, order, baseUrl)` = de persoonlijke link naar een gastbestelling (guest-orders.js; zonder geen link in de mails).
- * @returns {{ sendPlaced: Function, sendShipment: Function, sendBusinessRequest: Function, businessRequestReady: Function }} De functies.
+ * @returns {{ sendPlaced: Function, sendShipment: Function, sendBusinessRequest: Function, businessRequestReady: Function, mailReady: Function, sendStockAlert: Function, sendPaymentReminder: Function }} De functies.
  */
 function createOrderMailer({ orders, settingsFor, mailerFor, mailBody, guestLinkOf = () => '' }) {
   /**
@@ -112,15 +114,17 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody, guestLink
     const details = `Bestelling ${order.number}\n\n${linesText(order)}\n\n${totalsText(order)}\n\n${shippingText(order)}${order.note ? `\n\nJe opmerking: ${order.note}` : ''}`;
     let error = '';
     try {
-      const customerMail = mailBody(profile, [
-        `Beste ${order.customer.name},`, paid ? 'Bedankt voor je bestelling en je betaling. We hebben beide ontvangen en reserveren de artikelen voor je.' : 'Bedankt voor je bestelling. We hebben hem ontvangen en reserveren de artikelen voor je.',
-        details, paid ? `Je hebt ${EUR.format(order.totals.total)} online betaald. Je ontvangt de factuur van ons. Zodra je bestelling onderweg is of klaarstaat, laten we het je weten.` : 'Je bestelling gaat op rekening: je ontvangt de factuur van ons. Zodra je bestelling onderweg is of klaarstaat, laten we het je weten.',
-        ...(link ? [`Bekijk de status van je bestelling, download de factuur of vraag een retour aan via deze persoonlijke link (bewaar deze mail en deel de link niet):\n${link}`] : []),
-        `Als consument kun je binnen ${WITHDRAWAL_DAYS} dagen na ontvangst herroepen: ${link ? 'open je bestelling via de link hierboven' : 'log in'} en kies bij je bestelling Retour aanvragen, of antwoord op deze mail. Onze algemene voorwaarden, privacyverklaring en het herroepingsrecht met modelformulier staan onderaan elke pagina van de webshop.`,
-      ]);
-      await mailer.send({ to: order.email, subject: `Bevestiging van je bestelling ${order.number}`, text: customerMail.text, html: customerMail.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
+      const style = mailStyleOf(settings);
+      const composed = composeFor(settings, paid ? 'order_betaald' : 'order_rekening', {
+        klant: order.customer.name, nummer: order.number, bedrag: EUR.format(order.totals.total), bestelling: details, levertijd: DeliveryTimes.etaSentence(order.shipping),
+        statuslink: link ? `Bekijk de status van je bestelling, download de factuur of vraag een retour aan via deze persoonlijke link (bewaar deze mail en deel de link niet):\n${link}` : '',
+      });
+      // De tekst over het herroepingsrecht is wettelijk en staat altijd onderaan, welke eigen tekst er ook is ingesteld.
+      const withdrawal = `Als consument kun je binnen ${WITHDRAWAL_DAYS} dagen na ontvangst herroepen: ${link ? 'open je bestelling via de link hierboven' : 'log in'} en kies bij je bestelling Retour aanvragen, of antwoord op deze mail. Onze algemene voorwaarden, privacyverklaring en het herroepingsrecht met modelformulier staan onderaan elke pagina van de webshop.`;
+      const customerMail = mailBody(profile, [...composed.paragraphs, withdrawal], undefined, style);
+      await mailer.send({ to: order.email, subject: composed.subject, text: customerMail.text, html: customerMail.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
       if (validEmail(profile.email)) {
-        const shopMail = mailBody(profile, [`Nieuwe webshopbestelling ${order.number} van ${order.customer.company || order.customer.name} (${order.email})${paid ? ', online betaald' : ''}.`, details]);
+        const shopMail = mailBody(profile, [`Nieuwe webshopbestelling ${order.number} van ${order.customer.company || order.customer.name} (${order.email})${paid ? ', online betaald' : ''}.`, details, ...(DeliveryTimes.etaSentence(order.shipping) ? [`Aan de klant doorgegeven: ${DeliveryTimes.etaSentence(order.shipping)}`] : [])], undefined, style);
         await mailer.send({ to: profile.email, subject: `Nieuwe webshopbestelling ${order.number}`, text: shopMail.text, html: shopMail.html });
       }
     } catch (failure) {
@@ -176,7 +180,7 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody, guestLink
     const mailer = mailerFor(settings);
     const profile = settings.get('quoteProfile') || {};
     if (!mailer.configured() || !validEmail(profile.email)) return false;
-    const mail = mailBody(profile, ['Nieuwe aanvraag voor een zakelijk account via de webshop.', `Bedrijfsnaam: ${company}\nE-mail: ${email}\nTelefoon: ${phone}${message ? `\n\nBericht:\n${message}` : ''}`]);
+    const mail = mailBody(profile, ['Nieuwe aanvraag voor een zakelijk account via de webshop.', `Bedrijfsnaam: ${company}\nE-mail: ${email}\nTelefoon: ${phone}${message ? `\n\nBericht:\n${message}` : ''}`], undefined, mailStyleOf(settings));
     await mailer.send({ to: profile.email, subject: `Aanvraag zakelijk account: ${company}`, text: mail.text, html: mail.html, replyTo: email });
     return true;
   }
@@ -204,9 +208,10 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody, guestLink
     const record = (patch) => orders.updateData(tenantId, order.id, { shipMail: { tracking: tracking ? tracking.code : null, at: new Date().toISOString(), ...patch } });
     let mailer;
     let profile;
+    let settings;
     let link = '';
     try {
-      const settings = settingsFor(tenantId);
+      settings = settingsFor(tenantId);
       mailer = mailerFor(settings);
       profile = settings.get('quoteProfile') || {};
       link = guestLink(tenantId, order, settings);
@@ -223,29 +228,23 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody, guestLink
       : linesText(order);
     const backorderLines = shipment && order.fulfilment ? order.fulfilment.lines.filter((entry) => entry.backorder > 0 && order.lines[entry.index]) : [];
     const backorderText = backorderLines.map((entry) => `${entry.backorder} × ${order.lines[entry.index].name} (${order.lines[entry.index].code})${entry.expected ? `, verwacht ${expectedText(entry.expected)}` : ''}`).join('\n');
-    const intro = shipment
-      ? (pickup
-        ? `Een deel van je bestelling ${order.number} staat klaar om op te halen.${profile.address ? `\n\nOphaaladres:\n${profile.address}` : ''}`
-        : tracking
-          ? `Een deel van je bestelling ${order.number} is onderweg. Volg het pakket met de code ${tracking.code}: ${tracking.url}`
-          : `Een deel van je bestelling ${order.number} is onderweg met DPD.`)
-      : pickup
-      ? `Je bestelling ${order.number} staat klaar om op te halen.${profile.address ? `\n\nOphaaladres:\n${profile.address}` : ''}`
-      : tracking
-        ? `Je bestelling ${order.number} is onderweg. Volg je pakket met de code ${tracking.code}: ${tracking.url}`
-        : `Je bestelling ${order.number} is onderweg met DPD. Zodra we de volgcode hebben, sturen we hem je toe.`;
+    const typeKey = `${shipment ? 'deel_' : ''}${pickup ? 'klaar_ophalen' : tracking ? 'verzonden_volgcode' : 'verzonden'}`;
     let error = '';
     try {
-      const message = mailBody(profile, [`Beste ${order.customer.name},`, ...intro.split(/\n{2,}/), `Bestelling ${order.number}\n\n${shippedText}`, ...(link ? [`Je bestelling bekijken: ${link}`] : []),
-        ...(backorderText ? [`Nog niet geleverd (backorder):\n${backorderText}`, 'Zodra de rest binnen is, sturen we het je na. Je ontvangt dan opnieuw bericht.'] : [])]);
-      const subject = shipment ? `Een deel van je bestelling ${order.number} is ${pickup ? 'klaar' : 'onderweg'}` : pickup ? `Je bestelling ${order.number} staat klaar` : tracking ? `Je bestelling ${order.number} is onderweg (volgcode ${tracking.code})` : `Je bestelling ${order.number} is onderweg`;
-      await mailer.send({ to: order.email, subject, text: message.text, html: message.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
+      const style = mailStyleOf(settings);
+      const composed = composeFor(settings, typeKey, {
+        klant: order.customer.name, nummer: order.number, volgcode: tracking ? tracking.code : '', volglink: tracking ? tracking.url : '',
+        ophaaladres: profile.address || '', bestelling: `Bestelling ${order.number}\n\n${shippedText}`, bestellink: link ? `Je bestelling bekijken: ${link}` : '',
+        backorder: backorderText ? `Nog niet geleverd (backorder):\n${backorderText}\n\nZodra de rest binnen is, sturen we het je na. Je ontvangt dan opnieuw bericht.` : '',
+      });
+      const message = mailBody(profile, composed.paragraphs, undefined, style);
+      await mailer.send({ to: order.email, subject: composed.subject, text: message.text, html: message.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
       // Dropshipping: het adres voor het afleverbewijs krijgt een eigen, vast bericht (alleen bestelnummer en volgcode, nooit tekst van de klant),
       // want dat adres is niet geverifieerd en mag de shop-afzender niet als doorgeefluik gebruiken.
       const proofEmail = !pickup && order.dropshipping && validEmail(order.dropshipping.proofEmail) && order.dropshipping.proofEmail !== order.email ? order.dropshipping.proofEmail : '';
       if (proofEmail) {
         const proofLines = [`Bestelling ${order.number} is onderweg naar de ontvanger.`, tracking ? `Volg het pakket met de code ${tracking.code}: ${tracking.url}` : 'Zodra we de volgcode hebben, sturen we hem toe.'];
-        const proof = mailBody(profile, proofLines);
+        const proof = mailBody(profile, proofLines, undefined, style);
         await mailer.send({ to: proofEmail, subject: tracking ? `Bestelling ${order.number} is onderweg (volgcode ${tracking.code})` : `Bestelling ${order.number} is onderweg`, text: proof.text, html: proof.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
       }
     } catch (failure) {
@@ -254,7 +253,76 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody, guestLink
     record({ sent: !error, error });
   }
 
-  return { sendPlaced, sendShipment, sendBusinessRequest, businessRequestReady };
+  /**
+   * Of de omgeving mail kan versturen (een mailserver is ingesteld).
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {boolean} true als er een mailserver is.
+   */
+  function mailReady(tenantId) {
+    try {
+      return mailerFor(settingsFor(tenantId)).configured();
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Meldt een bezoeker dat een artikel weer te bestellen is (voorraadmelding), met een link naar de webshop als het webadres bekend is.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ email: string, name: string, code: string }} alert Het adres van de bezoeker en het artikel.
+   * @returns {Promise<boolean>} true als de mail is verstuurd; false zonder mailserver of bij een ongeldig adres. Een verzendfout wordt gegooid, zodat de melding blijft staan voor een volgende ronde.
+   */
+  async function sendStockAlert(tenantId, { email, name, code }) {
+    if (!validEmail(email)) return false;
+    const settings = settingsFor(tenantId);
+    const mailer = mailerFor(settings);
+    if (!mailer.configured()) return false;
+    const profile = settings.get('quoteProfile') || {};
+    const base = cleanPublicUrl((settings.get('shopPayment') || {}).publicUrl);
+    const link = base ? `${base}zoeken/?q=${encodeURIComponent(code)}` : '';
+    const composed = composeFor(settings, 'weer_op_voorraad', { artikel: name, code, artikellink: link ? `\n\nBekijk het artikel: ${link}` : '' });
+    const mail = mailBody(profile, composed.paragraphs, undefined, mailStyleOf(settings));
+    await mailer.send({ to: email, subject: composed.subject, text: mail.text, html: mail.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
+    return true;
+  }
+
+  /**
+   * Maakt een naam geschikt voor de aanhef van een ongevraagde mail: geen links, regeleinden of lange tekst.
+   * @param {string} name De naam uit de bestelling.
+   * @returns {string} De opgeschoonde naam, of 'klant'.
+   */
+  const safeName = (name) => String(name || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/https?:\/\/\S*|www\.\S*|\S+@\S+/gi, '').replace(/\s+/g, ' ').trim().slice(0, 60) || 'klant';
+
+  /**
+   * Stuurt één herinnering bij een online bestelling waarvan de betaling niet is afgerond: wat er aan de hand is, tot wanneer de
+   * artikelen gereserveerd blijven en een link om af te rekenen (de persoonlijke link bij een gastbestelling, anders de
+   * bestelpagina met Nu betalen). Zonder webadres uit Beheer wordt er niets gestuurd: een herinnering zonder link helpt niemand.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} order De bestelling (met pay, email, customer, number, reservedUntil).
+   * @returns {Promise<boolean>} true als de mail is verstuurd; false bij een ongeldig adres, geen mailserver of geen webadres.
+   */
+  async function sendPaymentReminder(tenantId, order) {
+    if (!validEmail(order.email)) return false;
+    const settings = settingsFor(tenantId);
+    const mailer = mailerFor(settings);
+    if (!mailer.configured()) return false;
+    const payment = settings.get('shopPayment') || {};
+    const base = cleanPublicUrl(payment.publicUrl);
+    const link = order.guest ? guestLink(tenantId, order, settings) : (base ? `${base}bestelling/${encodeURIComponent(order.id)}/` : '');
+    if (!link) return false;
+    const profile = settings.get('quoteProfile') || {};
+    const failed = order.pay && order.pay.status === 'mislukt';
+    const until = order.reservedUntil ? new Date(order.reservedUntil).toLocaleString('nl-NL', { dateStyle: 'long', timeStyle: 'short', timeZone: 'Europe/Amsterdam' }) : '';
+    const composed = composeFor(settings, failed ? 'betalingsherinnering_mislukt' : 'betalingsherinnering', {
+      klant: safeName(order.customer.name), nummer: order.number, bedrag: EUR.format(order.totals.total), link,
+      reservering: until ? `We houden de artikelen voor je gereserveerd tot ${until}. ` : '',
+    });
+    const mail = mailBody(profile, composed.paragraphs, undefined, mailStyleOf(settings));
+    await mailer.send({ to: order.email, subject: composed.subject, text: mail.text, html: mail.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
+    return true;
+  }
+
+  return { sendPlaced, sendShipment, sendBusinessRequest, businessRequestReady, mailReady, sendStockAlert, sendPaymentReminder };
 }
 
 module.exports = { createOrderMailer };

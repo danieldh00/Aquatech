@@ -5,6 +5,7 @@
 // (mailer.js); een mislukte verzending houdt de retour niet tegen maar blijft
 // zichtbaar bij de retour (data.mail).
 const { validEmail, mailFailure, MAIL_SETUP_FAILED } = require('../platform/mailer');
+const { mailStyleOf, composeFor } = require('../platform/mail-layout');
 
 /**
  * Maakt de verzender van retourmails.
@@ -30,7 +31,7 @@ function createReturnMailer({ returns, settingsFor, mailerFor, mailBody }) {
    * @param {string} tenantId Id van de omgeving.
    * @param {object} record De retour.
    * @param {string} kind Welke mail het is (aanvraag, besluit, afgerond), voor in het logboek.
-   * @param {(profile: object) => { subject: string, paragraphs: string[], shop?: { subject: string, paragraphs: string[] } }} compose Maakt de inhoud van de mail met het bedrijfsprofiel.
+   * @param {(profile: object, settings: object) => { subject: string, paragraphs: string[], shop?: { subject: string, paragraphs: string[] } }} compose Maakt de inhoud van de mail met het bedrijfsprofiel.
    * @returns {Promise<void>}
    */
   async function deliver(tenantId, record, kind, compose) {
@@ -42,8 +43,9 @@ function createReturnMailer({ returns, settingsFor, mailerFor, mailBody }) {
     const log = (patch) => returns.updateData(tenantId, record.id, { mail: { kind, at: new Date().toISOString(), ...patch } });
     let mailer;
     let profile;
+    let settings;
     try {
-      const settings = settingsFor(tenantId);
+      settings = settingsFor(tenantId);
       mailer = mailerFor(settings);
       profile = settings.get('quoteProfile') || {};
     } catch (failure) {
@@ -54,11 +56,12 @@ function createReturnMailer({ returns, settingsFor, mailerFor, mailBody }) {
     if (!mailer.configured()) { log({ sent: false, error: 'Geen mailserver ingesteld.' }); return; }
     let error = '';
     try {
-      const content = compose(profile);
-      const message = mailBody(profile, [`Beste ${record.customerName},`, ...content.paragraphs]);
+      const content = compose(profile, settings);
+      const style = mailStyleOf(settings);
+      const message = mailBody(profile, content.paragraphs, undefined, style);
       await mailer.send({ to: record.email, subject: content.subject, text: message.text, html: message.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
       if (content.shop && validEmail(profile.email)) {
-        const shopMessage = mailBody(profile, content.shop.paragraphs);
+        const shopMessage = mailBody(profile, content.shop.paragraphs, undefined, style);
         await mailer.send({ to: profile.email, subject: content.shop.subject, text: shopMessage.text, html: shopMessage.html });
       }
     } catch (failure) {
@@ -73,9 +76,8 @@ function createReturnMailer({ returns, settingsFor, mailerFor, mailBody }) {
    * @param {object} record De aangevraagde retour.
    * @returns {Promise<void>}
    */
-  const sendRequested = (tenantId, record) => deliver(tenantId, record, 'aangevraagd', () => ({
-    subject: `We hebben je retour ${record.number} ontvangen`,
-    paragraphs: ['We hebben je retouraanvraag ontvangen. We beoordelen hem zo snel mogelijk en laten je weten hoe je de artikelen kunt terugsturen.', detailsText(record)],
+  const sendRequested = (tenantId, record) => deliver(tenantId, record, 'aangevraagd', (_profile, settings) => ({
+    ...composeFor(settings, 'retour_ontvangen', { klant: record.customerName, nummer: record.number, specificatie: detailsText(record) }),
     shop: { subject: `Nieuwe retouraanvraag ${record.number}`, paragraphs: [`Nieuwe retouraanvraag van ${record.customerName} (${record.email}).`, detailsText(record)] },
   }));
 
@@ -85,18 +87,13 @@ function createReturnMailer({ returns, settingsFor, mailerFor, mailBody }) {
    * @param {object} record De retour met status goedgekeurd of afgewezen.
    * @returns {Promise<void>}
    */
-  const sendDecision = (tenantId, record) => deliver(tenantId, record, record.status, (profile) => (record.status === 'goedgekeurd'
-    ? {
-      subject: `Je retour ${record.number} is goedgekeurd`,
-      paragraphs: [
-        `Je retour is goedgekeurd. ${profile.address ? `Stuur de artikelen terug naar:\n${profile.address}\n\nVermeld retournummer ${record.number} in het pakket.` : `Het retouradres ontvang je van ons; antwoord op deze mail als je het nog niet hebt. Vermeld retournummer ${record.number} in het pakket.`}${record.decisionNote ? `\n\n${record.decisionNote}` : ''}`,
-        detailsText(record), 'Zodra we de artikelen hebben ontvangen, ontvang je de creditnota.',
-      ],
-    }
-    : {
-      subject: `Je retour ${record.number} is afgewezen`,
-      paragraphs: [`Helaas kunnen we je retour niet accepteren.\n\nReden: ${record.decisionNote}`, detailsText(record), 'Heb je vragen? Antwoord dan op deze mail.'],
-    }));
+  const sendDecision = (tenantId, record) => deliver(tenantId, record, record.status, (profile, settings) => {
+    const approved = record.status === 'goedgekeurd';
+    const instruction = `${profile.address ? `Stuur de artikelen terug naar:\n${profile.address}\n\nVermeld retournummer ${record.number} in het pakket.` : `Het retouradres ontvang je van ons; antwoord op deze mail als je het nog niet hebt. Vermeld retournummer ${record.number} in het pakket.`}${record.decisionNote ? `\n\n${record.decisionNote}` : ''}`;
+    return composeFor(settings, approved ? 'retour_goedgekeurd' : 'retour_afgewezen', {
+      klant: record.customerName, nummer: record.number, specificatie: detailsText(record), instructie: instruction, reden: record.decisionNote || '',
+    });
+  });
 
   /**
    * Meldt de klant dat de retour is ontvangen en afgehandeld, met het nummer van de creditnota als die er is.
@@ -104,12 +101,9 @@ function createReturnMailer({ returns, settingsFor, mailerFor, mailBody }) {
    * @param {object} record De afgeronde retour.
    * @returns {Promise<void>}
    */
-  const sendCompleted = (tenantId, record) => deliver(tenantId, record, 'afgerond', () => ({
-    subject: `Je retour ${record.number} is ontvangen en afgehandeld`,
-    paragraphs: [
-      `We hebben de artikelen van je retour ontvangen.${record.credit ? ` Je creditnota ${record.credit.number} is aangemaakt${record.credit.status === 'concept' ? ' en volgt zo snel mogelijk' : ' en komt apart in je mailbox'}.` : ' Je ontvangt de creditnota van ons.'}`,
-      detailsText(record),
-    ],
+  const sendCompleted = (tenantId, record) => deliver(tenantId, record, 'afgerond', (_profile, settings) => composeFor(settings, 'retour_afgehandeld', {
+    klant: record.customerName, nummer: record.number, specificatie: detailsText(record),
+    afhandeling: `We hebben de artikelen van je retour ontvangen.${record.credit ? ` Je creditnota ${record.credit.number} is aangemaakt${record.credit.status === 'concept' ? ' en volgt zo snel mogelijk' : ' en komt apart in je mailbox'}.` : ' Je ontvangt de creditnota van ons.'}`,
   }));
 
   return { sendRequested, sendDecision, sendCompleted };

@@ -17,6 +17,8 @@ const { createImageCache } = require('../platform/image-cache');
 const { legalDefaults } = require('./legal-pages');
 const { GROUP_SLUGS, GROUP_NAMES, slugify } = require('./storefront-data');
 const { DEFAULT_TREE } = require('./category-tree');
+const { sanitizeSeoTitle, sanitizeSeoDescription } = require('../artikelen/item-details');
+const { normalizeBlocks } = require('./page-blocks');
 
 /** Bestanden in assets/ die als standaardafbeelding gekozen mogen worden. */
 const ASSET_NAMES = new Set(fs.readdirSync(path.join(__dirname, 'assets')).filter((name) => /\.(png|jpe?g|webp)$/i.test(name)));
@@ -146,13 +148,14 @@ function cleanList(input, fallback, max, cleanItem) {
 }
 
 /**
- * Artikelcodes uit een lijst of een tekst met komma's: hoofdletters, geldige tekens, uniek, maximaal 6.
+ * Artikelcodes uit een lijst of een tekst met komma's: hoofdletters, geldige tekens, uniek, standaard maximaal 6.
  * @param {*} value Een lijst of een tekst met komma's of regeleinden.
+ * @param {number} [max] Maximaal aantal codes.
  * @returns {string[]} De codes.
  */
-function cleanCodes(value) {
+function cleanCodes(value, max = 6) {
   const list = Array.isArray(value) ? value : typeof value === 'string' ? value.split(/[,;\n]+/) : [];
-  return [...new Set(list.map((code) => cleanText(String(code), 40).toUpperCase()).filter((code) => /^[A-Z0-9][A-Z0-9 ._\-/+]*$/.test(code)))].slice(0, 6);
+  return [...new Set(list.map((code) => cleanText(String(code), 40).toUpperCase()).filter((code) => /^[A-Z0-9][A-Z0-9 ._\-/+]*$/.test(code)))].slice(0, max);
 }
 
 /**
@@ -282,6 +285,10 @@ function normalizeTree(input, base = DEFAULT_TREE, options = {}) {
     if (/^[a-z0-9_-]{1,60}$/.test(wanted) && !used.has(wanted)) { node.slug = wanted; used.add(wanted); } else needSlug.push(node);
     const intro = cleanText(item.intro, 2000);
     if (intro) node.intro = intro;
+    const seoTitle = sanitizeSeoTitle(item.seoTitle);
+    if (seoTitle) node.seoTitle = seoTitle;
+    const seoDescription = sanitizeSeoDescription(item.seoDescription);
+    if (seoDescription) node.seoDescription = seoDescription;
     const image = imageRef(item.image, '');
     if (image) node.image = image;
     if (item.hidden === true) node.hidden = true;
@@ -396,9 +403,10 @@ function sanitizeHtml(html) {
 }
 
 /**
- * Maakt van de ingevoerde velden van een pagina een geldige pagina.
+ * Maakt van de ingevoerde velden van een pagina een geldige pagina. De inhoud staat in `blocks`
+ * (zie page-blocks.js); een pagina met alleen `body` krijgt die tekst als één tekstblok.
  * @param {string} slug De naam in het adres (a-z, 0-9, streepjes).
- * @param {*} input De ingevoerde velden (title, description, body, menu, footer, order).
+ * @param {*} input De ingevoerde velden (title, description, seoTitle, blocks of body, menu, footer, order).
  * @returns {{ page?: object, error?: string, message?: string }} De pagina, of een fout.
  */
 function normalizePage(slug, input) {
@@ -406,11 +414,15 @@ function normalizePage(slug, input) {
   if (!/^[a-z0-9][a-z0-9-]{1,58}[a-z0-9]$/.test(slug)) return { error: 'invalid_slug', message: 'De naam in het adres bestaat uit 3 tot 60 kleine letters, cijfers en streepjes.' };
   const title = cleanText(given.title, 120);
   if (!title) return { error: 'title_required', message: 'Geef de pagina een titel.' };
-  if (typeof given.body === 'string' && given.body.length > MAX_HTML) return { error: 'too_long', message: 'De tekst is te lang.' };
-  const body = sanitizeHtml(given.body);
-  if (body.length > MAX_HTML) return { error: 'too_long', message: 'De tekst is te lang.' };
+  const rawBlocks = Array.isArray(given.blocks) ? given.blocks : [{ type: 'text', html: given.body }];
+  const tooLong = rawBlocks.some((block) => block && typeof block.html === 'string' && block.html.length > MAX_HTML);
+  if (tooLong) return { error: 'too_long', message: 'De tekst is te lang.' };
+  const checked = normalizeBlocks(rawBlocks, { cleanText, imageRef, linkRef, sanitizeHtml, cleanCodes: (value) => cleanCodes(value, 12) });
+  if (checked.error) return { error: checked.error, message: checked.message };
+  // Eén grens voor de hele gesaneerde pagina (tekst, vragen en alle andere blokken samen); de pagina staat in de database.
+  if (JSON.stringify(checked.blocks).length > MAX_HTML) return { error: 'too_long', message: 'De pagina is te lang.' };
   const order = Number.isFinite(Number(given.order)) ? Math.max(0, Math.min(999, Math.round(Number(given.order)))) : 100;
-  return { page: { slug, title, description: cleanText(given.description, 200), body, menu: given.menu === true, footer: given.footer !== false, order } };
+  return { page: { slug, title, description: cleanText(given.description, 200), seoTitle: sanitizeSeoTitle(given.seoTitle), blocks: checked.blocks, menu: given.menu === true, footer: given.footer !== false, order } };
 }
 
 // ---------- Opslag ----------

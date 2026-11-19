@@ -31,6 +31,7 @@
   --at-foot-line: rgba(255, 255, 255, 0.2);
 }
 * { box-sizing: border-box; }
+picture { display: contents; }
 body { margin: 0; font-family: var(--at-font); color: var(--at-ink); background: var(--at-page); line-height: 1.5; }
 a { color: var(--at-shop-navy); }
 h1 { color: var(--at-shop-navy); font-size: 1.7rem; margin: 0.4em 0; }
@@ -52,10 +53,10 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .shop-bar { max-width: 1200px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .shop-brand { display: block; flex: none; }
 .shop-brand img { display: block; height: 44px; width: auto; }
-.shop-search { flex: 1 1 280px; display: flex; min-width: 0; }
-.shop-search input { flex: 1; min-width: 0; font: inherit; padding: 10px 14px; border: 2px solid var(--at-shop-navy); border-right: 0; border-radius: 8px 0 0 8px; background: var(--at-white); color: var(--at-ink); }
+.shop-search { flex: 1 1 280px; display: flex; min-width: 0; position: relative; max-width: 560px; }
+.shop-search input { flex: 1; min-width: 0; font: inherit; padding: 11px 56px 11px 20px; border: 1px solid transparent; border-radius: 999px; background: var(--at-page); color: var(--at-ink); }
 .shop-search input:focus { outline: 2px solid var(--at-shop-teal); outline-offset: 0; }
-.shop-search button { display: flex; align-items: center; justify-content: center; width: 48px; border: 0; border-radius: 0 8px 8px 0; background: var(--at-shop-green); color: var(--at-white); cursor: pointer; }
+.shop-search button { position: absolute; right: 4px; top: 4px; bottom: 4px; display: flex; align-items: center; justify-content: center; width: 38px; border: 0; border-radius: 50%; background: var(--at-shop-green); color: var(--at-white); cursor: pointer; }
 .shop-search button:hover { background: var(--at-shop-green-dark); }
 .shop-phone { display: flex; align-items: center; gap: 10px; color: var(--at-shop-navy); text-decoration: none; }
 .shop-phone svg { width: 34px; height: 34px; }
@@ -63,30 +64,29 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .shop-phone small { font-size: 0.75rem; }
 .shop-phone strong { font-size: 1.15rem; }
 .shop-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
-.shop-action { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; color: var(--at-shop-navy); text-decoration: none; font-weight: 600; font-size: 0.9rem; }
+.shop-action { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; color: var(--at-shop-navy); text-decoration: none; font-weight: 600; font-size: 0.9rem; }
 a.shop-action:hover { background: var(--at-page); }
 a.shop-action.shop-admin { background: var(--at-shop-green-dark); color: var(--at-white); }
 a.shop-action.shop-admin:hover { background: var(--at-shop-navy); }
+.shop-action:not(.shop-admin) span { display: none; }
 .shop-action.cart { cursor: default; opacity: 0.75; }
 .shop-action.cart b { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--at-shop-teal); color: var(--at-white); font-size: 0.8rem; }
 
-.shop-nav { background: var(--at-shop-navy); }
-.nav-bar { list-style: none; margin: 0 auto; padding: 0 16px; max-width: 1200px; display: flex; flex-wrap: nowrap; }
+.shop-nav { background: var(--at-white); border-top: 1px solid var(--at-line); border-bottom: 1px solid var(--at-line); }
+.nav-bar { list-style: none; margin: 0 auto; padding: 0 16px; max-width: 1200px; display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; }
 .nav-bar > li { flex: 0 1 auto; min-width: 0; white-space: nowrap; }
-/* Past het menu toch niet, dan kort de tekst af met een beletselteken (de uitklappers staan buiten deze elementen, dus niet afgekapt). */
-.nav-all-text, .nav-about > a, .nav-planner > a, .nav-group > .nav-heading { overflow: hidden; text-overflow: ellipsis; }
-.nav-all-text { min-width: 0; }
+.nav-about > a, .nav-planner > a, .nav-group > .nav-heading { overflow: hidden; text-overflow: ellipsis; }
 .nav-bar .nav-drop { white-space: normal; }
-.nav-group, .nav-all { position: relative; }
-.nav-all-button { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-width: 220px; padding: 12px 18px; background: var(--at-shop-green); color: var(--at-white); font-weight: 700; text-transform: uppercase; cursor: default; }
-.nav-all:hover .nav-all-button, .nav-all:focus-within .nav-all-button { background: var(--at-shop-green-dark); }
-.nav-about > a { display: block; padding: 12px 18px; color: var(--at-white); text-decoration: none; font-weight: 600; }
-.nav-about > a:hover { background: var(--at-shop-navy-dark); }
-.nav-group > .nav-heading { display: block; padding: 12px 18px; color: var(--at-white); font-weight: 600; cursor: default; }
-.nav-group:hover > .nav-heading, .nav-group:focus-within > .nav-heading { background: var(--at-shop-navy-dark); }
-/* Uitklappers: de balk en elk niveau (flyout) alleen via CSS; een kop is geen link maar klapt open bij aanwijzen of focus. */
+.nav-group { position: relative; }
+.nav-about > a, .nav-group > .nav-heading { display: block; padding: 14px 14px; color: var(--at-shop-navy); text-decoration: none; font-weight: 600; font-size: 0.85rem; letter-spacing: 0.03em; text-transform: uppercase; cursor: default; }
+.nav-about > a { cursor: pointer; }
+.nav-group > .nav-heading::after { content: ""; display: inline-block; width: 6px; height: 6px; margin: 0 0 3px 8px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); }
+.nav-about > a:hover, .nav-group:hover > .nav-heading, .nav-group:focus-within > .nav-heading { color: var(--at-shop-green-dark); }
+.nav-about:first-child > a { margin: 6px 0; padding: 8px 18px; border-radius: 999px; background: var(--at-shop-green-dark); color: var(--at-white); }
+.nav-about:first-child > a:hover { background: var(--at-shop-navy); color: var(--at-white); }
+
 .nav-drop { display: none; position: absolute; left: 0; top: 100%; z-index: 20; min-width: 280px; margin: 0; padding: 8px 0; list-style: none; background: var(--at-white); border: 1px solid var(--at-line); border-top: 3px solid var(--at-shop-teal); border-radius: 0 0 8px 8px; box-shadow: 0 10px 24px var(--at-shadow); }
-.nav-all:hover > .nav-drop, .nav-all:focus-within > .nav-drop, .nav-group:hover > .nav-drop, .nav-group:focus-within > .nav-drop, .has-sub:hover > .nav-fly, .has-sub:focus-within > .nav-fly { display: block; }
+.nav-group:hover > .nav-drop, .nav-group:focus-within > .nav-drop, .has-sub:hover > .nav-fly, .has-sub:focus-within > .nav-fly { display: block; }
 .nav-drop li { position: relative; }
 .nav-drop a, .nav-drop .nav-heading { display: block; padding: 8px 18px; text-decoration: none; font-size: 0.92rem; }
 .nav-drop .nav-heading { color: var(--at-shop-navy); cursor: default; }
@@ -112,21 +112,18 @@ a.shop-action.shop-admin:hover { background: var(--at-shop-navy); }
 /* Menubalk altijd op één regel: bij smallere schermen worden ruimte en letter kleiner (onder 800 px neemt het mobiele menu het over). */
 @media (max-width: 1180px) {
   .nav-bar { padding: 0 8px; }
-  .nav-all-button { min-width: 0; gap: 10px; padding: 12px 12px; }
-  .nav-about > a, .nav-planner > a, .nav-group > .nav-heading { padding: 12px 11px; font-size: 0.92rem; }
+  .nav-about > a, .nav-planner > a, .nav-group > .nav-heading { padding-left: 11px; padding-right: 11px; font-size: 0.85rem; }
 }
 @media (max-width: 980px) {
-  .nav-all-button { padding: 12px 9px; font-size: 0.85rem; }
-  .nav-about > a, .nav-planner > a, .nav-group > .nav-heading { padding: 12px 8px; font-size: 0.85rem; }
+  .nav-about > a, .nav-planner > a, .nav-group > .nav-heading { padding-left: 8px; padding-right: 8px; font-size: 0.78rem; }
 }
 @media (max-width: 880px) {
-  .nav-all-button { padding: 12px 7px; gap: 6px; font-size: 0.8rem; }
-  .nav-about > a, .nav-planner > a, .nav-group > .nav-heading { padding: 12px 6px; font-size: 0.8rem; }
+  .nav-about > a, .nav-planner > a, .nav-group > .nav-heading { padding-left: 6px; padding-right: 6px; font-size: 0.73rem; }
 }
 @media (max-width: 800px) {
   .shop-nav { display: none; }
   .shop-menu { display: block; }
-  .shop-action span, .shop-phone span { display: none; }
+  .shop-phone span, .shop-action.shop-admin span { display: none; }
   .shop-action.cart b { display: inline-flex; }
   /* Compacte kop: logo en iconen op één rij, de zoekbalk er direct onder. */
   .shop-bar { gap: 8px; padding: 8px 12px; flex-wrap: wrap; }
@@ -137,8 +134,8 @@ a.shop-action.shop-admin:hover { background: var(--at-shop-navy); }
   .shop-action { padding: 6px; }
   .shop-action.cart { position: relative; }
   .shop-action.cart b { position: absolute; top: -2px; right: -4px; min-width: 18px; height: 18px; padding: 0 4px; font-size: 0.7rem; }
-  .shop-search { order: 3; flex-basis: 100%; }
-  .shop-search input { padding: 8px 12px; }
+  .shop-search { order: 3; flex-basis: 100%; max-width: none; }
+  .shop-search input { padding: 8px 48px 8px 14px; }
   .shop-notice { font-size: 0.8rem; line-height: 1.3; padding: 6px 12px; }
 }
 
@@ -290,8 +287,8 @@ a.shop-action.shop-admin:hover { background: var(--at-shop-navy); }
 .button { border: 0; cursor: pointer; font: inherit; font-weight: 700; }
 .button.secondary { background: var(--at-white); color: var(--at-shop-navy); border: 1px solid var(--at-shop-navy); }
 .trap { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
-.nav-planner > a { display: block; padding: 12px 18px; color: var(--at-white); text-decoration: none; font-weight: 700; background: var(--at-shop-green-dark); }
-.nav-planner > a:hover { background: var(--at-shop-navy-dark); outline: 1px solid var(--at-white); outline-offset: -2px; }
+.nav-planner > a { display: block; margin: 6px 0; padding: 8px 18px; border-radius: 999px; color: var(--at-white); text-decoration: none; font-weight: 700; background: var(--at-shop-green-dark); }
+.nav-planner > a:hover { background: var(--at-shop-navy-dark); }
 
 /* Telefoon: twee producten naast elkaar. */
 @media (max-width: 520px) {
@@ -326,6 +323,22 @@ a.shop-action.shop-admin:hover { background: var(--at-shop-navy); }
 .cms-page blockquote { margin: 1em 0; padding: 4px 16px; border-left: 4px solid var(--at-shop-teal); color: var(--at-muted); }
 .cms-page a { color: var(--at-shop-green-dark); text-decoration: underline; }
 @media (max-width: 520px) { .cms-page { padding: 16px; } }
+.cms-page > * + * { margin-top: 20px; }
+.cms-page .cms-text > :last-child { margin-bottom: 0; }
+.cms-image { margin: 0; text-align: center; }
+.cms-image a { display: inline-block; }
+.cms-image figcaption { margin-top: 6px; color: var(--at-muted); font-size: 0.9rem; }
+.cms-products h2 { margin-top: 0; }
+.cms-products a, .cms-cta a.button { text-decoration: none; }
+.cms-faq h2 { margin-top: 0; }
+.cms-faq details { border: 1px solid var(--at-line); border-radius: 8px; padding: 10px 14px; margin: 0 0 8px; }
+.cms-faq summary { cursor: pointer; font-weight: 600; color: var(--at-shop-navy); }
+.cms-faq details[open] summary { margin-bottom: 8px; }
+.cms-faq details p { margin: 0 0 0.8em; }
+.cms-cta { background: var(--at-shop-green-soft); border-radius: 10px; padding: 18px 20px; text-align: center; }
+.cms-cta h2 { margin: 0 0 6px; }
+.cms-cta p { margin: 0 0 12px; }
+.cms-cta .button { display: inline-block; }
 
 /* Productkaart: hoofdartikelen met varianten hebben een keuzelijst, alle kaarten een aantal en winkelwagenknop. */
 .product-card .product-name { text-decoration: none; }
@@ -497,3 +510,174 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
 .grecaptcha-badge { visibility: hidden; }
 .captcha-note { font-size: 0.75rem; color: var(--at-muted, #5b6575); margin: 0 0 12px; }
 .captcha-note a { color: inherit; text-decoration: underline; }
+
+/* Vertrouwensstrook op productpagina, winkelwagen en afrekenen. */
+.trust-strip { list-style: none; margin: 16px 0 0; padding: 12px 14px; display: grid; gap: 8px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 10px; font-size: 0.9rem; }
+.trust-strip li { display: flex; gap: 10px; align-items: center; }
+.trust-strip svg { flex: none; width: 20px; height: 20px; fill: none; stroke: var(--at-shop-green-dark); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.cart .trust-strip { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-top: 24px; }
+
+/* Verzendkosten, levertijd en drempelbalk in de winkelwagen. */
+.shipping-hint { margin-top: 16px; padding: 12px 14px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 10px; }
+.shipping-hint p { margin: 0 0 6px; }
+.shipping-hint p:last-child { margin-bottom: 0; }
+.free-bar { display: block; width: 100%; height: 10px; margin: 4px 0 8px; border: 0; border-radius: 5px; overflow: hidden; background: var(--at-line); accent-color: var(--at-shop-green-dark); }
+.free-bar::-webkit-progress-bar { background: var(--at-line); }
+.free-bar::-webkit-progress-value { background: var(--at-shop-green-dark); }
+.free-bar::-moz-progress-bar { background: var(--at-shop-green-dark); }
+
+/* Verzendmethode als keuzekaarten. */
+.ship-cards { border: 0; margin: 0 0 8px; padding: 0; display: grid; gap: 8px; }
+.ship-cards legend { padding: 0; margin-bottom: 6px; font-weight: 700; }
+.ship-card { display: grid; grid-template-columns: auto 1fr auto; column-gap: 10px; align-items: baseline; padding: 12px 14px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 10px; cursor: pointer; }
+.ship-card input { grid-row: 1 / span 2; align-self: center; width: 20px; height: 20px; margin: 0; }
+.ship-card:has(input:checked) { border-color: var(--at-shop-green-dark); background: var(--at-shop-green-soft); }
+.ship-card:has(input:focus-visible) { outline: 2px solid var(--at-shop-green-dark); outline-offset: 2px; }
+.ship-card .ship-card-name { font-weight: 700; }
+.ship-card .ship-card-price { font-weight: 700; text-align: right; }
+.ship-card small { grid-column: 2 / span 2; color: var(--at-muted); }
+.ship-card.unavailable { opacity: 0.6; cursor: not-allowed; }
+
+/* Zoekopdracht zonder resultaat. */
+.no-results { margin: 16px 0; padding: 14px 16px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 10px; }
+.no-results p { margin: 0 0 8px; }
+.no-results-groups { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0 0 12px; padding: 0; list-style: none; }
+
+/* Winkelwagen op een smal scherm: elke regel een kaart in plaats van een tabel die zijwaarts scrolt. */
+@media (max-width: 640px) {
+  .cart-table, .cart-table tbody, .cart-table tfoot { display: block; }
+  .cart-table thead { display: none; }
+  .cart-table tbody tr { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; padding: 12px; margin-bottom: 10px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 10px; }
+  .cart-table tbody td { padding: 0; border: 0; }
+  .cart-table tbody td:first-child { grid-column: 1 / -1; }
+  .cart-table tbody td[data-label]::before { content: attr(data-label) ": "; color: var(--at-muted); font-size: 0.85rem; }
+  .cart-table tbody td.num { text-align: left; }
+  .cart-table tfoot tr { display: flex; justify-content: space-between; gap: 12px; padding: 6px 12px; }
+  .cart-table tfoot th, .cart-table tfoot td { padding: 0; border: 0; }
+  .cart-table tfoot th[colspan], .cart-table tfoot td[colspan] { flex: 1; }
+}
+
+/* Voorraadmelding bij een artikel dat niet op voorraad is */
+.stock-alert { margin-top: 16px; padding: 14px; display: grid; gap: 10px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 10px; max-width: 420px; }
+.stock-alert h2 { margin: 0; font-size: 1.05rem; }
+.stock-alert .form-field { display: grid; gap: 4px; }
+.stock-alert small { color: var(--at-muted, inherit); }
+.stock-alert .button { justify-self: start; }
+
+/* Suggesties onder het zoekveld in de kop */
+.search-suggest { position: absolute; left: 0; right: 0; top: 100%; z-index: 30; margin: 4px 0 0; padding: 4px; list-style: none; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
+.search-suggest[hidden] { display: none; }
+.search-suggest li a { display: grid; gap: 2px; padding: 8px 10px; border-radius: 8px; color: inherit; text-decoration: none; }
+.search-suggest li[aria-selected="true"] a, .search-suggest li a:hover, .search-suggest li a:focus { background: var(--at-shop-bg, rgba(0, 0, 0, 0.05)); }
+.search-suggest-name { font-weight: 600; overflow-wrap: anywhere; }
+.search-suggest small { color: var(--at-muted, inherit); }
+
+/* Plannerpromotie op de startpagina en in beregeningscategorieën. */
+.planner-promo { margin: 16px 0; background: var(--at-shop-navy); color: var(--at-white); }
+.planner-promo-inner { display: flex; align-items: center; justify-content: space-between; gap: 16px 24px; flex-wrap: wrap; padding: 22px 16px; }
+.planner-promo h2 { margin: 0 0 4px; color: var(--at-white); font-size: 1.4rem; }
+.planner-promo p { margin: 0; }
+.browse-main .planner-promo { margin: 0 0 16px; border-radius: 8px; }
+.browse-main .planner-promo-inner { padding: 16px; }
+
+/* Categoriepagina, nieuw ontwerp: rustige kaarten, grotere prijs en duidelijke knop. Alles hangt onder .browse, zodat de startpagina ongewijzigd blijft. */
+.crumbs-band { background: transparent; border-bottom: 0; }
+.crumbs-band .crumbs { padding-top: 16px; }
+.browse { gap: 32px; padding-top: 12px; }
+.browse-side { padding: 24px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 20px; }
+.browse-side h2 { color: var(--at-shop-navy); font-size: 0.95rem; font-weight: 800; text-transform: none; letter-spacing: 0; }
+.browse-side li a { padding: 7px 0; }
+.browse-side li a[aria-current] { color: var(--at-shop-navy); }
+.browse .price-filter input { height: 42px; padding: 0 12px; border-radius: 10px; border-width: 1.5px; }
+.browse .price-filter .button { padding: 0 20px; height: 42px; background: var(--at-white); color: var(--at-shop-navy); border: 2px solid var(--at-shop-navy); border-radius: 10px; }
+.browse .price-filter .button:hover { background: var(--at-band); }
+.browse-main h1 { font-size: 2.4rem; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 10px; }
+.browse-intro { color: var(--at-muted); line-height: 1.7; }
+.browse-main .cat-blocks { gap: 14px; padding: 0; margin: 20px 0 28px; background: transparent; border: 0; border-radius: 0; }
+.browse-main .cat-block { align-items: flex-start; gap: 6px; padding: 16px; border: 1px solid var(--at-line); border-radius: 16px; text-align: left; }
+.browse-main .cat-block:hover { border-color: var(--at-shop-navy); box-shadow: none; }
+.browse-main .cat-block strong { color: var(--at-shop-navy); font-size: 1rem; }
+.browse-toolbar { justify-content: space-between; align-items: center; gap: 8px 24px; margin-bottom: 20px; }
+.browse-toolbar p:first-child { flex: 1 1 100%; font-size: 0.9rem; color: var(--at-muted); }
+.browse-toolbar .stock-filter a { display: inline-block; padding: 8px 14px; border: 1px solid var(--at-line); border-radius: 999px; background: var(--at-white); color: var(--at-shop-navy); text-decoration: none; font-weight: 600; }
+.browse-toolbar .stock-filter a[aria-current] { background: var(--at-shop-navy); border-color: var(--at-shop-navy); color: var(--at-white); }
+.browse .product-grid { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 20px; }
+.browse .product-card { gap: 8px; padding: 0 0 18px; border-radius: 20px; overflow: hidden; }
+.browse .product-card .product-image { aspect-ratio: 4 / 3; padding: 12px; border-bottom: 1px solid var(--at-line); }
+.browse .product-card > :not(.product-image) { margin-left: 18px; margin-right: 18px; }
+.browse .product-card .product-name { min-height: 0; font-size: 1.02rem; line-height: 1.4; margin-top: 6px; }
+.browse .product-card .product-price strong { font-size: 1.35rem; font-weight: 800; color: var(--at-ink); }
+.browse .product-card .stock::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: currentColor; }
+.browse .card-order input { height: 44px; padding: 0 10px; border-radius: 10px; border-width: 1.5px; }
+.browse .card-order .button { height: 44px; padding: 0 14px; background: var(--at-shop-green-dark); border-radius: 10px; }
+.browse .card-order .button:hover { background: var(--at-shop-green-dark); filter: brightness(0.92); }
+.browse .card-order .button:disabled { background: var(--at-muted); filter: none; }
+.browse .pager { justify-content: center; margin-top: 36px; }
+.browse .pager a { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; height: 44px; padding: 0 14px; border-radius: 12px; font-weight: 700; color: var(--at-shop-navy); box-sizing: border-box; }
+@media (max-width: 600px) {
+  .browse-main h1 { font-size: 1.9rem; }
+  .browse .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .browse .product-card { padding-bottom: 12px; border-radius: 16px; }
+  .browse .product-card > :not(.product-image) { margin-left: 12px; margin-right: 12px; }
+  .browse .product-card .product-name { font-size: 0.92rem; }
+}
+
+/* Productpagina, nieuw ontwerp: foto en koopblok naast elkaar, grote prijs, duidelijke voorraad en een hoge winkelwagenknop. Alles hangt onder .product-detail / .product-details, zodat andere pagina's ongewijzigd blijven. */
+.product-detail { gap: 40px; padding: 0; background: transparent; border: 0; border-radius: 0; margin-top: 16px; }
+.product-detail .product-image.large { aspect-ratio: 1; max-height: none; padding: 24px; box-sizing: border-box; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 24px; }
+.product-detail .product-info { display: flex; flex-direction: column; align-items: stretch; min-width: 0; }
+.product-detail .product-info h1 { margin: 0 0 6px; font-size: 2.1rem; font-weight: 800; line-height: 1.2; letter-spacing: -0.02em; }
+.product-detail .sku { margin: 0 0 16px; font-size: 0.9rem; }
+.product-detail .price { margin: 12px 0 6px; font-size: 2.4rem; font-weight: 800; letter-spacing: -0.02em; }
+.product-detail .price small { display: block; margin-top: 2px; font-size: 0.85rem; letter-spacing: 0; }
+.product-detail .stock { display: flex; align-items: center; gap: 8px; margin: 4px 0 2px; font-size: 1rem; }
+.product-detail .stock::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
+.product-detail .lead-time, .product-detail .delivery-note { margin: 4px 0 0; padding: 0; background: transparent; font-size: 0.92rem; color: var(--at-muted); }
+.product-detail .product-order { gap: 12px; margin: 20px 0 8px; }
+.product-detail .product-order input { width: 84px; height: 56px; padding: 0 12px; border: 1.5px solid var(--at-line); border-radius: 12px; font-size: 1.05rem; font-weight: 700; box-sizing: border-box; }
+.product-detail .product-order .button { flex: 1; height: 56px; padding: 0 24px; border-radius: 12px; background: var(--at-shop-green-dark); font-size: 1.05rem; font-weight: 800; }
+.product-detail .product-order .button:hover { filter: brightness(0.92); }
+.product-detail .product-order .button:disabled { background: var(--at-muted); filter: none; }
+.product-detail .variant-pick select { height: 48px; padding: 0 12px; border: 1.5px solid var(--at-line); border-radius: 12px; }
+.product-detail .trust-strip { margin-top: 20px; padding: 18px 20px; border-radius: 16px; gap: 12px; }
+.product-detail .stock-alert { max-width: none; border-radius: 16px; }
+.product-details { padding: 8px 28px 24px; border-radius: 20px; margin-top: 32px; }
+.product-details h2 { margin: 1.2em 0 0.6em; font-size: 1.25rem; font-weight: 800; }
+.product-details .product-specs { max-width: none; }
+.product-details .product-specs th, .product-details .product-specs td { padding: 12px 8px 12px 0; }
+@media (min-width: 720px) { .product-detail { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 0; } }
+@media (max-width: 600px) {
+  .product-detail { gap: 20px; }
+  .product-detail .product-image.large { padding: 12px; border-radius: 20px; }
+  .product-detail .product-info h1 { font-size: 1.6rem; }
+  .product-detail .price { font-size: 2rem; }
+  .product-detail .product-order { flex-direction: row; }
+  .product-details { padding: 4px 18px 18px; }
+}
+
+/* Winkelwagenpagina, nieuw ontwerp: regels als nette kaart, hoge aantalvelden en een duidelijke knop "Naar afrekenen". Alles hangt onder .cart-page, zodat bestellingen, retouren en groothandel ongewijzigd blijven. */
+.shop-main .cart-page { max-width: 1040px; }
+.cart-page h1 { font-size: 2.1rem; font-weight: 800; letter-spacing: -0.02em; }
+.cart-page .tablewrap { background: var(--at-white); border: 1px solid var(--at-line); border-radius: 20px; overflow: hidden; }
+.cart-page .cart-table th { padding: 14px 18px; background: var(--at-band); color: var(--at-muted); font-size: 0.85rem; font-weight: 700; }
+.cart-page .cart-table td { padding: 18px; vertical-align: middle; }
+.cart-page .cart-table tbody tr:last-child td { border-bottom: 0; }
+.cart-page .cart-table tfoot th, .cart-page .cart-table tfoot td { padding: 10px 18px; }
+.cart-page .cart-table tr.total th, .cart-page .cart-table tr.total td { font-size: 1.3rem; border-top: 1px solid var(--at-line); }
+.cart-page .cart-qty input { width: 84px; height: 48px; padding: 0 12px; border: 1.5px solid var(--at-line); border-radius: 12px; font-weight: 700; box-sizing: border-box; }
+.cart-page .cart-table form[action] .button.secondary, .cart-page .cart-qty .button.secondary { height: 48px; padding: 0 16px; border-radius: 12px; }
+.cart-page .shipping-hint { padding: 16px 20px; border-radius: 16px; }
+.cart-page .cart-actions { margin-top: 24px; gap: 16px; }
+.cart-page .cart-actions .button { display: inline-flex; align-items: center; justify-content: center; height: 54px; padding: 0 28px; border-radius: 12px; font-size: 1rem; }
+.cart-page .cart-actions .button:not(.secondary) { min-width: 240px; background: var(--at-shop-green-dark); font-size: 1.1rem; font-weight: 800; }
+.cart-page .cart-actions .button:not(.secondary):hover { filter: brightness(0.92); }
+.cart-page .trust-strip { margin-top: 28px; border-radius: 16px; padding: 18px 20px; }
+@media (max-width: 640px) {
+  .cart-page h1 { font-size: 1.7rem; }
+  .cart-page .tablewrap { background: transparent; border: 0; border-radius: 0; overflow: visible; }
+  .cart-page .cart-table tbody tr { padding: 16px; border-radius: 16px; }
+  .cart-page .cart-table tbody td { padding: 0; }
+  .cart-page .cart-table tfoot { padding: 12px 16px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 16px; }
+  .cart-page .cart-actions { flex-direction: column-reverse; align-items: stretch; }
+  .cart-page .cart-actions .button:not(.secondary) { min-width: 0; }
+}

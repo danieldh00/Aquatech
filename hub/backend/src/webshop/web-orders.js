@@ -16,6 +16,8 @@ const { withCause } = require('../platform/error-report');
 const Shipping = require('./shipping');
 const Vat = require('./vat');
 const Wholesale = require('./wholesale');
+const DeliveryRules = require('./delivery-rules');
+const DeliveryTimes = require('./delivery-times');
 const { createFulfilment, remainingOf } = require('./fulfilment');
 const { visibleFor: packagingVisibleFor } = require('../artikelen/packagings');
 
@@ -209,10 +211,10 @@ function sanitizeCheckout(raw, { method = 'dpd', country = 'NL', billingCountry 
 /**
  * Maakt de opslag voor bestellingen van de eigen webshop.
  * @param {object} db De database.
- * @param {{ stock: object, categoryDiscountsOf?: Function }} deps De voorraadopslag (reserveren en afboeken) en categoryDiscountsOf(tenantId) = per artikelcode de categoriekorting (%) voor zakelijke klanten (zonder: geen).
- * @returns {{ priceCart: Function, shippingQuote: Function, orderTotals: Function, place: Function, get: Function, getForUser: Function, listForUser: Function, list: Function, setStatus: Function, setTracking: Function, updateData: Function, changePay: Function, unpaidOnline: Function, listToPick: Function, getMany: Function, pickable: Function, markPackingSlipsPrinted: Function, onShipped: Function, onCancelled: Function, onTracking: Function }} De functies.
+ * @param {{ stock: object, categoryDiscountsOf?: Function, deliveryRulesOf?: Function }} deps De voorraadopslag (reserveren en afboeken), categoryDiscountsOf(tenantId) = per artikelcode de categoriekorting (%) voor zakelijke klanten (zonder: geen) en deliveryRulesOf(tenantId) = per artikelcode de levermethoderegels van de categorie (zonder: geen).
+ * @returns {{ priceCart: Function, shippingQuote: Function, orderTotals: Function, place: Function, get: Function, getForUser: Function, listForUser: Function, list: Function, setStatus: Function, setTracking: Function, updateData: Function, changePay: Function, unpaidOnline: Function, reminderAllowed: Function, listToPick: Function, listUnprocessed: Function, getMany: Function, pickable: Function, markPackingSlipsPrinted: Function, onShipped: Function, onCancelled: Function, onTracking: Function }} De functies.
  */
-function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() }) {
+function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(), deliveryRulesOf = () => new Map() }) {
   const shippedHooks = [];
   // Haken die na een deellevering draaien (er blijft nog iets op backorder).
   const partialHooks = [];
@@ -250,7 +252,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
     const codes = [...unique.keys()].slice(0, MAX_LINES);
     // Een artikelcode die zelf een @ bevat blijft werken: de volledige code gaat voor, anders wordt gesplitst in artikel en verpakking.
     const baseCodes = [...new Set(codes.flatMap((code) => [code, splitCartCode(code).baseCode]))];
-    const rows = baseCodes.length ? prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.stock_managed, i.sale_price, i.business_price, i.vat_rate, i.weight_grams, i.variant_values, i.order_pack_size, i.order_min_qty, i.price_tiers, i.unit_content, p.name AS parent_name,
+    const rows = baseCodes.length ? prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.stock_managed, i.sale_price, i.business_price, i.vat_rate, i.weight_grams, i.variant_values, i.order_pack_size, i.order_min_qty, i.price_tiers, i.unit_content, i.delivery_rules, i.lead_days_min, i.lead_days_max, p.delivery_rules AS parent_delivery_rules, p.name AS parent_name,
         (SELECT sp.in_stock FROM shop_products sp WHERE sp.tenant_id = i.tenant_id AND sp.id = i.shop_product_id) AS shop_in_stock,
         COALESCE((SELECT SUM(r.qty) FROM stock_reservations r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id), 0) AS reserved
       FROM stock_items i
@@ -270,6 +272,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
       WHERE tenant_id = ? AND active = 1 AND item_id IN (${packagedIds.map(() => '?').join(', ')})`).all(tenantId, ...packagedIds) : [];
     const packagingOf = new Map(packagingRows.map((row) => [`${row.item_id}|${row.code}`, row]));
     const lines = [];
+    const lineRows = [];
     const missing = [];
     for (const cartCode of codes) {
       const { baseCode, packCode } = resolve(cartCode);
@@ -308,6 +311,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
         : Math.round((Number(row.on_hand) - Number(row.reserved)) * 1000) / 1000;
       // Beschikbaar in de eenheid van de regel: bij een verpakking het aantal hele dozen of pallets.
       const available = packaging ? Math.floor(availableBase / factor) : availableBase;
+      lineRows.push(row);
       lines.push({
         itemId: row.id, code: cartCode, baseCode: row.code, name: packaging ? `${itemName} – ${packaging.name} (${factor} ${row.unit || 'st'})` : itemName, unit: packaging ? packaging.name : row.unit || 'st', qty, available, availableBase, managed: !unmanaged,
         unitExcl, vatRate, unitIncl, lineTotal: business ? round2(lineExcl * (1 + vatRate / 100)) : round2(unitIncl * qty), enough: available >= qty,
@@ -325,7 +329,16 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
       delete line.availableBase;
       delete line.managed;
     }
-    return { lines, missing, totals: totalsOf(lines), ok: lines.length > 0 && !missing.length && lines.every((line) => line.enough && !line.packProblem), pricesExcl: business };
+    // Levermethoderegels (artikel > hoofdartikel > categorie) en de eigen levertijd per regel, in de volgorde van de regels; blijft buiten de bestelregels.
+    const categoryRules = lines.length ? deliveryRulesOf(tenantId) : new Map();
+    const delivery = {
+      blocked: DeliveryRules.blockedMethods(lines.map((line, index) => ({
+        name: line.itemName || line.name, qty: stockQtyOf(line),
+        rules: DeliveryRules.effectiveRules(lineRows[index].delivery_rules, lineRows[index].parent_delivery_rules, categoryRules.get(lineRows[index].code)),
+      }))),
+      overrides: lineRows.map((row) => (row.lead_days_min == null ? null : DeliveryTimes.sanitizeLead({ min: row.lead_days_min, max: row.lead_days_max }))),
+    };
+    return { lines, missing, delivery, totals: totalsOf(lines), ok: lines.length > 0 && !missing.length && lines.every((line) => line.enough && !line.packProblem), pricesExcl: business };
   }
 
   /**
@@ -430,7 +443,15 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
    */
   function shippingQuote(cart, config, country) {
     const weightGrams = Shipping.weightOf(cart.lines, config);
-    return { weightGrams, countries: Shipping.countriesOf(config), options: Shipping.optionsFor(config, { country, weightGrams, subtotal: cart.totals.total }) };
+    const delivery = cart.delivery || { blocked: {}, overrides: [] };
+    const options = Shipping.optionsFor(config, { country, weightGrams, subtotal: cart.totals.total, quantity: Shipping.quantityOf(cart.lines), blocked: delivery.blocked });
+    // Indicatieve levertijd per methode: de langzaamste regel (alles in de wagen is op voorraad; een eigen levertijd van een artikel gaat voor).
+    for (const option of options) {
+      const lead = DeliveryTimes.slowestOf(cart.lines.map((line, index) => DeliveryTimes.leadFor({ override: delivery.overrides[index] || null, inStock: true, methodLead: option.leadDays, dayType: option.dayType })));
+      option.lead = lead;
+      option.leadText = DeliveryTimes.leadText(lead);
+    }
+    return { weightGrams, countries: Shipping.countriesOf(config), options };
   }
 
   /**
@@ -518,7 +539,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
             : { street: fields.deliveryStreet, postcode: fields.deliveryPostcode, city: fields.deliveryCity, country, ...(user.deliveryUnverified ? { unverified: true } : {}) },
         ...(method === 'ophalen' ? {} : { billingAddress: { street: fields.street, postcode: fields.postcode, city: fields.city, country: billingCountry, ...(user.addressUnverified ? { unverified: true } : {}) } }),
         deliverySame: method === 'ophalen' ? true : fields.deliverySame,
-        shipping: { method, label: option.label, price: calculated.shipping.price, priceExcl: calculated.shipping.priceExcl, free: option.free && method !== 'ophalen', vatRate: calculated.shipping.vatRate, weightGrams: quote.weightGrams, tracking: null },
+        shipping: { method, label: option.label, price: calculated.shipping.price, priceExcl: calculated.shipping.priceExcl, free: option.free && method !== 'ophalen', vatRate: calculated.shipping.vatRate, weightGrams: quote.weightGrams, tracking: null, eta: { text: option.leadText, min: option.lead ? option.lead.min : null, max: option.lead ? option.lead.max : null, dayType: option.lead ? option.lead.dayType : null, indicative: true } },
         customerGroup: group, vat: group === 'zakelijk' ? { number: fields.vatNumber, shifted: calculated.shifted, ...(calculated.shifted && user.vies ? { vies: user.vies } : {}) } : null,
         note: fields.note, totals, payment: online ? 'online' : 'op rekening', consent: { terms: true, at: timestamp },
         ...(dropshipping.value ? { dropshipping: dropshipping.value } : {}),
@@ -722,6 +743,25 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
     const items = candidates.filter((order) => plans.get(order.id).canShip).map((order) => ({ ...order, fulfilment: plans.get(order.id) }));
     const waitingForStock = candidates.filter((order) => !plans.get(order.id).canShip).map((order) => ({ id: order.id, number: order.number }));
     return { items, waitingForSlip, waitingForStock, truncated: rows.length > size };
+  }
+
+  /**
+   * De binnengekomen bestellingen die nog niet verwerkt (verzonden) zijn, voor het dashboard: status Nieuw, bij online betalen alleen de betaalde (een onbetaalde bestelling is nog geen order), oudste eerst. Zonder regels en zonder voorraadcontrole, dus goedkoop.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {number} [limit] Hoogstens zoveel bestellingen in de lijst (standaard 5, ten hoogste 20).
+   * @returns {{ total: number, items: { id: string, number: string, customerName: string, total: number, createdAt: string, payment: string }[] }} Het totale aantal en de oudste bestellingen.
+   */
+  function listUnprocessed(tenantId, limit = 5) {
+    const payment = isPg(db) ? "((data)::jsonb ->> 'payment')" : "json_extract(data, '$.payment')";
+    const payStatus = isPg(db) ? "((data)::jsonb -> 'pay' ->> 'status')" : "json_extract(data, '$.pay.status')";
+    const unprocessed = `status = 'nieuw' AND (COALESCE(${payment}, 'op rekening') <> 'online' OR ${payStatus} = 'betaald')`;
+    const size = Math.min(20, Math.max(1, Math.floor(Number(limit)) || 5));
+    const total = Number(prepare(`SELECT COUNT(*) AS n FROM web_orders WHERE tenant_id = ? AND ${unprocessed}`).get(tenantId).n);
+    const rows = prepare(`SELECT id, number, customer_name, total, created_at, COALESCE(${payment}, 'op rekening') AS payment FROM web_orders WHERE tenant_id = ? AND ${unprocessed} ORDER BY created_at ASC, number ASC LIMIT ?`).all(tenantId, size);
+    return {
+      total,
+      items: rows.map((row) => ({ id: row.id, number: row.number, customerName: row.customer_name, total: Number(row.total), createdAt: row.created_at, payment: row.payment })),
+    };
   }
 
   /**
@@ -1195,11 +1235,39 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
    * @param {string} before Tijdstip (ISO): alleen bestellingen die daarvoor zijn geplaatst.
    * @param {number} [limit] Hoogstens zoveel bestellingen (standaard 100).
    * @param {number} [skip] Zoveel oudste bestellingen overslaan (voor wie ze laat staan).
+   * @param {{ withoutReminder?: boolean }} [options] `withoutReminder`: alleen bestellingen die nog geen betalingsherinnering kregen (ook gastbestellingen).
    * @returns {string[]} De id's van de bestellingen.
    */
-  function unpaidOnline(tenantId, before, limit = 100, skip = 0) {
-    return prepare("SELECT id FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND created_at < ? AND data LIKE '%\"payment\":\"online\"%' AND data NOT LIKE '%\"status\":\"betaald\"%' ORDER BY created_at, id LIMIT ? OFFSET ?")
+  function unpaidOnline(tenantId, before, limit = 100, skip = 0, { withoutReminder = false } = {}) {
+    const reminderFilter = withoutReminder ? " AND data NOT LIKE '%\"reminderAt\"%'" : '';
+    return prepare("SELECT id FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND created_at < ? AND data LIKE '%\"payment\":\"online\"%' AND data NOT LIKE '%\"status\":\"betaald\"%'" + reminderFilter + " ORDER BY created_at, id LIMIT ? OFFSET ?")
       .all(tenantId, String(before), Math.max(1, Math.floor(limit)), Math.max(0, Math.floor(skip))).map((row) => row.id);
+  }
+
+  /**
+   * Mag er een betalingsherinnering naar het adres van deze bestelling? Een gast krijgt hem op het adres dat hij bij het afrekenen invulde (besluit
+   * Daniël 2026-11-18, geen vinkje). Bij een account-bestelling alleen als het adres van het account bevestigd is en gelijk aan dat van de
+   * bestelling (anders kan iemand een ander adres laten mailen). Nooit meer dan één herinnering per adres per 24 uur (ook niet over meerdere
+   * bestellingen, van gasten of accounts).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ userId: ?string, email: string }} order De bestelling.
+   * @param {string} [now] Het huidige moment (ISO); standaard nu.
+   * @returns {boolean} true als de herinnering mag.
+   */
+  function reminderAllowed(tenantId, order, now = currentTimestamp()) {
+    const address = String(order.email || '').trim().toLowerCase();
+    if (!address) return false;
+    if (order.userId) {
+      const user = prepare('SELECT email, email_verified_at FROM users WHERE tenant_id = ? AND id = ?').get(tenantId, String(order.userId));
+      if (!user || !user.email_verified_at || String(user.email || '').trim().toLowerCase() !== address) return false;
+    }
+    const dayAgo = new Date(Date.parse(now) - 24 * 3600 * 1000).toISOString();
+    const recent = new Date(Date.parse(now) - 14 * 24 * 3600 * 1000).toISOString();
+    const rows = prepare("SELECT data FROM web_orders WHERE tenant_id = ? AND lower(email) = ? AND created_at > ? AND data LIKE '%\"reminderAt\"%'").all(tenantId, address, recent);
+    return !rows.some((row) => {
+      const reminderAt = (JSON.parse(row.data).pay || {}).reminderAt;
+      return typeof reminderAt === 'string' && reminderAt > dayAgo;
+    });
   }
 
   /**
@@ -1242,7 +1310,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map() 
     return { released };
   }
 
-  return { priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, countGuestSince, guestAccessOf, attachToUser, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, releaseExpired, listToPick, getMany, pickable, markPackingSlipsPrinted, setDropshippingSlip, onShipped, onCancelled, onTracking, withFulfilment, getDetailed, ship, recordShipmentLabel, setAllowPartial, listBackorders, markBackorderReady, onPartialShipped };
+  return { deliveryRulesOf, priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, countGuestSince, guestAccessOf, attachToUser, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, reminderAllowed, releaseExpired, listToPick, listUnprocessed, getMany, pickable, markPackingSlipsPrinted, setDropshippingSlip, onShipped, onCancelled, onTracking, withFulfilment, getDetailed, ship, recordShipmentLabel, setAllowPartial, listBackorders, markBackorderReady, onPartialShipped };
 }
 
 /**

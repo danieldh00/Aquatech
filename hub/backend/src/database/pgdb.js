@@ -20,6 +20,7 @@ const { Worker, MessageChannel, receiveMessageOnPort } = require('worker_threads
 const { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS } = require('./pgschema');
 const { scopeKey } = require('./tenant-scope');
 const { syncAsync } = require('./async-db');
+const { recordQuery } = require('./query-stats');
 
 /** Tenantafscherming via policies (tenant-scope.js); PG_TENANT_RLS=0 zet hem uit als noodgreep. */
 const TENANT_RLS = process.env.PG_TENANT_RLS !== '0';
@@ -77,6 +78,21 @@ class Bridge {
    * @throws {DatabaseError} Bij een fout in de database, een gestopte werkthread of na TIMEOUT_MS.
    */
   call(message) {
+    const startedAt = performance.now();
+    try {
+      return this.callBlocking(message);
+    } finally {
+      recordQuery(performance.now() - startedAt);
+    }
+  }
+
+  /**
+   * Het eigenlijke blokkerende wachten van `call` (die er de duur van vastlegt voor de log van trage verzoeken).
+   * @param {{ op: string, schema: string, sql: string, params?: Array }} message De opdracht.
+   * @returns {{ rows: object[], rowCount: number }} Het antwoord van de werkthread.
+   * @throws {DatabaseError} Bij een fout in de database, een gestopte werkthread of na TIMEOUT_MS.
+   */
+  callBlocking(message) {
     if (this.dead) throw new DatabaseError({ message: `Database niet beschikbaar: ${this.dead.message}` });
     const id = ++this.seq;
     Atomics.store(this.flag, 0, 0);

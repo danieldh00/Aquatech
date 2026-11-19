@@ -14,7 +14,7 @@
 .wl-form input, .wl-form select { width: 100%; box-sizing: border-box; min-height: 40px; }
 .wl-form label.chk { flex-direction: row; align-items: center; gap: 6px; align-self: end; min-height: 40px; }
 .wl-form label.chk input { width: 20px; min-height: 0; height: 20px; }
-.wl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; margin-bottom: 8px; }
+.wl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 130px), 1fr)); gap: 8px; margin-bottom: 8px; }
 .wl-grid.two { grid-template-columns: minmax(180px, 1fr) 2fr; }
 .wl-grid .wide { grid-column: span 2; }
 .wl-grid[hidden] { display: none; }

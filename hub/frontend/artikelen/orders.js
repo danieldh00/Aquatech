@@ -68,6 +68,7 @@
     state.unmatched = [];
     state.imported = false;
     form.reset();
+    $('#po-mail').hidden = true;
     form.supplierReference.value = order ? order.supplierReference || '' : '';
     $('h3', form).textContent = order ? `Inkooporder ${order.number} (${STATUS_LABELS[order.status] || order.status}${isProposal(order) ? ', automatisch voorstel: na bewaren een gewone order' : ''})` : 'Nieuwe inkooporder';
     const choices = state.suppliers.filter((supplier) => !supplier.archived || (order && supplier.id === order.supplierId));
@@ -96,8 +97,9 @@
     $('[data-act=receivenow]', form).hidden = !(editable && !state.order);
     renderUnmatched();
     $('#po-add-row').hidden = !editable;
-    const show = { save: editable, receivenow: editable && !state.order, place: editable && Boolean(state.order), receive: receiving, excel: Boolean(state.order), close: status === 'deels_ontvangen', cancel: status === 'concept' ? false : status === 'besteld', remove: editable && Boolean(state.order) };
+    const show = { save: editable, receivenow: editable && !state.order, place: editable && Boolean(state.order), receive: receiving, mail: receiving, excel: Boolean(state.order), close: status === 'deels_ontvangen', cancel: status === 'concept' ? false : status === 'besteld', remove: editable && Boolean(state.order) };
     for (const [action, visible] of Object.entries(show)) $(`[data-act=${action}]`, form).hidden = !visible;
+    renderMailStatus();
     $('#po-add-row').hidden = !editable;
     const head = receiving || !editable
       ? '<th>Code</th><th>Omschrijving</th><th>Art.nr. leverancier</th><th class="num">Besteld</th><th class="num">Ontvangen</th><th class="num">Nog open</th><th class="num">Prijs</th>' + (receiving ? '<th class="num">Nu ontvangen</th>' : '')
@@ -462,6 +464,55 @@
     await openForm(order);
   }
 
+  /** Toont onder de knoppen of de order al naar de leverancier is gemaild (wanneer, naar wie, door wie) of dat de laatste poging mislukte. */
+  function renderMailStatus() {
+    const box = $('#po-mail-status');
+    const mail = state.order && state.order.mail;
+    const parts = [];
+    if (mail && mail.sentAt) parts.push(`Verstuurd naar ${mail.sentTo} op ${new Date(mail.sentAt).toLocaleString('nl-NL', { dateStyle: 'long', timeStyle: 'short' })}${mail.sentBy ? ` door ${mail.sentBy}` : ''}.`);
+    if (mail && mail.error) parts.push(`Laatste poging mislukt: ${mail.error}`);
+    box.textContent = parts.join(' ');
+    box.hidden = !parts.length;
+  }
+
+  /**
+   * Opent het paneel om de order naar de leverancier te mailen: haalt het concept (adres van de leverancier, onderwerp, tekst) op en
+   * laat het nakijken en aanpassen. Er wordt niets verstuurd voor de klik op Versturen.
+   * @returns {Promise<void>}
+   */
+  async function openMail() {
+    const form = $('#order-form');
+    const draft = await context.api(`purchase-orders/${encodeURIComponent(state.order.id)}/mail-draft`);
+    form.mailTo.value = draft.to;
+    form.mailSubject.value = draft.subject;
+    form.mailMessage.value = draft.message;
+    const problem = $('#po-mail-problem');
+    const earlier = draft.mail && draft.mail.sentAt ? `Deze order is al verstuurd naar ${draft.mail.sentTo} op ${new Date(draft.mail.sentAt).toLocaleString('nl-NL', { dateStyle: 'long', timeStyle: 'short' })}. Versturen mailt hem opnieuw.` : '';
+    problem.textContent = [draft.problem, earlier].filter(Boolean).join(' ');
+    problem.hidden = !problem.textContent;
+    state.resend = Boolean(earlier);
+    const link = $('#po-mail-pdf');
+    link.textContent = draft.fileName;
+    link.href = `../api/purchase-orders/${encodeURIComponent(state.order.id)}/pdf`;
+    $('[data-act=mail-send]', form).disabled = !draft.canSend;
+    $('#po-mail').hidden = false;
+    $('#po-mail').scrollIntoView({ block: 'nearest' });
+    (draft.to ? form.mailMessage : form.mailTo).focus();
+  }
+
+  /**
+   * Verstuurt de order met de nagekeken gegevens naar de leverancier (alleen na de klik op Versturen).
+   * @returns {Promise<void>}
+   */
+  async function sendMail() {
+    const form = $('#order-form');
+    const body = { to: form.mailTo.value.trim(), subject: form.mailSubject.value, message: form.mailMessage.value, resend: Boolean(state.resend) };
+    await run(`Inkooporder verstuurd naar ${body.to || 'de leverancier'}`, () => context.api(`purchase-orders/${encodeURIComponent(state.order.id)}/send`, { method: 'POST', body }));
+  }
+
+  /** Sluit het paneel zonder te versturen. */
+  function closeMail() { $('#po-mail').hidden = true; }
+
   /** Sluit het formulier zonder iets te bewaren. */
   function hideForm() { $('#order-form').hidden = true; }
 
@@ -529,7 +580,7 @@
       $('#po-add-qty').value = '';
       renderLines();
     };
-    const actions = { receivenow: receiveNow, place, receive, excel: exportOrder, close: closeOrder, cancel: cancelOrder, remove: removeOrder, hide: hideForm };
+    const actions = { receivenow: receiveNow, place, receive, mail: openMail, 'mail-send': sendMail, 'mail-cancel': closeMail, excel: exportOrder, close: closeOrder, cancel: cancelOrder, remove: removeOrder, hide: hideForm };
     /**
      * Voert de actie van de aangeklikte knop uit.
      * @param {MouseEvent} event de klik

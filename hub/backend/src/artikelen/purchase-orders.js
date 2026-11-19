@@ -19,6 +19,7 @@
 const crypto = require('crypto');
 const { transaction } = require('../database/db');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
+const { withCause } = require('../platform/error-report');
 
 const STATUSES = ['concept', 'besteld', 'deels_ontvangen', 'ontvangen', 'geannuleerd'];
 const OPEN_STATUSES = ['concept', 'besteld', 'deels_ontvangen'];
@@ -178,7 +179,7 @@ class ReceiveFailed extends Error {
  * Maakt de opslag voor inkooporders.
  * @param {object} db De database.
  * @param {{ stock: object, suppliers: object }} parts De voorraadopslag (book, reorderProposal) en de leveranciersopslag (preferredByItem).
- * @returns {object} list, get, create, createReceived, update, place, receive, close, cancel, remove, incomingByItem, fromProposal,
+ * @returns {object} list, get, create, createReceived, update, place, receive, close, markMail, cancel, remove, incomingByItem, fromProposal,
  *   autoPropose, proposals, approve, dismiss, restore.
  */
 function createPurchaseOrderStore(db, { stock, suppliers }) {
@@ -188,7 +189,7 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
    * @returns {object} De voorbereide query.
    */
   const prepare = (sql) => db.prepare(sql);
-  const ORDER_COLS = 'o.id, o.number, o.supplier_id, o.status, o.expected_date, o.notes, o.supplier_reference, o.origin, o.created_by, o.created_at, o.updated_at, o.ordered_at, o.closed_at, s.name AS supplier_name';
+  const ORDER_COLS = 'o.id, o.number, o.supplier_id, o.status, o.expected_date, o.notes, o.supplier_reference, o.origin, o.created_by, o.created_at, o.updated_at, o.ordered_at, o.closed_at, o.mail_sent_at, o.mail_sent_to, o.mail_sent_by, o.mail_error, s.name AS supplier_name';
   const LINE_COLS = 'id, item_id, code, name, unit, supplier_sku, qty, unit_cost, received_qty';
 
   /**
@@ -200,6 +201,7 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
     id: row.id, number: row.number, supplierId: row.supplier_id, supplierName: row.supplier_name, status: row.status,
     expectedDate: row.expected_date, notes: row.notes, supplierReference: row.supplier_reference, origin: row.origin, createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at,
     orderedAt: row.ordered_at || null, closedAt: row.closed_at || null,
+    mail: { sentAt: row.mail_sent_at || null, sentTo: row.mail_sent_to || '', sentBy: row.mail_sent_by || '', error: row.mail_error || '' },
   });
 
   /**
@@ -534,6 +536,22 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
   }
 
   /**
+   * Legt vast dat de order per e-mail naar de leverancier is gegaan (of dat de poging mislukte). Raakt de status en `updated_at` niet aan:
+   * het versturen verandert niets aan de order zelf.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} id Id van de order.
+   * @param {{ to?: string, by?: string, error?: string }} result Bij succes `to` (ontvanger) en `by` (naam van de medewerker); bij een mislukte poging `error` (leesbare melding, nooit een geheim).
+   * @returns {object|null} De bijgewerkte order, of null als hij niet bestaat.
+   */
+  function markMail(tenantId, id, { to = '', by = '', error = '' } = {}) {
+    const row = findRow(tenantId, id);
+    if (!row) return null;
+    if (error) prepare('UPDATE purchase_orders SET mail_error = ? WHERE tenant_id = ? AND id = ?').run(cleanText(error, 500), tenantId, row.id);
+    else prepare("UPDATE purchase_orders SET mail_sent_at = ?, mail_sent_to = ?, mail_sent_by = ?, mail_error = '' WHERE tenant_id = ? AND id = ?").run(currentTimestamp(), cleanText(to, 200), cleanText(by, 100), tenantId, row.id);
+    return fullOrder(findRow(tenantId, row.id), tenantId);
+  }
+
+  /**
    * Annuleert een order die nog niets heeft ontvangen (concept of besteld).
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van de order.
@@ -826,17 +844,17 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
     return { restored: Number(out.changes) || 0 };
   }
 
-  return { list, get, create, createReceived, update, place, receive, close, cancel, remove, incomingByItem, fromProposal, autoPropose, proposals, approve, dismiss, restore };
+  return { list, get, create, createReceived, update, place, receive, close, markMail, cancel, remove, incomingByItem, fromProposal, autoPropose, proposals, approve, dismiss, restore };
 }
 
 /**
  * Hangt de routes voor inkooporders aan de app (recht voorraad).
  * @param {object} app De Express-app.
- * @param {{ purchaseOrders: object, requireRight: Function, requireJson: Function, audit: Function, afterReceive?: Function, proposalsEnabled?: Function }} ctx De opslag en hulpfuncties van de server; afterReceive(tenantId, itemIds) draait na een ontvangst (backorders die nu leverbaar zijn); proposalsEnabled(tenantId) zegt of de automatische voorstellen aan staan (instelling purchaseProposals).
+ * @param {{ purchaseOrders: object, requireRight: Function, requireJson: Function, audit: Function, afterReceive?: Function, proposalsEnabled?: Function, mail?: object }} ctx De opslag en hulpfuncties van de server; `mail` = createPurchaseOrderMailer (zonder die geen PDF- en mailroutes); afterReceive(tenantId, itemIds) draait na een ontvangst (backorders die nu leverbaar zijn); proposalsEnabled(tenantId) zegt of de automatische voorstellen aan staan (instelling purchaseProposals).
  * @returns {void}
  */
 function registerPurchaseOrderRoutes(app, ctx) {
-  const { purchaseOrders, requireRight, requireJson, audit, afterReceive = () => {}, proposalsEnabled = () => true } = ctx;
+  const { purchaseOrders, requireRight, requireJson, audit, afterReceive = () => {}, proposalsEnabled = () => true, mail = null } = ctx;
   const requireStock = requireRight('voorraad');
   /**
    * De actieve omgeving van het verzoek.
@@ -912,6 +930,57 @@ function registerPurchaseOrderRoutes(app, ctx) {
       res.json(out);
     });
   });
+
+  // De order als PDF en per e-mail naar de leverancier (purchase-order-mail.js): het concept voor het scherm, de PDF en het versturen,
+  // dat alleen na een expliciete klik gebeurt (er is geen automatisch versturen).
+  if (mail) {
+    /**
+     * Antwoordt dat de order niet bestaat (of bij een andere omgeving hoort).
+     * @param {object} res Het antwoord.
+     * @returns {object} Het antwoord.
+     */
+    const notFound = (res) => res.status(404).json({ error: 'not_found', message: 'Inkooporder niet gevonden.' });
+    app.get('/api/purchase-orders/:id/pdf', requireStock, (req, res) => {
+      try {
+        const buffer = mail.pdfOf(tenantOf(req), req.params.id);
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="${mail.fileName(tenantOf(req), req.params.id)}"`);
+        res.send(buffer);
+      } catch (error) {
+        if (error.code === 'not_found') return notFound(res);
+        throw error;
+      }
+    });
+    app.get('/api/purchase-orders/:id/mail-draft', requireStock, (req, res) => {
+      try {
+        res.setHeader('Cache-Control', 'no-store');
+        res.json(mail.draft(tenantOf(req), req.params.id));
+      } catch (error) {
+        if (error.code === 'not_found') return notFound(res);
+        throw error;
+      }
+    });
+    const sendLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 30, keyFn: (req) => `po-mail:${tenantOf(req)}:${req.user && req.user.id}` });
+    app.post('/api/purchase-orders/:id/send', requireJson, requireStock, sendLimiter, async (req, res) => {
+      const body = req.body || {};
+      try {
+        const order = await mail.send(tenantOf(req), req.params.id, {
+          to: typeof body.to === 'string' ? body.to : undefined,
+          subject: typeof body.subject === 'string' ? body.subject : undefined,
+          message: typeof body.message === 'string' ? body.message : undefined,
+          resend: body.resend === true,
+        }, req.user);
+        audit(req, 'inkooporder_naar_leverancier_gemaild', { number: order.number });
+        res.json(order);
+      } catch (error) {
+        if (error.code === 'not_found') return notFound(res);
+        const status = { not_sendable: 409, already_sent: 409, not_configured: 409, busy: 409, invalid_to: 400, send_failed: 502 }[error.code];
+        if (!status) throw error;
+        withCause(res, error.cause || error).status(status).json({ error: error.code, message: error.message });
+      }
+    });
+  }
 
   app.get('/api/purchase-orders/:id', requireStock, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');

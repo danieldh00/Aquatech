@@ -6,18 +6,23 @@ const { sanitizeShop } = require('../webshop/woocommerce');
 const { sanitizeShipping } = require('../webshop/shipping');
 const { sanitizePayment } = require('../webshop/mollie');
 const { sanitizeAnalytics } = require('../webshop/shop-analytics');
+const { sanitizeSeoSettings } = require('../webshop/seo');
 const { sanitizeCaptcha } = require('../beveiliging/captcha');
 const { sanitizeOutsourcing } = require('../uitvoering/outsourcing');
 const { sanitizeInvoicing } = require('../verkoop/invoices');
 const { sanitizeSeasonReminders } = require('../uitvoering/season-reminders');
+const { sanitizePaymentReminders } = require('../verkoop/payment-reminders');
 const { sanitizeVisma, sanitizeVismaApp } = require('../verkoop/visma');
 const { sanitizeDriveBackup, sanitizeDriveState } = require('./drive-backup');
 const { sanitizeLabelTemplates } = require('../artikelen/labels');
 const { sanitizeQuoteTemplates } = require('../verkoop/quote-templates');
 const { sanitizeCategoryDiscounts } = require('../webshop/category-discounts');
+const { sanitizeCategoryRules } = require('../webshop/delivery-rules');
 const { sanitizePriceFactors } = require('../artikelen/price-factor');
 const { sanitizeDocumentLayout } = require('../verkoop/document-layout');
+const { sanitizeMailLayout } = require('./mail-layout');
 const { sanitizeMonitoring } = require('./monitoring-notify');
+const { sanitizeHostTasks } = require('./host-tasks');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const Theme = require(path.join(FRONTEND_DIR, 'shared', 'theme.js'));
@@ -66,6 +71,8 @@ const FIELDS = {
   shopPayment: { type: 'object', default: {}, sanitize: sanitizePayment },
   // Google Analytics (GA4) in de webshop: aan/uit en meet-ID; stuurt een extern systeem aan, dus alleen live (zie shop-analytics.js).
   shopAnalytics: { type: 'object', default: {}, sanitize: sanitizeAnalytics, liveOnly: true },
+  // Vrijgave voor zoekmachines (webshop/seo.js): zolang `indexing` uit staat, krijgt elke pagina noindex en blokkeert robots.txt alles; sitemap en feeds bestaan dan niet. Alleen live.
+  shopSeo: { type: 'object', default: {}, sanitize: sanitizeSeoSettings, liveOnly: true },
   // Onzichtbare captcha (Google reCAPTCHA v3) op de openbare formulieren (beveiliging/captcha.js): aan/uit, sitesleutel, minimumscore en
   // gedrag bij een onbereikbaar Google; het geheim staat apart en versleuteld. Per omgeving, en alleen live (stuurt een extern systeem aan).
   captcha: { type: 'object', default: {}, sanitize: sanitizeCaptcha, liveOnly: true },
@@ -97,6 +104,9 @@ const FIELDS = {
   // zoveel dagen gewist; regels in het auditlog na zoveel dagen verwijderd.
   ipRetentionDays: { type: 'int', default: 90, min: 1, max: 3650 },
   auditRetentionDays: { type: 'int', default: 365, min: 30, max: 3650 },
+  // Applicatielogboek (platform/app-log.js): info en waarschuwingen zoveel dagen bewaren, fouten (minstens) zoveel dagen.
+  logRetentionDays: { type: 'int', default: 14, min: 1, max: 90 },
+  logErrorRetentionDays: { type: 'int', default: 30, min: 1, max: 180 },
   // Versleutelde back-ups van de database: dagelijks, zoveel dagen bewaren
   // (0 = geen automatische back-ups).
   backupKeepDays: { type: 'int', env: 'BACKUP_KEEP_DAYS', default: 14, min: 0, max: 365 },
@@ -109,6 +119,8 @@ const FIELDS = {
   // Bewaking (platform/monitoring.js, Beheer > Systeem > Bewaking; alleen via /api/admin/monitoring): ontvangers, webhook,
   // heartbeat-adres (alleen de hoofdtenant), herinneringen, herstelmelding, gedempte controles en drempels van de platformcontroles.
   monitoring: { type: 'object', default: {}, sanitize: sanitizeMonitoring, internal: true, liveOnly: true },
+  // Servertaken die met de hand zijn afgevinkt (platform/host-tasks.js, Beheer > Systeem > Updates; alleen via /api/admin/host-tasks).
+  hostTasks: { type: 'object', default: {}, sanitize: sanitizeHostTasks, internal: true, liveOnly: true },
   // Bedrijfsgegevens, uurtarief en standaardteksten voor offertes (quotes.js).
   quoteProfile: { type: 'object', default: {}, sanitize: sanitizeProfile },
   // Offertesjablonen (verkoop/quote-templates.js): vaste teksten en standaardregels; alleen via /api/quote-templates.
@@ -117,6 +129,8 @@ const FIELDS = {
   // wachtwoord staat apart en versleuteld.
   mailServer: { type: 'object', default: {}, sanitize: sanitizeMail, liveOnly: true },
   mailPassword: { type: 'secret', default: '', min: 1, liveOnly: true },
+  // Clientgeheim van de Entra-app voor mail via Microsoft Graph (mailServer.mode 'graph').
+  mailGraphSecret: { type: 'secret', default: '', min: 8, max: 300, liveOnly: true },
   // Webshopkoppeling (shop.js): webadres, ophaalwijze, btw en handmatige
   // koppeling; de sleutels van de WooCommerce REST API staan apart en versleuteld.
   shopSource: { type: 'object', default: {}, sanitize: sanitizeShop, liveOnly: true },
@@ -133,12 +147,17 @@ const FIELDS = {
   // Seizoensherinneringen voor klanten (season-reminders.js): aan/uit, adres
   // van het klantportaal voor de knop in de mail, en de herinneringen.
   seasonReminders: { type: 'object', default: {}, sanitize: sanitizeSeasonReminders, liveOnly: true },
+  // Automatische betalingsherinneringen en aanmaningen voor vervallen facturen (verkoop/payment-reminders.js); mailt klanten, dus alleen live.
+  paymentReminders: { type: 'object', default: {}, sanitize: sanitizePaymentReminders, liveOnly: true },
   // Sjablonen voor etiketten met streepjescode (Artikelen > Etiket afdrukken; artikelen/labels.js), per omgeving.
   labelTemplates: { type: 'object', default: {}, sanitize: sanitizeLabelTemplates },
   // Opmaak van de PDF-documenten (verkoop/document-layout.js): logo, kop, kleuren, lettertype en voettekst; alleen via Beheer > Documentopmaak.
+  mailLayout: { type: 'object', default: {}, sanitize: sanitizeMailLayout, internal: true, notInView: true },
   documentLayout: { type: 'object', default: {}, sanitize: sanitizeDocumentLayout, internal: true, notInView: true },
   // Kortingen per productcategorie voor zakelijke klanten (webshop/category-discounts.js); alleen via Beheer > Webshop > Zakelijke kortingen.
   categoryDiscounts: { type: 'object', default: {}, sanitize: sanitizeCategoryDiscounts, internal: true },
+  // Toegestane bezorgmethodes per productcategorie (webshop/delivery-rules.js); alleen via /api/admin/delivery-rules.
+  deliveryRules: { type: 'object', default: {}, sanitize: sanitizeCategoryRules, internal: true },
   // Automatische bestelvoorstellen (artikelen/purchase-orders.js, autoPropose): zakt een artikel onder de minimumvoorraad,
   // dan houdt een uurlijkse taak per voorkeursleverancier een concept-inkooporder bij die de beheerder goedkeurt. Per
   // omgeving, standaard aan (Beheer > Modules > Artikelen: bestelvoorstellen). Bewust geen liveOnly: de taak maakt alleen
@@ -421,7 +440,7 @@ function createSettings({ db, tenantId, env = {}, vault = createVault() }) {
     return out;
   }
 
-  return { get, rejectedStart, update, view, FIELDS };
+  return { get, rejectedStart, update, view, FIELDS, tenantId };
 }
 
 module.exports = { createSettings, SettingsError, FIELDS, LIVE_ONLY_KEYS, valueForTest, sanitizePurchaseProposals, sanitizeMonitoring };

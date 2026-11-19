@@ -8,6 +8,7 @@
 // tekst). Elk uur kijkt runAll of er een herinnering aan de beurt is; tabel
 // season_reminders_sent zorgt dat een klant hem maar één keer per jaar krijgt.
 // Een klant zet de mails uit met de voorkeur seasonReminders (store.js).
+const { mailStyleOf } = require('../platform/mail-layout');
 const crypto = require('crypto');
 const { preferencesOf } = require('../platform/store');
 const { validEmail } = require('../platform/mailer');
@@ -219,7 +220,7 @@ function createSeasonReminderRunner(reminders, { settingsFor, mailerFor, userTen
           item.text,
           config.portalUrl ? 'Via de knop hieronder vraagt u in uw portaal direct een afspraak aan.' : 'Neem contact met ons op voor een afspraak.',
           'Wilt u deze herinneringen niet meer ontvangen? Zet ze uit in uw portaal.',
-        ], button);
+        ], button, mailStyleOf(settings));
         try {
           await mailer.send({ to: customer.email, subject: item.title, text: body.text, html: body.html });
           reminders.markSent(tenantId, customer.id, item.key, year);
@@ -284,4 +285,4 @@ function portalReminders(config, today = new Date()) {
   return activeItems(config, today, PORTAL_DAYS).map(({ item, date }) => ({ key: item.key, title: item.title, text: item.text, date }));
 }
 
-module.exports = { sanitizeSeasonReminders, createSeasonReminderStore, createSeasonReminderRunner, portalReminders, activeItems, DEFAULTS };
+module.exports = { sanitizeSeasonReminders, createSeasonReminderStore, createSeasonReminderRunner, portalReminders, activeItems, permanentFailure, DEFAULTS };

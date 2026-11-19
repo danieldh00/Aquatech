@@ -32,6 +32,7 @@
   const FEATURES = {
     plan_analyse: 'Plan herkennen',
     inkoop_inlezen: 'Inkoopdocument inlezen',
+    product_tekst: 'Producttekst schrijven',
   };
 
   /**

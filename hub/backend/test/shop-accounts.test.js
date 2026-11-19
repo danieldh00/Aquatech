@@ -51,7 +51,7 @@ test('registreren in de shop maakt een klantaccount en logt in', async () => {
   const visitor = createClient(base);
   const page = await visitor.get('/registreren/');
   assert.strictEqual(page.status, 200);
-  assert.ok(!/<script/i.test(page.text));
+  assert.ok(!/<script(?![^>]*src=)/i.test(page.text), 'geen inline script (alleen bestanden van de shop zelf)');
   const done = await postForm(base, visitor, '/registreren/', { displayName: 'Piet Tuin', email: 'Piet@Voorbeeld.nl', password: PW, password2: PW, website: '' });
   assert.strictEqual(done.status, 303);
   const me = await visitor.get('/app/api/me');

@@ -56,6 +56,7 @@ jobs:
           REPO: ${{ github.repository }}
           NUMBER: ${{ github.event.pull_request.number }}
           ACTION: ${{ github.event.action }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
           BEFORE: ${{ github.event.before }}
           AFTER: ${{ github.event.after }}
           MODEL_FULL: ${{ vars.CLAUDE_REVIEW_MODEL }}
@@ -80,6 +81,11 @@ jobs:
                   and ((.patch // "") | length > 0)
                   and ((.patch // "") | split("\n") | map(select(test("^[+-]") and (test("^(\\+\\+\\+|---)") | not))) | all(test("^[+-]\\s*\"version\": \""))))
                 | not)')
+          # Renovate-PR's (weekelijkse dependency-updates, zie renovate.json) krijgen geen codereview: een lockfile-bump
+          # levert niets op dat de review waard is, en elke week zou dat betaalde tokens kosten. De check slaagt dan zonder review.
+          if [ "$AUTHOR" = "renovate[bot]" ]; then
+            needs_review=false
+          fi
           if [ "$needs_review" = "true" ]; then
             echo "review=true" >> "$GITHUB_OUTPUT"
           else

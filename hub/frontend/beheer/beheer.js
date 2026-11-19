@@ -586,7 +586,7 @@
     codeState.textContent = code.set ? 'Ingesteld: inloggen kan ook met de code (als beheerder).' : 'Niet ingesteld: inloggen alleen met een eigen account.';
     $('#s-backup').backupKeepDays.value = view.backupKeepDays.value;
     const securityForm = $('#s-security');
-    for (const key of ['sessionIdleDays', 'sessionMaxDays', 'ipRetentionDays', 'auditRetentionDays']) securityForm[key].value = view[key].value;
+    for (const key of ['sessionIdleDays', 'sessionMaxDays', 'ipRetentionDays', 'auditRetentionDays', 'logRetentionDays', 'logErrorRetentionDays']) securityForm[key].value = view[key].value;
     const accessForm = $('#s-access');
     accessForm.guestAccess.checked = view.guestAccess.value;
     accessForm.guestAccess.disabled = code.set;
@@ -605,11 +605,13 @@
     $('#s-shipping').hidden = !state.storefrontAllowed;
     renderPayment(view);
     renderAnalytics(view);
+    renderSeo(view);
     renderCaptcha(view);
     codeState.className = `state ${code.set ? 'ok' : 'off'}`;
     $('[data-clear="anthropicApiKey"]').disabled = !key.set;
     $('[data-clear="accessCode"]').disabled = !code.set;
     renderSeason(view.seasonReminders.value);
+    if (view.paymentReminders) renderPaymentReminders(view.paymentReminders.value);
     if (view.labelTemplates) renderLabelTemplates(view.labelTemplates.value);
     const outsourcingForm = $('#s-outsourcing');
     const outsourcing = view.outsourcing.value;
@@ -649,8 +651,8 @@
       $('#b-now').disabled = !enabled;
       list.innerHTML = !enabled ? 'Back-ups zijn op deze server niet beschikbaar.'
         : !items.length ? 'Nog geen back-ups.'
-          : `<ul class="timeline">${items.map((backup) => `<li><a href="../api/admin/backups/${encodeURIComponent(backup.name)}" download>${esc(backup.name)}</a> · ${esc(when(backup.createdAt))} · ${esc(size(backup.size))}${driveNames.has(backup.name) ? ' · op Drive' : ''}
-            <button class="btn small danger" data-backup-del="${esc(backup.name)}">Verwijderen</button></li>`).join('')}</ul>`;
+          : window.BeheerCollapse.render(items.map((backup) => `<li><a href="../api/admin/backups/${encodeURIComponent(backup.name)}" download>${esc(backup.name)}</a> · ${esc(when(backup.createdAt))} · ${esc(size(backup.size))}${driveNames.has(backup.name) ? ' · op Drive' : ''}
+            <button class="btn small danger" data-backup-del="${esc(backup.name)}">Verwijderen</button></li>`), { expanded: window.BeheerCollapse.isExpanded(list) });
       list.querySelectorAll('[data-backup-del]').forEach((button) => {
         /**
          * Verwijdert deze back-up na bevestiging.
@@ -726,6 +728,37 @@
         </div>
         <label>Tekst in de mail en het portaal<textarea name="text" rows="3" maxlength="1000">${esc(item.text)}</textarea></label>
       </fieldset>`).join('');
+  }
+
+  /**
+   * Toont de instelling paymentReminders in het formulier Betalingsherinneringen.
+   * @param {object} config De instelling paymentReminders.
+   * @returns {void}
+   */
+  function renderPaymentReminders(config) {
+    const reminderForm = $('#s-payment-reminders');
+    reminderForm.enabled.checked = config.enabled;
+    reminderForm.stopAfterDays.value = config.stopAfterDays;
+    $('#s-payment-reminders-steps').innerHTML = config.steps.map((step) => `
+      <div class="field" data-key="${esc(step.key)}">
+        <label class="chk"><input type="checkbox" name="stepEnabled"${step.enabled ? ' checked' : ''}> ${esc(step.title)}</label>
+        <label>Dagen over de vervaldatum<input name="stepDays" type="number" min="1" max="364" step="1" required value="${step.days}"></label>
+      </div>`).join('');
+  }
+
+  /**
+   * Leest het formulier Betalingsherinneringen uit.
+   * @returns {object} De instelling paymentReminders.
+   */
+  function readPaymentReminders() {
+    const reminderForm = $('#s-payment-reminders');
+    return {
+      enabled: reminderForm.enabled.checked,
+      stopAfterDays: Number(reminderForm.stopAfterDays.value),
+      steps: [...reminderForm.querySelectorAll('[data-key]')].map((field) => ({
+        key: field.dataset.key, enabled: field.querySelector('[name="stepEnabled"]').checked, days: Number(field.querySelector('[name="stepDays"]').value),
+      })),
+    };
   }
 
   /** Hoogstens zoveel etiketsjablonen (gelijk aan de server). */
@@ -890,6 +923,22 @@
   }
 
   /**
+   * Vult het formulier Zoekmachines met de opgeslagen instelling en toont of de webshop voor zoekmachines open staat.
+   * @param {object} view De instellingen zoals de server ze toont (shopSeo en shopPayment).
+   * @returns {void}
+   */
+  function renderSeo(view) {
+    const form = $('#s-seo');
+    form.hidden = !state.storefrontAllowed;
+    const open = Boolean(view.shopSeo?.value?.indexing);
+    const hasUrl = Boolean(view.shopPayment?.value?.publicUrl);
+    form.indexing.checked = open;
+    const status = $('#s-seo-state');
+    status.textContent = open && hasUrl ? 'Open: zoekmachines mogen de webshop opnemen.' : open ? 'Nog dicht: vul eerst het webadres van de webshop in (bij Betalen).' : 'Dicht: de webshop staat op noindex en robots.txt blokkeert alles.';
+    status.className = `state ${open && hasUrl ? 'ok' : 'off'}`;
+  }
+
+  /**
    * Vult het formulier Onzichtbare captcha met de opgeslagen instelling en toont of de captcha nu actief is.
    * @param {object} view De instellingen zoals de server ze toont (captcha en captchaSecret).
    * @returns {void}
@@ -924,6 +973,9 @@
     form.online.checked = Boolean(payment.online);
     form.publicUrl.value = payment.publicUrl || '';
     form.guestCheckout.checked = payment.guestCheckout !== false;
+    form.paymentReminder.checked = payment.paymentReminder !== false;
+    form.quoteRequest.checked = payment.quoteRequest !== false;
+    form.quoteRequestMin.value = payment.quoteRequestMin || 500;
     form.onAccount.value = payment.onAccount || 'iedereen';
     form.holdHours.value = payment.holdHours || 24;
     form.accountHoldDays.value = payment.accountHoldDays == null ? 14 : payment.accountHoldDays;
@@ -953,15 +1005,17 @@
    * Tekent een regel (land) in het verzendformulier bij een bezorgmethode.
    * @param {HTMLElement} zones De lijst met landen van die methode.
    * @param {{ country: string, name: string, freeFrom: number, tiers: { upToGrams: number, price: number }[] }} zone Het land met zijn tarieven.
+   * @param {boolean} [withQtyTiers] true bij pallet en eigen transport: dan komt er een veld voor de aantalstaffel bij.
    * @returns {void}
    */
-  function addShippingZone(zones, zone) {
+  function addShippingZone(zones, zone, withQtyTiers = false) {
     const row = document.createElement('div');
     row.className = 'ship-zone';
     row.innerHTML = `<input data-f="country" maxlength="2" size="3" placeholder="NL" aria-label="Landcode" value="${esc(zone.country)}">
       <input data-f="name" maxlength="60" placeholder="Nederland" aria-label="Naam" value="${esc(zone.name)}">
       <input data-f="freeFrom" size="8" placeholder="Gratis vanaf" aria-label="Gratis vanaf" value="${zone.freeFrom ? esc(decimalText(zone.freeFrom)) : ''}">
       <input data-f="tiers" placeholder="2000=6,95; 5000=8,95" aria-label="Weegklassen" value="${esc(zone.tiers.map((tier) => `${tier.upToGrams}=${decimalText(tier.price)}`).join('; '))}">
+      ${withQtyTiers ? `<input data-f="qtyTiers" placeholder="Aantalstaffel: 50=45; 200=80" aria-label="Aantalstaffel (t/m aantal=prijs)" value="${esc((zone.qtyTiers || []).map((tier) => `${tier.upToQty}=${decimalText(tier.price)}`).join('; '))}">` : ''}
       <button type="button" class="btn danger" data-remove>Verwijder</button>`;
     /**
      * Verwijdert dit land uit het formulier.
@@ -986,18 +1040,25 @@
       <div class="form-grid">
         <label class="field chk"><input type="checkbox" data-c="enabled"> <span>${esc(title)} aanbieden</span></label>
         <label class="field">Naam bij het afrekenen<input data-c="label" maxlength="60"></label>
+        <label class="field">Levertijd van (dagen)<input data-c="leadMin" type="number" min="0" max="365" step="1" placeholder="leeg = op aanvraag"></label>
+        <label class="field">Levertijd tot (dagen)<input data-c="leadMax" type="number" min="0" max="365" step="1"></label>
+        <label class="field">Soort dagen<select data-c="dayType"><option value="calendar">Kalenderdagen</option><option value="working">Werkdagen</option></select></label>
       </div>
       <div data-zones></div>
       <p><button type="button" class="btn" data-add-zone>Land toevoegen</button></p>`;
     block.querySelector('[data-c="enabled"]').checked = carrier.enabled;
     block.querySelector('[data-c="label"]').value = carrier.label;
+    block.querySelector('[data-c="leadMin"]').value = carrier.leadDays ? carrier.leadDays.min : '';
+    block.querySelector('[data-c="leadMax"]').value = carrier.leadDays ? carrier.leadDays.max : '';
+    block.querySelector('[data-c="dayType"]').value = carrier.dayType || 'calendar';
     const zones = block.querySelector('[data-zones]');
-    for (const zone of carrier.zones) addShippingZone(zones, zone);
+    const withQtyTiers = key !== 'dpd';
+    for (const zone of carrier.zones) addShippingZone(zones, zone, withQtyTiers);
     /**
      * Voegt een leeg land toe aan de tarieven van deze methode.
      * @returns {void}
      */
-    block.querySelector('[data-add-zone]').onclick = () => addShippingZone(zones, { country: '', name: '', freeFrom: 0, tiers: [] });
+    block.querySelector('[data-add-zone]').onclick = () => addShippingZone(zones, { country: '', name: '', freeFrom: 0, tiers: [], qtyTiers: [] }, withQtyTiers);
     return block;
   }
 
@@ -1013,6 +1074,9 @@
     form.pickupLabel.value = config.pickup.label;
     form.pickupNote.value = config.pickup.note;
     form.defaultWeightGrams.value = config.defaultWeightGrams;
+    form.pickupLeadMin.value = config.pickup.leadDays ? config.pickup.leadDays.min : '';
+    form.pickupLeadMax.value = config.pickup.leadDays ? config.pickup.leadDays.max : '';
+    form.pickupDayType.value = config.pickup.dayType || 'calendar';
     const container = $('#s-shipping-carriers');
     container.innerHTML = '';
     for (const [key, title] of SHIPPING_CARRIERS) container.appendChild(shippingCarrierBlock(key, title, config[key]));
@@ -1039,7 +1103,14 @@
       });
       const freeFrom = field('freeFrom').trim() ? parseDecimal(field('freeFrom')) : 0;
       if (!Number.isFinite(freeFrom)) throw new Error('Gratis vanaf moet een bedrag zijn.');
-      return { country: field('country').trim().toUpperCase(), name: field('name').trim(), freeFrom, tiers };
+      const quantityInput = row.querySelector('[data-f="qtyTiers"]');
+      const qtyTiers = quantityInput ? quantityInput.value.split(';').map((part) => part.trim()).filter(Boolean).map((part) => {
+        const [quantity, price] = part.split('=');
+        const tier = { upToQty: parseDecimal(quantity == null ? '' : quantity), price: parseDecimal(price == null ? '' : price) };
+        if (!Number.isFinite(tier.upToQty) || !Number.isFinite(tier.price)) throw new Error(`Aantalklasse "${part}" is niet te lezen. Gebruik aantal=prijs, bijvoorbeeld 50=45.`);
+        return tier;
+      }) : undefined;
+      return { country: field('country').trim().toUpperCase(), name: field('name').trim(), freeFrom, tiers, ...(qtyTiers ? { qtyTiers } : {}) };
     });
   }
 
@@ -1050,12 +1121,12 @@
   function readShipping() {
     const form = $('#s-shipping');
     const config = {
-      pickup: { enabled: form.pickupEnabled.checked, label: form.pickupLabel.value, note: form.pickupNote.value },
+      pickup: { enabled: form.pickupEnabled.checked, label: form.pickupLabel.value, note: form.pickupNote.value, leadDays: { min: form.pickupLeadMin.value, max: form.pickupLeadMax.value }, dayType: form.pickupDayType.value },
       defaultWeightGrams: Number(form.defaultWeightGrams.value || 0),
     };
     for (const [key] of SHIPPING_CARRIERS) {
       const block = form.querySelector(`[data-carrier="${key}"]`);
-      config[key] = { enabled: block.querySelector('[data-c="enabled"]').checked, label: block.querySelector('[data-c="label"]').value, zones: readShippingZones(block) };
+      config[key] = { enabled: block.querySelector('[data-c="enabled"]').checked, label: block.querySelector('[data-c="label"]').value, zones: readShippingZones(block), leadDays: { min: block.querySelector('[data-c="leadMin"]').value, max: block.querySelector('[data-c="leadMax"]').value }, dayType: block.querySelector('[data-c="dayType"]').value };
     }
     return config;
   }
@@ -1149,7 +1220,7 @@
      */
     paymentForm.onsubmit = (event) => {
       event.preventDefault();
-      const patch = { shopPayment: { online: paymentForm.online.checked, publicUrl: paymentForm.publicUrl.value.trim(), onAccount: paymentForm.onAccount.value, guestCheckout: paymentForm.guestCheckout.checked, holdHours: Number(paymentForm.holdHours.value), accountHoldDays: paymentForm.accountHoldDays.value.trim() === '' ? '' : Number(paymentForm.accountHoldDays.value) } };
+      const patch = { shopPayment: { online: paymentForm.online.checked, publicUrl: paymentForm.publicUrl.value.trim(), onAccount: paymentForm.onAccount.value, guestCheckout: paymentForm.guestCheckout.checked, paymentReminder: paymentForm.paymentReminder.checked, quoteRequest: paymentForm.quoteRequest.checked, quoteRequestMin: Number(paymentForm.quoteRequestMin.value), holdHours: Number(paymentForm.holdHours.value), accountHoldDays: paymentForm.accountHoldDays.value.trim() === '' ? '' : Number(paymentForm.accountHoldDays.value) } };
       if (paymentForm.mollieApiKey.value.trim()) patch.mollieApiKey = paymentForm.mollieApiKey.value.trim();
       saveSettings(paymentForm, patch, 'Betalen opgeslagen');
     };
@@ -1196,6 +1267,15 @@
       if (measurementId && !/^G-[A-Z0-9]{4,14}$/.test(measurementId)) { $('.err', analyticsForm).textContent = 'Dit is geen geldig meet-ID. Het begint met G- en heeft 4 tot 14 letters of cijfers.'; return; }
       if (analyticsForm.enabled.checked && !measurementId) { $('.err', analyticsForm).textContent = 'Vul een meet-ID in om Google Analytics aan te zetten.'; return; }
       saveSettings(analyticsForm, { shopAnalytics: { enabled: analyticsForm.enabled.checked, measurementId } }, 'Google Analytics opgeslagen');
+    };
+    const seoForm = $('#s-seo');
+    /**
+     * Slaat de vrijgave voor zoekmachines op.
+     * @param {SubmitEvent} event het verzenden
+     */
+    seoForm.onsubmit = (event) => {
+      event.preventDefault();
+      saveSettings(seoForm, { shopSeo: { indexing: seoForm.indexing.checked } }, 'Zoekmachines opgeslagen');
     };
     const shippingForm = $('#s-shipping');
     /**
@@ -1267,7 +1347,7 @@
     securityForm.onsubmit = (event) => {
       event.preventDefault();
       const patch = {};
-      for (const key of ['sessionIdleDays', 'sessionMaxDays', 'ipRetentionDays', 'auditRetentionDays']) patch[key] = Number(securityForm[key].value);
+      for (const key of ['sessionIdleDays', 'sessionMaxDays', 'ipRetentionDays', 'auditRetentionDays', 'logRetentionDays', 'logErrorRetentionDays']) patch[key] = Number(securityForm[key].value);
       saveSettings(securityForm, patch, 'Instellingen opgeslagen');
     };
     const seasonForm = $('#s-season');
@@ -1285,6 +1365,15 @@
         return;
       }
       saveSettings(seasonForm, { seasonReminders: config }, 'Seizoensherinneringen opgeslagen');
+    };
+    const paymentRemindersForm = $('#s-payment-reminders');
+    /**
+     * Slaat de betalingsherinneringen op.
+     * @param {SubmitEvent} event het verzenden
+     */
+    paymentRemindersForm.onsubmit = (event) => {
+      event.preventDefault();
+      saveSettings(paymentRemindersForm, { paymentReminders: readPaymentReminders() }, 'Betalingsherinneringen opgeslagen');
     };
     const labelsForm = $('#s-labels');
     /**
@@ -1348,12 +1437,16 @@
     try {
       const result = await api('mail');
       const config = result.config;
-      for (const key of ['host', 'port', 'user', 'from', 'replyTo']) formElement[key].value = config[key] ?? '';
+      for (const key of ['host', 'port', 'user', 'from', 'replyTo', 'graphTenantId', 'graphClientId']) formElement[key].value = config[key] ?? '';
       formElement.mode.value = config.mode || 'smtp';
       formElement.secure.value = String(Boolean(config.secure));
       formElement.password.value = '';
       formElement.password.placeholder = result.passwordSet ? '•••••••• (ingesteld; leeg = ongewijzigd)' : '';
-      const ok = Boolean(config.host && config.from);
+      formElement.graphSecret.value = '';
+      formElement.graphSecret.placeholder = result.graphSecretSet ? '•••••••• (ingesteld; leeg = ongewijzigd)' : '';
+      const ok = config.mode === 'graph'
+        ? Boolean(config.graphTenantId && config.graphClientId && config.from && result.graphSecretSet)
+        : Boolean(config.host && config.from);
       $('#m-state').textContent = ok ? 'De mailserver is ingesteld.' : 'Nog geen mailserver ingesteld.';
       $('#m-state').className = `state ${ok ? 'ok' : 'off'}`;
       mailMode();
@@ -1371,9 +1464,12 @@
   function mailMode(changed) {
     const formElement = $('#s-mail');
     const connector = formElement.mode.value === 'connector';
+    const graph = formElement.mode.value === 'graph';
     $('[data-connector]', formElement).hidden = !connector;
-    $('[data-login]', formElement).hidden = connector;
-    if (changed) {
+    $('[data-login]', formElement).hidden = connector || graph;
+    $('[data-smtp]', formElement).hidden = graph;
+    $('[data-graph]', formElement).hidden = !graph;
+    if (changed && !graph) {
       formElement.port.value = connector ? 25 : 587;
       formElement.secure.value = 'false';
       const domain = (formElement.from.value.match(/@([^>\s]+)/) || [])[1];
@@ -1411,10 +1507,12 @@
   async function saveMail() {
     const formElement = $('#s-mail');
     const connector = formElement.mode.value === 'connector';
+    const graph = formElement.mode.value === 'graph';
     const body = {
-      config: { mode: formElement.mode.value, host: formElement.host.value.trim(), port: Number(formElement.port.value) || (connector ? 25 : 587), secure: formElement.secure.value === 'true', user: connector ? '' : formElement.user.value.trim(), from: formElement.from.value.trim(), replyTo: formElement.replyTo.value.trim() },
+      config: { graphTenantId: formElement.graphTenantId.value.trim(), graphClientId: formElement.graphClientId.value.trim(), mode: formElement.mode.value, host: formElement.host.value.trim(), port: Number(formElement.port.value) || (connector ? 25 : 587), secure: formElement.secure.value === 'true', user: connector || graph ? '' : formElement.user.value.trim(), from: formElement.from.value.trim(), replyTo: formElement.replyTo.value.trim() },
     };
-    if (!connector && formElement.password.value) body.password = formElement.password.value;
+    if (!connector && !graph && formElement.password.value) body.password = formElement.password.value;
+    if (graph && formElement.graphSecret.value) body.graphSecret = formElement.graphSecret.value;
     await api('mail', { method: 'PUT', body });
     await loadMail();
   }
@@ -1579,11 +1677,14 @@
     // Opnieuw klikken op de al geopende sectie laadt niets opnieuw, zodat niet-opgeslagen menuwijzigingen blijven staan.
     if (section.pane === 'shopinhoud' && activePane !== 'shopinhoud') window.BeheerWebshopInhoud.load();
     if (section.pane === 'shopkortingen') window.BeheerKortingen.load();
+    if (section.pane === 'shopleveren') window.BeheerLevermethodes.load();
     if (section.pane === 'sproeiers') window.BeheerSproeiers.load();
     if (section.pane === 'aikosten') window.BeheerAiKosten.load();
     if (section.pane === 'kleuren') window.BeheerKleuren.load();
     if (section.pane === 'documentopmaak') window.BeheerDocumentopmaak.load();
+    if (section.pane === 'mailopmaak') window.BeheerMailopmaak.load();
     if (section.pane === 'updates') window.BeheerUpdates.load(); else window.BeheerUpdates.stop();
+    if (section.pane === 'logboek') window.BeheerLogboek.load();
     if (section.pane === 'bewaking') window.BeheerBewaking.load(); else window.BeheerBewaking.stop();
     if (section.pane === 'audit') loadAudit();
     activePane = section.pane;
@@ -1642,11 +1743,13 @@
     window.BeheerWebshop.init({ toast });
     window.BeheerWebshopInhoud.init({ toast });
     window.BeheerKortingen.init({ toast });
+    window.BeheerLevermethodes.init({ toast });
     window.BeheerSproeiers.init({ toast });
     window.BeheerRollen.init({ toast, onChange: setRoles });
     window.BeheerAiKosten.init({ toast });
     window.BeheerKleuren.init({ toast });
     window.BeheerDocumentopmaak.init({ toast });
+    window.BeheerMailopmaak.init({ toast });
     /** Sluit het detailvenster. */
     $('#detail-close').onclick = () => { $('#detail').hidden = true; };
     /**

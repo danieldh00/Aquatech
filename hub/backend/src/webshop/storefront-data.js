@@ -12,6 +12,8 @@ const ItemDetails = require('../artikelen/item-details');
 
 /** Hoe lang (ms) een opgebouwde catalogus per omgeving wordt hergebruikt. */
 const CACHE_MS = 30 * 1000;
+/** Hoelang een verlopen catalogus nog mag dienen voor het tonen van pagina's (stale-while-revalidate); afrekenen rekent altijd vers. */
+const STALE_MS = 2 * 60 * 1000;
 /** Hoogstens zoveel productpagina's met omschrijving in de cache. */
 const DETAILS_CACHE_MAX = 2000;
 /** Categorie voor artikelen zonder categorie in de webshop. */
@@ -197,7 +199,7 @@ function arrangeCategories(products, variantProducts, tree) {
     const ownCount = ownCounts.get(node.slug) || 0;
     const count = ownCount + children.reduce((total, child) => total + child.count, 0);
     if (!count) return null;
-    const entry = { slug: node.slug, name: node.name, count, ownCount, groupSlug, parentSlug, depth, intro: node.intro || '', image: node.image || '', hidden: Boolean(node.hidden), loose: false, children };
+    const entry = { slug: node.slug, name: node.name, count, ownCount, groupSlug, parentSlug, depth, intro: node.intro || '', seoTitle: node.seoTitle || '', seoDescription: node.seoDescription || '', image: node.image || '', hidden: Boolean(node.hidden), loose: false, children };
     entries.push(entry);
     return entry;
   };
@@ -208,7 +210,7 @@ function arrangeCategories(products, variantProducts, tree) {
     topOf.set(root.group, (root.children || []).map((child) => build(child, 1, root.group, '')).filter(Boolean));
   }
   for (const category of flat.values()) {
-    const entry = { slug: category.slug, name: category.name, count: category.count, ownCount: category.count, groupSlug: category.groupSlug, parentSlug: '', depth: 1, intro: '', image: '', hidden: false, loose: true, children: [] };
+    const entry = { slug: category.slug, name: category.name, count: category.count, ownCount: category.count, groupSlug: category.groupSlug, parentSlug: '', depth: 1, intro: '', seoTitle: '', seoDescription: '', image: '', hidden: false, loose: true, children: [] };
     entries.push(entry);
     topOf.set(category.groupSlug, [...(topOf.get(category.groupSlug) || []), entry]);
   }
@@ -218,7 +220,7 @@ function arrangeCategories(products, variantProducts, tree) {
     const loose = (topOf.get(group.slug) || []).filter((category) => category.loose).sort((left, right) => left.name.localeCompare(right.name, 'nl'));
     const members = [...inTree, ...loose];
     const root = rootOf.get(group.slug);
-    return { slug: group.slug, name: root && root.name || group.name, categories: members, count: members.reduce((total, category) => total + category.count, 0), intro: root && root.intro || '', image: root && root.image || '' };
+    return { slug: group.slug, name: root && root.name || group.name, categories: members, count: members.reduce((total, category) => total + category.count, 0), intro: root && root.intro || '', seoTitle: root && root.seoTitle || '', seoDescription: root && root.seoDescription || '', image: root && root.image || '' };
   }).filter((group) => group.categories.length);
   return { categoryList: entries.sort((left, right) => left.name.localeCompare(right.name, 'nl')), groups };
 }
@@ -288,6 +290,12 @@ function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE, discoun
     return slug;
   };
   /**
+   * Hoeveel stuks er te bestellen zijn (voorraad min reserveringen, naar beneden afgerond): alleen met voorraadbeheer, anders onbekend.
+   * @param {object} row Artikelrij met on_hand, reserved en stock_managed.
+   * @returns {?number} Het aantal (nooit negatief), of null zonder voorraadbeheer.
+   */
+  const stockQtyOf = (row) => (Number(row.stock_managed) === 0 ? null : Math.max(0, Math.floor(Math.round((Number(row.on_hand) - Number(row.reserved || 0)) * 1000) / 1000)));
+  /**
    * Of een artikel op voorraad is: met voorraadbeheer stand min gereserveerd boven nul; zonder
    * voorraadbeheer (stock_managed = 0, bijvoorbeeld uit de webshop overgenomen zonder aantal) de
    * status uit het gekoppelde webshopproduct (zonder koppeling: op voorraad).
@@ -331,7 +339,7 @@ function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE, discoun
       priceIncl: Math.round(priceExcl * (1 + vatRate / 100) * 100) / 100,
       priceBusiness, priceBusinessIncl: Math.round(priceBusiness * (1 + vatRate / 100) * 100) / 100,
       explicitBusinessPrice: row.business_price != null,
-      inStock: stockOf(row), image: imageOf(row), updatedAt: String(row.updated_at || '').slice(0, 10),
+      inStock: stockOf(row), stockQty: stockQtyOf(row), image: imageOf(row), updatedAt: String(row.updated_at || '').slice(0, 10),
       // Groothandelsvoorwaarden (alleen gebruikt op de groothandelspagina's): verpakkingseenheid, minimale afname en staffels.
       packSize: Number(row.order_pack_size) || 1, minimum: Wholesale.minimumOf({ packSize: row.order_pack_size, orderMinQty: row.order_min_qty }), tiers: Wholesale.tiersOf(row.price_tiers),
     };
@@ -384,7 +392,7 @@ function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE, discoun
       variants: variants.map((variant) => ({
         slug: variant.slug, code: variant.code, label: Object.values(variant.values).join(' / ') || variant.code,
         meta: Object.entries(variant.values).map(([name, value]) => `${name}: ${value}`).join(' | '),
-        priceIncl: variant.priceIncl, priceBusiness: variant.priceBusiness, priceBusinessIncl: variant.priceBusinessIncl, vatRate: variant.vatRate, inStock: variant.inStock, image: variant.image || imageOf(parent),
+        priceIncl: variant.priceIncl, priceBusiness: variant.priceBusiness, priceBusinessIncl: variant.priceBusinessIncl, vatRate: variant.vatRate, inStock: variant.inStock, stockQty: variant.stockQty, image: variant.image || imageOf(parent),
       })),
     };
     for (const variant of variants) {
@@ -440,6 +448,8 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
   const detailsCache = new Map();
   // Verpakkingen per productpagina (zelfde bewaartijd en begrenzing).
   const packagingCache = new Map();
+  // Levertijdgegevens per productpagina (zelfde bewaartijd en begrenzing).
+  const leadCache = new Map();
   // Lopende opvragingen van warm per omgeving (één tegelijk).
   const warming = new Map();
   // Telt elke clearCache: een opvraging die begon vóór het wissen, vult de cache daarna niet met oude gegevens.
@@ -450,16 +460,17 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
      * verkoopprijs die naar de webshop mogen (shop_sync), met categorie en
      * afbeelding van het gekoppelde webshopproduct. Eén query.
      * @param {string} tenantId De omgeving.
-     * @param {{ preview?: boolean }} [options] preview = met het concept van de categorieboom (niet onthouden).
+     * @param {{ preview?: boolean, stale?: boolean }} [options] preview = met het concept van de categorieboom (niet onthouden); stale = een verlopen catalogus van hoogstens twee minuten oud is goed (alleen voor het tonen van pagina's; de verversing loopt op de achtergrond via warm).
      * @returns {{ products: object[], categories: object[], groups: object[], featured: object[], bestsellers: object[] }} Zie buildCatalog.
      */
-    catalogOf(tenantId, { preview = false } = {}) {
+    catalogOf(tenantId, { preview = false, stale = false } = {}) {
       const tree = treeOf(tenantId, preview);
       const discounts = discountsOf(tenantId);
       const discountKey = JSON.stringify(discounts);
       const cached = !preview && cache.get(tenantId);
       // Een andere boom (na publiceren) of andere kortingen geven een nieuwe catalogus, ook binnen de cachetijd.
       if (cached && cached.until > Date.now() && cached.tree === tree && cached.discountKey === discountKey) return cached.catalog;
+      if (stale && db.async && cached && cached.until + STALE_MS > Date.now() && cached.tree === tree && cached.discountKey === discountKey) return cached.catalog;
       const rows = db.prepare(CATALOG_SQL).all(tenantId, tenantId);
       const sold = db.prepare(SOLD_SQL).all(tenantId, soldSince());
       const catalog = buildCatalog(rows, new Map(sold.map((row) => [String(row.code), Number(row.qty)])), tree, discounts);
@@ -469,11 +480,13 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
     /**
      * Vult de cache van de gepubliceerde catalogus alvast via db.async (met PostgreSQL de pool, beide queries tegelijk),
      * zodat een shop-pagina daarna catalogOf zonder query uit het geheugen haalt en de hoofdthread niet stilstaat. Doet
-     * niets als de cache nog geldig is; gelijktijdige verzoeken wachten op dezelfde opvraging.
+     * niets als de cache nog geldig is; gelijktijdige verzoeken wachten op dezelfde opvraging. Met allowStale en een
+     * verlopen catalogus van hoogstens twee minuten oud komt het antwoord meteen en loopt de verversing op de achtergrond.
      * @param {string} tenantId De omgeving.
+     * @param {{ allowStale?: boolean }} [options] allowStale = een verlopen catalogus mag nog dienen (alleen om pagina's te tonen).
      * @returns {Promise<void>}
      */
-    warm(tenantId) {
+    warm(tenantId, { allowStale = false } = {}) {
       if (!db.async) return Promise.resolve();
       const tree = treeOf(tenantId, false);
       const discounts = discountsOf(tenantId);
@@ -481,7 +494,8 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
       const cached = cache.get(tenantId);
       if (cached && cached.until > Date.now() && cached.tree === tree && cached.discountKey === discountKey) return Promise.resolve();
       const running = warming.get(tenantId);
-      if (running) return running;
+      const usable = allowStale && cached && cached.until + STALE_MS > Date.now() && cached.tree === tree && cached.discountKey === discountKey;
+      if (running) return usable ? Promise.resolve() : running;
       const started = generation;
       const job = Promise.all([db.async.all(CATALOG_SQL, tenantId, tenantId), db.async.all(SOLD_SQL, tenantId, soldSince())])
         .then(([rows, sold]) => {
@@ -491,6 +505,10 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
         })
         .finally(() => warming.delete(tenantId));
       warming.set(tenantId, job);
+      if (usable) {
+        job.catch(() => {});
+        return Promise.resolve();
+      }
       return job;
     },
     /**
@@ -534,10 +552,39 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
       return packagings;
     },
     /**
+     * De gegevens waaruit de levertijd van een artikel volgt als de standaard van de bezorgmethode niet geldt: de eigen levertijd van het
+     * artikel, de levertijd van de voorkeursleverancier en de vroegste verwachte datum van een openstaande inkooporder. Eén query per
+     * productpagina, daarna uit het geheugen.
+     * @param {string} tenantId De omgeving.
+     * @param {string[]} codes Artikelcodes (het artikel of zijn varianten).
+     * @param {{ fresh?: boolean }} [options] `fresh` slaat het geheugen over (Beheer wil direct zien wat net is opgeslagen).
+     * @returns {Map<string, { override: ?{ min: number, max: number }, supplierLeadDays: ?number, expectedDate: string, itemRules: *, parentRules: * }>} Per artikelcode (een artikel zonder gegevens ontbreekt niet: de waarden zijn dan leeg).
+     */
+    leadInfoOf(tenantId, codes, { fresh = false } = {}) {
+      const wanted = [...new Set(codes.map(String))].slice(0, 500);
+      if (!wanted.length) return new Map();
+      const cacheKey = `${tenantId}|${wanted.join('|')}`;
+      const hit = leadCache.get(cacheKey);
+      if (!fresh && hit && hit.until > Date.now()) return hit.info;
+      const rows = db.prepare(`SELECT i.code, i.lead_days_min, i.lead_days_max, i.delivery_rules, (SELECT p.delivery_rules FROM stock_items p WHERE p.tenant_id = i.tenant_id AND p.id = i.parent_id) AS parent_delivery_rules,
+          (SELECT l.lead_days FROM item_suppliers l WHERE l.tenant_id = i.tenant_id AND l.item_id = i.id AND l.lead_days IS NOT NULL ORDER BY l.preferred DESC, l.lead_days LIMIT 1) AS supplier_lead_days,
+          (SELECT MIN(p.expected_date) FROM purchase_order_lines l JOIN purchase_orders p ON p.tenant_id = l.tenant_id AND p.id = l.order_id
+            WHERE l.tenant_id = i.tenant_id AND l.item_id = i.id AND p.status IN ('besteld', 'deels_ontvangen') AND l.received_qty < l.qty AND p.expected_date <> '') AS expected_date
+        FROM stock_items i WHERE i.tenant_id = ? AND i.code IN (${wanted.map(() => '?').join(',')})`).all(tenantId, ...wanted);
+      const info = new Map(rows.map((row) => [row.code, {
+        override: row.lead_days_min == null ? null : { min: Number(row.lead_days_min), max: Number(row.lead_days_max) },
+        supplierLeadDays: row.supplier_lead_days == null ? null : Number(row.supplier_lead_days), expectedDate: String(row.expected_date || ''),
+        itemRules: row.delivery_rules, parentRules: row.parent_delivery_rules,
+      }]));
+      if (leadCache.size >= DETAILS_CACHE_MAX) leadCache.delete(leadCache.keys().next().value);
+      leadCache.set(cacheKey, { info, until: Date.now() + CACHE_MS });
+      return info;
+    },
+    /**
      * Wist de cache (tests).
      * @returns {void}
      */
-    clearCache() { generation++; cache.clear(); detailsCache.clear(); packagingCache.clear(); },
+    clearCache() { generation++; cache.clear(); detailsCache.clear(); packagingCache.clear(); leadCache.clear(); },
   };
 
   /**
@@ -548,7 +595,7 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
    */
   function readDetails(tenantId, wanted) {
     const filter = wanted ? ` AND (i.code IN (${wanted.map(() => '?').join(',')}) OR i.id IN (SELECT v.parent_id FROM stock_items v WHERE v.tenant_id = ? AND v.code IN (${wanted.map(() => '?').join(',')})))` : '';
-    const rows = db.prepare(`SELECT i.id, i.code, i.parent_id, i.description, i.specifications, p.description AS shop_description, p.attributes AS shop_attributes
+    const rows = db.prepare(`SELECT i.id, i.code, i.parent_id, i.description, i.specifications, i.seo_title, i.seo_description, i.brand, i.ean, p.description AS shop_description, p.attributes AS shop_attributes
       FROM stock_items i LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
       WHERE i.tenant_id = ? AND i.archived = 0${filter}`).all(tenantId, ...(wanted ? [...wanted, tenantId, ...wanted] : []));
     const parents = new Map(rows.filter((row) => !row.parent_id).map((row) => [row.id, ItemDetails.shownDetails(row)]));

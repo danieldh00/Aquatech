@@ -9,6 +9,7 @@
 // zonder EXIF (photos.inspectImage) versleuteld opgeslagen (vault.sealBytes,
 // AAD = tenant + melding-foto-id). Bij het omzetten gaan ze als foto's "voor"
 // mee naar de werkorder.
+const { mailStyleOf } = require('../platform/mail-layout');
 const crypto = require('crypto');
 const { transaction } = require('../database/db');
 const { createMailer, validEmail } = require('../platform/mailer');
@@ -363,7 +364,7 @@ function createServiceRequestStore(db, { vault, workorders, photos }) {
         design: installationData.design || null, zones: installationData.zones || [], heads: installationData.heads || [],
         steps, materials: [],
       };
-      const workOrder = workorders.createReceived({ id: user.id, tenant_id: tenantId }, data, { assigneeId });
+      const workOrder = workorders.createReceived({ id: user.id, tenant_id: tenantId }, data, { assigneeId, customerId: requestRow.customer_id || null });
       prepare("UPDATE service_requests SET status = 'ingepland', work_order_id = ?, handled_by = ?, handled_by_name = ?, updated_at = ? WHERE id = ?")
         .run(workOrder.id, user.kind === 'account' ? user.id : null, cleanText(user.display_name || '', 200), currentTimestamp(), requestRow.id);
       // Foto's van de klant mee als foto's "voor" (zichtbaar voor de klant: ze zijn van hem).
@@ -475,7 +476,7 @@ function registerServiceRequestRoutes(app, ctx) {
     const mailer = mailerFor(settings);
     const profile = settings.get('quoteProfile') || {};
     if (!mailer.configured() || !validEmail(to)) return;
-    mailer.send({ to, subject, ...mailBody(profile, lines, null) })
+    mailer.send({ to, subject, ...mailBody(profile, lines, null, mailStyleOf(settings)) })
       .catch((error) => console.warn(`Bericht over ${what} niet verstuurd: ${error.message}`));
   }
   /**

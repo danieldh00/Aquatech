@@ -137,12 +137,13 @@
     const { esc } = context;
     const item = state.item;
     const archivedItem = Boolean(item && item.archived);
-    $('#d-sup-table').innerHTML = state.lines.length ? `<thead><tr><th>Leverancier</th><th>Artikelnummer leverancier</th><th class="num">Inkoopprijs (€)</th><th class="num">Bestelhoeveelheid (${esc(item.unit)})</th><th>Voorkeur</th><th></th></tr></thead>
+    $('#d-sup-table').innerHTML = state.lines.length ? `<thead><tr><th>Leverancier</th><th>Artikelnummer leverancier</th><th class="num">Inkoopprijs (€)</th><th class="num">Bestelhoeveelheid (${esc(item.unit)})</th><th class="num">Levertijd (dagen)</th><th>Voorkeur</th><th></th></tr></thead>
       <tbody>${state.lines.map((line, index) => `<tr data-line="${index}">
         <td class="wrap">${esc(line.supplierName)}${line.supplierArchived ? ' <span class="pill">Gearchiveerd</span>' : ''}</td>
         <td><input data-field="supplierSku" value="${esc(line.supplierSku)}" maxlength="80" aria-label="Artikelnummer van de leverancier"></td>
         <td class="num"><input data-field="costPrice" type="number" min="0" step="0.0001" inputmode="decimal" value="${line.costPrice == null ? '' : line.costPrice}" placeholder="van het artikel" aria-label="Inkoopprijs"></td>
         <td class="num"><input data-field="orderQty" type="number" min="0" step="any" inputmode="decimal" value="${line.orderQty}" aria-label="Bestelhoeveelheid"></td>
+        <td class="num"><input data-field="leadDays" type="number" min="0" max="365" step="1" inputmode="numeric" value="${line.leadDays == null ? '' : line.leadDays}" placeholder="onbekend" aria-label="Levertijd van de leverancier in dagen"></td>
         <td><input type="radio" name="sup-preferred" data-field="preferred" ${line.preferred ? 'checked' : ''} aria-label="Voorkeursleverancier"></td>
         <td class="num"><button class="btn small danger" type="button" data-drop="${index}">Weghalen</button></td></tr>`).join('')}</tbody>`
       : '<tbody><tr><td class="muted">Nog geen leverancier bij dit artikel.</td></tr></tbody>';
@@ -159,6 +160,7 @@
       line.supplierSku = row.querySelector('[data-field=supplierSku]').value;
       line.costPrice = row.querySelector('[data-field=costPrice]').value;
       line.orderQty = row.querySelector('[data-field=orderQty]').value;
+      line.leadDays = row.querySelector('[data-field=leadDays]').value;
       line.preferred = row.querySelector('[data-field=preferred]').checked;
     });
   }
@@ -173,7 +175,7 @@
     errorBox.textContent = '';
     readLines();
     try {
-      const body = { suppliers: state.lines.map((line) => ({ supplierId: line.supplierId, supplierSku: line.supplierSku, costPrice: line.costPrice, orderQty: line.orderQty, preferred: line.preferred })) };
+      const body = { suppliers: state.lines.map((line) => ({ supplierId: line.supplierId, supplierSku: line.supplierSku, costPrice: line.costPrice, orderQty: line.orderQty, leadDays: line.leadDays, preferred: line.preferred })) };
       const result = await context.api(`stock/items/${encodeURIComponent(state.item.id)}/suppliers`, { method: 'PUT', body });
       state.lines = result.items;
       renderLines();
@@ -228,7 +230,7 @@
       const supplier = state.choices.find((candidate) => candidate.id === id);
       if (!supplier) return;
       readLines();
-      state.lines.push({ supplierId: supplier.id, supplierName: supplier.name, supplierArchived: supplier.archived, supplierSku: '', costPrice: '', orderQty: 1, preferred: !state.lines.length });
+      state.lines.push({ supplierId: supplier.id, supplierName: supplier.name, supplierArchived: supplier.archived, supplierSku: '', costPrice: '', orderQty: 1, leadDays: '', preferred: !state.lines.length });
       renderLines();
     };
   }

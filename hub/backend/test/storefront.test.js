@@ -115,7 +115,7 @@ test('webshop aan: start, categorie en product zonder inloggen, zonder interne g
   assert.match(home.text, /product\/pe-buis-25-mm-buis-25\//);
   assert.ok(!home.text.includes('Alleen intern') && !home.text.includes('Niet naar de shop'));
   assert.match(home.headers.get('content-security-policy'), /default-src 'none'/);
-  assert.ok(!/<script(?![^>]*(?:assets\/menu\.js|application\/ld\+json))/i.test(home.text), 'alleen het menuscript');
+  assert.ok(!/<script(?![^>]*(?:assets\/(?:menu|zoeksuggesties)\.js|application\/ld\+json))/i.test(home.text), 'alleen het menu- en zoeksuggestiescript');
 
   const categorySlug = home.text.match(/href="categorie\/(leidingen-[0-9a-f]{6})\//)[1];
   const category = await anonymous.get(`/categorie/${categorySlug}/`);
@@ -270,7 +270,7 @@ test('webshop: assets met versie in het adres, startpagina in de opzet van aquat
   for (const name of ['hero-tuin.jpg', 'merk-rainbird.png', 'usp-prijzen.png', 'zakelijk-achtergrond.jpg', 'betaalmethoden.png']) {
     assert.strictEqual((await anonymous.get(`/assets/${name}?v=${version}`)).status, 200, name);
   }
-  for (const text of ['shop-notice', '06 47212019', 'Product zoeken', 'Over ons', 'Assortiment', 'Onze merken', 'Scherpe zakelijke prijzen', 'zakelijk account aan', 'K.v.k.: 88438252']) {
+  for (const text of ['shop-notice', '06 47212019', 'Over ons', 'Assortiment', 'Onze merken', 'Scherpe zakelijke prijzen', 'zakelijk account aan', 'K.v.k.: 88438252']) {
     assert.ok(home.text.includes(text), text);
   }
   const product = await anonymous.get('/product/pe-buis-25-mm-buis-25/');
@@ -364,7 +364,7 @@ test('webshop: hoofdartikel met varianten als regel met keuzelijst en eigen scri
   assert.ok(!mixed.text.includes('data-variant-row'), 'woorden uit verschillende varianten tellen niet samen');
   const found = await anonymous.get('/zoeken/?q=koppeling');
   assert.strictEqual(found.text.match(/data-variant-row/g).length, 1);
-  assert.ok(!/<script(?![^>]*(?:assets\/menu\.js|application\/ld\+json))/i.test((await anonymous.get('/')).text), 'startpagina laadt alleen het menuscript');
+  assert.ok(!/<script(?![^>]*(?:assets\/(?:menu|zoeksuggesties)\.js|application\/ld\+json))/i.test((await anonymous.get('/')).text), 'startpagina laadt alleen het menu- en zoeksuggestiescript');
 });
 
 test('webshop: voorraadstand uit het systeem en filter alleen op voorraad', async () => {

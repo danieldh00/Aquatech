@@ -139,7 +139,7 @@
   const progressBar = (progress) => `<span class="bar" title="${progress.done} van ${progress.steps} stappen klaar"><span style="width:${progress.pct}%"></span></span><span class="sub">${progress.done}/${progress.steps} stappen</span>`;
   const COLUMNS = [
     { key: 'number', label: 'Nummer', value: (workOrder) => workOrder.number, html: (workOrder) => `<b>${esc(workOrder.number)}</b>${workOrder.quoteNumber ? `<span class="sub">${esc(workOrder.quoteNumber)}</span>` : ''}` },
-    { key: 'title', label: 'Klant en klus', value: (workOrder) => workOrder.customer || workOrder.title, html: (workOrder) => `${esc(workOrder.customer || '–')}<span class="sub">${esc(workOrder.address || workOrder.title)}</span>`, cls: 'wrap' },
+    { key: 'title', label: 'Klant en klus', value: (workOrder) => workOrder.customer || workOrder.title, html: (workOrder) => `${esc(workOrder.customer || '–')}${workOrder.customerId || FINISHED.includes(workOrder.status) ? '' : ' <span class="unlinked-mark">Niet gekoppeld</span>'}<span class="sub">${esc(workOrder.address || workOrder.title)}</span>`, cls: 'wrap' },
     { key: 'plannedDate', label: 'Gepland', value: (workOrder) => (workOrder.plannedDate ? `${workOrder.plannedDate} ${workOrder.startTime}` : '9999'), html: (workOrder) => (workOrder.plannedDate ? `${esc(shortDate(workOrder.plannedDate))}${workOrder.startTime ? `<span class="sub">${esc(workOrder.startTime)}${workOrder.endTime ? `–${esc(workOrder.endTime)}` : ''} uur${workOrder.days > 1 ? ` · ${workOrder.days} dagen` : ''}</span>` : ''}${workOrder.appointment && ['wacht', 'bevestigd', 'ander_moment'].includes(workOrder.appointment.state) ? `<span class="sub"><span class="pill appt-${esc(workOrder.appointment.state)}">${esc(WorkOrderCore.APPOINTMENT[workOrder.appointment.state])}</span></span>` : ''}` : '<span class="muted">Nog niet</span>') },
     { key: 'assignee', label: 'Uitvoerder', value: (workOrder) => (workOrder.assignee ? workOrder.assignee.displayName : ''), html: (workOrder) => esc(workOrder.assignee ? workOrder.assignee.displayName : '–') },
     { key: 'status', label: 'Status', value: (workOrder) => workOrder.status, html: (workOrder) => `<span class="pill wo-${esc(workOrder.status)}">${esc(WorkOrderCore.STATUSES[workOrder.status] || workOrder.status)}</span>${outsourcedLabel(workOrder)}` },
@@ -195,11 +195,13 @@
     const search = $('#l-search').value.trim().toLowerCase();
     const status = $('#l-status').value;
     const mine = $('#l-mine').checked;
+    const unlinkedOnly = $('#l-unlinked').checked;
     const done = $('#l-done').checked || FINISHED.includes(status);
     const sortColumn = COLUMNS.find((column) => column.key === state.sort.key) || COLUMNS[0];
     return state.items
       .filter((workOrder) => (status ? workOrder.status === status : done || !FINISHED.includes(workOrder.status)))
       .filter((workOrder) => !mine || workOrder.assigneeId === state.me.user.id)
+      .filter((workOrder) => !unlinkedOnly || (!workOrder.customerId && workOrder.status !== 'geannuleerd'))
       .filter((workOrder) => !search || [workOrder.number, workOrder.title, workOrder.customer, workOrder.address, workOrder.quoteNumber, workOrder.assignee && workOrder.assignee.displayName].some((value) => String(value || '').toLowerCase().includes(search)))
       .sort((left, right) => {
         const leftValue = sortColumn.value(left), rightValue = sortColumn.value(right);
@@ -227,6 +229,13 @@
       [count('gereed'), 'gereed'],
     ].map(([value, label]) => `<div class="stat"><b>${esc(value)}</b><span>${esc(label)}</span></div>`).join('');
     $('#l-stats').hidden = !state.items.length;
+    // Werkorders zonder klantrecord zichtbaar maken (alleen voor wie klanten mag koppelen).
+    const unlinked = state.items.filter((workOrder) => !workOrder.customerId && workOrder.status !== 'geannuleerd').length;
+    const canLink = (state.me.rights || []).includes('klanten');
+    $('#l-unlinked-wrap').hidden = !unlinked;
+    $('#l-unlinked-count').textContent = unlinked;
+    if (!unlinked) $('#l-unlinked').checked = false;
+    $('#l-link').hidden = !unlinked || !canLink;
     const table = $('#l-table');
     if (!state.items.length) {
       table.innerHTML = '<tr><td class="empty">Nog geen werkorders. Kies <b>Nieuwe werkorder uit offerte</b>, of open een geaccordeerde offerte en kies daar <b>Werkorder maken</b>.</td></tr>';
@@ -419,6 +428,7 @@
     $('#e-status').value = workOrder.status;
     $('#e-saved').textContent = workOrder.cachedAt ? `Offline · gegevens van ${new Date(workOrder.cachedAt).toLocaleString('nl-NL', { dateStyle: 'short', timeStyle: 'short' })}` : '';
     renderAssignee(workOrder);
+    renderCustomer(workOrder);
     document.querySelectorAll('#edit-view [data-f]').forEach((field) => {
       const value = getPath(workOrder.data, field.dataset.f);
       field.value = value == null ? '' : value;
@@ -468,6 +478,79 @@
     select.innerHTML = '<option value="">Nog niet toegewezen</option>' + options
       .map((user) => `<option value="${esc(user.id)}">${esc(user.displayName)}${user.gone ? ' – uitgeschakeld' : ''}</option>`).join('');
     select.value = workOrder.assigneeId || '';
+  }
+
+  // ---------- Klantrecord koppelen ----------
+  /**
+   * Toont de klantkeuze (alleen met het recht klanten) en welke klant er gekoppeld is.
+   * @param {object} workOrder de werkorder
+   */
+  function renderCustomer(workOrder) {
+    const allowed = (state.me.rights || []).includes('klanten');
+    $('#e-cust-pick').hidden = !allowed;
+    if (!allowed) return;
+    const account = workOrder.customerAccount;
+    $('#e-cust-chosen').hidden = !account;
+    $('#e-cust-none').hidden = Boolean(account);
+    $('#e-cust-search').value = '';
+    $('#e-cust-list').hidden = true;
+    if (account) {
+      $('#e-cust-name').textContent = account.companyName || account.displayName;
+      $('#e-cust-card').href = `../klanten/?id=${encodeURIComponent(account.id)}`;
+    }
+  }
+
+  /**
+   * Zoekt klanten op de server en toont de eerste 20 onder het zoekveld.
+   * @returns {Promise<void>}
+   */
+  async function searchCustomers() {
+    const search = $('#e-cust-search').value.trim();
+    const ticket = (state.customerTicket = (state.customerTicket || 0) + 1);
+    let items = [];
+    try {
+      items = ((await api(`workorder-customers?q=${encodeURIComponent(search)}`)) || {}).items || [];
+    } catch (error) {
+      toast(error.message, true);
+      return;
+    }
+    if (ticket !== state.customerTicket) return;
+    state.customerHits = items;
+    const list = $('#e-cust-list');
+    list.innerHTML = items.length
+      ? items.map((customer, index) => `<li role="option" data-i="${index}"><b>${esc(customer.companyName || customer.displayName)}</b>`
+        + `<span class="sub">${esc([customer.companyName ? customer.displayName : '', (customer.address || '').replace(/\n/g, ', '), customer.email].filter(Boolean).join(' · ') || customer.username)}</span></li>`).join('')
+      : '<li class="none">Geen klanten gevonden.</li>';
+    list.hidden = false;
+    $('#e-cust-search').setAttribute('aria-expanded', 'true');
+  }
+
+  /**
+   * Koppelt de werkorder aan de gekozen klant en vult naam, contactpersoon, adres, e-mail en telefoon in.
+   * @param {object} customer de gekozen klant uit de zoekresultaten
+   * @returns {Promise<void>}
+   */
+  async function pickCustomer(customer) {
+    const workOrder = state.workOrder;
+    if (!workOrder || !customer) return;
+    const fields = {
+      'customer.name': customer.companyName || customer.displayName,
+      'customer.contact': customer.companyName ? customer.displayName : '',
+      'customer.address': customer.address || '',
+      'customer.email': customer.email || '',
+      'customer.phone': customer.phone || '',
+    };
+    for (const [path, value] of Object.entries(fields)) {
+      setPath(workOrder.data, path, value);
+      const input = document.querySelector(`#edit-view [data-f="${path}"]`);
+      if (input) input.value = value;
+    }
+    workOrder.customerId = customer.id;
+    workOrder.customerAccount = { id: customer.id, displayName: customer.displayName, companyName: customer.companyName || '' };
+    state.dirty = true;
+    renderCustomer(workOrder);
+    renderRoute();
+    await save({ customerId: customer.id });
   }
 
   // ---------- Afspraak met de klant (klantlink) ----------
@@ -819,6 +902,9 @@
           workOrder.status = result.status;
           workOrder.assigneeId = result.assigneeId;
           workOrder.assignee = result.assignee;
+          workOrder.customerId = result.customerId;
+          workOrder.customerAccount = result.customerAccount;
+          renderCustomer(workOrder);
           workOrder.appointment = result.appointment;
           workOrder.share = result.share;
           renderAppt();
@@ -1529,6 +1615,35 @@
     $('#l-status').onchange = renderList;
     $('#l-mine').onchange = renderList;
     $('#l-done').onchange = renderList;
+    $('#l-unlinked').onchange = renderList;
+    /** Koppelt werkorders aan klanten waar de naam eenduidig is en ververst de lijst. */
+    $('#l-link').onclick = async () => {
+      try {
+        const result = await api('workorders/link-customers', { method: 'POST' });
+        state.items = ((await api('workorders')) || {}).items || [];
+        renderList();
+        toast(result.linked ? `${result.linked} werkorder(s) gekoppeld. ${result.ambiguous} met meerdere klanten van dezelfde naam, ${result.unmatched} zonder passende klant: die koppel je zelf in de werkorder.` : 'Geen werkorder gevonden met een eenduidige klantnaam. Koppel ze zelf in de werkorder.');
+      } catch (error) {
+        toast(error.message, true);
+      }
+    };
+    let customerTimer = null;
+    document.addEventListener('click', (event) => { if (!event.target.closest('#e-cust-pick')) $('#e-cust-list').hidden = true; });
+    $('#e-cust-search').addEventListener('input', () => { clearTimeout(customerTimer); customerTimer = setTimeout(searchCustomers, 200); });
+    $('#e-cust-search').addEventListener('focus', searchCustomers);
+    $('#e-cust-list').addEventListener('click', (event) => {
+      const item = event.target.closest('li[data-i]');
+      if (item) { $('#e-cust-list').hidden = true; pickCustomer((state.customerHits || [])[Number(item.dataset.i)]); }
+    });
+    /** Ontkoppelt de werkorder van het klantrecord (naam en adres blijven als tekst staan). */
+    $('#e-cust-clear').onclick = async () => {
+      const workOrder = state.workOrder;
+      if (!workOrder) return;
+      workOrder.customerId = null;
+      workOrder.customerAccount = null;
+      renderCustomer(workOrder);
+      await save({ customerId: null });
+    };
     $('#l-new').onclick = pickQuote;
     $('#l-export').onclick = exportListXlsx;
     $('#l-hours').onclick = openHoursExport;

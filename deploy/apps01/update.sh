@@ -11,7 +11,7 @@
 #     releases.json     releasenotes van de beschikbare versie, uit het nieuwe image (tools/release-info.js)
 #     maintenance.json  bestaat zolang de uitrol loopt: de app weigert dan schrijfverzoeken (onderhoudsmodus)
 #   update/request/  de app (uid 1000) schrijft hier; dit script vertrouwt de inhoud niet.
-#     request.json      "installeer versie X": alleen geldig als X precies de versie is die dit script uit GHCR haalde
+#     request.json      "installeer versie X" (of {"check":true}: alleen controleren, niets installeren): alleen geldig als X precies de versie is die dit script uit GHCR haalde
 #     policy.json       {"auto":false} zet automatisch bijwerken uit
 #
 # Uitrol: onderhoudsmodus aan → even wachten tot lopende verzoeken klaar zijn → back-up → container vervangen →
@@ -106,10 +106,13 @@ REQ_PRESENT=0
 if [[ -e "$REQUEST_DIR/request.json" || -L "$REQUEST_DIR/request.json" ]]; then REQ_PRESENT=1; rm -f "$REQUEST_DIR/request.json"; fi
 REQ_VER="$(grep -oE '"version":"[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}"' <<<"$REQ_BODY" | head -n1 | cut -d'"' -f4 || true)"
 REQ_ID="$(grep -oE '"id":"[0-9a-f-]{36}"' <<<"$REQ_BODY" | head -n1 | cut -d'"' -f4 || true)"
+# Een aanvraag met "check":true is alleen "kijk nu of er een nieuwe versie is" (knop Nu controleren): niets installeren.
+CHECK_ONLY=0
+grep -qE '"check"[[:space:]]*:[[:space:]]*true' <<<"$REQ_BODY" && CHECK_ONLY=1
 AUTO=1
 grep -qE '"auto"[[:space:]]*:[[:space:]]*false' <<<"$(request_read policy.json || true)" && AUTO=0
 # Meteen laten zien dat de aanvraag binnen is (ophalen en de releasenotes kunnen even duren).
-if [[ "$REQ_PRESENT" == 1 ]]; then
+if [[ "$REQ_PRESENT" == 1 && "$CHECK_ONLY" == 0 ]]; then
   RUN_STARTED="$(now)"; [[ "$REQ_VER" =~ $VERSION_RE ]] && RUN_VERSION="$REQ_VER"
   run_put bezig ophalen "Aanvraag ontvangen."
 fi
@@ -132,6 +135,9 @@ if [[ "$(cat "$STATUS_DIR/.releases-version" 2>/dev/null || true)" != "$NEW_VER|
   status_put releases.json "$NOTES"
   printf '%s' "$NEW_VER|$CUR_VER" > "$STATUS_DIR/.releases-version"
 fi
+
+# Alleen controleren (knop in de app): status.json en releases.json zijn bijgewerkt, klaar.
+if [[ "$CHECK_ONLY" == 1 ]]; then log "Controle op verzoek: beschikbaar $NEW_VER, draaiend ${CUR_VER:-onbekend}"; exit 0; fi
 
 # ---------- Moet er geïnstalleerd worden? ----------
 RUN_VERSION="$NEW_VER"
@@ -218,4 +224,13 @@ rm -f .failed-version
 status_put status.json "{\"current\":\"$NEW_VER\",\"available\":\"$NEW_VER\",\"checkedAt\":\"$(now)\",\"auto\":$([[ $AUTO == 1 ]] && echo true || echo false)}"
 run_put geslaagd klaar "Versie $NEW_VER draait."
 docker image prune -f >/dev/null
+# Oude versies opruimen: alleen de nieuwe en de vorige (voor de terugval) blijven; elke uitrol laat anders een image van
+# enkele honderden MB achter. Een image dat nog in gebruik is wordt door docker geweigerd en blijft dus staan.
+# Zonder bekende vorige versie (leeg) wordt niets verwijderd: dan is de terugvalversie niet te bepalen.
+if [[ "$CUR_VER" =~ $VERSION_RE ]]; then
+  for old_tag in $(docker image ls --format '{{.Tag}}' "$IMAGE" 2>/dev/null | grep -E "$VERSION_RE" || true); do
+    [[ "$old_tag" == "$NEW_VER" || "$old_tag" == "$CUR_VER" ]] && continue
+    docker rmi "$IMAGE:$old_tag" >/dev/null 2>&1 || true
+  done
+fi
 log "Update naar $NEW_VER geslaagd"

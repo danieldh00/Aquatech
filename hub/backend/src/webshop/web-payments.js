@@ -18,13 +18,19 @@ const { withHiddenCause } = require('../platform/error-report');
  */
 const round2 = (value) => Math.round((Number(value) || 0) * 100) / 100;
 
+/** Na hoeveel uur zonder betaling de herinnering gestuurd wordt. */
+const REMINDER_AFTER_HOURS = 1;
+/** Hoeveel herinneringen één ronde hoogstens verstuurt, en hoeveel onbetaalde bestellingen hij hoogstens bekijkt. */
+const MAX_REMINDERS_PER_RUN = 50;
+const MAX_REMINDER_SCAN = 500;
+
 /** Hoe de Mollie-status bij ons heet: betaald, nog open of mislukt. */
 const MOLLIE_STATES = { paid: 'betaald', open: 'open', pending: 'open', authorized: 'open', canceled: 'mislukt', expired: 'mislukt', failed: 'mislukt' };
 
 /**
  * Maakt de betaalfuncties voor webshopbestellingen.
  * @param {{ orders: object, mollie: object, settingsFor: Function, log?: object }} deps De bestelopslag (web-orders.js), de Mollie-client (mollie.js), de instellingen per omgeving en de logger.
- * @returns {{ start: Function, sync: Function, expireUnpaid: Function, onPaid: Function, optionsFor: Function, guestCheckoutAllowed: Function, refund: Function }} De functies.
+ * @returns {{ start: Function, sync: Function, expireUnpaid: Function, remindUnpaid: Function, onPaid: Function, optionsFor: Function, guestCheckoutAllowed: Function, refund: Function }} De functies.
  */
 function createWebPayments({ orders, mollie, settingsFor, log = console }) {
   const paidHooks = [];
@@ -235,6 +241,52 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
   }
 
   /**
+   * Stuurt één herinnering bij online bestellingen die na een uur nog niet betaald zijn (of waarvan de betaling mislukte), zolang
+   * de reservering loopt. Elke bestelling krijgt hoogstens één herinnering (`pay.reminderAt`); een mail die niet lukt wordt de
+   * volgende ronde opnieuw geprobeerd. Wat intussen toch betaald bleek bij Mollie wordt eerst bijgewerkt en krijgt niets.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ send: Function, canSend?: Function }} mailer `send(order)` stuurt de herinnering en geeft true als dat gelukt is; `canSend()` meldt vooraf of er een mailserver is (zo niet, dan ook geen Mollie-opvragingen).
+   * @returns {Promise<{ sent: number }>} Het aantal verstuurde herinneringen.
+   */
+  async function remindUnpaid(tenantId, { send, canSend = () => true }) {
+    const config = configOf(settingsFor(tenantId));
+    if (!config.online || !config.paymentReminder || !canSend()) return { sent: 0 };
+    const nowIso = new Date().toISOString();
+    const cutoff = new Date(Date.now() - REMINDER_AFTER_HOURS * 3600 * 1000).toISOString();
+    const fallback = new Date(Date.now() - config.holdHours * 3600 * 1000).toISOString();
+    let sent = 0;
+    let looked = 0;
+    for (;;) {
+      const batch = orders.unpaidOnline(tenantId, cutoff, 100, looked, { withoutReminder: true });
+      if (!batch.length || looked >= MAX_REMINDER_SCAN) break;
+      // Een bestelling die een herinnering krijgt valt uit de selectie: telt dus niet mee voor het overslaan.
+      looked += batch.length;
+      for (const id of batch) {
+        try {
+          let order = orders.get(tenantId, id);
+          if (!order || order.status !== 'nieuw' || !order.pay || order.pay.reminderAt || order.pay.status === 'betaald') continue;
+          const deadline = order.reservedUntil;
+          if (deadline ? deadline <= nowIso : order.createdAt <= fallback) continue;
+          if (!orders.reminderAllowed(tenantId, order)) continue;
+          if (order.pay.id && config.apiKey) {
+            const out = await sync(tenantId, id);
+            if (out.becamePaid || (out.order && out.order.pay.status === 'betaald')) continue;
+            if (out.order) order = out.order;
+          }
+          if (!(await send(order))) continue;
+          orders.changePay(tenantId, id, (pay) => (pay.status === 'betaald' || pay.reminderAt ? null : { ...pay, reminderAt: new Date().toISOString() }));
+          sent += 1;
+          looked -= 1;
+          if (sent >= MAX_REMINDERS_PER_RUN) return { sent };
+        } catch (error) {
+          log.warn(`Betalingsherinnering voor bestelling ${id} mislukt: ${error.message}`);
+        }
+      }
+    }
+    return { sent };
+  }
+
+  /**
    * Betaalt (een deel van) een online betaalde bestelling terug via Mollie (W-05): bij een retour het bedrag van de
    * creditnota, bij een geannuleerde bestelling wat er nog over is. Dezelfde sleutel betaalt nooit twee keer terug
    * (ook Mollie krijgt hem als idempotentiesleutel).
@@ -270,7 +322,7 @@ function createWebPayments({ orders, mollie, settingsFor, log = console }) {
     return { order: out.order || order, refund: { id: made.id, amount: value, status: made.status } };
   }
 
-  return { start, sync, expireUnpaid, onPaid, optionsFor, guestCheckoutAllowed, refund };
+  return { start, sync, expireUnpaid, remindUnpaid, onPaid, optionsFor, guestCheckoutAllowed, refund };
 }
 
 module.exports = { createWebPayments, MOLLIE_STATES };

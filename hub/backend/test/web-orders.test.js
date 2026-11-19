@@ -186,6 +186,57 @@ test('verzonden boekt af en annuleren geeft de reservering vrij', async () => {
   assert.strictEqual(excel.body.items[0].lines[0].code, 'SPR-1');
 });
 
+test('openstaande taken (dashboard): bestellingen nieuw, oudste eerst, per omgeving en volgens de rechten', async () => {
+  const { base, admin, vreemd, shopper, db } = await setup();
+  const customer = await shopper();
+  /**
+   * De taak Webshopbestellingen verwerken uit /api/tasks.
+   * @param {object} client De ingelogde client.
+   * @returns {Promise<object|undefined>} De taak, of niets als er niets openstaat.
+   */
+  const ordersTask = async (client) => (await client.get('/app/api/tasks')).body.tasks.find((task) => task.key === 'bestellingen');
+  assert.strictEqual(await ordersTask(admin), undefined, 'zonder bestellingen geen taak');
+  for (let count = 0; count < 7; count += 1) {
+    await addToCart(base, customer, 'BUIS-25', 1);
+    assert.strictEqual((await postCheckout(base, customer, CHECKOUT)).status, 303);
+  }
+  const open = await ordersTask(admin);
+  assert.strictEqual(open.count, 7, 'het totaal telt alles, ook buiten de lijst');
+  assert.strictEqual(open.items.length, 5, 'de lijst is begrensd');
+  assert.ok(open.items[0].label < open.items[1].label, 'oudste eerst');
+  assert.match(open.items[0].label, /Piet Tuin/);
+  assert.match(open.items[0].href, /^webshop-bestellingen\/\?id=/);
+  const orders = (await admin.get('/app/api/admin/web-orders')).body.items;
+  const oldest = orders[orders.length - 1];
+  const youngest = orders[0];
+  assert.strictEqual((await admin.post(`/app/api/admin/web-orders/${oldest.id}/status`, { status: 'verzonden' })).status, 200);
+  assert.strictEqual((await admin.post(`/app/api/admin/web-orders/${youngest.id}/status`, { status: 'geannuleerd' })).status, 200);
+  assert.strictEqual((await ordersTask(admin)).count, 5, 'verzonden en geannuleerde bestellingen zijn verwerkt');
+  // Een online bestelling telt pas mee als hij betaald is.
+  const online = orders[1];
+  /**
+   * Zet de bestelling op online betalen met de gegeven betaalstatus.
+   * @param {string} status De betaalstatus (open of betaald).
+   * @returns {void}
+   */
+  const setPay = (status) => {
+    const row = db.prepare('SELECT data FROM web_orders WHERE id = ?').get(online.id);
+    const data = JSON.parse(row.data);
+    data.payment = 'online';
+    data.pay = { status };
+    db.prepare('UPDATE web_orders SET data = ? WHERE id = ?').run(JSON.stringify(data), online.id);
+  };
+  setPay('open');
+  assert.strictEqual((await ordersTask(admin)).count, 4, 'een onbetaalde online bestelling is nog geen order');
+  setPay('betaald');
+  assert.strictEqual((await ordersTask(admin)).count, 5, 'betaald telt weer mee');
+  assert.strictEqual(await ordersTask(vreemd), undefined, 'andere organisatie ziet niets');
+  const asCustomer = await customer.get('/app/api/tasks');
+  assert.strictEqual(asCustomer.status, 200);
+  assert.deepStrictEqual(asCustomer.body.tasks, [], 'een klant heeft geen taken');
+  assert.strictEqual((await createClient(base).get('/app/api/tasks')).status, 401);
+});
+
 test('te weinig voorraad en artikelen die niet te koop zijn houden de bestelling tegen', async () => {
   const { base, admin, shopper } = await setup();
   const customer = await shopper();

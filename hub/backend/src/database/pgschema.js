@@ -1145,6 +1145,152 @@ const PG_MIGRATIONS = [
   CREATE UNIQUE INDEX monitor_incidents_open ON monitor_incidents (tenant_id, check_key) WHERE state = 'open';
   CREATE INDEX monitor_incidents_recent ON monitor_incidents (tenant_id, state, last_at);
   `,
+  // 73: zoekmachineteksten en merk per artikel (zie db.js).
+  `
+  ALTER TABLE stock_items ADD COLUMN seo_title ${TEXT_TYPE} NOT NULL DEFAULT '';
+  ALTER TABLE stock_items ADD COLUMN seo_description ${TEXT_TYPE} NOT NULL DEFAULT '';
+  ALTER TABLE stock_items ADD COLUMN brand ${TEXT_TYPE} NOT NULL DEFAULT '';
+  `,
+  // 74: levermethode en levertijd per artikel en leverancier (zie db.js).
+  `
+  ALTER TABLE stock_items ADD COLUMN delivery_rules ${TEXT_TYPE} NOT NULL DEFAULT '[]';
+  ALTER TABLE stock_items ADD COLUMN lead_days_min BIGINT;
+  ALTER TABLE stock_items ADD COLUMN lead_days_max BIGINT;
+  ALTER TABLE item_suppliers ADD COLUMN lead_days BIGINT;
+  `,
+  // 75: concepten van producttekst door de AI (zie db.js).
+  `
+  CREATE TABLE item_text_drafts (
+    id              TEXT PRIMARY KEY,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id),
+    item_id         TEXT NOT NULL REFERENCES stock_items(id),
+    description     ${TEXT_TYPE} NOT NULL DEFAULT '',
+    seo_title       ${TEXT_TYPE} NOT NULL DEFAULT '',
+    seo_description ${TEXT_TYPE} NOT NULL DEFAULT '',
+    warnings        ${TEXT_TYPE} NOT NULL DEFAULT '[]',
+    notes           ${TEXT_TYPE} NOT NULL DEFAULT '',
+    model           ${TEXT_TYPE} NOT NULL DEFAULT '',
+    base_hash       ${TEXT_TYPE} NOT NULL DEFAULT '',
+    edited          BIGINT NOT NULL DEFAULT 0,
+    created_by      ${TEXT_TYPE},
+    created_at      ${TEXT_TYPE} NOT NULL,
+    updated_at      ${TEXT_TYPE} NOT NULL
+  );
+  CREATE UNIQUE INDEX item_text_drafts_item ON item_text_drafts (tenant_id, item_id);
+  `,
+  // 76: voorraadmeldingen in de eigen webshop (zie db.js).
+  `
+  CREATE TABLE stock_alerts (
+    id         TEXT PRIMARY KEY,
+    tenant_id  TEXT NOT NULL REFERENCES tenants(id),
+    item_code  ${TEXT_TYPE} NOT NULL,
+    email      ${TEXT_TYPE} NOT NULL,
+    created_at ${TEXT_TYPE} NOT NULL
+  );
+  CREATE UNIQUE INDEX stock_alerts_unique ON stock_alerts (tenant_id, item_code, email);
+  CREATE INDEX stock_alerts_email ON stock_alerts (tenant_id, email);
+  `,
+  // 77: zoektermen zonder resultaat in de eigen webshop (zie db.js).
+  `
+  CREATE TABLE shop_search_misses (
+    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+    term      ${TEXT_TYPE} NOT NULL,
+    hits      INTEGER NOT NULL,
+    first_at  ${TEXT_TYPE} NOT NULL,
+    last_at   ${TEXT_TYPE} NOT NULL,
+    PRIMARY KEY (tenant_id, term)
+  );
+  CREATE INDEX shop_search_misses_last ON shop_search_misses (tenant_id, last_at);
+  `,
+  // 78: eigen koopfunneltelling van de webshop (zie db.js).
+  `
+  CREATE TABLE shop_funnel_days (
+    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+    day       ${TEXT_TYPE} NOT NULL,
+    step      ${TEXT_TYPE} NOT NULL,
+    hits      INTEGER NOT NULL,
+    PRIMARY KEY (tenant_id, day, step)
+  );
+  `,
+  // 79: werkorder aan een klantrecord (zie db.js).
+  `
+  ALTER TABLE work_orders ADD COLUMN customer_id ${TEXT_TYPE} ${references('users(id)')};
+  CREATE INDEX work_orders_customer ON work_orders (tenant_id, customer_id);
+  UPDATE work_orders SET customer_id = (SELECT q.customer_id FROM quotes q WHERE q.id = work_orders.quote_id AND q.tenant_id = work_orders.tenant_id
+    AND q.customer_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = q.customer_id)) WHERE quote_id IS NOT NULL;
+  UPDATE work_orders SET customer_id = (SELECT sr.customer_id FROM service_requests sr WHERE sr.tenant_id = work_orders.tenant_id AND sr.work_order_id = work_orders.id
+    AND sr.customer_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = sr.customer_id) ORDER BY sr.created_at LIMIT 1) WHERE customer_id IS NULL;
+  `,  // 80: inkooporder per e-mail naar de leverancier (zie db.js).
+  `
+  ALTER TABLE purchase_orders ADD COLUMN mail_sent_at ${TEXT_TYPE};
+  ALTER TABLE purchase_orders ADD COLUMN mail_sent_to ${TEXT_TYPE} NOT NULL DEFAULT '';
+  ALTER TABLE purchase_orders ADD COLUMN mail_sent_by ${TEXT_TYPE} NOT NULL DEFAULT '';
+  ALTER TABLE purchase_orders ADD COLUMN mail_error ${TEXT_TYPE} NOT NULL DEFAULT '';
+  `,
+  // 81: miniatuur bij een artikelafbeelding (zie db.js).
+  `
+  ALTER TABLE item_images ADD COLUMN thumb ${TEXT_TYPE};
+  `,
+  // 82: centraal applicatielogboek (zie db.js).
+  `
+  CREATE TABLE app_logs (
+    id           ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id    ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    scope        ${TEXT_TYPE} NOT NULL DEFAULT 'tenant',
+    created_at   ${TEXT_TYPE} NOT NULL,
+    level        ${TEXT_TYPE} NOT NULL DEFAULT 'info',
+    source       ${TEXT_TYPE} NOT NULL,
+    request_id   ${TEXT_TYPE} NOT NULL DEFAULT '',
+    error_code   ${TEXT_TYPE} NOT NULL DEFAULT '',
+    message      ${TEXT_TYPE} NOT NULL DEFAULT '',
+    data         ${TEXT_TYPE} NOT NULL DEFAULT '{}',
+    duration_ms  BIGINT NOT NULL DEFAULT 0,
+    repeat_count BIGINT NOT NULL DEFAULT 1
+  );
+  CREATE INDEX app_logs_tenant_time ON app_logs (tenant_id, created_at);
+  CREATE INDEX app_logs_tenant_level ON app_logs (tenant_id, level, created_at);
+  CREATE INDEX app_logs_request ON app_logs (tenant_id, request_id);
+  `,
+  // 83: herhaalde logregels (taak, stilstand, traag) blijven na het wegschrijven één regel met teller: `created_at` = laatste keer,
+  // `first_at` = eerste keer (leeg = één keer voorgekomen).
+  `
+  ALTER TABLE app_logs ADD COLUMN first_at ${TEXT_TYPE};
+  `,
+  // 84: online betalen van een factuur (zie db.js).
+  `
+  CREATE TABLE invoice_payments (
+    id           ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id    ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    invoice_id   ${TEXT_TYPE} NOT NULL,
+    mollie_id    ${TEXT_TYPE} NOT NULL,
+    status       ${TEXT_TYPE} NOT NULL DEFAULT 'open',
+    amount       DOUBLE PRECISION NOT NULL,
+    checkout_url ${TEXT_TYPE} NOT NULL DEFAULT '',
+    method       ${TEXT_TYPE} NOT NULL DEFAULT '',
+    mode         ${TEXT_TYPE} NOT NULL DEFAULT '',
+    created_at   ${TEXT_TYPE} NOT NULL,
+    paid_at      ${TEXT_TYPE}
+  );
+  CREATE UNIQUE INDEX invoice_payments_mollie ON invoice_payments (tenant_id, mollie_id);
+  CREATE INDEX invoice_payments_invoice ON invoice_payments (tenant_id, invoice_id, created_at);
+  `,
+  // 85: betalingsherinneringen en aanmaningen (zie db.js).
+  `
+  ALTER TABLE users ADD COLUMN reminders_off BIGINT NOT NULL DEFAULT 0;
+  CREATE TABLE invoice_reminders (
+    id           ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id    ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    invoice_id   ${TEXT_TYPE} NOT NULL ${references('invoices(id)')},
+    step_key     ${TEXT_TYPE} NOT NULL,
+    status       ${TEXT_TYPE} NOT NULL DEFAULT 'verstuurd',
+    sent_at      ${TEXT_TYPE} NOT NULL,
+    sent_to      ${TEXT_TYPE} NOT NULL DEFAULT '',
+    reason       ${TEXT_TYPE} NOT NULL DEFAULT '',
+    days_overdue BIGINT NOT NULL DEFAULT 0,
+    UNIQUE (tenant_id, invoice_id, step_key)
+  );
+  CREATE INDEX invoices_due ON invoices (tenant_id, status, due_date, id);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

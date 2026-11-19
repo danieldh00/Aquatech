@@ -264,6 +264,7 @@ test('testdata vult alle features: klantlinks, akkoord met handtekening, werkord
     const NO_TESTDATA = {
       sessions: 'ontstaan bij inloggen',
       audit: 'ontstaat vanzelf bij handelingen',
+      app_logs: 'logregels ontstaan vanzelf bij fouten en traagheid',
       settings: 'instellingen kiest de beheerder zelf (alleen de nepwebshop wordt gezet)',
       support_grants: 'meekijken is een handeling, geen data',
       impersonations: 'meekijken is een handeling, geen data',
@@ -278,6 +279,10 @@ test('testdata vult alle features: klantlinks, akkoord met handtekening, werkord
       visma_log: 'de Visma-koppeling is liveOnly (geen koppelingen in een testomgeving); het logboek vult zich alleen door echt verkeer met Visma',
       purchase_proposal_dismissals: 'een afgewezen regel uit een automatisch bestelvoorstel is een keuze van de beheerder; nep-afwijzingen zouden voorstellen verbergen',
       price_proposal_rejections: 'een afgewezen prijsvoorstel is een keuze van de beheerder bij een nieuwe inkoopprijs; nep-afwijzingen zouden voorstellen verbergen',
+      item_text_drafts: 'een concept van producttekst is het resultaat van een betaalde AI-aanroep met de eigen sleutel en wacht op goedkeuring van de beheerder; een nep-concept zou in het goedkeuringsscherm als echt voorstel verschijnen',
+      stock_alerts: 'een voorraadmelding is het e-mailadres van een bezoeker van de eigen webshop (hoofdtenant) en wordt na de mail gewist; een nep-adres zou echte mail veroorzaken',
+      shop_search_misses: 'zoektermen zonder resultaat ontstaan alleen door echte bezoekers van de eigen webshop (hoofdtenant); een nep-term zou in het overzicht als echte zoekopdracht verschijnen',
+      shop_funnel_days: 'de funneltelling ontstaat alleen door echte bezoekers van de eigen webshop (hoofdtenant); nep-aantallen zouden in het overzicht als echt verkeer verschijnen',
       account_tokens: 'eenmalige links voor wachtwoord vergeten en e-mail bevestigen ontstaan alleen per mail in de eigen webshop (hoofdtenant), met een korte geldigheid',
     };
     const tables = listTables(db).filter((table) => tableColumns(db, table).some((column) => column.name === 'tenant_id'));

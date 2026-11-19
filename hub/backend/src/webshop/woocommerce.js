@@ -586,6 +586,8 @@ function sanitizeShop(raw) {
     // De webshop bepaalt welke artikelen er zijn (nieuwe producten worden artikel,
     // ontbrekende worden gearchiveerd). Uit = Aquatech is de bron van de artikellijst.
     mirror: input.mirror !== false,
+    // Hoe vaak alles wordt opgehaald: 'night' (standaard, één keer per nacht), 'hourly' of 'tenmin'.
+    syncSchedule: ['night', 'hourly', 'tenmin'].includes(input.syncSchedule) ? input.syncSchedule : 'night',
     mapping,
   };
 }

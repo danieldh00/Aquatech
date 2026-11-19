@@ -112,6 +112,10 @@
     const canRefund = order.status === 'geannuleerd' && order.payment === 'online' && order.pay && order.pay.status === 'betaald' && !(order.pay.refunds || []).some((entry) => entry.key === 'annulering');
     const shipping = order.shipping;
     const shippingRow = shipping ? `<tr><td colspan="3">${esc(shipping.label)}</td><td class="num">${shipping.price > 0 ? euro(shipping.price) : 'Gratis'}</td></tr>` : '';
+    // Levermethode en de bij het bestellen vastgelegde, indicatieve levertijd (data.shipping.eta).
+    const eta = shipping && shipping.eta ? shipping.eta : null;
+    const etaText = !eta ? '' : (eta.min == null ? 'op aanvraag' : (eta.max === 0 ? 'direct' : `ca. ${eta.text}`));
+    const deliveryLine = shipping ? `<p class="muted small" id="wo-delivery">Levermethode: ${esc(shipping.label)}${shipping.method !== 'ophalen' && etaText ? ` · levertijd bij bestellen: ${esc(etaText)} <span title="Een momentopname bij het plaatsen van de bestelling; indicatief, niet beloofd aan de klant.">(indicatie)</span>` : ''}</p>` : '';
     const canTrack = shipping && shipping.method === 'dpd' && ['verzonden', 'afgerond'].includes(order.status);
     const trackingForm = shipping && shipping.method === 'dpd' ? `<p>${shipping.tracking ? `Volgcode: <a href="${esc(shipping.tracking.url)}" target="_blank" rel="noopener">${esc(shipping.tracking.code)}</a> ` : 'Nog geen volgcode. '}${order.status === 'nieuw' ? '<input id="wo-tracking" placeholder="Volgcode DPD (optioneel)" maxlength="40"> <span class="muted small">wordt bij Verzonden vastgelegd</span>' : canTrack ? `<input id="wo-tracking" placeholder="Volgcode DPD" maxlength="40" value="${esc(shipping.tracking ? shipping.tracking.code : '')}"> <button class="btn" id="wo-tracking-save">Volgcode opslaan</button>` : ''}</p>` : '';
     const shipMail = order.shipMail ? (order.shipMail.sent ? `Verzendmail verstuurd${order.shipMail.tracking ? ` met volgcode ${esc(order.shipMail.tracking)}` : ''} (${when(order.shipMail.at)})` : `Verzendmail niet verstuurd: ${esc(order.shipMail.error)}`) : '';
@@ -132,7 +136,7 @@
       <div class="tablewrap"><table class="grid"><thead><tr><th>Artikel</th><th class="num">Besteld</th>${extraHead}<th class="num">Prijs</th><th class="num">Totaal</th></tr></thead><tbody>${lines}${shippingRow.replace('colspan="3"', `colspan="${3 + extraCols}"`)}${vat.replace(/colspan="3"/g, `colspan="${3 + extraCols}"`)}
         <tr><th colspan="${3 + extraCols}">${order.vat && order.vat.shifted ? 'Totaal (btw verlegd)' : 'Totaal incl. btw'}</th><td class="num"><b>${euro(order.totals.total)}</b></td></tr></tbody></table></div>
       ${partialBox}${shipmentsText}
-      ${trackingForm}
+      ${deliveryLine}${trackingForm}
       ${invoiceLine}
       <p class="muted small">Betaling: ${paymentText(order)} · ${mail}${shipMail ? ` · ${shipMail}` : ''}<br>Verloop: ${order.history.map((step) => `${esc(state.statuses[step.status] || step.status)} (${when(step.at)})${step.note ? `: ${esc(step.note)}` : ''}`).join(' → ')}${reservationText(order)}</p>
       <p>${buttons}${canRefund ? ' <button class="btn primary" id="wo-refund">Terugbetalen via Mollie</button>' : ''} ${order.status !== 'geannuleerd' && !(order.status === 'nieuw' && unpaid) ? '<button class="btn" id="wo-slip">Pakbon</button> ' : ''}<button class="btn" id="wo-close">Sluiten</button></p>`;
@@ -334,7 +338,7 @@
         { header: 'Klant', key: 'name', width: 26 }, { header: 'Bedrijf', key: 'company', width: 24 }, { header: 'E-mail', key: 'email', width: 28 }, { header: 'Telefoon', key: 'phone', width: 16 },
         { header: 'Afleveradres', key: 'street', width: 28 }, { header: 'Postcode', key: 'postcode', width: 10 }, { header: 'Plaats', key: 'city', width: 18 }, { header: 'Factuuradres (indien afwijkend)', key: 'billing', width: 40 },
         { header: 'Totaal excl. btw', key: 'excl', width: 15, style: { numFmt: '€ #,##0.00' } }, { header: 'Btw', key: 'vat', width: 11, style: { numFmt: '€ #,##0.00' } }, { header: 'Totaal (incl. btw; excl. bij verlegging)', key: 'total', width: 40, style: { numFmt: '€ #,##0.00' } },
-        { header: 'Klantgroep', key: 'group', width: 12 }, { header: 'Btw-nummer', key: 'vatNumber', width: 18 }, { header: 'Btw verlegd', key: 'shifted', width: 11 }, { header: 'Verzending', key: 'shipping', width: 26 }, { header: 'Verzendkosten (incl. btw; excl. bij verlegging)', key: 'shippingPrice', width: 46, style: { numFmt: '€ #,##0.00' } }, { header: 'Volgcode', key: 'tracking', width: 20 },
+        { header: 'Klantgroep', key: 'group', width: 12 }, { header: 'Btw-nummer', key: 'vatNumber', width: 18 }, { header: 'Btw verlegd', key: 'shifted', width: 11 }, { header: 'Verzending', key: 'shipping', width: 26 }, { header: 'Levertijd bij bestellen', key: 'eta', width: 22 }, { header: 'Verzendkosten (incl. btw; excl. bij verlegging)', key: 'shippingPrice', width: 46, style: { numFmt: '€ #,##0.00' } }, { header: 'Volgcode', key: 'tracking', width: 20 },
         { header: 'Opmerking', key: 'note', width: 30 },
       ];
       const lines = workbook.addWorksheet('Regels');
@@ -347,7 +351,7 @@
         const vat = order.totals.byRate.reduce((sum, row) => sum + row.vat, 0);
         orders.addRow({
           number: order.number, at: new Date(order.createdAt), status: order.statusLabel, name: order.customer.name, company: order.customer.company, email: order.email, phone: order.customer.phone,
-          billing: order.deliverySame === false && order.billingAddress ? [order.billingAddress.street, `${order.billingAddress.postcode} ${order.billingAddress.city}`].filter(Boolean).join(', ') : '', street: order.address.street, postcode: order.address.postcode, city: order.address.city, excl: Math.round((order.total - vat) * 100) / 100, vat: Math.round(vat * 100) / 100, total: order.total, group: order.customerGroup === 'zakelijk' ? 'zakelijk' : 'particulier', vatNumber: order.vat ? order.vat.number : '', shifted: order.vat && order.vat.shifted ? 'ja' : '', shipping: order.shipping ? order.shipping.label : '', shippingPrice: order.shipping ? order.shipping.price : 0,
+          billing: order.deliverySame === false && order.billingAddress ? [order.billingAddress.street, `${order.billingAddress.postcode} ${order.billingAddress.city}`].filter(Boolean).join(', ') : '', street: order.address.street, postcode: order.address.postcode, city: order.address.city, excl: Math.round((order.total - vat) * 100) / 100, vat: Math.round(vat * 100) / 100, total: order.total, group: order.customerGroup === 'zakelijk' ? 'zakelijk' : 'particulier', vatNumber: order.vat ? order.vat.number : '', shifted: order.vat && order.vat.shifted ? 'ja' : '', shipping: order.shipping ? order.shipping.label : '', eta: order.shipping && order.shipping.method !== 'ophalen' && order.shipping.eta ? (order.shipping.eta.min == null ? 'op aanvraag' : (order.shipping.eta.max === 0 ? 'direct' : `ca. ${order.shipping.eta.text}`)) : '', shippingPrice: order.shipping ? order.shipping.price : 0,
           tracking: order.shipping && order.shipping.tracking ? order.shipping.tracking.code : '', note: order.note,
         });
         for (const line of order.lines) lines.addRow({ number: order.number, code: line.code, name: line.name, qty: line.qty, unitExcl: line.unitExcl, vatRate: line.vatRate, unitIncl: line.unitIncl, lineTotal: line.lineTotal });

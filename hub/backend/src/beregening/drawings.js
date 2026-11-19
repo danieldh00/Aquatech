@@ -10,6 +10,7 @@
 //   installateur (recht plannen.goedkeuren) keurt goed of trekt dat in.
 //   Een plan van een klant is nooit meteen definitief.
 
+const { mailStyleOf } = require('../platform/mail-layout');
 const { createMailer, validEmail } = require('../platform/mailer');
 const { mailBody } = require('../verkoop/quotes');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
@@ -152,7 +153,7 @@ function registerDrawingRoutes(app, ctx) {
     const mailer = mailerFor(settings);
     const profile = settings.get('quoteProfile');
     if (!mailer.configured() || !validEmail(profile.email)) return;
-    mailer.send({ to: profile.email, subject, ...mailBody(profile, lines, null) })
+    mailer.send({ to: profile.email, subject, ...mailBody(profile, lines, null, mailStyleOf(settings)) })
       .catch((err) => console.warn(`Bericht over een tekening ter controle niet verstuurd: ${err.message}`));
   }
 

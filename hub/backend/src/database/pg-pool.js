@@ -9,6 +9,7 @@
 const { Pool, types } = require('pg');
 const { scopeKey } = require('./tenant-scope');
 const { refuseTransaction } = require('./async-db');
+const { recordQuery } = require('./query-stats');
 
 // BIGINT (ook COUNT(*)) en NUMERIC als gewoon getal, zoals in SQLite en in de werkthread.
 types.setTypeParser(20, (text) => Number(text));
@@ -19,7 +20,7 @@ const POOL_SIZE = Math.min(50, Math.max(0, Math.floor(Number(process.env.PG_POOL
 /** Hoogstens zoveel milliseconden per query, net als in de werkthread (PG_STATEMENT_TIMEOUT_MS, 0 = geen grens). */
 const STATEMENT_TIMEOUT_MS = Math.max(0, Math.floor(Number(process.env.PG_STATEMENT_TIMEOUT_MS ?? 30000)) || 0);
 /** Na zoveel milliseconden zonder werk sluit een verbinding (en kan het proces stoppen als er niets meer loopt). */
-const IDLE_MS = 10000;
+const IDLE_MS = 5 * 60 * 1000;
 const SCHEMA_NAME = /^[a-z_][a-z0-9_]{0,62}$/;
 const CONN_CODES = new Set(['ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', '57P01', '57P02', '57P03', '08000', '08003', '08006']);
 
@@ -103,6 +104,21 @@ function createPoolAsync({ url, config, db, toPgValue, DatabaseError }) {
    * @throws {DatabaseError} Bij een fout in de database.
    */
   const query = async (sql, params) => {
+    const startedAt = performance.now();
+    try {
+      return await runQuery(sql, params);
+    } finally {
+      recordQuery(performance.now() - startedAt);
+    }
+  };
+  /**
+   * Voert de query uit op een verbinding uit de pool (met één nieuwe poging bij een verbroken verbinding); `query` legt de duur vast.
+   * @param {string} sql De SQL met ?-parameters.
+   * @param {Array} params De parameters.
+   * @returns {Promise<{ rows: object[], rowCount: number }>} Het resultaat van pg.
+   * @throws {DatabaseError} Bij een fout in de database.
+   */
+  const runQuery = async (sql, params) => {
     refuseTransaction(sql);
     const text = db.pgText(sql);
     const values = params.map(toPgValue);

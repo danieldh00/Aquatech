@@ -2,9 +2,11 @@
 // afrekenen en de bevestiging van een bestelling. Server-side opgebouwd, zonder
 // scripts; alle adressen zijn relatief aan de pagina (/<pagina>/).
 
-const { layout, escapeHtml, formatPrice, captchaFields } = require('./storefront-pages');
+const { layout, escapeHtml, formatPrice, captchaFields, trustStrip } = require('./storefront-pages');
 const { deliverySameOf } = require('./web-orders');
 const Analytics = require('./shop-analytics');
+const Shipping = require('./shipping');
+const DeliveryTimes = require('./delivery-times');
 
 /** Relatief pad van deze pagina's naar de shop-startpagina. */
 const ROOT = '../';
@@ -45,37 +47,102 @@ function analyticsItems(lines, excl) {
 const DISCOUNT_LABELS = { staffel: 'staffelkorting', klant: 'groothandelskorting', categorie: 'categoriekorting' };
 
 /**
+ * De zin over de betaalwijzen in de winkelwagen, naar wat deze klant echt kan kiezen.
+ * @param {string[]} paymentOptions De betaalwijzen: 'online' en/of 'rekening'.
+ * @returns {string} De tekst.
+ */
+function paymentNote(paymentOptions) {
+  const online = paymentOptions.includes('online');
+  const invoice = paymentOptions.includes('rekening');
+  if (online && invoice) return 'Betalen kan online (iDEAL en andere methodes) of op rekening.';
+  if (online) return 'Betalen kan online met iDEAL of een andere betaalmethode.';
+  return invoice ? 'Betalen kan op rekening.' : '';
+}
+
+/**
+ * De korte levertijd bij een verzendoptie in de keuzelijst.
+ * @param {{ leadText: string, lead: ?object }} option De optie (web-orders.js, shippingQuote).
+ * @returns {string} Bijvoorbeeld "levertijd ca. 1-2 dagen", "direct" of "levertijd op aanvraag".
+ */
+function leadPhrase(option) {
+  if (!option.lead) return 'levertijd op aanvraag';
+  return option.lead.max === 0 ? 'direct' : `levertijd ca. ${option.leadText}`;
+}
+
+/**
+ * Wat de winkelwagen vooraf over de verzending kan zeggen: de eerste bezorgmethode die kan (voor het eerste bezorgbare land), de kosten,
+ * wat er nog aan een gratis bestelling ontbreekt en de levertijd. Bedragen volgen de klantgroep (zakelijk excl. btw).
+ * @param {{ options: object[] }} quote De verzendopties (web-orders.js, shippingQuote).
+ * @param {{ totals: { total: number }, pricesExcl?: boolean }} cart De geprijsde winkelwagen.
+ * @param {string} [countryName] De naam van het land waarvoor dit geldt (het eerste bezorgbare land).
+ * @returns {?{ label: string, price: number, free: boolean, freeFrom: number, remaining: number, leadText: string, excl: boolean, countryName: string }} De gegevens, of null als er geen bezorgmethode beschikbaar is (dan alleen afhalen of niets).
+ */
+function shippingHint(quote, cart, countryName = '') {
+  const option = quote.options.find((entry) => entry.available && entry.method !== 'ophalen');
+  if (!option) return null;
+  const excl = Boolean(cart.pricesExcl);
+  /**
+   * Het bedrag zoals de klant het ziet: incl. btw, of excl. btw voor een zakelijke klant.
+   * @param {number} amount Bedrag incl. btw.
+   * @returns {number} Het getoonde bedrag.
+   */
+  const toShown = (amount) => (excl ? Math.round((amount / (1 + Shipping.SHIPPING_VAT_RATE / 100)) * 100) / 100 : amount);
+  const remaining = option.freeFrom > 0 && !option.free ? Math.max(0, Math.round((option.freeFrom - cart.totals.total) * 100) / 100) : 0;
+  return { label: option.label, price: toShown(option.price), free: option.free, freeFrom: option.freeFrom, remaining, leadText: leadPhrase(option), excl, countryName };
+}
+
+/**
+ * Het blok met verzendkosten, levertijd en de drempelbalk in de winkelwagen.
+ * @param {?object} hint De gegevens (shippingHint).
+ * @param {boolean} business true voor een zakelijke klant (bedragen excl. btw, drempel incl. btw).
+ * @returns {string} HTML, of leeg zonder gegevens.
+ */
+function shippingBlock(hint, business) {
+  if (!hint) return '';
+  const cost = hint.free ? 'Gratis' : `${formatPrice(hint.price)} ${hint.excl ? 'excl.' : 'incl.'} btw`;
+  const bar = hint.remaining > 0 && hint.freeFrom > 0
+    ? `<p class="free-bar-text">Nog <strong>${escapeHtml(formatPrice(hint.remaining))}</strong> tot gratis bezorging${business ? ' (incl. btw)' : ''}.</p><progress class="free-bar" max="${hint.freeFrom}" value="${Math.round(Math.max(0, Math.min(hint.freeFrom, hint.freeFrom - hint.remaining)) * 100) / 100}" aria-label="Voortgang naar gratis bezorging"></progress>`
+    : hint.free && hint.freeFrom > 0 ? '<p class="free-bar-text">Je bestelling wordt gratis bezorgd.</p>' : '';
+  return `<div class="shipping-hint" data-shipping-hint><p><strong>Verzending${hint.countryName ? ` naar ${escapeHtml(hint.countryName)}` : ''}</strong> (${escapeHtml(hint.label)}): ${escapeHtml(cost)} · ${escapeHtml(hint.leadText)}</p>${bar}<p class="muted"><small>Definitieve kosten en levertijd zie je bij het afrekenen; levertijden zijn indicatief.</small></p></div>`;
+}
+
+/**
  * De winkelwagen met aantallen die de klant kan aanpassen.
  * @param {{ lines: object[], missing: string[], totals: object, ok: boolean }} cart De geprijsde winkelwagen (zie web-orders.js, priceCart).
  * @param {object[]} groups Alle hoofdcategorieën.
  * @param {string} [notice] Een melding bovenaan, bijvoorbeeld dat een wijziging niet meer in de wagen paste.
  * @param {?{ added: number, notOrderable: string[], otherUnit?: string[] }} [fromPlan] Uitkomst van "in winkelwagen" vanuit de planner: aantal toegevoegde artikelen, de codes die niet te bestellen zijn en de codes die de shop in een andere eenheid verkoopt.
+ * @param {{ shipping?: ?object, paymentOptions?: string[], continueHref?: string, quoteRequest?: boolean, quoteSent?: boolean, reordered?: ?{ added: number, notOrderable: string[] } }} [extras] De verzendgegevens (shippingHint), de betaalwijzen van deze klant en waar Verder winkelen heen gaat (de laatst bekeken categorie of zoekopdracht; standaard de startpagina).
  * @returns {string} De HTML-pagina.
  */
-function cartPage(cart, groups = [], notice = '', fromPlan = null) {
+function cartPage(cart, groups = [], notice = '', fromPlan = null, { shipping = null, paymentOptions = ['rekening'], continueHref = ROOT, quoteRequest = false, quoteSent = false, reordered = null } = {}) {
+  const leadText = shipping ? `${shipping.leadText[0].toUpperCase()}${shipping.leadText.slice(1)}` : '';
   const planInfo = fromPlan ? `${fromPlan.added > 0 ? `<div class="form-info" role="status"><p>Het materiaal uit je plan staat in je winkelwagen (${fromPlan.added} ${fromPlan.added === 1 ? 'artikel' : 'artikelen'}). Controleer de aantallen en reken af.</p></div>` : ''}${fromPlan.notOrderable.length ? `<div class="form-error" role="alert"><p>Deze onderdelen uit je plan zijn niet in de webshop te bestellen: ${fromPlan.notOrderable.map(escapeHtml).join(', ')}.</p></div>` : ''}${fromPlan.otherUnit && fromPlan.otherUnit.length ? `<div class="form-error" role="alert"><p>Deze onderdelen verkopen we in een andere eenheid dan je plan (bijvoorbeeld per rol in plaats van per meter) en staan daarom niet in je winkelwagen: ${fromPlan.otherUnit.map(escapeHtml).join(', ')}. Kies zelf het aantal dat je nodig hebt.</p></div>` : ''}` : '';
   if (!cart.lines.length && !cart.missing.length) {
     return layout({ root: ROOT, title: 'Winkelwagen – Aquatechshop.nl', description: 'Je winkelwagen bij Aquatechshop.nl.', groups, events: Analytics.cartEvents({ items: [], value: 0, fromPlanner: fromPlan ? fromPlan.added : 0 }),
-      body: `<section class="cart"><h1>Winkelwagen</h1>${planInfo}<p>Je winkelwagen is leeg.</p><p><a class="button" href="${ROOT}">Verder winkelen</a></p></section>` });
+      body: `<section class="cart"><h1>Winkelwagen</h1>${planInfo}<p>Je winkelwagen is leeg.</p><p><a class="button" href="${escapeHtml(continueHref)}">Verder winkelen</a></p></section>` });
   }
   const rows = cart.lines.map((line) => `<tr${line.enough && !line.packProblem ? '' : ' class="problem"'}>
     <td><strong>${escapeHtml(line.name)}</strong><br><small>Artikelnr.: ${escapeHtml(line.code)}</small>${line.enough ? '' : `<br><small class="stock out">${line.available > 0 ? `Nog maar ${escapeHtml(String(line.available))} beschikbaar` : 'Niet meer op voorraad'}</small>`}${line.packProblem ? `<br><small class="stock out">${escapeHtml(line.packProblem)}</small>` : ''}</td>
-    <td class="num">${escapeHtml(formatPrice(cart.pricesExcl ? line.unitExcl : line.unitIncl))}${line.discountPct > 0 ? `<br><small class="muted">${escapeHtml(String(line.discountPct))}% ${DISCOUNT_LABELS[line.discountSource] || 'groothandelskorting'}</small>` : ''}</td>
-    <td><form class="cart-qty" method="post" action="./"><input type="hidden" name="action" value="set"><input type="hidden" name="code" value="${escapeHtml(line.code)}"><input type="number" name="qty" value="${line.qty}" min="0" max="9999" aria-label="Aantal ${escapeHtml(line.name)}"><button class="button secondary" type="submit">Wijzig</button></form></td>
-    <td class="num">${escapeHtml(formatPrice(cart.pricesExcl ? line.lineExcl : line.lineTotal))}</td>
+    <td class="num" data-label="Prijs">${escapeHtml(formatPrice(cart.pricesExcl ? line.unitExcl : line.unitIncl))}${line.discountPct > 0 ? `<br><small class="muted">${escapeHtml(String(line.discountPct))}% ${DISCOUNT_LABELS[line.discountSource] || 'groothandelskorting'}</small>` : ''}</td>
+    <td data-label="Aantal"><form class="cart-qty" data-cart-qty method="post" action="./"><input type="hidden" name="action" value="set"><input type="hidden" name="code" value="${escapeHtml(line.code)}"><input type="number" name="qty" value="${line.qty}" min="0" max="9999" aria-label="Aantal ${escapeHtml(line.name)}"><button class="button secondary cart-qty-save" type="submit">Wijzig</button></form></td>
+    <td class="num" data-label="Totaal">${escapeHtml(formatPrice(cart.pricesExcl ? line.lineExcl : line.lineTotal))}</td>
     <td><form method="post" action="./"><input type="hidden" name="action" value="remove"><input type="hidden" name="code" value="${escapeHtml(line.code)}"><button class="button secondary" type="submit" aria-label="Verwijder ${escapeHtml(line.name)}">Verwijder</button></form></td>
   </tr>`).join('');
   const missing = cart.missing.length ? `<div class="form-error" role="alert"><p>Niet meer te koop: ${cart.missing.map(escapeHtml).join(', ')}.</p>${cart.missing.map((code) => `<form class="inline" method="post" action="./"><input type="hidden" name="action" value="remove"><input type="hidden" name="code" value="${escapeHtml(code)}"><button class="button secondary" type="submit">Verwijder ${escapeHtml(code)}</button></form>`).join('')}</div>` : '';
   const full = notice ? `<div class="form-error" role="alert"><p>${escapeHtml(notice)}</p></div>` : '';
-  const body = `<section class="cart"><h1>Winkelwagen</h1>
-${planInfo}${full}${missing}
+  const body = `<section class="cart cart-page"><h1>Winkelwagen</h1>
+${planInfo}${reordered ? `<div class="form-info" role="status"><p>${reordered.added > 0 ? `De artikelen van je eerdere bestelling staan in je winkelwagen (${reordered.added}). Controleer de aantallen en prijzen.` : 'Er kon niets uit je eerdere bestelling in de winkelwagen.'}${reordered.notOrderable.length ? ` Niet meer te bestellen: ${reordered.notOrderable.map(escapeHtml).join(', ')}.` : ''}</p></div>` : ''}${quoteSent ? '<div class="form-info" role="status"><p>Je offerteaanvraag is ontvangen. We controleren de prijzen en sturen je de offerte. Je winkelwagen blijft bewaard.</p></div>' : ''}${full}${missing}
 <div class="tablewrap"><table class="cart-table"><thead><tr><th>Artikel</th><th class="num">Prijs${cart.pricesExcl ? ' excl. btw' : ''}</th><th>Aantal</th><th class="num">Totaal${cart.pricesExcl ? ' excl. btw' : ''}</th><th></th></tr></thead>
 <tbody>${rows}</tbody><tfoot>${totalRows(cart.totals, cart.pricesExcl)}</tfoot></table></div>
-<p class="note">${cart.pricesExcl ? 'Je ziet zakelijke prijzen excl. btw. ' : ''}Verzendkosten worden bij het afrekenen berekend. Betalen kan op rekening.</p>
-<div class="cart-actions"><a class="button secondary" href="${ROOT}">Verder winkelen</a>
+${shippingBlock(shipping, Boolean(cart.pricesExcl))}
+<p class="note">${cart.pricesExcl ? 'Je ziet zakelijke prijzen excl. btw. ' : ''}${paymentNote(paymentOptions)}</p>
+<div class="cart-actions"><a class="button secondary" href="${escapeHtml(continueHref)}">Verder winkelen</a>
+${quoteRequest ? `<form class="inline" method="post" action="offerte/"><button class="button secondary" type="submit">Offerte aanvragen</button></form>` : ''}
 ${cart.ok ? `<a class="button" href="${ROOT}afrekenen/">Naar afrekenen</a>` : '<span class="note">Pas eerst je winkelwagen aan om af te rekenen.</span>'}</div>
+${trustStrip(ROOT, { leadText, freeFrom: shipping ? shipping.freeFrom : 0, business: Boolean(cart.pricesExcl), online: paymentOptions.includes('online') })}
 </section>`;
-  return layout({ root: ROOT, title: 'Winkelwagen – Aquatechshop.nl', description: 'Je winkelwagen bij Aquatechshop.nl.', body, groups, events: Analytics.cartEvents({ items: analyticsItems(cart.lines, cart.pricesExcl), value: cart.totals.total, fromPlanner: fromPlan ? fromPlan.added : 0 }) });
+  return layout({ root: ROOT, title: 'Winkelwagen – Aquatechshop.nl', description: 'Je winkelwagen bij Aquatechshop.nl.', body, groups, script: 'winkelwagen.js', events: Analytics.cartEvents({ items: analyticsItems(cart.lines, cart.pricesExcl), value: cart.totals.total, fromPlanner: fromPlan ? fromPlan.added : 0 }) });
 }
 
 /**
@@ -160,19 +227,19 @@ function shippingChoice(quote, country, method, summaries = {}, business = false
     ? `<label class="form-field"><span>Land</span><select name="country">${quote.countries.map((entry) => `<option value="${escapeHtml(entry.code)}"${entry.code === country ? ' selected' : ''}>${escapeHtml(entry.name)}</option>`).join('')}</select></label>
 `
     : `<input type="hidden" name="country" value="${escapeHtml(country)}">`;
+  const chosen = quote.options.find((option) => option.method === method && option.available);
   const entries = quote.options.map((option) => {
     const businessPrice = option.available && business && summaries[option.method] ? summaries[option.method].shipping.priceExcl : undefined;
     const displayPrice = businessPrice !== undefined ? businessPrice : option.price;
     const price = !option.available ? '' : option.free && option.method !== 'ophalen' ? 'Gratis' : displayPrice > 0 ? formatPrice(displayPrice) : 'Gratis';
-    const text = `${option.label}${option.available ? ` – ${price}` : ' (niet beschikbaar)'}`;
-    return `<option value="${escapeHtml(option.method)}"${option.method === method ? ' selected' : ''}${option.available ? '' : ' disabled'} data-method-note="${escapeHtml(option.available ? option.note : '')}"${summaryData(option, summaries[option.method], business)}>${escapeHtml(text)}</option>`;
+    const lead = option.available && option.leadText ? `<small>${escapeHtml(leadPhrase(option)[0].toUpperCase() + leadPhrase(option).slice(1))}</small>` : '';
+    const reason = !option.available && option.reason ? `<small>${escapeHtml(option.reason)}</small>` : '';
+    const body = `<span class="ship-card-name">${escapeHtml(option.label)}</span><span class="ship-card-price">${option.available ? escapeHtml(price) : 'Niet beschikbaar'}</span>${lead}${reason}`;
+    return `<label class="ship-card${option.available ? '' : ' unavailable'}"><input type="radio" name="shippingMethod" value="${escapeHtml(option.method)}"${option.method === method ? ' checked' : ''}${option.available ? '' : ' disabled'} required data-method-note="${escapeHtml(option.available ? option.note : '')}"${summaryData(option, summaries[option.method], business)}>${body}</label>`;
   });
-  const chosen = quote.options.find((option) => option.method === method && option.available);
-  const unavailable = quote.options.filter((option) => !option.available && option.reason);
-  const reasons = unavailable.map((option) => `<br><small>${escapeHtml(option.label)}: ${escapeHtml(option.reason)}</small>`).join('');
   const list = entries.length
-    ? `<label class="form-field"><span>Verzendmethode</span><select name="shippingMethod" required>${entries.join('')}</select></label>
-<p class="note" data-ship-note${chosen && chosen.note ? '' : ' hidden'}>${chosen ? escapeHtml(chosen.note) : ''}</p>${reasons ? `<p class="note">${reasons.slice(4)}</p>` : ''}`
+    ? `<fieldset class="ship-cards"><legend>Verzendmethode</legend>${entries.join('')}</fieldset>
+<p class="note" data-ship-note${chosen && chosen.note ? '' : ' hidden'}>${chosen ? escapeHtml(chosen.note) : ''}</p><p class="note"><small>Levertijden zijn indicatief; we zijn afhankelijk van externe partijen.</small></p>`
     : '<p class="note">Er is op dit moment geen verzendmethode beschikbaar.</p>';
   return `<h2>Verzending</h2>
 ${countryField}
@@ -266,7 +333,7 @@ ${business ? checkoutField({ name: 'vatNumber', label: 'Btw-nummer (optioneel, b
 ${viewer.email ? `<label class="form-field"><span>E-mailadres</span><input name="email" type="email" value="${escapeHtml(viewer.email)}" autocomplete="email" readonly><small>De bevestiging gaat naar het e-mailadres van je account; wijzigen kan in <a href="../app/profiel/">Mijn profiel</a>.</small></label>` : checkoutField({ name: 'email', label: guest ? 'E-mailadres (hierheen sturen we de bevestiging en de link naar je bestelling)' : 'E-mailadres', value: value.email || '', autocomplete: 'email', type: 'email' })}
 ${checkoutField({ name: 'phone', label: 'Telefoon (optioneel)', value: value.phone || '', autocomplete: 'tel', required: false, type: 'tel' })}
 ${shippingChoice(quote, country, method, summaries, business)}
-<h2>Factuuradres</h2>
+<h2 data-address-heading data-heading-same="Bezorg- en factuuradres" data-heading-other="Factuuradres">${deliverySame ? 'Bezorg- en factuuradres' : 'Factuuradres'}</h2>
 <p class="note">Bij ophalen is een adres niet nodig.</p>
 <div class="address-block" data-address-block="billing">
 ${addressBlock({ delivery: false, value, countries: quote.countries, country: value.billingCountry || 'NL', deliverySame })}
@@ -278,7 +345,7 @@ ${addressBlock({ delivery: false, value, countries: quote.countries, country: va
 ${addressBlock({ delivery: true, value })}
 </div>
 <label class="form-field"><span>Opmerking (optioneel)</span><textarea name="note" rows="3" maxlength="500">${escapeHtml(value.note || '')}</textarea></label>
-${guest ? '' : dropshipChoice(value)}
+${guest || !business ? '' : dropshipChoice(value)}
 ${paymentChoice(paymentOptions, value.paymentMethod)}
 <label class="terms-check"><input type="checkbox" name="terms" value="ja" required${value.terms === 'ja' ? ' checked' : ''}><span>Ik ga akkoord met de <a href="${ROOT}pagina/algemene-voorwaarden/" target="_blank" rel="noopener">algemene voorwaarden</a> en heb de <a href="${ROOT}pagina/privacyverklaring/" target="_blank" rel="noopener">privacyverklaring</a> gelezen. Als consument heb je <a href="${ROOT}pagina/herroepingsrecht/" target="_blank" rel="noopener">herroepingsrecht</a>.</span></label>
 ${captchaFields('checkout')}
@@ -286,7 +353,7 @@ ${captchaFields('checkout')}
 </form>
 <aside class="checkout-summary"><h2>Je bestelling</h2><ul>${items}${shippingRow}</ul>
 <p class="checkout-total"><span data-total-caption>${totalCaption(business, Boolean(summary && summary.shifted))}</span><strong data-total-text>${escapeHtml(formatPrice(total))}</strong></p>${vatNote}
-<p><a href="${ROOT}winkelwagen/">Winkelwagen aanpassen</a></p></aside>
+<p><a href="${ROOT}winkelwagen/">Winkelwagen aanpassen</a></p>${trustStrip(ROOT, { leadText: chosen && chosen.leadText ? leadPhrase(chosen)[0].toUpperCase() + leadPhrase(chosen).slice(1) : '', business, online: paymentOptions.includes('online') })}</aside>
 </div></section>`;
   return layout({ root: ROOT, title: 'Afrekenen – Aquatechshop.nl', description: 'Reken je bestelling af bij Aquatechshop.nl.', body, groups, script: ['adres.js', 'afrekenen.js'], events: Analytics.checkoutEvents({ items: analyticsItems(cart.lines, business), value: total, loggedIn: !guest, guestForm: guest, error }) });
 }
@@ -341,7 +408,9 @@ function deliveryBlock(order) {
   const tracking = order.shipping && order.shipping.tracking ? `<p>Volg je pakket: <a href="${escapeHtml(order.shipping.tracking.url)}" rel="noopener" target="_blank">${escapeHtml(order.shipping.tracking.code)}</a></p>` : '';
   const billing = order.deliverySame === false && order.billingAddress && order.billingAddress.street
     ? `<p><strong>Factuuradres</strong><br>${[order.customer.company, order.customer.name, order.billingAddress.street, `${order.billingAddress.postcode} ${order.billingAddress.city}`].filter(Boolean).map(escapeHtml).join('<br>')}</p>` : '';
-  return `<p><strong>Afleveradres</strong><br>${address}</p>${billing}${tracking}`;
+  const eta = order.shipping && order.shipping.method !== 'ophalen' ? DeliveryTimes.etaPhrase(order.shipping.eta) : '';
+  const etaBlock = eta && !tracking && order.status === 'nieuw' ? `<p><strong>Verwachte levertijd</strong><br>${escapeHtml(eta[0].toUpperCase() + eta.slice(1))}<br><small class="muted">Een indicatie, geen toezegging: we zijn afhankelijk van externe partijen.</small></p>` : '';
+  return `<p><strong>Afleveradres</strong><br>${address}</p>${billing}${etaBlock}${tracking}`;
 }
 
 /**
@@ -385,7 +454,7 @@ ${dropshipBlock(order, thanks)}${payBlock}<p>Status: <strong>${escapeHtml(order.
 ${invoiceBlock}${history}
 ${returnsHtml}
 ${guest ? guestNote() : ''}${accountCreated ? '<p class="form-info" role="status">Je account is aangemaakt en deze bestelling staat erin. We hebben je een mail gestuurd om je e-mailadres te bevestigen.</p>' : ''}${accountOffer ? accountOfferBlock(order, accountOffer) : ''}
-<p><a class="button" href="${DETAIL_ROOT}">Verder winkelen</a>${guest ? '' : ` <a class="button secondary" href="${DETAIL_ROOT}bestellingen/">Al mijn bestellingen</a>`}</p></section>`;
+<div class="cart-actions"><a class="button" href="${DETAIL_ROOT}">Verder winkelen</a>${guest ? '' : ` <a class="button secondary" href="${DETAIL_ROOT}bestellingen/">Al mijn bestellingen</a>`}${order.lines.length ? `<form class="inline" method="post" action="opnieuw/"><button class="button secondary" type="submit">Opnieuw bestellen</button></form>` : ''}</div></section>`;
   return layout({ root: DETAIL_ROOT, title: `Bestelling ${order.number} – Aquatechshop.nl`, description: 'Je bestelling bij Aquatechshop.nl.', body, groups, events: thanks && !waiting ? Analytics.purchaseEvents({ number: order.number, total: order.totals.total, tax: order.totals.byRate.reduce((sum, row) => sum + row.vat, 0), shipping: order.shipping ? order.shipping.price : 0, payment: order.payment, guest: Boolean(order.guest), items: analyticsItems(order.lines, business) }) : [], script: order.dropshipping && order.status === 'nieuw' && !order.packingSlip ? 'pakbon.js' : '', refresh: autoPay && waiting && !payError ? 'betalen/' : '' });
 }
 
@@ -502,4 +571,4 @@ ${list.items.length ? `<div class="tablewrap"><table class="cart-table"><thead><
   return layout({ root: ROOT, title: 'Mijn bestellingen – Aquatechshop.nl', description: 'Je bestellingen bij Aquatechshop.nl.', body, groups });
 }
 
-module.exports = { cartPage, checkoutPage, checkoutLoginPage, orderPage, ordersPage, guestNoAccessPage, guestLinkInvalidPage };
+module.exports = { shippingHint, cartPage, checkoutPage, checkoutLoginPage, orderPage, ordersPage, guestNoAccessPage, guestLinkInvalidPage };

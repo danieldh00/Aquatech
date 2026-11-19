@@ -46,6 +46,7 @@
         <button class="tab" data-tab="orders" data-purchasing role="tab">Inkooporders</button>
         <button class="tab" data-tab="pricefactor" data-purchasing role="tab">Prijsfactor</button>
         <button class="tab" data-tab="media" role="tab">Afbeeldingen</button>
+        <button class="tab" data-tab="texts" role="tab">Teksten <span id="t-texts" class="count"></span></button>
       </nav>
 
       <section id="tab-stock" class="tabpane">
@@ -57,7 +58,7 @@
           <button class="btn primary" id="b-new">+ Artikel</button>
           <button class="btn" id="b-import">Uit catalogus</button>
           <button class="btn" id="b-shop" title="Neemt alle producten uit de webshop over; artikelen die niet in de webshop staan worden gearchiveerd">Alles uit webshop</button>
-          <button class="btn" id="b-images" title="Neemt de afbeeldingen van de webshopproducten over in dit systeem, zodat ze hier staan en niet meer van de oude webshop komen">Afbeeldingen uit webshop</button>
+          <button class="btn" id="b-images" title="Neemt de afbeeldingen van de webshopproducten over in dit systeem, zodat ze hier staan en niet meer van de oude webshop komen, en maakt miniaturen voor snelle kaartjes in de webshop">Afbeeldingen en miniaturen</button>
           <button class="btn" id="b-merge" title="Losse artikelen die eigenlijk maten of kleuren van één product zijn omzetten naar één variabel artikel">Samenvoegen tot variabel artikel</button>
           <button class="btn" id="b-units" title="Eenheden (st, m, rol, …) aanmaken of verwijderen">Eenheden</button>
           <button class="btn" id="b-export">Excel-export</button>
@@ -181,7 +182,7 @@
         </dialog>
 
         <dialog id="images-dialog" class="card-form">
-          <h3>Afbeeldingen uit de webshop overnemen</h3>
+          <h3>Afbeeldingen en miniaturen</h3>
           <p id="images-text" class="small"></p>
           <progress id="images-bar" max="1" style="width:100%"></progress>
           <div id="images-failed" class="small muted" hidden></div>
@@ -240,12 +241,28 @@
             <button class="btn primary" type="button" data-act="receivenow" title="Maakt de order en boekt alles meteen in de voorraad">Bewaren en inboeken</button>
             <button class="btn primary" type="button" data-act="place">Bestellen</button>
             <button class="btn primary" type="button" data-act="receive">Ontvangst boeken</button>
+            <button class="btn primary" type="button" data-act="mail" title="Toont eerst wat er verstuurd wordt; er gaat niets weg zonder jouw klik op Versturen">Versturen naar leverancier</button>
             <button class="btn" type="button" data-act="excel">Excel voor de leverancier</button>
             <button class="btn" type="button" data-act="close" title="Wat nog niet is geleverd vervalt">Afsluiten</button>
             <button class="btn danger" type="button" data-act="cancel">Annuleren</button>
             <button class="btn danger" type="button" data-act="remove">Weggooien</button>
             <button class="btn" type="button" data-act="hide">Sluiten</button>
           </div>
+          <p class="muted small" id="po-mail-status" hidden></p>
+          <section id="po-mail" class="subcard" hidden aria-label="Inkooporder versturen naar de leverancier">
+            <h4>Versturen naar de leverancier</h4>
+            <p class="muted small" id="po-mail-problem" hidden></p>
+            <div class="form-grid">
+              <label class="field full">Aan (meerdere adressen met een komma)<input name="mailTo" type="text" inputmode="email" autocomplete="off" maxlength="200" placeholder="inkoop@leverancier.nl"></label>
+              <label class="field full">Onderwerp<input name="mailSubject" maxlength="200"></label>
+              <label class="field full">Tekst van de mail<textarea name="mailMessage" rows="9" maxlength="5000"></textarea></label>
+              <p class="muted small full">Bijlage: <a id="po-mail-pdf" href="#" target="_blank" rel="noopener"></a>. Je bedrijfsgegevens worden onderaan de mail automatisch toegevoegd.</p>
+            </div>
+            <div class="row actions">
+              <button class="btn primary" type="button" data-act="mail-send">Versturen</button>
+              <button class="btn" type="button" data-act="mail-cancel">Niet versturen</button>
+            </div>
+          </section>
           <div class="err" role="alert"></div>
         </form>
         <div class="tablewrap"><table class="grid" id="po-table"></table></div>
@@ -320,6 +337,30 @@
         <div class="tablewrap"><table class="grid" id="m-missing-table" hidden></table></div>
       </section>
 
+      <section id="tab-texts" class="tabpane" hidden>
+        <p class="muted small">De AI schrijft een concept van de omschrijving en de zoekmachineteksten, alleen met de gegevens die bij het artikel staan (naam, merk, specificaties, bestaande omschrijving). Niets gaat vanzelf live: jij controleert elk concept en keurt het goed. Getallen, eenheden en beweringen die niet in de artikelgegevens staan worden gemarkeerd.</p>
+        <div id="tx-notice" class="notice" hidden></div>
+        <div class="filters">
+          <input id="tx-search" type="search" placeholder="Zoek op code of naam">
+          <select id="tx-category" aria-label="Categorie"><option value="">Alle categorieën</option></select>
+          <select id="tx-filter" aria-label="Filter">
+            <option value="alle">Alle artikelen</option>
+            <option value="ontbreekt">Tekst ontbreekt</option>
+            <option value="zonderconcept">Zonder concept</option>
+            <option value="concept">Met concept</option>
+          </select>
+          <span class="spacer"></span>
+          <span id="tx-count" class="muted small"></span>
+        </div>
+        <div class="form-actions tx-actions">
+          <button class="btn primary" id="tx-write" type="button">Concepten schrijven</button>
+          <button class="btn" id="tx-approve" type="button">Goedkeuren</button>
+          <button class="btn" id="tx-reject" type="button">Afwijzen</button>
+          <span id="tx-progress" class="muted small" role="status"></span>
+        </div>
+        <div class="tablewrap"><table class="grid" id="tx-table"></table></div>
+      </section>
+
       <section id="tab-reorder" class="tabpane" hidden>
         <section id="pp-block" class="pp-block" aria-labelledby="pp-title">
           <div class="pp-head">
@@ -371,6 +412,7 @@
         <h1 id="d-title"></h1>
       </div>
       <p id="d-variant-of" class="muted" hidden></p>
+      <div id="d-proposal" class="proposal-box" role="status" hidden></div>
       <div id="d-stats" class="stats"></div>
       <div class="cols">
         <form id="move-form" class="card-form" novalidate>
@@ -426,6 +468,17 @@
           <label>Notities<textarea name="notes" rows="2" maxlength="1000"></textarea></label>
           <label title="Staat op de productpagina en in de productfeed. Een lege regel begint een nieuwe alinea, een regel die met • begint is een lijstpunt.">Omschrijving in de webshop<textarea name="description" rows="5" maxlength="5000"></textarea></label>
           <label title="Eén specificatie per regel, als naam: waarde (bijvoorbeeld Aansluiting: 3/4 inch). Komt als tabel op de productpagina.">Specificaties (naam: waarde per regel)<textarea name="specifications" rows="4" maxlength="8000"></textarea></label>
+          <div class="row">
+            <label title="Het merk staat in de gestructureerde gegevens van de productpagina (voor zoekmachines). Een variant neemt het merk van het hoofdartikel over zolang hij er zelf geen heeft.">Merk<input name="brand" maxlength="60" autocomplete="off"></label>
+            <label title="De titel in zoekresultaten. Leeg = de naam van het artikel met de naam van de shop. Maximaal 70 tekens.">Titel voor zoekmachines<input name="seoTitle" maxlength="70" autocomplete="off" placeholder="Leeg = naam – Aquatechshop.nl"></label>
+          </div>
+          <div class="row">
+            <label title="Welke bezorgmethodes bij welk aantal (in de basiseenheid) mogen, als methode:van-tot, gescheiden door komma's. Bijvoorbeeld dpd:1-99, pallet:100- (vanaf 100 alleen pallet). Leeg = de regels van de categorie, anders geen beperking. Ophalen kan altijd. Een gemengde bestelling gaat met de zwaarste methode mee.">Toegestane levermethodes<input name="deliveryRules" maxlength="300" autocomplete="off" placeholder="Leeg = geen beperking, bijv. dpd:1-99, pallet:100-"></label>
+            <label title="Eigen levertijd van dit artikel in dagen (de soort dagen volgt de gekozen methode). Leeg = de standaard van de methode, of bij niet op voorraad de verwachte inkoop of de levertijd van de leverancier.">Levertijd van (dagen)<input name="leadMin" type="number" min="0" max="365" step="1" inputmode="numeric" placeholder="standaard"></label>
+            <label>Levertijd tot (dagen)<input name="leadMax" type="number" min="0" max="365" step="1" inputmode="numeric" placeholder="= van"></label>
+          </div>
+          <div id="d-delivery-preview" class="tablewrap" hidden></div>
+          <label title="De tekst onder de titel in zoekresultaten. Leeg = het begin van de omschrijving. Maximaal 160 tekens.">Omschrijving voor zoekmachines<textarea name="seoDescription" rows="2" maxlength="160"></textarea></label>
           <p class="muted small" id="d-details-shop" hidden><span></span> <button class="btn small" type="button" id="d-details-copy">Overnemen uit webshop</button></p>
           <div class="row">
             <button class="btn primary" type="submit">Opslaan</button>
@@ -436,6 +489,29 @@
           <div class="err" role="alert"></div>
         </form>
       </div>
+      <section id="tx-detail" class="card-form tx-detail" hidden aria-labelledby="tx-detail-title">
+        <div class="tx-detail-head"><h3 id="tx-detail-title">Producttekst</h3></div>
+        <p class="muted small">De AI schrijft een concept van de omschrijving en de zoekmachineteksten, alleen met de gegevens van dit artikel. Niets gaat live zonder jouw goedkeuring.</p>
+        <div id="tx-warnings"></div>
+        <div class="form-grid tx-compare">
+          <div class="field full"><span>Gegevens waar de AI mee werkt</span><dl id="tx-facts" class="tx-facts"></dl></div>
+          <label class="field" title="Wat nu in de webshop staat">Huidige omschrijving<textarea id="tx-live-description" rows="6" readonly></textarea></label>
+          <label class="field">Concept omschrijving<textarea id="tx-description" rows="6" maxlength="5000"></textarea></label>
+          <label class="field">Huidige titel voor zoekmachines<input id="tx-live-seoTitle" readonly></label>
+          <label class="field">Concept titel (max. 70 tekens)<input id="tx-seoTitle" maxlength="70"></label>
+          <label class="field">Huidige omschrijving voor zoekmachines<textarea id="tx-live-seoDescription" rows="2" readonly></textarea></label>
+          <label class="field">Concept omschrijving voor zoekmachines (max. 160)<textarea id="tx-seoDescription" rows="2" maxlength="160"></textarea></label>
+        </div>
+        <p id="tx-notes" class="muted small"></p>
+        <label class="chk" id="tx-ack-row" hidden><input type="checkbox" id="tx-ack"> Ik heb de gemarkeerde punten gecontroleerd en de tekst klopt met het artikel</label>
+        <label class="chk" id="tx-over-row" hidden><input type="checkbox" id="tx-over"> De huidige tekst is intussen gewijzigd; overschrijf hem toch</label>
+        <div class="form-actions">
+          <button class="btn" id="tx-save" type="button">Wijziging bewaren</button>
+          <button class="btn primary" id="tx-publish" type="button">Goedkeuren en plaatsen</button>
+          <button class="btn" id="tx-redo" type="button">Opnieuw schrijven</button>
+          <button class="btn" id="tx-discard" type="button">Afwijzen</button>
+        </div>
+      </section>
       <section class="card-form" id="d-costs">
         <h3>Inkoopprijs en voorraadlagen (FIFO)</h3>
         <p class="muted small">Een nieuwe inkoopprijs overschrijft de oude niet: elke prijs blijft met zijn datum bewaard. Elke ontvangst is een eigen partij (laag) met de inkoopprijs van dat moment; bij verkoop of verbruik gaat de oudste partij eerst. Zo blijft in de rapportages de inkoopprijs staan waarvoor de artikelen echt zijn ingekocht.</p>
@@ -544,6 +620,7 @@
   <script src="proposals-core.js"></script>
   <script src="proposals.js"></script>
   <script src="price-factor.js"></script>
+  <script src="item-texts.js"></script>
   <script src="artikelen.js"></script>
 </body>
 </html>

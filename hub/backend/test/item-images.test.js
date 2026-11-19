@@ -160,7 +160,7 @@ test('artikelafbeelding: de openbare shop toont de eigen afbeelding', async () =
   const item = await article(admin, 'IMG-4');
   const { imageId } = (await admin.put(`/app/api/stock/items/${item.id}/image`, { name: 'shop.png', data: pngBase64(6) })).body;
   const home = await anonymous.get('/');
-  assert.ok(home.text.includes(`src="artikelfoto/${imageId}"`), 'startpagina verwijst naar de eigen afbeelding');
+  assert.ok(home.text.includes(`src="artikelfoto/${imageId}/klein"`), 'startpagina verwijst naar de miniatuur van de eigen afbeelding');
   const product = await anonymous.get(`/product/${/product\/([^/"]+)\//.exec(home.text)[1]}/`);
   assert.ok(product.text.includes(`src="../../artikelfoto/${imageId}"`), 'productpagina verwijst naar de eigen afbeelding');
   const picture = await anonymous.get(`/artikelfoto/${imageId}`);
@@ -264,4 +264,124 @@ test('afbeeldingen overnemen: veel artikelen en verschillende adressen met dezel
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM item_images WHERE tenant_id = ?').get(main).n, 1);
   assert.strictEqual(db.prepare('SELECT COUNT(DISTINCT image_id) AS n FROM stock_items WHERE tenant_id = ? AND image_id IS NOT NULL').get(main).n, 1);
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_items WHERE tenant_id = ? AND image_id IS NOT NULL').get(main).n, 30);
+});
+
+/**
+ * Een minimale WebP (VP8L-kop, geen echte beelddata) met de opgegeven afmetingen, genoeg voor de controle op inhoud.
+ * @param {number} width De breedte.
+ * @param {number} height De hoogte.
+ * @returns {string} De WebP als base64.
+ */
+function webpBase64(width, height) {
+  const data = Buffer.alloc(20);
+  data[0] = 0x2f;
+  data.writeUInt32LE((width - 1) | ((height - 1) << 14), 1);
+  const chunk = Buffer.concat([Buffer.from('VP8L'), Buffer.from(Uint32Array.of(data.length).buffer), data]);
+  const header = Buffer.alloc(12);
+  header.write('RIFF', 0, 'latin1');
+  header.writeUInt32LE(chunk.length + 4, 4);
+  header.write('WEBP', 8, 'latin1');
+  return Buffer.concat([header, chunk]).toString('base64');
+}
+
+/**
+ * Een kleine JPEG-structuur (SOF0) met de opgegeven afmetingen, genoeg voor de controle op inhoud.
+ * @param {number} width De breedte.
+ * @param {number} height De hoogte.
+ * @returns {string} De JPEG als base64.
+ */
+function jpegBase64(width, height) {
+  /**
+   * Eén JPEG-segment: marker, lengte en inhoud.
+   * @param {number} marker Segmenttype (na 0xFF).
+   * @param {Buffer} body Inhoud.
+   * @returns {Buffer} Het segment.
+   */
+  const segment = (marker, body) => {
+    const length = Buffer.alloc(2); length.writeUInt16BE(body.length + 2);
+    return Buffer.concat([Buffer.from([0xff, marker]), length, body]);
+  };
+  const sof = Buffer.from([8, height >> 8, height & 255, width >> 8, width & 255, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1]);
+  return Buffer.concat([
+    Buffer.from([0xff, 0xd8]), segment(0xdb, Buffer.alloc(65, 1)), segment(0xc0, sof),
+    segment(0xda, Buffer.from([1, 1, 0, 0, 0x3f, 0])), Buffer.from([0x12, 0x34, 0x56, 0xff, 0x00, 0x78]), Buffer.from([0xff, 0xd9]),
+  ]).toString('base64');
+}
+
+test('miniatuur: opslaan, tonen in de shop met terugval, porties en afkeuren van ongeldige', async () => {
+  const { admin, klant, vreemd, anonymous, db, main, vault } = await setup();
+  const item = await article(admin, 'IMG-T1');
+  const { imageId } = (await admin.put(`/app/api/stock/items/${item.id}/image`, { name: 'groot.png', data: pngBase64(11) })).body;
+  // Zonder miniatuur levert /klein de gewone afbeelding.
+  const fallback = await anonymous.get(`/artikelfoto/${imageId}/klein`);
+  assert.strictEqual(fallback.status, 200);
+  assert.match(fallback.type, /image\/png/);
+  assert.match(fallback.headers.get('cache-control'), /max-age=300/);
+  assert.doesNotMatch(fallback.headers.get('cache-control'), /immutable/, 'de terugval wordt niet een jaar onthouden');
+  assert.deepStrictEqual((await admin.get('/app/api/stock/images-thumbs')).body, { pending: 1, ids: [imageId], next: null });
+  // Ongeldig: geen WebP, te groot van afmeting, geen afbeelding.
+  assert.strictEqual((await admin.put(`/app/api/stock/images/${imageId}/thumb`, { data: pngBase64(12) })).status, 400);
+  assert.strictEqual((await admin.put(`/app/api/stock/images/${imageId}/thumb`, { data: webpBase64(900, 600) })).status, 400);
+  assert.strictEqual((await admin.put(`/app/api/stock/images/${imageId}/thumb`, { data: 'geen afbeelding' })).status, 400);
+  // Rechten en andere organisatie.
+  assert.strictEqual((await klant.put(`/app/api/stock/images/${imageId}/thumb`, { data: webpBase64(480, 320) })).status, 403);
+  assert.strictEqual((await vreemd.put(`/app/api/stock/images/${imageId}/thumb`, { data: webpBase64(480, 320) })).status, 404);
+  assert.strictEqual((await admin.put('/app/api/stock/images/geen-id/thumb', { data: webpBase64(480, 320) })).status, 404);
+  // Geldig: versleuteld bewaard, daarna geserveerd als WebP.
+  assert.strictEqual((await admin.put(`/app/api/stock/images/${imageId}/thumb`, { data: webpBase64(480, 320) })).status, 200);
+  const stored = db.prepare('SELECT thumb FROM item_images WHERE tenant_id = ?').get(main).thumb;
+  assert.deepStrictEqual(vault.openBytes(stored, `${main}:artikel-afbeelding-klein:${imageId}`), Buffer.from(webpBase64(480, 320), 'base64'));
+  const small = await anonymous.get(`/artikelfoto/${imageId}/klein`);
+  assert.match(small.type, /image\/webp/);
+  assert.match(small.headers.get('cache-control'), /immutable/);
+  assert.match((await anonymous.get(`/artikelfoto/${imageId}`)).type, /image\/png/, 'de gewone afbeelding blijft de grote');
+  assert.deepStrictEqual((await admin.get('/app/api/stock/images-thumbs')).body, { pending: 0, ids: [], next: null });
+  // Safari maakt een JPEG-miniatuur: ook die wordt geaccepteerd en als JPEG geserveerd.
+  assert.strictEqual((await admin.put(`/app/api/stock/images/${imageId}/thumb`, { data: jpegBase64(480, 320) })).status, 200);
+  assert.match((await anonymous.get(`/artikelfoto/${imageId}/klein`)).type, /image\/jpeg/);
+  assert.strictEqual((await admin.put(`/app/api/stock/images/${imageId}/thumb`, { data: jpegBase64(900, 600) })).status, 400);
+  assert.strictEqual((await anonymous.get('/artikelfoto/geen-id/klein')).status, 404);
+  // Nieuwe upload met miniatuur meteen erbij; een ongeldige miniatuur laat de upload wel slagen.
+  const second = await article(admin, 'IMG-T2');
+  const withThumb = await admin.put(`/app/api/stock/items/${second.id}/image`, { name: 'b.png', data: pngBase64(13), thumb: webpBase64(300, 200) });
+  assert.strictEqual(withThumb.status, 200);
+  assert.match((await anonymous.get(`/artikelfoto/${withThumb.body.imageId}/klein`)).type, /image\/webp/);
+  const third = await article(admin, 'IMG-T3');
+  const badThumb = await admin.put(`/app/api/stock/items/${third.id}/image`, { name: 'c.png', data: pngBase64(14), thumb: 'rommel' });
+  assert.strictEqual(badThumb.status, 200);
+  assert.match((await anonymous.get(`/artikelfoto/${badThumb.body.imageId}/klein`)).type, /image\/png/);
+});
+
+test('afbeeldingen overnemen: AVIF van de oude webshop wordt gemeld als omzetten in de browser en de bytes zijn op te halen', async () => {
+  const { admin, klant, vreemd, db, main, responses } = await setup();
+  const item = await article(admin, 'AVIF-1');
+  const loose = await article(admin, 'AVIF-2');
+  const url = 'https://oud.example/honda.avif';
+  db.prepare('INSERT INTO shop_products (tenant_id, id, sku, name, price, currency, url, image, in_stock, code, categories) VALUES (?, ?, ?, ?, 10, ?, ?, ?, 1, ?, ?)').run(main, 'pa', 'AVIF-1', 'x', 'EUR', '', url, 'AVIF-1', '[]');
+  db.prepare('UPDATE stock_items SET shop_product_id = ? WHERE tenant_id = ? AND id = ?').run('pa', main, item.id);
+  // Een AVIF-bestand: ftyp-vak met het merk avif (de server kan de inhoud niet decoderen).
+  const avif = Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypavif'), Buffer.alloc(40)]);
+  responses.set(url, avif);
+  const run = await admin.post('/app/api/stock/images-import', { after: '' });
+  assert.strictEqual(run.status, 200);
+  assert.strictEqual(run.body.failed.length, 1);
+  assert.strictEqual(run.body.failed[0].convert, true);
+  assert.strictEqual(run.body.failed[0].itemId, item.id);
+  assert.match(run.body.failed[0].reason, /AVIF/);
+  // Een kapot adres blijft een gewone fout zonder omzetten.
+  responses.set(url, Buffer.from('<html>geen afbeelding</html>'));
+  assert.strictEqual((await admin.post('/app/api/stock/images-import', { after: '' })).body.failed[0].convert, false);
+  responses.set(url, avif);
+  // De browser haalt de bytes op via het artikel (nooit via een adres uit het verzoek).
+  const bytes = await admin.get(`/app/api/stock/items/${item.id}/shop-image`);
+  assert.strictEqual(bytes.status, 200);
+  assert.match(bytes.type, /octet-stream/);
+  assert.strictEqual(bytes.size, avif.length);
+  assert.strictEqual((await admin.get(`/app/api/stock/items/${loose.id}/shop-image`)).status, 404, 'artikel zonder webshopproduct');
+  assert.strictEqual((await admin.get('/app/api/stock/items/geen-id/shop-image')).status, 404);
+  assert.strictEqual((await klant.get(`/app/api/stock/items/${item.id}/shop-image`)).status, 403);
+  assert.strictEqual((await vreemd.get(`/app/api/stock/items/${item.id}/shop-image`)).status, 404, 'andere organisatie');
+  // Na het omzetten door de browser (JPEG/PNG uploaden) is het artikel niet meer in afwachting.
+  assert.strictEqual((await admin.put(`/app/api/stock/items/${item.id}/image`, { name: 'AVIF-1.png', data: pngBase64(21) })).status, 200);
+  assert.deepStrictEqual((await admin.get('/app/api/stock/images-import')).body, { pending: 0 });
 });

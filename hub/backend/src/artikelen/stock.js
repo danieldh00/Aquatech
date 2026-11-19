@@ -54,6 +54,8 @@ const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const Barcode = require(path.join(FRONTEND_DIR, 'shared', 'barcode.js'));
 const PriceFactor = require('./price-factor');
+const DeliveryRules = require('../webshop/delivery-rules');
+const DeliveryTimes = require('../webshop/delivery-times');
 
 const KINDS = { ontvangst: 'Ontvangst', afboeking: 'Afboeking', retour: 'Retour', correctie: 'Correctie', telling: 'Telling' };
 // Mutaties die een beheerder op het artikel zelf doet (de rest hoort bij een werkorder).
@@ -337,6 +339,21 @@ function sanitizeItem(raw, { partial = false } = {}) {
   // Omschrijving en specificaties voor de productpagina en de feed (12); los opgeslagen, niet in de overzichten.
   if (!partial || input.description !== undefined) out.description = ItemDetails.sanitizeDescription(input.description);
   if (!partial || input.specifications !== undefined) out.specifications = ItemDetails.sanitizeSpecifications(input.specifications);
+  // Eigen titel en omschrijving voor zoekmachines en het merk (leeg = automatisch), zie webshop/seo.js.
+  if (!partial || input.seoTitle !== undefined) out.seoTitle = ItemDetails.sanitizeSeoTitle(input.seoTitle);
+  if (!partial || input.seoDescription !== undefined) out.seoDescription = ItemDetails.sanitizeSeoDescription(input.seoDescription);
+  if (!partial || input.brand !== undefined) out.brand = ItemDetails.sanitizeBrand(input.brand);
+  // Levermethoderegels en levertijd per artikel (webshop/delivery-rules.js, delivery-times.js); los opgeslagen zoals de omschrijving.
+  if (!partial || input.deliveryRules !== undefined) {
+    const problem = input.deliveryRules === undefined ? '' : DeliveryRules.checkRules(input.deliveryRules);
+    if (problem) return { error: problem, field: 'deliveryRules' };
+    out.deliveryRules = DeliveryRules.sanitizeRules(input.deliveryRules);
+  }
+  if (!partial || input.leadDays !== undefined) {
+    const lead = input.leadDays === undefined || input.leadDays === null ? null : DeliveryTimes.sanitizeLead(input.leadDays);
+    if (input.leadDays && input.leadDays.min !== '' && input.leadDays.min != null && !lead) return { error: `De levertijd is een bereik in hele dagen van 0 tot en met ${DeliveryTimes.MAX_LEAD_DAYS}.`, field: 'leadDays' };
+    out.leadDays = lead;
+  }
   if (!partial || input.priceTiers !== undefined) {
     const tiers = Wholesale.sanitizeTiers(input.priceTiers);
     if (tiers.error) return { error: tiers.error, field: 'priceTiers' };
@@ -551,12 +568,17 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * Moet binnen de transactie van de aanroeper lopen.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van het artikel.
-   * @param {{ description?: string, specifications?: object[] }} fields De opgeschoonde velden (sanitizeItem).
+   * @param {{ description?: string, specifications?: object[], seoTitle?: string, seoDescription?: string, brand?: string, deliveryRules?: object[], leadDays?: ?object }} fields De opgeschoonde velden (sanitizeItem).
    * @returns {void}
    */
   function saveDetails(tenantId, id, fields) {
     if (fields.description !== undefined) prepare('UPDATE stock_items SET description = ? WHERE tenant_id = ? AND id = ?').run(fields.description, tenantId, id);
     if (fields.specifications !== undefined) prepare('UPDATE stock_items SET specifications = ? WHERE tenant_id = ? AND id = ?').run(JSON.stringify(fields.specifications), tenantId, id);
+    if (fields.seoTitle !== undefined) prepare('UPDATE stock_items SET seo_title = ? WHERE tenant_id = ? AND id = ?').run(fields.seoTitle, tenantId, id);
+    if (fields.seoDescription !== undefined) prepare('UPDATE stock_items SET seo_description = ? WHERE tenant_id = ? AND id = ?').run(fields.seoDescription, tenantId, id);
+    if (fields.brand !== undefined) prepare('UPDATE stock_items SET brand = ? WHERE tenant_id = ? AND id = ?').run(fields.brand, tenantId, id);
+    if (fields.deliveryRules !== undefined) prepare('UPDATE stock_items SET delivery_rules = ? WHERE tenant_id = ? AND id = ?').run(JSON.stringify(fields.deliveryRules), tenantId, id);
+    if (fields.leadDays !== undefined) prepare('UPDATE stock_items SET lead_days_min = ?, lead_days_max = ? WHERE tenant_id = ? AND id = ?').run(fields.leadDays ? fields.leadDays.min : null, fields.leadDays ? fields.leadDays.max : null, tenantId, id);
   }
 
   /**
@@ -566,7 +588,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @param {string} id Id van het artikel.
    * @returns {object|undefined} De rij met ITEM_COLS plus description, specifications, shop_description en shop_attributes.
    */
-  const findItemWithDetails = (tenantId, id) => prepare(`SELECT ${ITEM_COLS.split(', ').map((column) => `i.${column}`).join(', ')}, i.description, i.specifications, p.description AS shop_description, p.attributes AS shop_attributes
+  const findItemWithDetails = (tenantId, id) => prepare(`SELECT ${ITEM_COLS.split(', ').map((column) => `i.${column}`).join(', ')}, i.description, i.specifications, i.seo_title, i.seo_description, i.brand, i.delivery_rules, i.lead_days_min, i.lead_days_max, p.description AS shop_description, p.attributes AS shop_attributes
     FROM stock_items i LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
     WHERE i.tenant_id = ? AND i.id = ?`).get(tenantId, String(id));
   /**
@@ -577,6 +599,8 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    */
   const detailsOf = (row) => ({
     description: ItemDetails.sanitizeDescription(row.description), specifications: ItemDetails.specificationsOf(row.specifications),
+    seoTitle: ItemDetails.sanitizeSeoTitle(row.seo_title), seoDescription: ItemDetails.sanitizeSeoDescription(row.seo_description), brand: ItemDetails.sanitizeBrand(row.brand),
+    deliveryRules: DeliveryRules.sanitizeRules(row.delivery_rules), leadDays: row.lead_days_min == null ? null : { min: Number(row.lead_days_min), max: Number(row.lead_days_max) },
     shopDescription: ItemDetails.sanitizeDescription(row.shop_description), shopSpecifications: ItemDetails.specificationsFromShop(row.shop_attributes),
   });
 
@@ -708,7 +732,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
            sale_price, business_price, vat_rate, revenue_group, shop_sync, weight_grams, order_pack_size, order_min_qty, price_tiers, unit_content, ean, price_mode, price_factor)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(id, tenantId, fields.code, fields.name, fields.unit, fields.location, fields.minQty, fields.reorderQty, fields.costPrice, fields.notes, timestamp, timestamp, fields.salePrice, fields.businessPrice ?? null, fields.vatRate, fields.revenueGroup, fields.shopSync ? 1 : 0, fields.weightGrams ?? null, fields.packSize ?? 1, fields.orderMinQty ?? 1, JSON.stringify(fields.priceTiers || []), fields.unitContent ?? null, fields.ean || null, fields.priceMode || 'vast', fields.priceFactor ?? null);
-      if (fields.description || fields.specifications.length) saveDetails(tenantId, id, fields);
+      if (fields.description || fields.specifications.length || fields.seoTitle || fields.seoDescription || fields.brand || fields.deliveryRules.length || fields.leadDays) saveDetails(tenantId, id, fields);
       costs.noteFormPrice(tenantId, id, null, fields.costPrice, user);
       const start = Number(raw && raw.onHand);
       if (Number.isFinite(start) && start > 0 && start <= MAX_QTY) book(tenantId, id, start, { kind: 'ontvangst', note: 'Beginvoorraad', user });
@@ -787,7 +811,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         .run(merged.code, merged.name, merged.unit, merged.location, merged.minQty, merged.reorderQty ?? null, merged.costPrice, merged.notes, archived, currentTimestamp(), merged.salePrice, merged.businessPrice, merged.vatRate, merged.revenueGroup, merged.shopSync ? 1 : 0, merged.weightGrams,
           merged.packSize, mergedTerms.orderMinQty, JSON.stringify(merged.priceTiers), merged.unitContent ?? null, ean, merged.priceMode, merged.priceFactor ?? null,
           toShop && merged.shopSync ? 1 : 0, tenantId, existing.id);
-      if (fields.description !== undefined || fields.specifications !== undefined) saveDetails(tenantId, existing.id, fields);
+      if (['description', 'specifications', 'seoTitle', 'seoDescription', 'brand', 'deliveryRules', 'leadDays'].some((key) => fields[key] !== undefined)) saveDetails(tenantId, existing.id, fields);
       // Een andere inkoopprijs komt als nieuwe regel in de historie (de oude blijft staan).
       costs.noteFormPrice(tenantId, existing.id, existing.cost_price, merged.costPrice, user);
       if (archived && !existing.archived) prepare('DELETE FROM stock_reservations WHERE tenant_id = ? AND item_id = ?').run(tenantId, existing.id);
@@ -864,6 +888,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     prepare('DELETE FROM item_packagings WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
     prepare('DELETE FROM price_proposal_rejections WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
     prepare('DELETE FROM purchase_proposal_dismissals WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
+    prepare('DELETE FROM item_text_drafts WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
     prepare('DELETE FROM stock_items WHERE tenant_id = ? AND id = ?').run(tenantId, row.id);
     return false;
   }
@@ -1372,6 +1397,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     prepare('UPDATE stock_items SET has_variants = 1, ean = NULL, attributes = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(attributes, currentTimestamp(), tenantId, item.id);
     prepare('DELETE FROM item_suppliers WHERE tenant_id = ? AND item_id = ?').run(tenantId, item.id);
     prepare('DELETE FROM item_packagings WHERE tenant_id = ? AND item_id = ?').run(tenantId, item.id);
+    prepare('DELETE FROM item_text_drafts WHERE tenant_id = ? AND item_id = ?').run(tenantId, item.id);
     item.has_variants = 1;
     item.attributes = attributes;
     return true;

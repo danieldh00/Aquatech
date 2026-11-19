@@ -106,6 +106,45 @@
    */
   const specificationsText = (specifications) => (specifications || []).map((entry) => `${entry.name}: ${entry.value}`).join('\n');
   /**
+   * Zet de regels van een artikel om naar de invoertekst, bijvoorbeeld "dpd:1-99, pallet:100-".
+   * @param {{ method: string, minQty: number, maxQty: ?number }[]} rules De regels.
+   * @returns {string} De tekst (leeg zonder regels).
+   */
+  const rulesText = (rules) => (rules || []).map((rule) => `${rule.method}:${rule.minQty}-${rule.maxQty == null ? '' : rule.maxQty}`).join(', ');
+
+  /**
+   * Leest de invoertekst met levermethoderegels.
+   * @param {string} text De tekst, bijvoorbeeld "dpd:1-99, pallet:100-".
+   * @returns {{ method: string, minQty: string, maxQty: string }[]} De regels; een regel die niet te lezen is geeft een lege methode, zodat de server hem met een melding weigert.
+   */
+  const parseRules = (text) => String(text).split(',').map((part) => part.trim()).filter(Boolean).map((part) => {
+    const match = /^([a-z]+)\s*:\s*(\d*)\s*-?\s*(\d*)$/i.exec(part);
+    return match ? { method: match[1].toLowerCase(), minQty: match[2], maxQty: match[3] } : { method: '', minQty: '', maxQty: '' };
+  });
+
+  /**
+   * Toont onder de levervelden wat de webshop met dit artikel doet: per levermethode het aantalbereik en de levertijd (op voorraad en niet op voorraad).
+   * @param {object} item Het artikel (id).
+   * @returns {Promise<void>}
+   */
+  const renderDeliveryPreview = async (item) => {
+    const box = $('#d-delivery-preview');
+    box.hidden = true;
+    box.dataset.itemId = item && item.id ? String(item.id) : '';
+    if (!box.dataset.itemId) return;
+    try {
+      const preview = await api(`stock/items/${encodeURIComponent(item.id)}/delivery-preview`);
+      // Een trager antwoord van een eerder geopend artikel mag het overzicht van het huidige artikel niet overschrijven.
+      if (!box.isConnected || box.dataset.itemId !== String(item.id)) return;
+      const rows = preview.methods.map((method) => `<tr><td>${esc(method.label)}</td><td>${esc(method.quantities)}</td><td>${esc(method.leadInStock)}</td><td>${esc(method.leadOutOfStock)}</td></tr>`).join('');
+      box.innerHTML = `<table class="grid"><caption class="muted small">In de webshop (${esc(preview.rulesSource)}; levertijden zijn indicatief)</caption><thead><tr><th>Levermethode</th><th>Aantal</th><th>Op voorraad</th><th>Niet op voorraad</th></tr></thead><tbody>${rows}</tbody></table>`;
+      box.hidden = !rows;
+    } catch (failure) {
+      box.hidden = true;
+    }
+  };
+
+  /**
    * Vult omschrijving en specificaties in het artikelformulier en toont wat de oude webshop heeft (12): zolang het
    * artikel zelf niets heeft, toont de shop die tekst; met de knop neem je hem over om aan te passen.
    * @param {HTMLFormElement} formElement Het formulier.
@@ -115,6 +154,13 @@
   const renderDetails = (formElement, item) => {
     formElement.description.value = item.description || '';
     formElement.specifications.value = specificationsText(item.specifications);
+    formElement.brand.value = item.brand || '';
+    formElement.seoTitle.value = item.seoTitle || '';
+    formElement.seoDescription.value = item.seoDescription || '';
+    formElement.deliveryRules.value = rulesText(item.deliveryRules);
+    formElement.leadMin.value = item.leadDays ? item.leadDays.min : '';
+    formElement.leadMax.value = item.leadDays ? item.leadDays.max : '';
+    renderDeliveryPreview(item);
     const hasShop = Boolean(item.shopDescription) || Boolean((item.shopSpecifications || []).length);
     const note = $('#d-details-shop');
     note.hidden = !hasShop;
@@ -130,7 +176,7 @@
   };
   const KINDS = { ontvangst: 'Ontvangst', afboeking: 'Afboeking', retour: 'Retour', correctie: 'Correctie', telling: 'Telling' };
 
-  const state = { items: [], reservations: [], moves: null, tab: 'stock', item: null, units: [], open: new Set(), newImage: null, media: null };
+  const state = { items: [], reservations: [], moves: null, tab: 'stock', item: null, units: [], open: new Set(), newImage: null, media: null, proposals: new Map(), canApprove: false };
 
   /**
    * Toont kort een melding onderin het scherm.
@@ -276,7 +322,7 @@
         <td class="num">${item.reserved ? `${esc(nl(item.reserved))}<span class="sub">${item.orders} werkorder${item.orders === 1 ? '' : 's'}</span>` : ''}</td>
         <td class="num avail">${esc(nl(item.available))}${item.low ? ' <span class="pill low">Bijbestellen</span>' : ''}</td>
         <td class="num">${item.minQty && !item.hasVariants ? esc(nl(item.minQty)) : ''}</td>
-        <td class="num">${item.hasVariants ? '' : `${esc(eur(item.salePrice))}${item.salePrice != null && item.vatRate !== 21 ? `<span class="sub">${item.vatRate}% btw</span>` : ''}${item.priceMode === 'factor' ? '<span class="sub">× factor</span>' : ''}`}</td>
+        <td class="num">${item.hasVariants ? '' : `${esc(eur(item.salePrice))}${item.salePrice != null && item.vatRate !== 21 ? `<span class="sub">${item.vatRate}% btw</span>` : ''}${item.priceMode === 'factor' ? '<span class="sub">× factor</span>' : ''}${state.proposals.has(item.id) ? `<span class="pill proposal" title="Nieuwe verkoopprijs voorgesteld: ${esc(eur(state.proposals.get(item.id).newPrice))}">Voorstel ${esc(eur(state.proposals.get(item.id).newPrice))}</span>` : ''}`}</td>
         <td class="num${item.margin != null && item.margin < 0 ? ' neg' : ''}">${item.hasVariants || item.margin == null ? '' : `${esc(nl(item.margin))}%`}</td>
         <td>${shopPill(item)}</td>
         <td class="num">${esc(eur(item.value))}</td>
@@ -355,7 +401,7 @@
   }
 
   /** De tabbladen, ook als #-adres (de zijbalk onder Inkoop wijst naar moves, reorder, suppliers en orders). */
-  const TABS = ['stock', 'reserved', 'moves', 'reorder', 'suppliers', 'orders', 'pricefactor', 'media'];
+  const TABS = ['stock', 'reserved', 'moves', 'reorder', 'suppliers', 'orders', 'pricefactor', 'media', 'texts'];
 
   /**
    * Tekent het bestelvoorstel op het scherm: per leverancier de artikelen die onder het minimum zitten.
@@ -389,6 +435,7 @@
     if (name === 'suppliers') window.ArtikelenSuppliers.load().catch((error) => toast(error.message, true));
     if (name === 'orders') window.ArtikelenOrders.load().catch((error) => toast(error.message, true));
     if (name === 'pricefactor') window.ArtikelenPriceFactor.load().catch((error) => toast(error.message, true));
+    if (name === 'texts') window.ArtikelenTexts.load().catch((error) => toast(error.message, true));
     if (name === 'media') loadMedia().catch((error) => toast(error.message, true));
     try { history.replaceState(null, '', `./#${name}`); } catch { /* file:// */ }
     if (window.AquatechNav) window.AquatechNav.refresh();
@@ -411,11 +458,69 @@
   async function load() {
     const [stock, reservations] = await Promise.all([api(`stock${$('#f-archived').checked ? '?archived=1' : ''}`), api('stock/reservations')]);
     state.items = stock.items;
+    // Voorstellen alleen ophalen als er artikelen met prijs volgens factor zijn (anders is er niets te berekenen).
+    if (state.items.some((item) => item.priceMode === 'factor')) await loadProposals(); else state.proposals = new Map();
     state.reservations = reservations.items;
     renderStats();
     renderStock();
     renderReserved();
     if (state.moves) loadMoves();
+  }
+
+  /**
+   * Haalt de open prijsvoorstellen op (nieuwe verkoopprijs na een andere inkoopprijs). Een fout laat het scherm gewoon werken zonder voorstellen.
+   * @param {?string} [itemId] Alleen het voorstel van dit artikel verversen (artikelscherm), anders alle voorstellen.
+   * @returns {Promise<void>}
+   */
+  async function loadProposals(itemId = null) {
+    try {
+      const items = (await api(`stock/price-proposals${itemId ? `?id=${encodeURIComponent(itemId)}` : ''}`)).items;
+      // Voor één artikel: alleen dat voorstel verversen, de rest van de lijst blijft staan.
+      if (itemId) { state.proposals.delete(itemId); for (const entry of items) state.proposals.set(entry.id, entry); } else state.proposals = new Map(items.map((entry) => [entry.id, entry]));
+    } catch (error) {
+      if (!itemId) state.proposals = new Map();
+    }
+  }
+
+  /**
+   * Tekent de melding bij het geopende artikel: voorgestelde verkoopprijs met Goedkeuren en Negeren.
+   * @returns {void}
+   */
+  function renderProposal() {
+    const box = $('#d-proposal');
+    const item = state.item;
+    const proposal = item && state.proposals.get(item.id);
+    box.hidden = !proposal;
+    if (!proposal) { box.innerHTML = ''; return; }
+    const margin = proposal.marginNew == null ? '' : ` (marge ${esc(nl(proposal.marginNew))}%)`;
+    box.innerHTML = `<div><b>Nieuwe verkoopprijs voorgesteld:</b> ${esc(eur(proposal.oldPrice) || 'geen prijs')} → <b>${esc(eur(proposal.newPrice))}</b> excl. btw${margin}<span class="sub">Door een nieuwe inkoopprijs of factor. De verkoopprijs verandert pas na jouw goedkeuring.</span></div>
+      ${state.canApprove ? '<div class="proposal-actions"><button class="btn primary" type="button" data-proposal="apply">Goedkeuren</button><button class="btn" type="button" data-proposal="reject">Negeren</button></div>' : '<div class="muted small">Alleen een beheerder kan dit goedkeuren.</div>'}`;
+    box.querySelectorAll('[data-proposal]').forEach((button) => {
+      /** Keurt het voorstel goed of negeert het. */
+      button.onclick = () => { decideProposal(button.dataset.proposal).catch((error) => toast(error.message, true)); };
+    });
+  }
+
+  /**
+   * Keurt het voorstel van het geopende artikel goed of negeert het, en ververst het scherm.
+   * @param {'apply'|'reject'} action Wat er gebeurt.
+   * @returns {Promise<void>}
+   */
+  async function decideProposal(action) {
+    const proposal = state.proposals.get(state.item.id);
+    if (!proposal) return;
+    for (const button of $('#d-proposal').querySelectorAll('button')) button.disabled = true;
+    let result;
+    try {
+      result = await api(`stock/price-factors/${action}`, { method: 'POST', body: { items: [{ id: proposal.id, newPrice: proposal.newPrice }] } });
+    } finally {
+      for (const button of $('#d-proposal').querySelectorAll('button')) button.disabled = false;
+    }
+    const done = action === 'apply' ? result.updated : result.rejected;
+    if (done) toast(action === 'apply' ? `Verkoopprijs gezet op ${eur(proposal.newPrice)}` : 'Voorstel genegeerd');
+    else toast('Het voorstel is intussen gewijzigd; bekijk het nieuwe voorstel.', true);
+    await reloadItem();
+    renderStock();
   }
 
   // ---------- Eenheden ----------
@@ -671,6 +776,7 @@
   /** Tekent het geopende artikel: tellers, formulier, webshop, reserveringen en mutaties. */
   function renderItem() {
     const item = state.item;
+    renderProposal();
     $('#d-title').innerHTML = `<span class="code">${esc(item.code)}</span> ${esc(item.name)}${item.archived ? ' <span class="pill">Gearchiveerd</span>' : ''}`;
     document.title = `${item.code} – Artikelen`;
     $('#d-stats').innerHTML = [
@@ -722,6 +828,7 @@
     renderCosts();
     window.ArtikelenSuppliers.showItem(item).catch((error) => toast(error.message, true));
     window.ArtikelenPackagings.showItem(item).catch((error) => toast(error.message, true));
+    window.ArtikelenTexts.showItem(item).catch((error) => toast(error.message, true));
     $('#d-res').innerHTML = item.reservations.length ? `<thead><tr><th>Werkorder</th><th>Status</th><th>Gepland</th><th class="num">Gereserveerd</th></tr></thead>
       <tbody>${item.reservations.map((reservation) => `<tr><td class="wrap">${woLink(reservation.workOrder)}<span class="sub">${esc(reservation.workOrder.title)}</span></td>
         <td><span class="pill wo-${esc(reservation.workOrder.status)}">${esc((WorkOrderCore && WorkOrderCore.STATUSES[reservation.workOrder.status]) || reservation.workOrder.status)}</span></td>
@@ -861,12 +968,14 @@
     $('#images-text').textContent = 'Controleren…';
     dialog.showModal();
     try {
-      const pendingCount = await window.ItemImages.pending();
-      $('#images-text').textContent = pendingCount
-        ? `${pendingCount} artikel${pendingCount === 1 ? '' : 'en'} gebruik${pendingCount === 1 ? 't' : 'en'} nog de afbeelding van de oude webshop. Overnemen bewaart ze in dit systeem; opnieuw uitvoeren neemt alleen over wat nog ontbreekt.`
-        : 'Alle afbeeldingen van gekoppelde webshopproducten staan al in dit systeem.';
-      $('#images-start').hidden = !pendingCount;
+      const [pendingCount, thumbCount] = await Promise.all([window.ItemImages.pending(), window.ItemImages.thumbsPending()]);
+      const lines = [];
+      if (pendingCount) lines.push(`${pendingCount} artikel${pendingCount === 1 ? '' : 'en'} gebruik${pendingCount === 1 ? 't' : 'en'} nog de afbeelding van de oude webshop. Overnemen bewaart ze in dit systeem; opnieuw uitvoeren neemt alleen over wat nog ontbreekt.`);
+      if (thumbCount) lines.push(`${thumbCount} afbeelding${thumbCount === 1 ? '' : 'en'} ${thumbCount === 1 ? 'heeft' : 'hebben'} nog geen miniatuur. Miniaturen maken de webshop op telefoons en bij veel producten sneller; ze worden hier in uw browser gemaakt.`);
+      $('#images-text').textContent = lines.length ? lines.join(' ') : 'Alle afbeeldingen staan in dit systeem en hebben een miniatuur.';
+      $('#images-start').hidden = !lines.length;
       $('#images-start').dataset.total = String(pendingCount);
+      $('#images-start').dataset.thumbs = String(thumbCount);
     } catch (error) {
       $('#images-text').textContent = `Controleren mislukt: ${error.message}`;
     }
@@ -878,17 +987,24 @@
     $('#images-close').onclick = () => { $('#images-dialog').close(); };
     /** Neemt de afbeeldingen over met een voortgangsbalk. */
     $('#images-start').onclick = async () => {
-      const total = Number($('#images-start').dataset.total) || 1;
+      const total = Number($('#images-start').dataset.total) || 0;
       $('#images-start').hidden = true;
       $('#images-close').disabled = true;
       try {
-        const totals = await window.ItemImages.importAll((progress) => {
+        const totals = total ? await window.ItemImages.importAll((progress) => {
           $('#images-bar').value = Math.min(1, (total - progress.pending) / total);
           $('#images-text').textContent = `${progress.imported + progress.reused} artikelen gekoppeld, ${progress.stored} afbeeldingen bewaard…`;
-        });
+        }) : { imported: 0, reused: 0, stored: 0, failed: [] };
+        // Daarna de miniaturen (ook voor de zojuist overgenomen afbeeldingen).
+        const thumbTotal = await window.ItemImages.thumbsPending();
+        $('#images-bar').value = 0;
+        const thumbs = thumbTotal ? await window.ItemImages.thumbsAll((progress) => {
+          $('#images-bar').value = Math.min(1, (progress.done + progress.failed) / thumbTotal);
+          $('#images-text').textContent = `Miniaturen maken: ${progress.done} van ${thumbTotal}…`;
+        }) : { done: 0, failed: 0 };
         $('#images-bar').value = 1;
         const linked = totals.imported + totals.reused;
-        $('#images-text').textContent = `Klaar: ${linked} artikel${linked === 1 ? '' : 'en'} gekoppeld; ${totals.stored} nieuwe afbeelding${totals.stored === 1 ? '' : 'en'} bewaard, bestaande foto\'s zijn hergebruikt${totals.failed.length ? `. ${totals.failed.length} niet gelukt` : ''}.`;
+        $('#images-text').textContent = `Klaar: ${linked} artikel${linked === 1 ? '' : 'en'} gekoppeld; ${totals.stored} nieuwe afbeelding${totals.stored === 1 ? '' : 'en'} bewaard; ${thumbs.done} miniatuur${thumbs.done === 1 ? '' : 'en'} gemaakt${totals.failed.length || thumbs.failed ? `. ${totals.failed.length + thumbs.failed} niet gelukt (opnieuw uitvoeren probeert ze nog eens)` : ''}.`;
         if (totals.failed.length) {
           $('#images-failed').hidden = false;
           $('#images-failed').innerHTML = `Niet gelukt (opnieuw uitvoeren probeert ze nog eens):<br>${totals.failed.slice(0, 20).map((failure) => `${esc(failure.code)}: ${esc(failure.reason)}`).join('<br>')}${totals.failed.length > 20 ? `<br>… en ${totals.failed.length - 20} meer` : ''}`;
@@ -963,12 +1079,12 @@
    * @param {string} id id van het artikel
    * @param {boolean} push true om het adres (?id=) in de geschiedenis te zetten
    * @param {Promise<object>|null} pending het al lopende verzoek om het artikel (of null)
-   * @param {{ focus?: boolean }} [options] focus: de focus naar de titel van het artikel (na een toetsenbord- of linkactie)
+   * @param {{ focus?: boolean, keepScroll?: boolean }} [options] focus: de focus naar de titel van het artikel (na een toetsenbord- of linkactie); keepScroll: niet naar boven scrollen (verversen na een actie)
    * @returns {Promise<void>}
    */
-  async function openItem(id, push = false, pending = null, { focus = false } = {}) {
+  async function openItem(id, push = false, pending = null, { focus = false, keepScroll = false } = {}) {
     try {
-      state.item = await (pending || api(`stock/items/${encodeURIComponent(id)}`));
+      [state.item] = await Promise.all([pending || api(`stock/items/${encodeURIComponent(id)}`), loadProposals(id)]);
     } catch (error) {
       toast(error.status === 404 ? 'Artikel niet gevonden.' : error.message, true);
       showList();
@@ -978,9 +1094,17 @@
     $('#v-list').hidden = true;
     $('#v-item').hidden = false;
     renderItem();
-    window.scrollTo(0, 0);
+    if (!keepScroll) window.scrollTo(0, 0);
     const heading = focus ? $('#d-title') : null;
     if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
+  }
+
+  /**
+   * Haalt het geopende artikel opnieuw op en tekent het zonder te scrollen (na het plaatsen van een producttekst).
+   * @returns {Promise<void>}
+   */
+  async function reloadItem() {
+    if (state.item) await openItem(state.item.id, false, null, { keepScroll: true });
   }
 
   /** Toont het overzicht in plaats van het artikel. */
@@ -1098,6 +1222,8 @@
           packSize: num(editForm.packSize.value), orderMinQty: num(editForm.orderMinQty.value), priceTiers: parseTiers(editForm.priceTiers.value), unitContent: num(editForm.unitContent.value), ean: editForm.ean.value,
           priceMode: editForm.priceMode.value, priceFactor: num(editForm.priceFactor.value),
           description: editForm.description.value, specifications: editForm.specifications.value,
+          brand: editForm.brand.value, seoTitle: editForm.seoTitle.value, seoDescription: editForm.seoDescription.value,
+          deliveryRules: parseRules(editForm.deliveryRules.value), leadDays: { min: editForm.leadMin.value, max: editForm.leadMax.value },
         } }) };
         toast('Opgeslagen');
         await loadUnits().catch((error) => toast(error.message, true));
@@ -1451,6 +1577,7 @@
     if (pendingItem) pendingItem.catch(() => {});
     const me = await window.AquatechAccount.load('../');
     const rights = me.rights || [];
+    state.canApprove = rights.includes('beheer');
     if (!me.user || !rights.includes('voorraad')) {
       const deniedBox = $('#v-denied');
       deniedBox.hidden = false;
@@ -1532,6 +1659,7 @@
       pricingForm.addEventListener('change', () => syncPricing(pricingForm));
       pricingForm.addEventListener('reset', () => setTimeout(() => syncPricing(pricingForm)));
     }
+    window.ArtikelenTexts.setup({ api, toast, esc, openItem: (id) => openItem(id, true), reloadItem: () => reloadItem() });
     window.ArtikelenPriceFactor.setup({ api, toast, esc, nl, eur, workbook, save, stamp });
     window.ArtikelenOrders.setup({ api, toast, esc, nl, eur, getItems: () => state.items, workbook, save, stamp, afterProposal: () => loadReorder().catch((error) => toast(error.message, true)) });
     window.ArtikelenProposals.setup({

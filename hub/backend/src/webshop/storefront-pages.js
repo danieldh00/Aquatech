@@ -4,10 +4,13 @@
 // '', '../' of '../../'), zodat de shop ook onder een padprefix achter een
 // proxy werkt.
 
+const fs = require('fs');
+const path = require('path');
 const { version: SHOP_VERSION } = require('../../package.json');
 const { DEFAULT_SITE } = require('./shop-content');
 const { LEGAL_SLUGS, LEGAL_TITLES } = require('./legal-pages');
 const Seo = require('./seo');
+const { blocksOf, faqEntriesOfBlocks } = require('./page-blocks');
 const Analytics = require('./shop-analytics');
 
 const SHOP_NAME = 'Aquatechshop.nl';
@@ -39,7 +42,7 @@ function formatPrice(amount) {
 /** De inhoud (blokken en pagina's uit Beheer) waarmee de pagina's die nu worden opgebouwd, worden getekend. */
 let activeContent = { site: DEFAULT_SITE, pages: [] };
 /** Of bestellen aan staat, hoeveel regels er in de winkelwagen van de bezoeker zitten en of hij een groothandelsklant is, met het kopje Groothandel (voor de pagina's die nu worden opgebouwd). */
-let activeShop = { ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '', analytics: '', captcha: '' };
+let activeShop = { indexing: false, ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '', analytics: '', captcha: '' };
 
 /**
  * De velden die een formulier nodig heeft voor de onzichtbare captcha: het verborgen veld waar het script een token in zet en de
@@ -61,7 +64,7 @@ function captchaFields(action) {
  * @param {{ ordering: boolean, cartCount: number, business?: boolean, wholesale?: boolean, baseUrl?: string }} [shop] Het volledige webadres van de shop (met slash achteraan; leeg = geen canonical-link en OpenGraph), of bestellen aan staat, het aantal regels in de winkelwagen, of de bezoeker een zakelijke klant is (prijzen excl. btw) en of hij groothandelsklant is (kopje Groothandel).
  * @returns {*} Wat `render` teruggeeft.
  */
-function renderWith(content, render, shop = { ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '', analytics: '', captcha: '' }) {
+function renderWith(content, render, shop = { indexing: false, ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '', analytics: '', captcha: '' }) {
   const previous = activeContent;
   const previousShop = activeShop;
   activeContent = content;
@@ -81,16 +84,46 @@ function imageSrc(root, reference) {
   return kind === 'media' && name ? `${root}media/${escapeHtml(name)}` : '';
 }
 
+/** Namen van de bestanden in de map assets/ (om te weten van welke afbeeldingen een WebP-variant bestaat). */
+const ASSET_NAMES = new Set(fs.readdirSync(path.join(__dirname, 'assets')));
+
+/**
+ * Een afbeelding uit Beheer als img, met een WebP-variant als picture als die bestaat. Een standaardbestand `<naam>.jpg|png` krijgt
+ * `<naam>.webp` (en `<naam>-klein.webp` voor smalle schermen) als die in assets/ staan (zie tools/shop-webp.py); geüploade
+ * afbeeldingen en bestanden zonder WebP blijven een gewone img.
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @param {string} reference 'asset:<bestand>' of 'media:<id>' (zie imageSrc).
+ * @param {{ attributes?: string, sizes?: string }} [options] attributes = extra attributen voor de img (al ontsnapt, bijv. alt en loading), sizes = de sizes-waarde als er een kleine variant is.
+ * @returns {string} De HTML, of een lege tekst als er geen afbeelding is.
+ */
+function imageHtml(root, reference, { attributes = '', sizes = '100vw' } = {}) {
+  const source = imageSrc(root, reference);
+  if (!source) return '';
+  const img = `<img src="${source}"${attributes ? ` ${attributes}` : ''}>`;
+  const [kind, name] = String(reference || '').split(':');
+  const stem = kind === 'asset' ? /^([a-z0-9-]+)\.(?:jpg|png)$/i.exec(name || '') : null;
+  if (!stem || !ASSET_NAMES.has(`${stem[1]}.webp`)) return img;
+  const large = assetUrl(root, `${stem[1]}.webp`);
+  const small = ASSET_NAMES.has(`${stem[1]}-klein.webp`) ? assetUrl(root, `${stem[1]}-klein.webp`) : '';
+  const widths = IMAGE_WIDTHS[stem[1]] || [];
+  const srcset = small && widths.length === 2 ? `${small} ${widths[0]}w, ${large} ${widths[1]}w` : large;
+  return `<picture><source type="image/webp" srcset="${srcset}"${small && widths.length === 2 ? ` sizes="${sizes}"` : ''}>${img}</picture>`;
+}
+
+/** Breedte in pixels van de kleine en de grote WebP per standaardafbeelding (voor srcset). */
+const IMAGE_WIDTHS = { 'hero-tuin': [720, 1440], 'banner-druppelslang': [600, 1000], 'banner-pomp': [600, 1000] };
+
 /**
  * Het adres van een productafbeelding: een eigen afbeelding ('own:<id>') komt van
  * de shop zelf, anders is het het https-adres van het webshopproduct.
  * @param {string} root Relatief pad naar de shop-startpagina.
  * @param {string} image De waarde uit de catalogus ('own:<id>' of een https-adres).
+ * @param {{ small?: boolean }} [options] small = de miniatuur voor een kaartje (alleen bij een eigen afbeelding; zonder miniatuur levert de server de gewone).
  * @returns {string} Het adres, ontsnapt voor in een attribuut.
  */
-function productImageSrc(root, image) {
+function productImageSrc(root, image, { small = false } = {}) {
   const text = String(image || '');
-  return text.startsWith('own:') ? `${root}artikelfoto/${escapeHtml(text.slice(4))}` : escapeHtml(text);
+  return text.startsWith('own:') ? `${root}artikelfoto/${escapeHtml(text.slice(4))}${small ? '/klein' : ''}` : escapeHtml(text);
 }
 
 /**
@@ -126,6 +159,14 @@ const ICONS = {
   phone: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/><path d="M19 19c0 1.5-1.5 2-4 2"/></svg>',
   admin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13a8 8 0 0 1 16 0"/><path d="m12 13 4-5"/><circle cx="12" cy="13" r="1.4"/><path d="M4 13v4h16v-4"/></svg>',
   down: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
+};
+
+/** Pictogrammen voor de vertrouwensstrook (inline SVG). */
+const ICONS_TRUST = {
+  truck: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h11v10H3zM14 9h4l3 3v4h-7"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="17.5" cy="17.5" r="1.5"/></svg>',
+  tag: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.2"/></svg>',
+  back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7 4 12l5 5"/><path d="M4 12h10a6 6 0 0 1 0 12"/></svg>',
+  lock: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
 };
 
 /**
@@ -186,28 +227,28 @@ function navigation(groups, root) {
       ? `<li><details><summary>${escapeHtml(category.name)}</summary><ul><li><a href="${root}categorie/${escapeHtml(category.slug)}/">Alles in ${escapeHtml(category.name)}</a></li>${foldItems(children)}</ul></details></li>`
       : `<li>${link}</li>`;
   }).join('');
-  const allGroups = groups.map((group) => `<li class="has-sub"><span class="nav-heading" tabindex="0">${escapeHtml(group.name)}</span><ul class="nav-drop nav-fly">${flyItems(group.categories)}</ul></li>`).join('');
-  const search = `<li class="nav-all"><span class="nav-all-button" tabindex="0"><span class="nav-all-text">Product zoeken</span>${ICONS.down}</span><ul class="nav-drop">${allGroups}</ul></li>`;
   const extraPages = activeContent.pages.filter((page) => page.menu && page.slug !== 'over-ons');
   const wholesale = activeShop.wholesale ? `<li class="nav-about"><a href="${root}groothandel/">Groothandel</a></li>` : '';
   const about = `<li class="nav-about"><a href="${root}over-ons/">Over ons</a></li>${wholesale}${extraPages.map((page) => `<li class="nav-about"><a href="${root}pagina/${escapeHtml(page.slug)}/">${escapeHtml(page.title)}</a></li>`).join('')}`;
   const desktop = groups.map((group) => `<li class="nav-group"><span class="nav-heading" tabindex="0">${escapeHtml(group.name)}</span><ul class="nav-drop">${flyItems(group.categories)}</ul></li>`).join('');
   const mobile = groups.map((group) => `<li><details><summary>${escapeHtml(group.name)}</summary><ul>${foldItems(group.categories)}</ul></details></li>`).join('');
-  return `<nav class="shop-nav" aria-label="Productgroepen"><ul class="nav-bar">${search}${about}${desktop}<!--planner:${root}--></ul></nav>
+  return `<nav class="shop-nav" aria-label="Productgroepen"><ul class="nav-bar">${about}${desktop}<!--planner:${root}--></ul></nav>
 <details class="shop-menu"><summary>${ICONS.menu}<span>Alle productgroepen</span></summary><ul>${activeShop.staff ? `<li><a href="${root}app/">Naar het beheer</a></li>` : ''}${mobile}${activeShop.wholesale ? `<li><a href="${root}groothandel/">Groothandel</a></li>` : ''}${extraPages.map((page) => `<li><a href="${root}pagina/${escapeHtml(page.slug)}/">${escapeHtml(page.title)}</a></li>`).join('')}<!--planner:${root}--></ul></details>`;
 }
 
 /**
  * De kopregels voor zoekmachines en delen: canonical-link, OpenGraph, Twitter-kaart, robots en JSON-LD.
  * Zonder webadres van de shop (activeShop.baseUrl) of zonder canonicalPath is er geen canonical en OpenGraph;
- * een pagina zonder canonicalPath (account, winkelwagen, zoeken, niet gevonden) krijgt noindex.
+ * een pagina zonder canonicalPath (account, winkelwagen, zoeken, niet gevonden) krijgt noindex, en elke pagina zolang
+ * de shop niet is vrijgegeven voor zoekmachines (activeShop.indexing, instelling shopSeo).
  * @param {{ title: string, description: string, canonicalPath: ?string, ogImage: string, ogType: string, jsonLd: object[], root: string }} input De gegevens van de pagina (zie layout).
  * @returns {string} De HTML-regels (leeg als er niets te zetten is).
  */
 function seoHead({ title, description, canonicalPath, ogImage, ogType, jsonLd, root }) {
   const { baseUrl } = activeShop;
-  const robots = canonicalPath == null ? '<meta name="robots" content="noindex, follow">\n' : '';
-  if (!baseUrl || canonicalPath == null) return robots;
+  const robots = canonicalPath == null || !activeShop.indexing ? '<meta name="robots" content="noindex, follow">\n' : '';
+  // Zolang de shop niet is vrijgegeven voor zoekmachines: alleen noindex, geen canonical, OpenGraph of gestructureerde gegevens.
+  if (!baseUrl || canonicalPath == null || !activeShop.indexing) return robots;
   const url = Seo.absoluteUrl(baseUrl, canonicalPath);
   const image = ogImage || Seo.absoluteUrl(baseUrl, assetUrl(root, 'aquatechshop-logo.png').replace(/^(\.\.\/)+/, ''));
   return `<link rel="canonical" href="${escapeHtml(url)}">
@@ -271,24 +312,25 @@ function layout({ root, title, description, body, groups, query = '', wide = fal
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
 <meta name="description" content="${escapeHtml(description)}">
+<meta name="google-site-verification" content="F-Mvae4wYP79oJ8bT2t-gPrw6Jr-dgUAFkOBetYB1ic">
 ${seoHead({ title, description, canonicalPath, ogImage, ogType, jsonLd, root })}${refresh ? `<meta http-equiv="refresh" content="0;url=${escapeHtml(refresh)}">\n` : ''}<link rel="icon" type="image/png" href="${assetUrl(root, 'favicon.png')}">
 <link rel="stylesheet" href="${assetUrl(root, 'brand.css')}">
 <link rel="stylesheet" href="${assetUrl(root, 'winkel.css')}">
-${nav.includes('nav-fly') ? `<script src="${assetUrl(root, 'menu.js')}" defer></script>\n` : ''}${variantScript ? `<script src="${assetUrl(root, 'varianten.js')}" defer></script>\n` : ''}${[].concat(script || [], activeShop.analytics ? 'analytiek.js' : [], activeShop.captcha ? 'captcha.js' : []).map((name) => `<script src="${assetUrl(root, name)}" defer></script>\n`).join('')}</head>
+${nav.includes('nav-fly') ? `<script src="${assetUrl(root, 'menu.js')}" defer></script>\n` : ''}${variantScript ? `<script src="${assetUrl(root, 'varianten.js')}" defer></script>\n` : ''}${[].concat(script || [], 'zoeksuggesties.js', activeShop.analytics ? 'analytiek.js' : [], activeShop.captcha ? 'captcha.js' : []).map((name) => `<script src="${assetUrl(root, name)}" defer></script>\n`).join('')}</head>
 <body${analyticsAttributes(root, events)}>
 ${site.notice.enabled && site.notice.text ? `<div class="shop-notice kleur-${escapeHtml(site.notice.color || 'purple')}">${escapeHtml(site.notice.text)}</div>` : ''}
 <header class="shop-head">
   <div class="shop-bar">
     <a class="shop-brand" href="${home}"><img src="${assetUrl(root, 'aquatechshop-logo.png')}" alt="Aquatechshop.nl" width="216" height="44"></a>
     <form class="shop-search" action="${root}zoeken/" method="get" role="search">
-      <input type="search" name="q" value="${escapeHtml(query)}" placeholder="Zoek op product of artikelnummer" aria-label="Zoeken" maxlength="80">
+      <input type="search" name="q" value="${escapeHtml(query)}" placeholder="Zoek op product of artikelnummer" aria-label="Zoeken" maxlength="80" autocomplete="off" data-suggest="${root}zoeken/suggesties/">
       <button type="submit" aria-label="Zoeken">${ICONS.search}</button>
     </form>
     ${phone ? `<a class="shop-phone" href="${phoneHref}" aria-label="Klantenservice ${escapeHtml(phone)}">${ICONS.phone}<span><small>Klantenservice</small><strong>${escapeHtml(phone)}</strong></span></a>` : ''}
     <div class="shop-actions">
-      ${activeShop.staff ? `<a class="shop-action shop-admin" href="${root}app/" title="Naar het beheer">${ICONS.admin}<span>Beheer</span></a>\n      ` : ''}<a class="shop-action" href="${root}account/" title="Inloggen of mijn account">${ICONS.user}<span>Account</span></a>
+      ${activeShop.staff ? `<a class="shop-action shop-admin" href="${root}app/" title="Naar het beheer">${ICONS.admin}<span>Beheer</span></a>\n      ` : ''}<a class="shop-action" href="${root}account/" title="Inloggen of mijn account" aria-label="Account">${ICONS.user}<span>Account</span></a>
       ${activeShop.ordering
-    ? `<a class="shop-action cart" href="${root}winkelwagen/" title="Naar je winkelwagen">${ICONS.cart}<span>Winkelwagen</span><b>${activeShop.cartCount}</b></a>`
+    ? `<a class="shop-action cart" href="${root}winkelwagen/" title="Naar je winkelwagen" aria-label="Winkelwagen, ${activeShop.cartCount} ${activeShop.cartCount === 1 ? 'artikel' : 'artikelen'}">${ICONS.cart}<span>Winkelwagen</span><b>${activeShop.cartCount}</b></a>`
     : `<span class="shop-action cart" aria-disabled="true" title="De winkelwagen volgt binnenkort">${ICONS.cart}<span>Winkelwagen</span><b>0</b></span>`}
     </div>
   </div>
@@ -352,6 +394,58 @@ function productHref(root, product, variant) {
   return `${root}product/${escapeHtml(product.slug)}/${variant ? `?v=${encodeURIComponent(variant.code)}` : ''}`;
 }
 
+/** Tot en met dit aantal toont de shop "Nog N op voorraad" in plaats van "Op voorraad". */
+const LOW_STOCK_MAX = 5;
+
+/**
+ * De voorraadtekst bij een artikel: "Nog 3 op voorraad" bij een kleine voorraad, anders "Op voorraad" of "Niet op voorraad".
+ * @param {boolean} inStock Of het artikel te bestellen is.
+ * @param {?number} [quantity] Het aantal te bestellen stuks, of null als dat onbekend is (geen voorraadbeheer).
+ * @returns {string} De tekst.
+ */
+function stockText(inStock, quantity = null) {
+  if (!inStock) return 'Niet op voorraad';
+  return quantity !== null && quantity >= 1 && quantity <= LOW_STOCK_MAX ? `Nog ${quantity} op voorraad` : 'Op voorraad';
+}
+
+/**
+ * Het formulier "Mail mij als hij weer binnen is" bij een artikel dat niet op voorraad is.
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @param {string} code Artikelcode (van de gekozen variant).
+ * @param {string} status De uitkomst van een eerdere aanmelding: `ja`, `fout` of leeg.
+ * @returns {string} HTML van het blok.
+ */
+function stockAlertForm(root, code, status) {
+  const message = status === 'ja' ? '<p class="form-info" role="status">Gelukt: je krijgt één mail zodra dit artikel weer te bestellen is.</p>'
+    : status === 'fout' ? '<p class="form-error" role="alert">Aanmelden is niet gelukt. Controleer je e-mailadres en probeer het opnieuw.</p>' : '';
+  return `<form class="stock-alert" id="voorraadmelding" method="post" action="${root}voorraadmelding/">
+<h2>Mail mij als hij weer binnen is</h2>${message}
+<input type="hidden" name="code" value="${escapeHtml(code)}">
+<label class="trap" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
+<label class="form-field"><span>E-mailadres</span><input name="email" type="email" required maxlength="200" autocomplete="email"><small>We mailen je één keer en wissen je adres daarna.</small></label>
+${captchaFields('stock_alert')}
+<button class="button" type="submit">Mail mij</button>
+</form>`;
+}
+
+/**
+ * De vertrouwensstrook op de beslismomenten (productpagina, winkelwagen, afrekenen): levertijd, gratis verzenden, retour, advies en
+ * betalen. Alleen wat klopt: een punt zonder gegevens (geen drempel, geen telefoonnummer, geen online betalen) blijft weg.
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @param {{ leadText?: string, freeFrom?: number, business?: boolean, online?: boolean }} [facts] De levertijd van de eerste bezorgmethode (leeg = onbekend), de gratis-vanaf-drempel (incl. btw), of de klant zakelijk is (geen herroepingsrecht) en of online betalen aan staat.
+ * @returns {string} HTML van de strook, of leeg als er niets te melden is.
+ */
+function trustStrip(root, { leadText = '', freeFrom = 0, business = false, online = false } = {}) {
+  const phone = activeContent.site.contact.phone;
+  const items = [];
+  if (leadText) items.push(`<li>${ICONS_TRUST.truck}<span>${escapeHtml(leadText)}</span></li>`);
+  if (freeFrom > 0) items.push(`<li>${ICONS_TRUST.tag}<span>Gratis bezorgd vanaf ${escapeHtml(formatPrice(freeFrom))}${business ? ' (incl. btw)' : ''}</span></li>`);
+  if (!business) items.push(`<li>${ICONS_TRUST.back}<span><a href="${root}pagina/herroepingsrecht/">14 dagen bedenktijd</a> voor consumenten</span></li>`);
+  if (phone) items.push(`<li>${ICONS.phone}<span>Advies van vakmensen: <a href="${escapeHtml(phoneLink(phone))}">${escapeHtml(phone)}</a></span></li>`);
+  if (online) items.push(`<li>${ICONS_TRUST.lock}<span>Veilig betalen met iDEAL en andere methodes</span></li>`);
+  return items.length ? `<ul class="trust-strip" aria-label="Waarom bij ons bestellen">${items.join('')}</ul>` : '';
+}
+
 /**
  * Het formulier om een artikel in de winkelwagen te leggen (alleen als bestellen aan staat; anders een uitgeschakelde knop).
  * @param {string} root Relatief pad naar de shop-startpagina.
@@ -384,7 +478,7 @@ function productCard(product, root) {
   const variants = product.variants || [];
   const selected = variants.length ? (variants.find((variant) => variant.inStock) || variants[0]) : product;
   const href = productHref(root, product, variants.length ? selected : null);
-  const image = product.image ? `<img src="${productImageSrc(root, product.image)}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>';
+  const image = product.image ? `<img src="${productImageSrc(root, product.image, { small: true })}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>';
   const options = variants.map((variant) => `<option value="${escapeHtml(variant.code)}" data-code="${escapeHtml(variant.code)}" data-meta="${escapeHtml(variant.meta)}" data-price="${escapeHtml(formatPrice(shownPrice(variant)))}" ${activeShop.business ? ` data-price-incl="${escapeHtml(formatPrice(variant.priceBusinessIncl))}"` : ''} data-stock="${variant.inStock ? 'in' : 'out'}" data-value="${escapeHtml(String(shownPrice(variant)))}" data-label="${escapeHtml(variant.label)}" data-href="${productHref(root, product, variant)}"${variant === selected ? ' selected' : ''}>${escapeHtml(variant.label)}</option>`).join('');
   const picker = variants.length ? `<form class="variant-pick" method="get" action="${root}product/${escapeHtml(product.slug)}/">
     <label>${escapeHtml(product.attributeName)}<select name="v" data-variant-select>${options}</select></label>
@@ -431,7 +525,7 @@ function groupShowcase(group, products) {
  * @returns {string} HTML van de regel.
  */
 function productRow(product, root) {
-  return `<a class="product-row" href="${root}product/${escapeHtml(product.slug)}/"><span class="product-image"><img src="${productImageSrc(root, product.image)}" alt="" loading="lazy"></span><span class="product-row-text"><span class="product-name" title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</span><span class="product-price">${priceText(product)}</span>${variantBadge(product)}<span class="stock ${product.inStock ? 'in' : 'out'}">${product.inStock ? 'Op voorraad' : 'Niet op voorraad'}</span></span></a>`;
+  return `<a class="product-row" href="${root}product/${escapeHtml(product.slug)}/"><span class="product-image"><img src="${productImageSrc(root, product.image, { small: true })}" alt="" loading="lazy"></span><span class="product-row-text"><span class="product-name" title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</span><span class="product-price">${priceText(product)}</span>${variantBadge(product)}<span class="stock ${product.inStock ? 'in' : 'out'}">${product.inStock ? 'Op voorraad' : 'Niet op voorraad'}</span></span></a>`;
 }
 
 /**
@@ -476,6 +570,25 @@ function homeJsonLd(heroReference) {
 }
 
 /**
+ * Het blok dat de gratis planner aanprijst: ontwerp de beregening en bestel de complete lijst in één keer. De server vervangt het
+ * merkteken door het blok als de planner aan staat (anders blijft er niets over), zodat de pagina's er niet van afhangen.
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @returns {string} Het merkteken `<!--planner-promo:…-->`.
+ */
+function plannerPromoMark(root) {
+  return `<!--planner-promo:${root}-->`;
+}
+
+/**
+ * Of een hoofdcategorie over beregening gaat (daar past de plannerpromotie): de naam of het adres bevat "beregening".
+ * @param {{ slug?: string, name?: string }} group De hoofdcategorie.
+ * @returns {boolean} true als het een beregeningscategorie is.
+ */
+function isIrrigationGroup(group) {
+  return /beregening/i.test(`${group.slug || ''} ${group.name || ''}`);
+}
+
+/**
  * Startpagina in de opzet van aquatechshop.nl: foto met kop, assortimentsbalk,
  * populaire producten, producten per hoofdcategorie, voordelen, merken en een
  * oproep voor een zakelijk account.
@@ -489,11 +602,11 @@ function homePage(catalog) {
   const heroButton = hero.button || (hero.title && first ? `Bekijk ${first.name.toLowerCase()}` : '');
   const heroHref = linkHref(hero.link, root, first ? `groep/${escapeHtml(first.slug)}/` : '');
   const heroImage = imageSrc(root, hero.image);
-  const intro = `<section class="home-hero">${heroImage ? `<img src="${heroImage}" alt=""${hero.image === DEFAULT_SITE.hero.image ? ' width="1440" height="419"' : ''}>` : ''}${hero.title || hero.text || heroButton ? `<div class="home-hero-text">${hero.title ? `<h1>${escapeHtml(hero.title)}</h1>` : ''}${hero.text ? `<p>${escapeHtml(hero.text)}</p>` : ''}${heroButton && heroHref ? `<a class="button" href="${heroHref}">${escapeHtml(heroButton)}</a>` : ''}</div>` : ''}</section>`;
+  const intro = `<section class="home-hero">${heroImage ? imageHtml(root, hero.image, { attributes: `alt=""${hero.image === DEFAULT_SITE.hero.image ? ' width="1440" height="419" fetchpriority="high"' : ''}` }) : ''}${hero.title || hero.text || heroButton ? `<div class="home-hero-text">${hero.title ? `<h1>${escapeHtml(hero.title)}</h1>` : ''}${hero.text ? `<p>${escapeHtml(hero.text)}</p>` : ''}${heroButton && heroHref ? `<a class="button" href="${heroHref}">${escapeHtml(heroButton)}</a>` : ''}</div>` : ''}</section>`;
   if (!catalog.products.length) return layout({ root, groups: catalog.groups, wide: true, canonicalPath: '', jsonLd: homeJsonLd(hero.image), ogImage: homeImage(hero.image), title: `${SHOP_NAME} – alles voor uw tuinberegening`, description: 'Sproeiers, druppelslang, leidingen en pompen voor tuinberegening van AquaTech Service.', body: `${intro}<div class="wrap"><p class="muted">De webshop wordt gevuld. Kom snel terug.</p></div>` });
   const tiles = catalog.groups.map((group) => {
     const showcase = groupShowcase(group, catalog.products);
-    return `<a class="assortment-tile" href="groep/${escapeHtml(group.slug)}/"><span class="product-image">${showcase ? `<img src="${productImageSrc(root, showcase.image)}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>'}</span><span>${escapeHtml(group.name)}</span></a>`;
+    return `<a class="assortment-tile" href="groep/${escapeHtml(group.slug)}/"><span class="product-image">${showcase ? `<img src="${productImageSrc(root, showcase.image, { small: true })}" alt="" loading="lazy">` : '<span class="no-image" aria-hidden="true"></span>'}</span><span>${escapeHtml(group.name)}</span></a>`;
   }).join('');
   const assortment = `<section class="assortment"><div class="wrap assortment-inner"><div class="assortment-title"><h2>Assortiment</h2><p>Alles voor jouw project</p></div><div class="assortment-strip">${tiles}</div></div></section>`;
   /**
@@ -508,7 +621,7 @@ function homePage(catalog) {
     : catalog.featured.length ? `<section class="wrap"><h2 class="centered">Populaire producten</h2>\n${grid(catalog.featured)}</section>` : '';
   const banners = bannerBlock.enabled && bannerBlock.items.length ? `<section class="home-banners">${bannerBlock.items.map((item) => {
     const href = linkHref(item.link, root, '');
-    const inner = `<img src="${imageSrc(root, item.image)}" alt="" loading="lazy"><span class="home-banner-text">${item.title ? `<strong>${escapeHtml(item.title)}</strong>` : ''}${item.button ? `<span class="button">${escapeHtml(item.button)}</span>` : ''}</span>`;
+    const inner = `${imageHtml(root, item.image, { attributes: 'alt="" loading="lazy"', sizes: '(max-width: 800px) 100vw, 50vw' })}<span class="home-banner-text">${item.title ? `<strong>${escapeHtml(item.title)}</strong>` : ''}${item.button ? `<span class="button">${escapeHtml(item.button)}</span>` : ''}</span>`;
     return href ? `<a class="home-banner" href="${href}">${inner}</a>` : `<div class="home-banner">${inner}</div>`;
   }).join('')}</section>` : '';
   // Een variantcode verwijst naar het hoofdartikel waar de variant onder valt.
@@ -531,8 +644,8 @@ function homePage(catalog) {
   const businessImage = imageSrc(root, businessBlock.image);
   const businessHref = linkHref(businessBlock.link, root, `${root}registreren/`);
   const withForm = Boolean(businessBlock.form && activeShop.businessForm);
-  const business = businessBlock.enabled ? `<section class="business${withForm ? ' with-form' : ''}">${businessImage ? `<img src="${businessImage}" alt="" loading="lazy">` : ''}<div class="business-text"><h2>${escapeHtml(businessBlock.title)}</h2>${businessBlock.text ? `<p>${escapeHtml(businessBlock.text)}</p>` : ''}${businessBlock.button && !withForm ? `<a class="button" href="${businessHref}">${escapeHtml(businessBlock.button)}</a>` : ''}</div>${withForm ? businessForm(root, activeShop.businessSent) : ''}</section>` : '';
-  return layout({ root, wide: true, canonicalPath: '', variantScript: [...catalog.bestsellers, ...catalog.featured].some((product) => product.variants), jsonLd: homeJsonLd(hero.image), ogImage: homeImage(hero.image), title: `${SHOP_NAME} – alles voor uw tuinberegening`, description: 'Sproeiers, druppelslang, leidingen en pompen voor tuinberegening van AquaTech Service.', body: `${intro}\n${assortment}\n${popular}\n${banners}\n${perGroup}\n${benefits}\n${brands}\n${quote}\n${business}`, groups: catalog.groups });
+  const business = businessBlock.enabled ? `<section class="business${withForm ? ' with-form' : ''}">${businessImage ? imageHtml(root, businessBlock.image, { attributes: 'alt="" loading="lazy"' }) : ''}<div class="business-text"><h2>${escapeHtml(businessBlock.title)}</h2>${businessBlock.text ? `<p>${escapeHtml(businessBlock.text)}</p>` : ''}${businessBlock.button && !withForm ? `<a class="button" href="${businessHref}">${escapeHtml(businessBlock.button)}</a>` : ''}</div>${withForm ? businessForm(root, activeShop.businessSent) : ''}</section>` : '';
+  return layout({ root, wide: true, canonicalPath: '', variantScript: [...catalog.bestsellers, ...catalog.featured].some((product) => product.variants), jsonLd: homeJsonLd(hero.image), ogImage: homeImage(hero.image), title: `${SHOP_NAME} – alles voor uw tuinberegening`, description: 'Sproeiers, druppelslang, leidingen en pompen voor tuinberegening van AquaTech Service.', body: `${intro}\n${assortment}\n${plannerPromoMark(root)}\n${popular}\n${banners}\n${perGroup}\n${benefits}\n${brands}\n${quote}\n${business}`, groups: catalog.groups });
 }
 
 /**
@@ -661,13 +774,14 @@ ${side}
 <section class="browse-main">
 <h1>${escapeHtml(subject.name)}</h1>
 <div class="browse-intro">${introHtml(subject.intro)}</div>
+${isIrrigationGroup(group) ? plannerPromoMark(root) : ''}
 ${blocks}
 ${list}
 </section>
 </div>`;
   const browsePath = `${category ? `categorie/${category.slug}` : `groep/${group.slug}`}/${page > 1 ? `?pagina=${page}` : ''}`;
   const breadcrumbSteps = [{ name: 'Shop', path: '' }, { name: group.name, path: `groep/${group.slug}/` }, ...chain.map((item) => ({ name: item.name, path: `categorie/${item.slug}/` }))];
-  return layout({ root, wide: true, canonicalPath: browsePath, jsonLd: [Seo.breadcrumbJsonLd(breadcrumbSteps, activeShop.baseUrl)], events: listEventsOf(subject.name, shown), variantScript: shown.some((product) => product.variants), title: `${subject.name} – ${SHOP_NAME}`, description: `${subject.name} van AquaTech Service: ${productCount(subject.count)}.`, body, groups });
+  return layout({ root, wide: true, canonicalPath: browsePath, jsonLd: [Seo.breadcrumbJsonLd(breadcrumbSteps, activeShop.baseUrl)], events: listEventsOf(subject.name, shown), variantScript: shown.some((product) => product.variants), title: Seo.pageTitleOf(subject.seoTitle, `${subject.name} – ${SHOP_NAME}`), description: subject.seoDescription || `${subject.name} van AquaTech Service: ${productCount(subject.count)}.`, body, groups });
 }
 
 /**
@@ -694,20 +808,35 @@ function categoryPage(category, products, groups, options = {}) {
 }
 
 /**
- * Zoekpagina: producten waarvan naam of artikelnummer de zoekterm bevat.
+ * De hulp bij een zoekopdracht zonder resultaat: tips, de hoofdcategorieën en het telefoonnummer, zodat de bezoeker niet op een lege pagina strandt.
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @param {object[]} groups Alle hoofdcategorieën.
+ * @returns {string} HTML van het blok.
+ */
+function noResults(root, groups) {
+  const phone = activeContent.site.contact.phone;
+  const links = groups.map((group) => `<li><a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a></li>`).join('');
+  return `<div class="no-results"><p><strong>Niets gevonden.</strong> Probeer een korter woord, een andere schrijfwijze of het artikelnummer.</p>${links ? `<p>Of kijk in een van onze categorieën:</p><ul class="no-results-groups">${links}</ul>` : ''}${phone ? `<p>Zoek je iets specifieks? Bel ons voor advies: <a href="${escapeHtml(phoneLink(phone))}">${escapeHtml(phone)}</a>.</p>` : ''}</div>`;
+}
+
+/**
+ * Zoekpagina: producten waarvan naam, artikelnummer of categorie bij de zoekterm passen, beste treffer eerst.
  * @param {string} query De zoekterm.
  * @param {object[]} products De producten die passen (al gefilterd).
  * @param {object[]} groups Alle hoofdcategorieën.
  * @param {boolean} [onlyInStock] Of alleen producten op voorraad getoond worden.
  * @param {boolean} [preview] Of het conceptvoorbeeld in de filterlinks behouden blijft.
+ * @param {boolean} [widened] Of er ruimer is gezocht (verwante woorden, tikfouten) omdat er geen exacte treffers waren.
  * @returns {string} De HTML-pagina.
  */
-function searchPage(query, products, groups, onlyInStock = false, preview = false) {
+function searchPage(query, products, groups, onlyInStock = false, preview = false, widened = false) {
   const root = '../';
   const shown = products.slice(0, MAX_SEARCH_RESULTS);
   const body = `<h1>Zoeken</h1>
 ${query ? `<p class="muted">${productCount(products.length)} voor “${escapeHtml(query)}”${products.length > shown.length ? ` (de eerste ${shown.length} getoond)` : ''}.</p>` : '<p class="muted">Typ een productnaam of artikelnummer.</p>'}
+${query && widened && products.length ? '<p class="muted search-widened">Geen exacte treffers: we zochten ook op verwante woorden en andere schrijfwijzen.</p>' : ''}
 ${query ? stockFilter(onlyInStock, `q=${encodeURIComponent(query)}`, `q=${encodeURIComponent(query)}&amp;voorraad=1`, preview) : ''}
+${query && !products.length ? noResults(root, groups) : ''}
 <div class="product-grid">
 ${shown.map((product) => productCard(product, root)).join('\n')}
 </div>`;
@@ -752,10 +881,10 @@ function detailsSection(details) {
  * @param {object[]} groups Alle hoofdcategorieën.
  * @param {string} [chosenCode] Artikelnummer van de gekozen variant (alleen bij een hoofdartikel; anders de eerste op voorraad).
  * @param {Map<string, { description: string, specifications: object[] }>} [details] Omschrijving en specificaties per artikelcode (storefront-data.detailsOf).
- * @param {{ packagingsFor?: Function, packCode?: string }} [packaging] packagingsFor(artikelcode) = de verpakkingen die de bezoeker mag kiezen (zie storefront.js) en packCode = de gekozen verpakking (leeg = per stuk).
+ * @param {{ packagingsFor?: Function, packCode?: string, leadTextFor?: Function, deliveryNoteFor?: Function, trust?: { freeFrom?: number, online?: boolean }, stockAlert?: ?{ status: string } }} [packaging] `stockAlert` zet het formulier voor de voorraadmelding bij een artikel dat niet op voorraad is (met de uitkomst van een eerdere aanmelding in `status`) packagingsFor(artikelcode) = de verpakkingen die de bezoeker mag kiezen (zie storefront.js) en packCode = de gekozen verpakking (leeg = per stuk).
  * @returns {string} De HTML-pagina.
  */
-function productPage(product, groups, chosenCode = '', details = new Map(), { packagingsFor = () => [], packCode = '' } = {}) {
+function productPage(product, groups, chosenCode = '', details = new Map(), { packagingsFor = () => [], packCode = '', leadTextFor = () => '', deliveryNoteFor = () => '', trust = {}, stockAlert = null } = {}) {
   const root = '../../';
   const variants = product.variants || [];
   const chosen = variants.length ? (variants.find((variant) => variant.code === chosenCode) || variants.find((variant) => variant.inStock) || variants[0]) : null;
@@ -775,7 +904,7 @@ function productPage(product, groups, chosenCode = '', details = new Map(), { pa
       <label>Verpakking<select name="p" data-autosubmit><option value="">Per ${escapeHtml(product.unit)} – ${escapeHtml(formatPrice(shownPrice(shown)))}</option>${packagings.map((packaging) => `<option value="${escapeHtml(packaging.packCode)}"${packaging === pack ? ' selected' : ''}>${escapeHtml(packaging.name)} (${packaging.factor} ${escapeHtml(product.unit)}) – ${escapeHtml(formatPrice(packaging.price))}</option>`).join('')}</select></label>
       <button class="button secondary variant-go" type="submit">Kies</button>
     </form>` : '';
-  const shownDetails = details.get(shown.code) || details.get(product.code) || { description: '', specifications: [] };
+  const shownDetails = details.get(shown.code) || details.get(product.code) || { description: '', specifications: [], seoTitle: '', seoDescription: '', brand: '', ean: '' };
   const parentLink = product.parentSlug ? `<p class="note"><a href="${root}product/${escapeHtml(product.parentSlug)}/?v=${encodeURIComponent(shown.code)}">Alle uitvoeringen van ${escapeHtml(product.parentName)}</a></p>` : '';
   const viewedItem = activeShop.analytics ? Analytics.itemOfProduct({ code: pack ? pack.cartCode : shown.code, name: product.name, categoryName: product.categoryName }, pack ? pack.price : shownPrice(shown), { variant: chosen ? chosen.label : '' }) : null;
   const body = `<nav class="crumbs" aria-label="Kruimelpad"><a href="${root}">Shop</a>${group ? ` › <a href="${root}groep/${escapeHtml(group.slug)}/">${escapeHtml(group.name)}</a>` : ''} › <a href="${root}categorie/${escapeHtml(product.categorySlug)}/">${escapeHtml(product.categoryName)}</a> › <span>${escapeHtml(product.name)}</span></nav>
@@ -787,9 +916,13 @@ function productPage(product, groups, chosenCode = '', details = new Map(), { pa
     <p class="sku">Artikelnummer: ${escapeHtml(shown.code)}${chosen && chosen.meta ? ` | ${escapeHtml(chosen.meta)}` : ''}</p>
     ${packagingPicker}
     <p class="price">${escapeHtml(formatPrice(pack ? pack.price : shownPrice(shown)))} <small>${activeShop.business ? `excl. ${shown.vatRate}% btw · per ${escapeHtml(pack ? `${pack.name} (${pack.factor} ${product.unit})` : product.unit)}<br><span class="price-incl">incl. btw ${escapeHtml(formatPrice(pack ? pack.priceIncl : shown.priceBusinessIncl))}</span>` : `incl. ${shown.vatRate}% btw · per ${escapeHtml(pack ? `${pack.name} (${pack.factor} ${product.unit})` : product.unit)}`}</small></p>
-    <p class="stock ${(pack ? pack.inStock : shown.inStock) ? 'in' : 'out'}">${(pack ? pack.inStock : shown.inStock) ? 'Op voorraad' : 'Niet op voorraad'}</p>
+    <p class="stock ${(pack ? pack.inStock : shown.inStock) ? 'in' : 'out'}">${stockText(pack ? pack.inStock : shown.inStock, pack ? null : (shown.stockQty === undefined ? null : shown.stockQty))}</p>
+    ${leadTextFor(shown.code, pack ? pack.inStock : shown.inStock) ? `<p class="lead-time">${escapeHtml(leadTextFor(shown.code, pack ? pack.inStock : shown.inStock))}</p>` : ''}
+    ${deliveryNoteFor(shown.code) ? `<p class="delivery-note note">Bezorging: ${escapeHtml(deliveryNoteFor(shown.code))}</p>` : ''}
     ${activeShop.ordering ? orderForm(root, pack ? pack.cartCode : shown.code, pack ? pack.inStock : shown.inStock, 'product-order', viewedItem) : '<button class="button" type="button" disabled>In winkelwagen</button>\n    <p class="note">Online bestellen volgt binnenkort.</p>'}
+    ${stockAlert && !(pack ? pack.inStock : shown.inStock) ? stockAlertForm(root, shown.code, stockAlert.status) : ''}
     ${parentLink}
+    ${trustStrip(root, { freeFrom: trust.freeFrom || 0, online: Boolean(trust.online), business: activeShop.business })}
   </div>
 </article>
 ${detailsSection(shownDetails)}`;
@@ -798,7 +931,7 @@ ${detailsSection(shownDetails)}`;
   const jsonProduct = product.parentSlug ? { ...product, variants: [] } : product;
   const productDescription = shownDetails.description ? shortText(shownDetails.description, 500) : `${product.name}, artikelnummer ${product.code}${product.categoryName ? `, uit de categorie ${product.categoryName}` : ''} bij ${SHOP_NAME}.`;
   const breadcrumbSteps = [{ name: 'Shop', path: '' }, ...(group ? [{ name: group.name, path: `groep/${group.slug}/` }] : []), { name: product.categoryName, path: `categorie/${product.categorySlug}/` }, { name: product.name, path: productPath }];
-  return layout({ root, events: viewedItem ? Analytics.viewItemEvents(viewedItem, { inStock: pack ? pack.inStock : shown.inStock }) : [], canonicalPath: productPath, ogType: 'product', ogImage: Seo.imageUrlOf(activeShop.baseUrl, imageUrl), variantScript: Boolean(chosen || packagings.length), jsonLd: [Seo.productJsonLd({ product: jsonProduct, baseUrl: activeShop.baseUrl, canonicalPath: productPath, shopName: SHOP_NAME, description: productDescription }), Seo.breadcrumbJsonLd(breadcrumbSteps, activeShop.baseUrl)], title: `${product.name} – ${SHOP_NAME}`, description: shownDetails.description ? shortText(shownDetails.description, 155) : `${product.name} (${formatPrice(shownPrice(shown))} ${activeShop.business ? 'excl.' : 'incl.'} btw) bij AquaTech Service.`, body, groups });
+  return layout({ root, events: viewedItem ? Analytics.viewItemEvents(viewedItem, { inStock: pack ? pack.inStock : shown.inStock }) : [], canonicalPath: productPath, ogType: 'product', ogImage: Seo.imageUrlOf(activeShop.baseUrl, imageUrl), variantScript: Boolean(chosen || packagings.length), jsonLd: [Seo.productJsonLd({ product: jsonProduct, baseUrl: activeShop.baseUrl, canonicalPath: productPath, shopName: SHOP_NAME, description: productDescription, brand: shownDetails.brand, ean: shownDetails.ean }), Seo.breadcrumbJsonLd(breadcrumbSteps, activeShop.baseUrl)], title: Seo.pageTitleOf(shownDetails.seoTitle, `${product.name} – ${SHOP_NAME}`), description: shownDetails.seoDescription || (shownDetails.description ? shortText(shownDetails.description, 155) : `${product.name} (${formatPrice(shownPrice(shown))} ${activeShop.business ? 'excl.' : 'incl.'} btw) bij AquaTech Service.`), body, groups });
 }
 
 /**
@@ -831,20 +964,110 @@ function aboutPage(groups) {
   return layout({ root, groups, wide: true, canonicalPath: 'over-ons/', title: `Over ons – ${SHOP_NAME}`, description: 'Aquatechshop.nl is ontstaan vanuit HVT Beregening: scherpe tarieven, een eigen technische dienst en levering op locatie.', body });
 }
 
+/** Opzoeklijsten per catalogus (artikelcode → artikel, categorie → subcategorieën), zodat een pagina met meer artikelblokken ze één keer opbouwt. */
+const blockLookups = new WeakMap();
+
 /**
- * Een vaste pagina uit Beheer (zoals Over ons): titel en tekst.
- * @param {object} page De pagina (slug, title, description, body).
- * @param {object[]} groups Alle hoofdcategorieën (voor menu en voet).
- * @param {string} root Relatief pad naar de shop-startpagina ('../' of '../../').
+ * De opzoeklijsten voor artikelblokken van een catalogus.
+ * @param {object} catalog De catalogus (zie buildCatalog).
+ * @returns {{ byCode: Map<string, object>, childrenOf: Map<string, string[]> }} Artikel per code (een variantcode geeft het hoofdartikel) en de directe subcategorieën per categorie.
+ */
+function lookupsOf(catalog) {
+  let lookups = blockLookups.get(catalog);
+  if (lookups) return lookups;
+  const byCode = new Map(catalog.products.map((product) => [product.code, product]));
+  const bySlug = new Map(catalog.products.map((product) => [product.slug, product]));
+  for (const variant of catalog.variantProducts || []) {
+    if (!byCode.has(variant.code) && bySlug.has(variant.parentSlug)) byCode.set(variant.code, bySlug.get(variant.parentSlug));
+  }
+  const childrenOf = new Map();
+  for (const category of catalog.categories) {
+    if (category.parentSlug) childrenOf.set(category.parentSlug, [...(childrenOf.get(category.parentSlug) || []), category.slug]);
+  }
+  lookups = { byCode, childrenOf };
+  blockLookups.set(catalog, lookups);
+  return lookups;
+}
+
+/**
+ * Zoekt de artikelen voor een artikelblok: eigen artikelcodes (een variantcode geeft het hoofdartikel) of een categorie met haar subcategorieën.
+ * @param {object} block Het artikelblok (mode, codes, category, limit).
+ * @param {object} catalog De catalogus (zie buildCatalog).
+ * @returns {object[]} De artikelen (uit een categorie maximaal block.limit; bij eigen codes alle bestaande, zonder dubbelen).
+ */
+function productsOfBlock(block, catalog) {
+  const { byCode, childrenOf } = lookupsOf(catalog);
+  if (block.mode === 'category') {
+    const slugs = new Set([block.category]);
+    const queue = [block.category];
+    while (queue.length) {
+      for (const child of childrenOf.get(queue.pop()) || []) {
+        if (!slugs.has(child)) { slugs.add(child); queue.push(child); }
+      }
+    }
+    return catalog.products.filter((product) => slugs.has(product.categorySlug)).slice(0, block.limit);
+  }
+  // Bij eigen codes telt het aantal codes (maximaal 12, al begrensd bij het opslaan); `limit` geldt alleen voor een categorie.
+  return [...new Set(block.codes.map((code) => byCode.get(code)).filter(Boolean))];
+}
+
+/**
+ * Tekent de blokken van een pagina (tekst, afbeelding, artikelen, vragen, knop).
+ * @param {object[]} blocks De blokken (zie page-blocks.js).
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @param {object} catalog De catalogus voor de artikelblokken.
+ * @returns {string} HTML van de blokken.
+ */
+function renderPageBlocks(blocks, root, catalog) {
+  return blocks.map((block) => {
+    if (block.type === 'text') return `<div class="cms-text">${block.html.replace(/<img src="media:([0-9a-f-]{36})"/g, (_, id) => `<img loading="lazy" src="${root}media/${id}"`)}</div>`;
+    if (block.type === 'image') {
+      const image = `<img loading="lazy" src="${imageSrc(root, block.image)}" alt="${escapeHtml(block.alt)}">`;
+      const href = linkHref(block.link, root, '');
+      return `<figure class="cms-image">${href ? `<a href="${href}">${image}</a>` : image}${block.caption ? `<figcaption>${escapeHtml(block.caption)}</figcaption>` : ''}</figure>`;
+    }
+    if (block.type === 'products') {
+      const products = productsOfBlock(block, catalog);
+      if (!products.length) return '';
+      return `<section class="cms-products">${block.title ? `<h2>${escapeHtml(block.title)}</h2>` : ''}<div class="product-grid">\n${products.map((product) => productCard(product, root)).join('\n')}\n</div></section>`;
+    }
+    if (block.type === 'faq') {
+      return `<section class="cms-faq">${block.title ? `<h2>${escapeHtml(block.title)}</h2>` : ''}${block.items.map((item) => `<details><summary>${escapeHtml(item.question)}</summary>${item.answer.split(/\n{2,}/).map((part) => `<p>${escapeHtml(part).replace(/\n/g, '<br>')}</p>`).join('')}</details>`).join('')}</section>`;
+    }
+    const href = linkHref(block.link, root, '');
+    return `<aside class="cms-cta">${block.title ? `<h2>${escapeHtml(block.title)}</h2>` : ''}${block.text ? `<p>${escapeHtml(block.text)}</p>` : ''}${href && block.button ? `<a class="button" href="${href}">${escapeHtml(block.button)}</a>` : ''}</aside>`;
+  }).join('\n');
+}
+
+/**
+ * Vragen met antwoord voor de FAQPage-gegevens van een pagina: de vragen uit de FAQ-blokken, en op de pagina
+ * veelgestelde-vragen (zonder FAQ-blok) de koppen in de tekstblokken.
+ * @param {{ slug: string }} page De pagina.
+ * @param {object[]} blocks De blokken van de pagina.
+ * @returns {{ question: string, answer: string }[]} De vragen.
+ */
+function faqEntriesOfPage(page, blocks) {
+  const fromBlocks = faqEntriesOfBlocks(blocks);
+  if (fromBlocks.length || page.slug !== FAQ_SLUG) return fromBlocks;
+  return Seo.faqEntriesOf(blocks.filter((block) => block.type === 'text').map((block) => block.html).join(''));
+}
+
+/**
+ * Een vaste pagina uit Beheer.
+ * @param {{ slug: string, title: string, description?: string, seoTitle?: string, blocks?: object[], body?: string }} page De pagina.
+ * @param {object[]} groups Alle hoofdcategorieën.
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @param {object} [catalog] De catalogus voor artikelblokken (zonder tonen die blokken niets).
  * @returns {string} De HTML-pagina.
  */
-function contentPage(page, groups, root) {
-  const body = page.body.replace(/<img src="media:([0-9a-f-]{36})"/g, (_, id) => `<img loading="lazy" src="${root}media/${id}"`);
+function contentPage(page, groups, root, catalog = { products: [], categories: [] }) {
+  const blocks = blocksOf(page);
   const html = `<div class="wrap"><nav class="crumbs" aria-label="Kruimelpad"><a href="${root}">Shop</a> › <span>${escapeHtml(page.title)}</span></nav>
 <article class="cms-page"><h1>${escapeHtml(page.title)}</h1>
-${body}
+${renderPageBlocks(blocks, root, catalog)}
 </article></div>`;
-  return layout({ root, groups, wide: true, canonicalPath: page.slug === 'over-ons' ? 'over-ons/' : `pagina/${page.slug}/`, jsonLd: page.slug === FAQ_SLUG ? [Seo.faqJsonLd(Seo.faqEntriesOf(page.body))] : [], title: `${page.title} – ${SHOP_NAME}`, description: page.description || `${page.title} bij ${SHOP_NAME}.`, body: html });
+  const faq = Seo.faqJsonLd(faqEntriesOfPage(page, blocks));
+  return layout({ root, groups, wide: true, canonicalPath: page.slug === 'over-ons' ? 'over-ons/' : `pagina/${page.slug}/`, jsonLd: faq ? [faq] : [], title: Seo.pageTitleOf(page.seoTitle, `${page.title} – ${SHOP_NAME}`), description: page.description || `${page.title} bij ${SHOP_NAME}.`, body: html });
 }
 
 /**
@@ -857,4 +1080,4 @@ function notFoundPage(root, groups) {
   return layout({ root, groups, title: `Pagina niet gevonden – ${SHOP_NAME}`, description: 'Deze pagina bestaat niet.', body: `<h1>Pagina niet gevonden</h1><p><a href="${root || './'}">Terug naar de shop</a></p>` });
 }
 
-module.exports = { layout, renderWith, captchaFields, contentPage, homePage, aboutPage, groupPage, categoryPage, searchPage, productPage, notFoundPage, escapeHtml, formatPrice };
+module.exports = { layout, renderWith, captchaFields, trustStrip, stockText, contentPage, homePage, aboutPage, groupPage, categoryPage, searchPage, productPage, notFoundPage, escapeHtml, formatPrice };

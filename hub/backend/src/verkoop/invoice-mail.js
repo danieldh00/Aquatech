@@ -4,6 +4,7 @@
 // factuur definitief wordt (instelling invoicing.autoSend; ook voor facturen
 // uit webshopbestellingen). Een mislukte verzending blijft zichtbaar op de
 // factuur (send_error); de factuur zelf blijft gewoon definitief.
+const { mailStyleOf } = require('../platform/mail-layout');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const { validEmail, mailFailure } = require('../platform/mailer');
@@ -14,10 +15,10 @@ const DocText = require(path.join(FRONTEND_DIR, 'shared', 'doc-text.js'));
 
 /**
  * Maakt de verzender voor facturen per e-mail.
- * @param {object} ctx invoices, settingsFor(tenantId), mailerFor(settings), colorsOf(tenantId) en mailBody(profile, paragraphs).
- * @returns {{ send: Function, autoSend: Function, draft: Function, pdfOf: Function }} De verzendfuncties.
+ * @param {object} ctx invoices, settingsFor(tenantId), mailerFor(settings), colorsOf(tenantId), mailBody(profile, paragraphs) en payLinkOf(tenantId, invoice) (persoonlijke betaallink, leeg als online betalen niet kan).
+ * @returns {{ send: Function, autoSend: Function, draft: Function, pdfOf: Function, values: Function }} De verzendfuncties.
  */
-function createInvoiceSender({ invoices, settingsFor, mailerFor, colorsOf = () => ({}), mailBody }) {
+function createInvoiceSender({ invoices, settingsFor, mailerFor, colorsOf = () => ({}), mailBody, payLinkOf = () => '' }) {
   /**
    * De gecontroleerde factuurinstellingen van een organisatie.
    * @param {object} settings De instellingen van de tenant.
@@ -38,12 +39,13 @@ function createInvoiceSender({ invoices, settingsFor, mailerFor, colorsOf = () =
 
   /**
    * Waarden voor {veld} in onderwerp en tekst.
+   * @param {string} tenantId Id van de tenant.
    * @param {object} invoice De factuur (met data).
    * @param {object} profile Het bedrijfsprofiel.
    * @param {object} invoicing De factuurinstellingen.
    * @returns {object} Veldnaam → tekst (klant, nummer, datum, bedrag, betaling, ...).
    */
-  function valuesOf(invoice, profile, invoicing) {
+  function valuesOf(tenantId, invoice, profile, invoicing) {
     const details = invoice.data;
     const lang = DocText.clean(details.language);
     /**
@@ -54,19 +56,35 @@ function createInvoiceSender({ invoices, settingsFor, mailerFor, colorsOf = () =
     const translate = (key) => DocText.text(lang, key);
     const credit = invoice.kind === 'credit';
     const totals = Core.totals(details, invoicing);
+    const payLink = credit ? '' : payLinkOf(tenantId, invoice);
+    const payment = credit ? translate('mail.creditSettled')
+      : invoice.status === 'betaald' ? translate('mail.alreadyPaid')
+        : Core.paymentText(invoicing, { number: invoice.number, iban: profile.iban, dueDate: day(details.dueDate, lang), days: details.paymentDays, language: lang });
     return {
+      betaallink: payLink,
       klant: details.customer.contact || details.customer.name || translate('mail.customer'),
       nummer: invoice.number || `(${DocText.text(lang, 'invoice.draft')})`,
       datum: day(details.date, lang),
       vervaldatum: day(details.dueDate, lang),
       bedrag: eur(totals.total, lang),
       bedrijf: profile.companyName || '',
+      iban: profile.iban || '',
       soort: translate(credit ? 'invoice.credit' : 'invoice.title'),
       soort_klein: translate(credit ? 'invoice.credit' : 'invoice.title').toLowerCase(),
-      betaling: credit ? translate('mail.creditSettled')
-        : invoice.status === 'betaald' ? translate('mail.alreadyPaid')
-          : Core.paymentText(invoicing, { number: invoice.number, iban: profile.iban, dueDate: day(details.dueDate, lang), days: details.paymentDays, language: lang }),
+      // De betaallink staat standaard onder {betaling}; een eigen tekst kan {betaallink} zelf plaatsen.
+      betaling: payLink ? `${payment}\n\n${DocText.text(lang, 'mail.payOnline', { link: payLink })}` : payment,
     };
+  }
+
+  /**
+   * De invulwaarden van een factuur voor een mail (ook voor de betalingsherinneringen).
+   * @param {string} tenantId Id van de tenant.
+   * @param {object} invoice De factuur (met data).
+   * @returns {object} Veldnaam → tekst.
+   */
+  function values(tenantId, invoice) {
+    const settings = settingsFor(tenantId);
+    return valuesOf(tenantId, invoice, settings.get('quoteProfile'), invoicingOf(settings));
   }
 
   /**
@@ -78,7 +96,7 @@ function createInvoiceSender({ invoices, settingsFor, mailerFor, colorsOf = () =
   function draft(tenantId, invoice) {
     const settings = settingsFor(tenantId);
     const invoicing = invoicingOf(settings);
-    const values = valuesOf(invoice, settings.get('quoteProfile'), invoicing);
+    const values = valuesOf(tenantId, invoice, settings.get('quoteProfile'), invoicing);
     // De ingestelde onderwerpregel en tekst zijn Nederlands; een Engels document krijgt de Engelse standaardtekst.
     const english = DocText.clean(invoice.data.language) === 'en';
     return {
@@ -113,7 +131,7 @@ function createInvoiceSender({ invoices, settingsFor, mailerFor, colorsOf = () =
       await mailer.send({
         to, replyTo: profile.email, bcc: options.bcc,
         subject: String(options.subject || defaults.subject).slice(0, 300),
-        ...mailBody(profile, message.split(/\n{2,}/)),
+        ...mailBody(profile, message.split(/\n{2,}/), undefined, mailStyleOf(settings)),
         attachments: [{ filename: invoiceFileName(invoice), content: pdfOf(tenantId, invoice), contentType: 'application/pdf' }],
       });
     } catch (error) {
@@ -148,7 +166,7 @@ function createInvoiceSender({ invoices, settingsFor, mailerFor, colorsOf = () =
     }
   }
 
-  return { send, autoSend, draft, pdfOf };
+  return { send, autoSend, draft, pdfOf, values };
 }
 
 module.exports = { createInvoiceSender };

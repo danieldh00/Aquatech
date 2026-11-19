@@ -171,10 +171,10 @@
         </form>
 
         <form id="s-mail" class="card-form settings">
-          <h3>E-mail (SMTP)</h3>
-          <p class="muted small">Hiermee verstuurt de app offertes, afspraaklinks en bevestigingen. Het wachtwoord wordt versleuteld opgeslagen en nooit getoond. Zonder mailserver opent versturen het eigen mailprogramma.</p>
+          <h3>E-mail</h3>
+          <p class="muted small">Hiermee verstuurt de app offertes, afspraaklinks en bevestigingen, via SMTP of Microsoft Graph. Wachtwoord en geheim worden versleuteld opgeslagen en nooit getoond. Zonder mailserver opent versturen het eigen mailprogramma.</p>
           <div class="row">
-            <label>Soort<select name="mode"><option value="smtp">SMTP met inlog</option><option value="connector">Exchange Online-connector (op IP)</option></select></label>
+            <label>Soort<select name="mode"><option value="smtp">SMTP met inlog</option><option value="connector">Exchange Online-connector (op IP)</option><option value="graph">Microsoft 365 via Graph (HTTPS, geen poorten)</option></select></label>
           </div>
           <div class="field" data-connector hidden>
             <span class="label">WAN-IP van deze server</span>
@@ -196,7 +196,28 @@
               </ol>
             </details>
           </div>
-          <div class="row">
+          <div class="field" data-graph hidden>
+            <div class="row">
+              <label>Tenant-ID (map)<input name="graphTenantId" maxlength="100" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off" spellcheck="false"></label>
+              <label>Client-ID (toepassing)<input name="graphClientId" maxlength="40" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off" spellcheck="false"></label>
+            </div>
+            <label>Clientgeheim (waarde)<input name="graphSecret" type="password" maxlength="300" autocomplete="new-password" spellcheck="false"></label>
+            <span class="muted small">De afzender hieronder moet het volledige e-mailadres zijn van een bestaande mailbox in je Microsoft 365-omgeving. Mail gaat via HTTPS (poort 443), dus een geblokkeerde SMTP-poort is geen probleem. Het geheim wordt versleuteld opgeslagen en nooit getoond.</span>
+            <details class="guide">
+              <summary>Handleiding: app registreren in Microsoft Entra</summary>
+              <ol>
+                <li>Open <b>entra.microsoft.com</b> → <b>Toepassingen</b> → <b>App-registraties</b> → <b>Nieuwe registratie</b>. Naam bijvoorbeeld <i>AquaTech mail</i>, ondersteunde accounttypen: <b>Alleen deze organisatiemap</b>. Geen omleidings-URI nodig.</li>
+                <li>Kopieer op de overzichtspagina de <b>Toepassings-id (client)</b> en de <b>Map-id (tenant)</b> naar de velden hierboven.</li>
+                <li><b>Certificaten en geheimen</b> → <b>Nieuw clientgeheim</b>. Kopieer direct de <b>waarde</b> (niet de geheim-id) naar het veld Clientgeheim. Een geheim verloopt (maximaal 24 maanden): zet een herinnering en vervang het op tijd.</li>
+                <li><b>API-machtigingen</b> → <b>Een machtiging toevoegen</b> → <b>Microsoft Graph</b> → <b>Toepassingsmachtigingen</b> → <b>Mail.Send</b>. Kies daarna <b>Beheerderstoestemming verlenen</b> (een globale of toepassingsbeheerder).</li>
+                <li><b>Beperk de app tot één mailbox</b> (sterk aanbevolen: Mail.Send als toepassing mag anders namens elke mailbox versturen). Maak in Exchange Online PowerShell een mailbeveiligde groep met alleen de afzender-mailbox en een beleid:
+                  <pre>New-ApplicationAccessPolicy -AppId &lt;client-ID&gt; -PolicyScopeGroupId offerte@jouwdomein.nl -AccessRight RestrictAccess -Description "AquaTech mail"</pre>
+                  Controleer met <code>Test-ApplicationAccessPolicy -Identity offerte@jouwdomein.nl -AppId &lt;client-ID&gt;</code>. Het beleid werkt na enkele minuten tot een uur.</li>
+                <li>Vul de afzender in (bijvoorbeeld <code>AquaTech Service &lt;offerte@jouwdomein.nl&gt;</code>), sla op en stuur een testmail. Meldt Microsoft toegang geweigerd, wacht dan even of controleer de toestemming en het beleid.</li>
+              </ol>
+            </details>
+          </div>
+          <div class="row" data-smtp>
             <label>SMTP-server<input name="host" maxlength="200" placeholder="smtp.voorbeeld.nl" autocomplete="off" spellcheck="false"></label>
             <label>Poort<input name="port" type="number" min="1" max="65535" placeholder="587"></label>
             <label>Beveiliging<select name="secure"><option value="false">STARTTLS</option><option value="true">SSL/TLS (465)</option></select></label>
@@ -251,6 +272,10 @@
             <label>IP-adressen bewaren (dagen) <span class="src" data-origin="ipRetentionDays"></span><input name="ipRetentionDays" type="number" min="1" max="3650" step="1" required></label>
             <label>Auditlog bewaren (dagen) <span class="src" data-origin="auditRetentionDays"></span><input name="auditRetentionDays" type="number" min="30" max="3650" step="1" required></label>
           </div>
+          <div class="row">
+            <label>Logboek: informatie en waarschuwingen bewaren (dagen) <span class="src" data-origin="logRetentionDays"></span><input name="logRetentionDays" type="number" min="1" max="90" step="1" required></label>
+            <label>Logboek: fouten bewaren (dagen) <span class="src" data-origin="logErrorRetentionDays"></span><input name="logErrorRetentionDays" type="number" min="1" max="180" step="1" required></label>
+          </div>
           <div class="row"><button class="btn primary" type="submit">Opslaan</button></div>
           <div class="err" role="alert"></div>
         </form>
@@ -269,12 +294,25 @@
           <p class="muted small">Elke nieuwe back-up wordt automatisch (versleuteld, zoals hij op de server staat) naar een map in je eigen Google Drive gekopieerd, zodat er altijd een kopie buiten de server staat. De app ziet alleen de map die hij zelf aanmaakt. Zonder de hoofdsleutel van deze server is een back-up op Drive onleesbaar: bewaar die sleutel dus ook apart.</p>
           <div id="d-warn" class="notice warn" role="status" hidden></div>
           <div id="d-state" class="muted small"></div>
+          <details class="ai-guide drive-steps">
+            <summary>Zo stel je dit in (eenmalig, ongeveer 15 minuten)</summary>
+            <ol>
+              <li>Ga naar <em>console.cloud.google.com</em>, kies een project of maak een nieuw project aan (bijvoorbeeld "AquaTech back-ups").</li>
+              <li>Ga naar <em>API's en services &gt; Bibliotheek</em>, zoek <em>Google Drive API</em> en klik op <em>Inschakelen</em>.</li>
+              <li>Stel het OAuth-scherm in (onder <em>Google Auth Platform</em>): app-naam, supportadres en ontwikkelaarsadres invullen; doelgroep <em>Extern</em>; bij <em>Gegevenstoegang</em> de scope <code>.../auth/drive.file</code> toevoegen.</li>
+              <li>Zet de publicatiestatus op <strong>In productie</strong> (onder <em>Doelgroep</em>). In de testmodus verloopt de koppeling na 7 dagen en moet je elke week opnieuw verbinden.</li>
+              <li>Maak onder <em>Clients</em> een client aan van het type <strong>Webtoepassing</strong>. Zet bij <em>Geautoriseerde redirect-URI's</em> exact het redirect-adres uit het veld hieronder (met https en het pad naar <code>/callback</code>).</li>
+              <li>Kopieer de <strong>Client-ID</strong> en het <strong>clientgeheim</strong> en plak ze hieronder. Sla op met <em>Opslaan</em>.</li>
+              <li>Klik op <em>Verbinden met Google Drive</em> en log in met het Google-account waarin de back-ups moeten komen. Google toont een waarschuwing dat de app niet is geverifieerd: kies <em>Geavanceerd</em> en ga door. Geef toegang tot de gevraagde Drive-rechten.</li>
+              <li>Vink <em>Nieuwe back-ups automatisch kopiëren</em> aan, sla op en klik op <em>Nu uploaden</em> voor de eerste kopie.</li>
+            </ol>
+          </details>
           <div class="form-grid">
             <label class="full">Client-ID van de Google-app <input name="clientId" autocomplete="off" spellcheck="false"></label>
             <label class="full">Clientgeheim <span id="d-secret-set" class="muted small"></span><input name="clientSecret" type="password" autocomplete="new-password" placeholder="Leeg laten = ongewijzigd"></label>
             <label class="full">Redirect-adres (voeg dit toe bij de Google-app) <input name="redirectUri" autocomplete="off" spellcheck="false"></label>
             <label>Mapnaam op Drive <input name="folderName" maxlength="80"></label>
-            <label>Aantal back-ups op Drive bewaren <input name="keepCount" type="number" min="1" max="365" step="1"></label>
+            <label>Aantal back-ups bewaren <input name="keepCount" type="number" min="1" max="365" step="1"></label>
           </div>
           <label class="chk"><input type="checkbox" name="enabled"> <span>Nieuwe back-ups automatisch naar Google Drive kopiëren</span></label>
           <div class="form-actions">
@@ -289,16 +327,65 @@
           <div id="d-remote" class="muted small"></div>
           <h4>Logboek</h4>
           <div id="d-events" class="muted small"></div>
-          <details class="ai-guide">
-            <summary>Handleiding: Google-app aanmaken (eenmalig)</summary>
-            <ol>
-              <li>Ga in de Google Cloud Console naar een project (of maak er een) en zet de <em>Google Drive API</em> aan.</li>
-              <li>Maak onder <em>OAuth-toestemmingsscherm</em> een app aan en zet de status op <strong>In productie</strong>. In de testmodus verloopt de koppeling na 7 dagen.</li>
-              <li>Maak onder <em>Inloggegevens</em> een <em>OAuth-client-ID</em> van het type <em>Webtoepassing</em> met het redirect-adres hierboven.</li>
-              <li>Vul Client-ID en clientgeheim hierboven in, sla op en klik op <em>Verbinden</em>. Google toont een waarschuwing voor niet-geverifieerde apps: kies <em>Geavanceerd</em> en ga door (alleen toegang tot door de app gemaakte bestanden).</li>
-            </ol>
-          </details>
           <div class="err" role="alert"></div>
+        </form>
+        <form id="s-vps" class="card-form settings vps-plan" novalidate>
+          <h3>Draaiboek: verhuizen naar een VPS</h3>
+          <p class="muted small">Stap voor stap van de huidige server (<code>apps01</code>, een Proxmox-VM met Docker en een Cloudflare-tunnel) naar een VPS. Het geheim van een rustige verhuizing: de tunnel, het adres en de hoofdsleutel blijven gelijk, dus er verandert niets voor klanten en niets aan DNS. Vink af wat klaar is; de vinkjes onthoudt alleen deze browser. <strong id="v-progress"></strong></p>
+
+          <h4>1. Voorbereiding (dagen eerder, zonder risico)</h4>
+          <ul class="vps-steps">
+            <li><label class="chk"><input type="checkbox" data-step="kies"> <span><strong>VPS kiezen.</strong> Datacenter in de EU, minstens 2 vCPU en 6 GB geheugen, 80 GB schijf met back-up of snapshots, Debian 13. Het image wordt alleen voor <code>amd64</code> gebouwd: kies geen ARM-VPS, tenzij de release eerst ook <code>arm64</code> bouwt.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="avg"> <span><strong>Verwerkersovereenkomst</strong> met de VPS-aanbieder sluiten en schijfversleuteling of versleutelde opslag kiezen (AVG).</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="sleutel"> <span><strong>Hoofdsleutel veilig hebben.</strong> <code>/opt/apps/aquatech/secrets/master-key</code> staat ook in de wachtwoordkluis. Zonder die sleutel zijn de back-ups, de versleutelde instellingen en alle geheimen onleesbaar.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="backup-ok"> <span><strong>Back-up controleren.</strong> Er staat een recente back-up in Beheer &gt; Systeem &gt; Back-ups en een kopie op Google Drive (zie <em>Back-ups naar Google Drive</em>).</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="inventaris"> <span><strong>Inventaris.</strong> Wat mee moet uit <code>/opt/apps/aquatech</code>: <code>.env</code> (tunneltoken), <code>secrets/</code> (<code>master-key</code>, <code>database-url-local</code>, <code>postgres-password</code>), <code>compose.yml</code>, <code>compose.localdb.yml</code>, <code>update.sh</code> en de <code>aquatech-*</code> systemd-bestanden. De database gaat via een back-up mee, nooit door <code>pgdata/</code> te kopiëren.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="adressen"> <span><strong>Adressen noteren die aan de server hangen:</strong> het uitgaande IP-adres voor de Exchange-connector (mail), het redirect-adres van Google Drive (blijft gelijk zolang het webadres gelijk blijft), de Mollie-webhook (webadres) en eventuele IP-beperkingen bij Visma of AI-aanbieders.</span></label></li>
+          </ul>
+
+          <h4>2. De VPS inrichten (oude server blijft gewoon draaien)</h4>
+          <ul class="vps-steps">
+            <li><label class="chk"><input type="checkbox" data-step="basis"> <span><strong>Basis.</strong> Eigen beheerdersaccount met SSH-sleutel, root-login en wachtwoordlogin uit, firewall met alleen SSH open (poort 3300 nooit naar buiten: de tunnel verbindt uitgaand), automatische beveiligingsupdates, tijdzone <code>Europe/Amsterdam</code>.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="docker"> <span><strong>Docker</strong> met de compose-plugin installeren en <code>/opt/apps/aquatech</code> aanmaken (uid 1000 voor <code>data/</code> en <code>secrets/</code>, zoals op apps01).</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="bestanden"> <span><strong>Bestanden kopiëren</strong> uit de inventaris (<code>scp</code> of <code>rsync</code> vanaf apps01); <code>secrets/</code> met mode 400. Zet in <code>.env</code> dezelfde tunneltoken, maar <strong>start de tunnel nog niet</strong>: twee servers op dezelfde tunnel zouden verkeer verdelen.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="update-timer"> <span><strong>Updates inrichten:</strong> <code>deploy/apps01/setup-app-update.sh</code> (timer, status- en aanvraagmap, zodat <em>Nu updaten</em> hier ook werkt) en de back-uptimer <code>aquatech-pg-backup.timer</code>.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="ghcr"> <span><strong>Image kunnen ophalen.</strong> Nu is <code>ghcr.io/danieldh00/aquatech</code> openbaar. Wordt het image later privé, doe dan op de VPS eenmalig <code>docker login ghcr.io</code> met een token met alleen <em>read:packages</em>.</span></label></li>
+          </ul>
+
+          <h4>3. Proefverhuizing (oude server nog in bedrijf)</h4>
+          <ul class="vps-steps">
+            <li><label class="chk"><input type="checkbox" data-step="proef-restore"> <span><strong>Een recente back-up terugzetten op de VPS</strong> met <code>local-db.sh restore &lt;bestand&gt;</code> (de back-ups staan in <code>backups/postgres/</code>; ze zijn gecontroleerd te openen met de hoofdsleutel). Dit is ook je bewijs dat een back-up echt terug te zetten is.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="proef-start"> <span><strong>App starten en testen zonder tunnel:</strong> <code>ssh -L 3300:localhost:3300 &lt;vps&gt;</code> en dan <code>http://localhost:3300/api/health</code>. Log in, open een offerte, een werkorder en een webshopbestelling. Meet hoe lang het terugzetten duurde: dat is je stilstand op de verhuisdag.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="proef-stop"> <span><strong>Proefdata weer weghalen</strong> (app stoppen, database leegmaken) zodat er op de verhuisdag niets blijft hangen.</span></label></li>
+          </ul>
+
+          <h4>4. Verhuisdag (reken op de stilstand uit de proef, meestal 10-30 minuten)</h4>
+          <ul class="vps-steps">
+            <li><label class="chk"><input type="checkbox" data-step="plan-dag"> <span><strong>Kies een rustig moment</strong> (buiten kantoortijd, geen lopende betalingen) en meld de onderhoudsduur in Nieuws.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="oud-stop"> <span><strong>Oude server:</strong> app in onderhoudsmodus en stoppen, daarna <code>db-local.sh backup</code> voor de laatste, volledige back-up. Stop ook <code>cloudflared</code> op apps01.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="kopie"> <span><strong>Laatste back-up naar de VPS</strong> kopiëren (en controleren met een controlesom aan beide kanten).</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="nieuw-restore"> <span><strong>VPS:</strong> back-up terugzetten (<code>local-db.sh restore</code>), app starten.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="tunnel"> <span><strong>Tunnel starten op de VPS</strong> (<code>COMPOSE_PROFILES=tunnel</code> in <code>.env</code>, daarna <code>docker compose up -d</code>). Het webadres wijst nu naar de VPS; er is niets aan DNS veranderd.</span></label></li>
+          </ul>
+
+          <h4>5. Controle direct na de verhuizing</h4>
+          <ul class="vps-steps">
+            <li><label class="chk"><input type="checkbox" data-step="check-health"> <span><code>/api/health</code> geeft de verwachte versie; inloggen werkt; het dashboard en de webshop laden.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="check-flows"> <span>Een testofferte, een testbestelling (online betalen via Mollie, de webhook moet aankomen) en een pickronde in de orderpick-app.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="check-mail"> <span><strong>Mail:</strong> bij de Exchange-connector het nieuwe uitgaande IP-adres van de VPS invullen (Beheer &gt; Instellingen &gt; E-mail toont het huidige adres) en een testmail sturen.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="check-koppelingen"> <span>Google Drive-back-up (<em>Nu uploaden</em>), Visma (verbinding testen), AI-herkenning en de bewaking in Beheer &gt; Systeem &gt; Bewaking: geen open meldingen.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="check-timers"> <span><code>systemctl list-timers | grep aquatech</code> toont de update- en back-uptimer; in Beheer &gt; Systeem &gt; Updates staat de VPS op de laatste versie.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="check-cache"> <span>Cloudflare-cacheregel voor foto's en het adres van de tunnel ongewijzigd; <code>curl -sI</code> op een artikelfoto geeft bij de tweede aanroep <code>HIT</code>.</span></label></li>
+          </ul>
+
+          <h4>6. Terugvallen en opruimen</h4>
+          <ul class="vps-steps">
+            <li><label class="chk"><input type="checkbox" data-step="terugval"> <span><strong>Terugvallen kan 14 dagen:</strong> oude server laten staan (app uit). Gaat er iets mis: tunnel op de VPS stoppen, op apps01 de app en de tunnel weer starten. Wat na de verhuizing is ingevoerd staat dan alleen op de VPS: zet eerst een verse back-up van de VPS terug op apps01.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="eerste-back-up"> <span>Op de VPS de eerste nachtelijke back-up gecontroleerd en op Google Drive teruggevonden.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="opruimen"> <span><strong>Na 14 rustige dagen:</strong> apps01 uitzetten en verwijderen, inclusief <code>pgdata/</code>, <code>secrets/</code> en alle back-ups op die schijf (AVG); oude Supabase-project verwijderen als dat nog bestaat.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="privé"> <span><strong>Daarna pas de repository en het image privé zetten</strong> (apart besluit): registry-login op de VPS en op de runner regelen vóór de omzetting.</span></label></li>
+          </ul>
+          <div class="form-actions"><button type="button" class="btn" id="v-reset">Vinkjes wissen</button></div>
         </form>
         <form id="s-restore" class="card-form settings" novalidate>
           <h3>Terugzetten uit een back-up</h3>
@@ -365,6 +452,16 @@
           <div class="row"><button class="btn primary" type="submit">Opslaan</button></div>
           <div class="err" role="alert"></div>
         </form>
+        <form id="s-payment-reminders" class="card-form settings">
+          <h3>Betalingsherinneringen en aanmaningen</h3>
+          <p class="muted small">Elk uur kijkt AquaTech welke definitieve, onbetaalde facturen over de vervaldatum zijn en mailt de klant (met de factuur als PDF) volgens de stappen hieronder. Per factuur wordt elke stap hoogstens één keer verstuurd; wat verstuurd is staat op de factuur. Een betaalde of gecrediteerde factuur valt vanzelf af. Per klant zet je dit uit op de klantkaart. De teksten pas je aan onder <em>Mail-opmaak</em> (groep Facturen).</p>
+          <label class="chk"><input type="checkbox" name="enabled"> Betalingsherinneringen automatisch versturen</label>
+          <div id="s-payment-reminders-steps" class="form-grid"></div>
+          <label class="field">Niet meer automatisch mailen na (dagen over de vervaldatum)<input name="stopAfterDays" type="number" min="1" max="365" step="1" required><span class="hint">Oudere facturen pak je zelf op (bijvoorbeeld incasso); ze krijgen geen mails meer.</span></label>
+          <p class="muted small">Zet je dit voor het eerst aan, dan krijgt een factuur die al lang open staat alleen de laatst passende stap, niet alle stappen achter elkaar.</p>
+          <div class="row"><button class="btn primary" type="submit">Opslaan</button></div>
+          <div class="err" role="alert"></div>
+        </form>
         <form id="s-purchase-proposals" class="card-form settings">
           <h3>Automatische bestelvoorstellen</h3>
           <p class="muted small">Zakt een artikel onder de minimumvoorraad, dan zet AquaTech elk uur per voorkeursleverancier een concept-inkooporder klaar onder Inkooporders. Wat al onderweg is en wat op backorder staat telt mee. Er wordt nooit iets besteld zonder dat je het voorstel goedkeurt.</p>
@@ -418,7 +515,11 @@
             <label class="field">Naam van de afhaaloptie<input name="pickupLabel" maxlength="60" placeholder="Afhalen in Nunspeet"></label>
             <label class="field span-2">Toelichting bij afhalen (adres, openingstijden)<input name="pickupNote" maxlength="300"></label>
             <label class="field">Gewicht per artikel zonder ingevuld gewicht (gram)<input name="defaultWeightGrams" type="number" min="0" max="100000" step="1"></label>
+            <label class="field">Levertijd afhalen van (dagen)<input name="pickupLeadMin" type="number" min="0" max="365" step="1" placeholder="leeg = op aanvraag"></label>
+            <label class="field">Levertijd afhalen tot (dagen)<input name="pickupLeadMax" type="number" min="0" max="365" step="1"></label>
+            <label class="field">Soort dagen bij afhalen<select name="pickupDayType"><option value="calendar">Kalenderdagen</option><option value="working">Werkdagen</option></select></label>
           </div>
+          <p class="muted small">Levertijden zijn indicatief en worden getoond bij het product en bij het afrekenen. Een artikel kan een eigen levertijd hebben; zonder levertijd staat er "Levertijd op aanvraag". Bij pallet en eigen transport kun je naast weegklassen een <i>aantalstaffel</i> invullen (t/m aantal=prijs, bijvoorbeeld <code>50=45; 200=80</code>); die gaat dan voor de weegklassen.</p>
           <p class="muted small">Per bezorgmethode één regel per land: landcode, naam, gratis vanaf (leeg of 0 = nooit) en de weegklassen als <i>t/m gram=prijs</i>, gescheiden door een puntkomma (bijvoorbeeld <code>2000=6,95; 5000=8,95</code>). Zwaarder dan de hoogste klasse = niet te bezorgen met die methode. Het gewicht per artikel vul je in bij <i>Artikelen</i>.</p>
           <div id="s-shipping-carriers"></div>
           <div class="form-actions"><button class="btn primary" type="submit">Verzending opslaan</button></div>
@@ -438,6 +539,11 @@
           <span class="muted small">Het openbare adres van de webshop, voor de terugkeer van de klant en de melding van Mollie (<code>mollie/webhook/…</code>). Moet vanaf internet bereikbaar zijn en met https beginnen.</span>
           <label class="chk"><input type="checkbox" name="guestCheckout"> <span>Bestellen zonder account toestaan</span></label>
           <span class="muted small">Een bezoeker rekent dan af met alleen e-mailadres en adres: als particulier en met direct online betalen (nooit op rekening). Hij volgt zijn bestelling met een persoonlijke link in de bevestigingsmail en kan daarna alsnog een account maken. Zakelijk bestellen (prijzen excl. btw), groothandel en dropshipping blijven alleen met een account. Werkt alleen als online betalen werkt.</span>
+          <label class="chk"><input type="checkbox" name="paymentReminder"> <span>Eén herinnering sturen bij een niet afgeronde betaling</span></label>
+          <span class="muted small">Staat een online bestelling na een uur nog open (of mislukte de betaling), dan krijgt de klant één mail met een link om af te rekenen en de tijd waarbinnen de artikelen gereserveerd blijven. Ook een gast krijgt hem, op het adres dat hij bij het afrekenen invulde. Alleen zolang de reservering loopt, nooit meer dan één keer per bestelling en per adres hoogstens één per 24 uur.</span>
+          <label class="chk"><input type="checkbox" name="quoteRequest"> <span>Zakelijke klanten een offerte laten aanvragen vanuit de winkelwagen</span></label>
+          <label>Offerte aanvragen vanaf (euro excl. btw)<input name="quoteRequestMin" type="number" min="1" max="1000000" step="1"></label>
+          <span class="muted small">Vanaf dit bedrag ziet een zakelijke klant in de winkelwagen de knop <em>Offerte aanvragen</em>. Dat maakt een concept in Offertes (alleen zichtbaar voor medewerkers) en stuurt een melding naar het e-mailadres uit je bedrijfsprofiel. Je controleert het concept en verstuurt de offerte zelf.</span>
           <label>Op rekening bestellen<select name="onAccount">
             <option value="iedereen">Voor iedereen (naast online betalen)</option>
             <option value="zakelijk">Alleen voor zakelijke klanten</option>
@@ -460,6 +566,14 @@
           <p><button class="btn primary" type="submit">Google Analytics opslaan</button></p>
           <div class="err" role="alert"></div>
         </form>
+        <form id="s-seo" class="card-form settings">
+          <h3>Zoekmachines</h3>
+          <p class="muted small">Zolang dit uit staat, is de webshop onzichtbaar voor Google en andere zoekmachines: elke pagina krijgt <code>noindex</code>, robots.txt blokkeert alles en sitemap en productfeed bestaan niet. Zet dit pas aan als de webshop live gaat. Het webadres van de webshop (bij Betalen) moet dan ingevuld zijn; daarmee worden de canonical-links, de sitemap en de gestructureerde gegevens (prijs, voorraad, merk, EAN) gemaakt. De titel en omschrijving voor zoekmachines stel je per artikel, categorie en pagina in. Alleen voor de hoofdtenant.</p>
+          <label class="chk"><input type="checkbox" name="indexing"> <span>Zoekmachines mogen de webshop opnemen</span></label>
+          <p class="state" id="s-seo-state" role="status"></p>
+          <p><button class="btn primary" type="submit">Zoekmachines opslaan</button></p>
+          <div class="err" role="alert"></div>
+        </form>
         <form id="w-form" class="card-form settings">
           <h3>WooCommerce</h3>
           <label>Webadres van de webshop<input name="url" type="url" placeholder="https://www.voorbeeld.nl" spellcheck="false"></label>
@@ -480,12 +594,16 @@
             <span class="label">Aquatech als bron</span>
             <label class="chk"><input type="checkbox" name="push"> Verkoopprijzen uit Artikelen naar de webshop sturen</label>
             <label class="chk"><input type="checkbox" name="pushStock"> Ook de voorraad (beschikbaar = stand − gereserveerd); verkopen in de webshop worden in Aquatech afgeboekt</label>
-            <span class="muted small">Een wijziging gaat binnen enkele seconden naar de webshop, en elke 10 minuten wordt alles vergeleken. Een prijs die alleen in de webshop is gewijzigd, neemt Aquatech over. Zonder dit vinkje blijft de webshop leidend voor de prijzen.</span>
+            <span class="muted small">Een wijziging gaat binnen enkele seconden naar de webshop, en daarna wordt alles vergeleken volgens het schema hieronder. Een prijs die alleen in de webshop is gewijzigd, neemt Aquatech over. Zonder dit vinkje blijft de webshop leidend voor de prijzen.</span>
           </div>
           <div class="field">
             <span class="label">Artikellijst</span>
             <label class="chk"><input type="checkbox" name="mirror"> Webshop bepaalt de artikellijst: alle producten worden voorraadartikel, artikelen die niet in de webshop staan worden gearchiveerd</label>
             <span class="muted small">Zet dit uit zodra Aquatech de bron is: de lijst wordt dan niet meer aangepast aan de webshop.</span>
+          </div>
+          <div class="field">
+            <label>Alles vergelijken met de webshop<select name="syncSchedule"><option value="night">Eén keer per nacht (aanbevolen)</option><option value="hourly">Elk uur</option><option value="tenmin">Elke 10 minuten</option></select></label>
+            <span class="muted small">Een volledige ronde haalt alle producten op en belast de server enkele minuten. Wijzigingen in Aquatech gaan altijd meteen naar de webshop; de knop Nu synchroniseren blijft werken.</span>
           </div>
           <div class="row">
             <label class="chk"><input type="checkbox" name="pricesIncludeTax"> Prijzen in de webshop zijn incl. btw</label>
@@ -517,6 +635,19 @@
             <button class="btn primary" type="submit">Kortingen opslaan</button>
           </div>
           <div id="kd-err" class="err" role="alert"></div>
+        </form>
+      </section>
+      <section id="tab-shopleveren" class="tabpane" hidden>
+        <p class="muted small">Bepaal per productcategorie welke bezorgmethodes mogen, met een aantalgrens in de basiseenheid. Schrijf de regels als <code>methode:van-tot</code>, gescheiden door komma's: <code>dpd:1-99, pallet:100-</code> betekent tot 99 stuks DPD en vanaf 100 alleen pallet (een leeg "tot" = geen bovengrens). Methodes zijn <code>dpd</code>, <code>eigen</code> en <code>pallet</code>; afhalen kan altijd. Een subcategorie met eigen regels gaat voor haar hoofdcategorie; regels bij het artikel zelf gaan voor de categorie. Een bestelling met artikelen die verschillende methodes vragen gaat met de zwaarste methode (pallet) mee. De tarieven en levertijden per methode staan bij Instellingen &gt; Verzending.</p>
+        <form id="dr-form" class="card-form settings" novalidate>
+          <h3>Regels per categorie</h3>
+          <div id="dr-list"></div>
+          <p class="muted small" id="dr-empty" hidden>Nog geen regels: alle methodes zijn toegestaan.</p>
+          <div class="row actions">
+            <button class="btn" type="button" id="dr-add">Categorie toevoegen</button>
+            <button class="btn primary" type="submit">Regels opslaan</button>
+          </div>
+          <div id="dr-err" class="err" role="alert"></div>
         </form>
       </section>
       <section id="tab-shopinhoud" class="tabpane" hidden>
@@ -635,7 +766,104 @@
           </div>
         </div>
       </section>
+      <section id="tab-mailopmaak" class="tabpane" hidden>
+        <p class="muted small">Bepaal hoe de e-mails aan klanten en leveranciers eruitzien en wat erin staat: logo, kleuren, voettekst en per mailtype het onderwerp en de tekst. Kleuren die je leeg laat volgen de documentopmaak en het kleurthema. De factuurmail stel je in bij Facturen &gt; Instellingen; berichten die je zelf nakijkt voor het versturen (offerte, afspraak) krijgen wel dezelfde opmaak.</p>
+        <div class="do-layout">
+          <form id="ml-form" class="card-form settings" novalidate>
+            <div class="form-grid">
+              <label class="field">Logo
+                <select name="logoMode">
+                  <option value="document">Logo van de documentopmaak</option>
+                  <option value="custom">Eigen logo</option>
+                  <option value="none">Geen logo, alleen de bedrijfsnaam</option>
+                </select>
+              </label>
+              <label class="field">Positie van het logo
+                <select name="logoPosition"><option value="left">Links</option><option value="center">Midden</option></select>
+              </label>
+              <div class="field full" id="ml-logo-field" hidden>
+                <span>Eigen logo</span>
+                <div class="do-logo-row">
+                  <span class="do-logo-box" id="ml-logo-box"><img id="ml-logo-img" alt="Logo" hidden><span id="ml-logo-none" class="muted small">Nog geen logo gekozen</span></span>
+                  <input type="file" id="ml-logo-file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden>
+                  <button class="btn" type="button" id="ml-logo-pick">Logo kiezen</button>
+                </div>
+                <span class="hint">PNG, JPG of SVG; wordt verkleind opgeslagen. Op een gekleurde balk past een wit of transparant logo het best.</span>
+              </div>
+              <label class="field">Hoogte van het logo
+                <input type="range" name="logoHeight" min="20" max="80" step="2">
+                <span class="hint" id="ml-logo-height-text"></span>
+              </label>
+              <label class="field">Kop
+                <select name="headerStyle"><option value="band">Gekleurde balk</option><option value="plain">Wit met een lijn</option></select>
+              </label>
+              <div class="field">
+                <span>Kopkleur</span>
+                <span class="th-pick"><input type="color" data-color="headerColor"><input type="text" data-hex="headerColor" maxlength="7" spellcheck="false" autocomplete="off" placeholder="automatisch"></span>
+                <span class="hint">Leeg = kleur van de documentopmaak of het thema.</span>
+              </div>
+              <div class="field">
+                <span>Knopkleur</span>
+                <span class="th-pick"><input type="color" data-color="buttonColor"><input type="text" data-hex="buttonColor" maxlength="7" spellcheck="false" autocomplete="off" placeholder="automatisch"></span>
+                <span class="hint">De knop in mails met een link.</span>
+              </div>
+              <div class="field">
+                <span>Accentkleur</span>
+                <span class="th-pick"><input type="color" data-color="accentColor"><input type="text" data-hex="accentColor" maxlength="7" spellcheck="false" autocomplete="off" placeholder="automatisch"></span>
+                <span class="hint">De lijn boven de voet.</span>
+              </div>
+              <label class="field chk"><input type="checkbox" name="showCompanyInFooter"> <span>Bedrijfsgegevens in de voet</span></label>
+              <label class="field full">Eigen voettekst
+                <textarea name="footerText" rows="2" maxlength="300" placeholder="Bijvoorbeeld: Openingstijden ma-vr 8.00-17.00 uur."></textarea>
+                <span class="hint">Onder de bedrijfsgegevens, in elke mail.</span>
+              </label>
+              <label class="field full">Mailtype
+                <select id="ml-type"></select>
+                <span class="hint" id="ml-type-state"></span>
+              </label>
+              <label class="field full">Onderwerp
+                <input type="text" id="ml-subject" maxlength="200" autocomplete="off">
+              </label>
+              <label class="field full">Tekst
+                <textarea id="ml-body" rows="10" maxlength="4000"></textarea>
+                <span class="hint">Alinea's scheid je met een lege regel. Klik op een invulveld om het in de tekst te zetten; een alinea waarvan alle velden leeg zijn, valt weg.</span>
+              </label>
+              <div class="field full"><div id="ml-fields" class="row actions"></div><span class="hint" id="ml-note" hidden></span></div>
+            </div>
+            <div class="row actions">
+              <button class="btn primary" type="submit" id="ml-save">Opslaan</button>
+              <button class="btn" type="button" id="ml-type-reset">Tekst van dit type terugzetten</button>
+              <button class="btn" type="button" id="ml-test">Testmail naar mezelf</button>
+              <button class="btn" type="button" id="ml-reset">Alles terugzetten</button>
+            </div>
+            <div id="ml-err" class="err" role="alert"></div>
+          </form>
+          <div class="card-form do-preview">
+            <div class="row do-preview-head">
+              <h3>Voorbeeld</h3>
+              <div class="do-kinds ml-widths" role="group" aria-label="Breedte van het voorbeeld">
+                <button class="btn small" type="button" data-width="600px" aria-pressed="true">Computer</button>
+                <button class="btn small" type="button" data-width="375px" aria-pressed="false">Telefoon</button>
+              </div>
+            </div>
+            <p class="small"><strong>Onderwerp:</strong> <span id="ml-preview-subject"></span></p>
+            <iframe id="ml-frame" class="ml-frame" sandbox title="Voorbeeld van de mail"></iframe>
+            <p class="muted small" id="ml-preview-note"></p>
+          </div>
+        </div>
+      </section>
       <section id="tab-updates" class="tabpane" hidden>
+        <section class="card" id="ht-card" aria-labelledby="ht-title">
+          <h3 id="ht-title">Servertaken</h3>
+          <p class="muted small">Dingen die op de Proxmox-host moeten gebeuren (bijvoorbeeld een serverscript opnieuw draaien). Eén commando voert alles uit wat nog open staat; taken die de server als gedaan meldt, worden vanzelf afgevinkt. Je kunt ook zelf afvinken.</p>
+          <ul class="ht-list" id="ht-list"></ul>
+          <div id="ht-command-box" hidden>
+            <p class="muted small">Plak dit op de Proxmox-host (als root):</p>
+            <pre class="ht-code" id="ht-command"></pre>
+            <div class="form-actions"><button class="btn" type="button" id="ht-copy">Kopieer commando</button></div>
+          </div>
+          <div id="ht-err" class="err" role="alert"></div>
+        </section>
         <p class="muted small">Installeer een nieuwe versie van de software wanneer het jou uitkomt. Tijdens de update staat de site ongeveer een minuut in onderhoudsmodus: bekijken kan, opslaan even niet. Start de nieuwe versie niet goed, dan gaat de server vanzelf terug naar de huidige versie.</p>
         <div id="up-none" class="card" hidden>
           <h3>Niet ingericht</h3>
@@ -651,6 +879,9 @@
                 <dt>Laatst gecontroleerd</dt><dd id="up-checked">–</dd>
               </dl>
               <p class="muted small" id="up-state" role="status" aria-live="polite"></p>
+              <div class="form-actions" id="up-check-actions">
+                <button class="btn" type="button" id="up-check">Nu controleren op updates</button>
+              </div>
               <form id="up-form" class="form-grid" novalidate hidden>
                 <label class="field full">Bevestig met je wachtwoord
                   <input type="password" id="up-password" autocomplete="current-password" required maxlength="200">
@@ -758,6 +989,29 @@
           <div class="form-actions"><button class="btn" type="button" id="mon-more" hidden>Oudere meldingen</button></div>
         </section>
       </section>
+      <section id="tab-logboek" class="tabpane" hidden>
+        <p class="muted small">Fouten, trage verzoeken, stilstand van de server, mislukte taken en bewakingsmeldingen van deze omgeving. Elke foutmelding in de app noemt een foutcode of verzoek-id: zoek die hier om te zien wat er gebeurde. Wachtwoorden, sleutels, e-mailadressen en IBAN's worden nooit bewaard. De bewaartermijn stel je in bij <a href="#security">Sessies en bewaartermijnen</a>.</p>
+        <section class="card" aria-labelledby="log-title">
+          <h3 id="log-title">Logboek</h3>
+          <div class="form-grid cols-4 log-filters">
+            <label class="field">Niveau
+              <select id="log-level"><option value="">Alles</option><option value="error">Fouten</option><option value="warn,error">Waarschuwingen en fouten</option><option value="info">Informatie</option></select>
+            </label>
+            <label class="field">Bron <select id="log-source"><option value="">Alle bronnen</option></select></label>
+            <label class="field">Van <input type="date" id="log-from"></label>
+            <label class="field">Tot en met <input type="date" id="log-to"></label>
+            <label class="field span-2">Zoeken <input type="search" id="log-q" maxlength="100" placeholder="Foutcode, verzoek-id of tekst" autocomplete="off"></label>
+            <label class="field" id="log-env-wrap" hidden>Omgeving <select id="log-env"></select></label>
+          </div>
+          <div class="form-actions">
+            <button class="btn primary" type="button" id="log-search">Zoeken</button>
+            <button class="btn" type="button" id="log-export">Exporteer naar Excel</button>
+          </div>
+          <div id="log-err" class="err" role="alert"></div>
+          <div class="tablewrap"><table class="grid" id="log-table"></table></div>
+          <div class="form-actions"><button class="btn" type="button" id="log-more" hidden>Oudere regels</button></div>
+        </section>
+      </section>
       <section id="tab-aikosten" class="tabpane" hidden>
         <div class="filters">
           <select id="ai-range" aria-label="Periode">
@@ -822,14 +1076,19 @@
   <script src="webshop-menu.js"></script>
   <script src="webshop-inhoud.js"></script>
   <script src="kortingen.js"></script>
+  <script src="levermethodes.js"></script>
   <script src="sproeiers.js"></script>
   <script src="rollen.js"></script>
   <script src="aikosten.js"></script>
   <script src="kleuren.js"></script>
   <script src="documentopmaak.js"></script>
+  <script src="mailopmaak.js"></script>
   <script src="updates.js"></script>
   <script src="bewaking.js"></script>
+  <script src="logboek.js"></script>
+  <script src="collapse-list.js"></script>
   <script src="drive-backup.js"></script>
+  <script src="vps-draaiboek.js"></script>
   <script src="backup-restore.js"></script>
   <script src="beheer.js"></script>
 </body>

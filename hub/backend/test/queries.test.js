@@ -7,7 +7,7 @@ const { createApp } = require('../src/server');
 const { createPdokFake } = require('./helpers/pdok-fake');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
-const { createClient, listen } = require('./helpers/http-client');
+const { createClient, listen, postForm } = require('./helpers/http-client');
 
 const SECRET = 'q'.repeat(64);
 const PASSWORD = 'Tuin-Plan-2026!';
@@ -201,12 +201,13 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
     // Facturen: overzicht en export in een vast aantal queries, ongeacht het
     // aantal facturen (geen query per factuur of regel).
     for (let i = 0; i < 4; i++) {
-      const inv = (await client.post('/app/api/invoices', { data: { customer: { name: `Klant ${i}` }, lines: [{ description: 'Sproeier', qty: 2, price: 10 }] } })).body;
+      const inv = (await client.post('/app/api/invoices', { data: { ...(i === 0 ? { date: '2020-01-01', dueDate: '2020-01-15' } : {}), customer: { name: `Klant ${i}` }, lines: [{ description: 'Sproeier', qty: 2, price: 10 }] } })).body;
       assert.strictEqual((await client.post(`/app/api/invoices/${inv.id}/finalize`, {})).status, 200);
     }
     probe.reset();
+    // Met een factuur over de vervaldatum komt er één query bij voor de laatste betalingsherinnering (niet per factuur).
     assert.strictEqual((await client.get('/app/api/invoices')).body.items.length, 4);
-    assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
+    assert.ok(probe.stats.queries <= 3, probe.stats.sql.join('\n'));
     probe.reset();
     assert.strictEqual((await client.get('/app/api/invoices/export')).body.items.length, 4);
     assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
@@ -229,6 +230,10 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
     probe.reset();
     assert.deepStrictEqual((await client.get('/app/api/visma/log')).body, { items: [], next: null });
     assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
+    // Kengetallen van het dashboard: één query per tegel (vier) plus de sessie.
+    probe.reset();
+    assert.strictEqual((await client.get('/app/api/kpis')).body.kpis.length, 4);
+    assert.ok(probe.stats.queries <= 5, probe.stats.sql.join('\n'));
   } finally {
     server.close();
   }
@@ -281,6 +286,13 @@ test('queries: leveranciers en inkooporders kosten een vast aantal queries, onge
     const factorView = (await client.get('/app/api/stock/price-factors')).body;
     assert.strictEqual(factorView.preview.length, 12);
     assert.ok(probe.stats.queries <= 8, probe.stats.sql.join('\n'));
+    // Open prijsvoorstellen (lijst) en voor één artikel: een vast aantal queries.
+    probe.reset();
+    assert.strictEqual((await client.get('/app/api/stock/price-proposals')).body.items.length, factorView.changedCount);
+    assert.ok(probe.stats.queries <= 8, probe.stats.sql.join('\n'));
+    probe.reset();
+    assert.strictEqual((await client.get(`/app/api/stock/price-proposals?id=${ids[0]}`)).status, 200);
+    assert.ok(probe.stats.queries <= 8, probe.stats.sql.join('\n'));
     probe.reset();
     const changes = factorView.preview.filter((row) => row.changed).map((row) => ({ id: row.id, newPrice: row.newPrice }));
     assert.strictEqual((await client.post('/app/api/stock/price-factors/apply', { items: changes })).body.updated, changes.length);
@@ -307,6 +319,41 @@ test('queries: geen SELECT * in de backend', () => {
     });
   }
   assert.deepStrictEqual(hits, []);
+});
+
+test('webshop: de winkelwagenpagina met verzendinfo doet geen query per regel', async () => {
+  const db = openDb();
+  const store = createStore(db);
+  const main = store.ensureTenant().id;
+  await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PASSWORD, mustChangePassword: false }, { platformAdmin: true });
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db }));
+  try {
+    const admin = createClient(base);
+    assert.strictEqual((await admin.post('/app/api/auth/login', { username: 'baas', password: PASSWORD })).status, 200);
+    for (const code of ['SPR-1', 'SPR-2', 'SPR-3', 'SPR-4']) assert.strictEqual((await admin.post('/app/api/stock/items', { code, name: `Sproeier ${code}`, onHand: 5, salePrice: 10, weightGrams: 300 })).status, 201);
+    assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true, shopOrdering: true, shopShipping: { pickup: { enabled: true }, dpd: { enabled: true, zones: [{ country: 'NL', freeFrom: 100, tiers: [{ upToGrams: 5000, price: 6.95 }] }] } } })).status, 200);
+    const counter = instrument(db);
+    /**
+     * Telt de queries van de winkelwagenpagina met de gegeven artikelen in de wagen.
+     * @param {string[]} codes De artikelcodes.
+     * @returns {Promise<number>} Het aantal queries.
+     */
+    const queriesFor = async (codes) => {
+      const cart = createClient(base);
+      for (const code of codes) await postForm(base, cart, '/winkelwagen/', { action: 'add', code, qty: '1' });
+      await cart.get('/winkelwagen/');
+      counter.reset();
+      const page = await cart.get('/winkelwagen/');
+      assert.strictEqual(page.status, 200);
+      assert.match(page.text, /data-shipping-hint/);
+      return counter.stats.queries;
+    };
+    const one = await queriesFor(['SPR-1']);
+    const four = await queriesFor(['SPR-1', 'SPR-2', 'SPR-3', 'SPR-4']);
+    assert.strictEqual(four, one, `geen query per regel (1 regel: ${one}, 4 regels: ${four})`);
+  } finally {
+    server.close();
+  }
 });
 
 test('webshop: met een warme cache kost een shop-pagina geen query, ook de productpagina met omschrijving niet (1)', async () => {

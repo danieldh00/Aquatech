@@ -15,8 +15,17 @@ function setText(selector, text) {
 }
 
 /**
+ * De gekozen verzendmethode: het aangevinkte keuzerondje.
+ * @param {HTMLFormElement} form Het afrekenformulier.
+ * @returns {?HTMLInputElement} Het keuzerondje, of null als er geen methode te kiezen is.
+ */
+function chosenShipping(form) {
+  return form.querySelector('input[name="shippingMethod"]:checked');
+}
+
+/**
  * Werkt het overzicht en het verwachte totaal bij voor de gekozen verzendmethode.
- * @param {HTMLOptionElement} radio De gekozen verzendmethode (optie van de keuzelijst) met de berekende gegevens.
+ * @param {HTMLInputElement} radio De gekozen verzendmethode (keuzerondje) met de berekende gegevens.
  * @returns {void}
  */
 function showChosenShipping(radio) {
@@ -49,10 +58,12 @@ function showChosenShipping(radio) {
 async function refreshTotals(form) {
   const sequence = ++refreshSequence;
   const body = new URLSearchParams({ action: 'update' });
-  for (const name of ['country', 'shippingMethod', 'vatNumber', 'guest']) {
+  for (const name of ['country', 'vatNumber', 'guest']) {
     const field = form.querySelector(`[name="${name}"]`);
     if (field) body.set(name, field.value);
   }
+  const method = chosenShipping(form);
+  if (method) body.set('shippingMethod', method.value);
   try {
     const response = await fetch(form.getAttribute('action'), { method: 'POST', body, credentials: 'same-origin', headers: { Accept: 'text/html' } });
     if (!response.ok || sequence !== refreshSequence) return;
@@ -63,16 +74,19 @@ async function refreshTotals(form) {
     const newTotal = updated.querySelector('[data-expected-total]');
     if (!newOptions || !newSummary || !newTotal) return;
     // Koos de klant intussen een andere verzendmethode, dan blijft die keuze staan (ook al kwam het antwoord voor de eerdere keuze).
-    const chosenNow = form.querySelector('select[name="shippingMethod"]');
+    const chosenNow = chosenShipping(form);
     const chosenValue = chosenNow ? chosenNow.value : '';
     form.querySelector('[data-shipping-options]').innerHTML = newOptions.innerHTML;
     document.querySelector('.checkout-summary').innerHTML = newSummary.innerHTML;
     form.querySelector('[data-expected-total]').value = newTotal.value;
-    const list = form.querySelector('select[name="shippingMethod"]');
-    if (chosenValue && list) {
-      const sameChoice = [...list.options].find((option) => option.value === chosenValue && !option.disabled);
-      if (sameChoice && list.value !== chosenValue) list.value = chosenValue;
-      if (sameChoice) showChosenShipping(list.selectedOptions[0]);
+    const sameChoice = chosenValue ? [...form.querySelectorAll('input[name="shippingMethod"]')].find((radio) => radio.value === chosenValue && !radio.disabled) : null;
+    if (sameChoice) {
+      sameChoice.checked = true;
+      showChosenShipping(sameChoice);
+    } else {
+      // De eerdere keuze bestaat in dit land niet meer: de server koos een geldige methode vooraf; neem die over in het overzicht.
+      const fallback = chosenShipping(form);
+      if (fallback) showChosenShipping(fallback);
     }
   } catch (error) {
     // Geen verbinding: de pagina blijft staan en bij het bestellen controleert de server het totaal alsnog.
@@ -99,7 +113,7 @@ if (checkoutForm) {
   checkoutForm.querySelector('.update-totals').hidden = true;
   checkoutForm.addEventListener('change', (event) => {
     const field = event.target;
-    if (field.name === 'shippingMethod') showChosenShipping(field.selectedOptions[0]);
+    if (field.name === 'shippingMethod') showChosenShipping(field);
     if (field.name === 'country' || field.name === 'vatNumber') scheduleRefresh(checkoutForm);
   });
   // Wordt er besteld terwijl de berekening nog loopt, dan eerst afwachten zodat het getoonde totaal klopt.
@@ -201,7 +215,7 @@ function setUpAddresses(form) {
    * Of de klant voor ophalen koos (dan is geen adres nodig).
    * @returns {boolean} true bij ophalen.
    */
-  const pickup = () => form.querySelector('[name="shippingMethod"]')?.value === 'ophalen';
+  const pickup = () => chosenShipping(form)?.value === 'ophalen';
   /**
    * Het land van aflevering (zonder keuzelijst is dat Nederland).
    * @returns {string} Landcode.
@@ -220,6 +234,8 @@ function setUpAddresses(form) {
    */
   const sync = () => {
     deliveryBlock.hidden = sameBox.checked;
+    const heading = form.querySelector('[data-address-heading]');
+    if (heading) heading.textContent = sameBox.checked ? heading.dataset.headingSame : heading.dataset.headingOther;
     const countryRow = form.querySelector('[data-billing-country]');
     if (countryRow) countryRow.hidden = sameBox.checked;
     if (billing) billing.refresh();
@@ -257,7 +273,7 @@ function setUpDropshipping(form) {
    * @returns {void}
    */
   const sync = () => {
-    const pickup = form.querySelector('[name="shippingMethod"]')?.value === 'ophalen';
+    const pickup = chosenShipping(form)?.value === 'ophalen';
     section.hidden = pickup;
     if (pickup) box.checked = false;
     fields.hidden = !box.checked;

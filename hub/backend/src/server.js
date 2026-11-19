@@ -2,6 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const express = require('express');
 
+const { warmShop } = require('./webshop/warm-up');
 const { createAuth, remoteIp, clientKey, parseCookies } = require('./beveiliging/auth');
 const { createAccountTokens } = require('./platform/account-tokens');
 const { createRateLimiter } = require('./beveiliging/rate-limit');
@@ -10,6 +11,7 @@ const { loadOrCreateSecret } = require('./beveiliging/session-secret');
 const { createPlanAnalyzer, AnalyzeError, PROMPT_VERSION } = require('./beregening/plan-analyzer');
 const { createRecognitionStore, sanitizeSamples, sanitizeFinalPlan, imageHash } = require('./beregening/recognitions');
 const { openDb, openDatabase, isPg } = require('./database/db');
+const { createSlowLog, timedFetch, normalizePath } = require('./platform/slow-log');
 const { createStore, withRequestCache, hashPassword, passwordProblem, preferencesOf, fingerprintOf } = require('./platform/store');
 const { withScope, limitTo, bindStream, asSystem } = require('./database/tenant-scope');
 const testdata = require('./platform/test-data');
@@ -19,7 +21,7 @@ const backups = require('./backup');
 const { createDriveBackup, sanitizeDriveBackup, DriveError, CALLBACK_PATH: DRIVE_CALLBACK_PATH } = require('./platform/drive-backup');
 const { createQuoteStore, registerQuoteRoutes, validShareBase, mailBody, Core: QuoteCore } = require('./verkoop/quotes');
 const { createCustomerStore, registerCustomerRoutes } = require('./verkoop/customers');
-const { createMailer } = require('./platform/mailer');
+const { createMailer, mailFailure } = require('./platform/mailer');
 const { createWanIp } = require('./platform/wan-ip');
 const { createAddressLookup, createAddressGuard, registerAddressRoute } = require('./platform/address-lookup');
 const { createWorkOrderStore, registerWorkOrderRoutes } = require('./uitvoering/workorders');
@@ -34,6 +36,7 @@ const { createStorefront } = require('./webshop/storefront');
 const { createVies } = require('./webshop/vies');
 const { normalizeVatNumber, validVatNumber } = require('./webshop/vat');
 const { createShopStore, registerShopRoutes, loadArticles } = require('./webshop/shop');
+const { createQuoteRequests } = require('./webshop/quote-requests');
 const { createShopSync } = require('./webshop/shop-sync');
 const { createShopContentStore, registerShopContentRoutes } = require('./webshop/shop-content');
 const { createStorefrontData } = require('./webshop/storefront-data');
@@ -41,6 +44,7 @@ const webOrdersModule = require('./webshop/web-orders');
 const { createWebOrderStore, registerWebOrderRoutes } = webOrdersModule;
 const { createPackingSlips, registerPackingSlipRoutes, packingSlipsPdf } = require('./webshop/packing-slips');
 const { registerDocumentLayoutRoutes } = require('./verkoop/document-layout');
+const { registerMailLayoutRoutes, configure: configureMailLayout } = require('./platform/mail-layout');
 const { invoicePdf } = require('./verkoop/invoice-pdf');
 const { createOrderpick, registerOrderpickRoutes } = require('./webshop/orderpick');
 const { createGoodsReceipt, registerGoodsReceiptRoutes } = require('./artikelen/goods-receipt');
@@ -50,14 +54,20 @@ const { createQuoteOrders, registerQuoteOrderRoutes } = require('./verkoop/quote
 const { createWebOrderInvoices } = require('./verkoop/web-order-invoices');
 const { createOrderMailer } = require('./webshop/web-orders-mail');
 const { createGuestOrders } = require('./webshop/guest-orders');
-const { createMollie, cleanPublicUrl } = require('./webshop/mollie');
+const { createStockAlerts } = require('./webshop/stock-alerts');
+const { createMollie, cleanPublicUrl, validPaymentId } = require('./webshop/mollie');
 const { createWebPayments } = require('./webshop/web-payments');
 const { createWebReturnStore, registerWebReturnRoutes } = require('./webshop/web-returns');
 const { createWebSalesStore, registerWebSalesRoutes } = require('./webshop/web-sales');
+const { createSearchMisses, registerSearchMissRoutes } = require('./webshop/search-misses');
+const { createFunnel, registerFunnelRoutes } = require('./webshop/funnel');
 const { createReturnMailer } = require('./webshop/web-returns-mail');
 const { createShopOrders } = require('./webshop/shop-orders');
 const { createDebtorStore, registerDebtorRoutes } = require('./verkoop/debtors');
 const { createInvoiceSender } = require('./verkoop/invoice-mail');
+const { createPaymentReminderStore, createPaymentReminderRunner } = require('./verkoop/payment-reminders');
+const { createInvoicePayments } = require('./verkoop/invoice-payments');
+const { registerInvoicePayLinkRoutes } = require('./verkoop/invoice-pay-routes');
 const { createInvoiceStore, registerInvoiceRoutes } = require('./verkoop/invoices');
 const { createVisma, registerVismaRoutes } = require('./verkoop/visma');
 const { createVismaLog } = require('./verkoop/visma-log');
@@ -69,23 +79,34 @@ const { createSeasonReminderStore, createSeasonReminderRunner } = require('./uit
 const { createStockStore, registerStockRoutes } = require('./artikelen/stock');
 const { createItemImageStore, registerItemImageRoutes } = require('./artikelen/item-images');
 const { registerLabelRoutes } = require('./artikelen/labels');
-const { sanitizeCategoryDiscounts, registerCategoryDiscountRoutes } = require('./webshop/category-discounts');
+const { sanitizeCategoryDiscounts, registerCategoryDiscountRoutes, flatten: flattenCategories } = require('./webshop/category-discounts');
+const { registerDeliveryPreviewRoutes } = require('./webshop/delivery-preview');
+const { sanitizeCategoryRules, registerDeliveryRuleRoutes, resolverFor: resolveDeliveryRules } = require('./webshop/delivery-rules');
 const { createSupplierStore, registerSupplierRoutes } = require('./artikelen/suppliers');
 const { createPriceFactorStore, registerPriceFactorRoutes } = require('./artikelen/price-factor');
 const { createOrderReader: createDefaultOrderReader } = require('./artikelen/order-reader');
 const { registerOrderReadRoute } = require('./artikelen/order-read-route');
+const { createItemTextWriter: createDefaultItemTextWriter } = require('./artikelen/item-text-writer');
+const { createItemTextDraftStore, registerItemTextRoutes } = require('./artikelen/item-text-drafts');
 const { createPackagingStore, registerPackagingRoutes } = require('./artikelen/packagings');
 const { createPurchaseOrderStore, registerPurchaseOrderRoutes } = require('./artikelen/purchase-orders');
+const { registerOpenTaskRoutes } = require('./platform/open-tasks');
+const { createHostTasks } = require('./platform/host-tasks');
+const { registerHostTaskRoutes } = require('./platform/host-tasks-routes');
+const { registerKpiRoutes } = require('./platform/kpis');
+const { createPurchaseOrderMailer } = require('./artikelen/purchase-order-mail');
 const { createNewsStore, registerNewsRoutes, unreadCount } = require('./platform/news');
 const { createSprinklerStore, registerSprinklerRoutes } = require('./beregening/sprinklers');
 const { runPlanTask } = require('./beregening/plan-runner');
 const { registerDrawingRoutes, RETENTION_DAYS: DRAWING_RETENTION_DAYS } = require('./beregening/drawings');
 const { createAiUsageStore } = require('./platform/ai-usage');
+const { createAppLog } = require('./platform/app-log');
 const { createErrorReport, catchAsync, withCause, errorCounter } = require('./platform/error-report');
 const { createSystemUpdate } = require('./platform/system-update');
 const { registerBackupRestoreRoutes } = require('./platform/backup-restore-routes');
 const { createMonitor } = require('./platform/monitoring');
 const { registerMonitoringRoutes } = require('./platform/monitoring-routes');
+const { registerAppLogRoutes } = require('./platform/app-log-routes');
 const { createMonitoringChecks } = require('./platform/monitoring-checks');
 const { registerSystemUpdateRoutes, maintenanceGuard } = require('./platform/system-update-routes');
 const { createIdempotency, ifBaseOf } = require('./beveiliging/idempotency');
@@ -330,10 +351,10 @@ function staticHeaders(version) {
 
 /**
  * Bouwt de Express-app met alle routes en opslag.
- * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, mailerFor, shopFetch, vismaFetch, mollieFetch, addressFetch, viesFetch, captchaFetch (reCAPTCHA), googleFetch (Google Drive), shippingLabelProviders (koppelingen voor verzendlabels per vervoerder) en wanIp (tests vervangen hiermee de buitenwereld).
+ * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, graphFetch (Microsoft Graph), mailerFor, shopFetch, vismaFetch, mollieFetch, addressFetch, viesFetch, captchaFetch (reCAPTCHA), googleFetch (Google Drive), shippingLabelProviders (koppelingen voor verzendlabels per vervoerder) en wanIp (tests vervangen hiermee de buitenwereld).
  * @returns {object} De app; app.locals bevat settings, onderhoud en synchronisatie.
  */
-function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, createOrderReader = createDefaultOrderReader, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, captchaFetch, googleFetch, shippingLabelProviders = {}, wanIp = createWanIp(), loginDelayMs = 1000 }) {
+function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, createOrderReader = createDefaultOrderReader, createItemTextWriter = createDefaultItemTextWriter, vault = createVault(), setupCode, backupDir = null, graphFetch, mailerFor = (settings) => createMailer(settings, graphFetch ? { fetchImpl: graphFetch } : {}), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, captchaFetch, googleFetch, shippingLabelProviders = {}, wanIp = createWanIp(), loginDelayMs = 1000, backupInChild = false }) {
   const version = readVersion();
   const database = db || openDb();
   const store = createStore(database);
@@ -588,6 +609,24 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     }
     return cached;
   }
+  const itemTextWriters = new Map();
+  /**
+   * De AI-schrijver voor producttekst van een omgeving (per model en sleutel onthouden).
+   * @param {string} [tenantId] Id van de omgeving.
+   * @returns {object} De schrijver (item-text-writer.js).
+   */
+  function currentItemTextWriter(tenantId = tenant.id) {
+    const aiSettings = settingsFor(aiTenantOf(tenantId));
+    const key = aiSettings.get('anthropicApiKey');
+    const model = aiSettings.get('aiModel');
+    const cacheKey = `${model}|${key}`;
+    let cached = itemTextWriters.get(cacheKey);
+    if (!cached) {
+      cached = createItemTextWriter({ apiKey: key, model });
+      itemTextWriters.set(cacheKey, cached);
+    }
+    return cached;
+  }
   // Verbruik en kosten van elk AI-verzoek (Beheer > AI-kosten).
   const aiUsage = createAiUsageStore(database);
   // Vaste AI-uitkomst per tekening en geleerde kleuren (zie recognitions.js).
@@ -608,9 +647,53 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   catchAsync(app);
   // Per verzoek een eigen geheugen voor gegevens die binnen één verzoek
   // meermaals nodig zijn (zoals de tenant); zie withRequestCache in store.js.
+  // Log van trage verzoeken en achtergrondtaken (platform/slow-log.js); eerste in de keten, zodat ook de rest meetelt.
+  // Centraal logboek (platform/app-log.js): request-id per verzoek en gebufferde opslag van fouten, trage verzoeken, stilstand en taken.
+  const appLog = createAppLog({ db: database, mainTenantId: tenant.id });
+  app.locals.appLog = appLog;
+  app.use(appLog.middleware);
+  const slowLog = createSlowLog({
+    thresholdMs: Number(env.SLOW_REQUEST_MS) || 1000, stallMs: Number(env.SLOW_STALL_MS) || 1000,
+    // Onder `node --test` (of met SLOW_LOG_QUIET=1) blijft het logboek in het geheugen, maar komt er niets op de console.
+    ...(env.SLOW_LOG_QUIET === '1' || (process.env.NODE_TEST_CONTEXT && env.SLOW_LOG_QUIET !== '0') ? { write: () => {} } : {}),
+    /**
+     * Een mislukte of afgeremde inlogpoging is bewust traag (wachtwoord-hash, loginvertraging) en is geen storing.
+     * @param {object} req Het verzoek.
+     * @param {object} res Het antwoord.
+     * @returns {boolean} true als het verzoek niet als traag gelogd hoeft te worden.
+     */
+    ignoreRequest: (req, res) => req.method === 'POST' && /\/api\/auth\/login$/.test(String(req.originalUrl || req.url).split('?')[0]) && [400, 401, 403, 429].includes(res.statusCode),
+    /**
+     * Zet een regel van het trage-verzoekenlog ook in het centrale logboek.
+     * @param {object} entry De vastgelegde regel (soort, duur, pad, status enz.).
+     * @returns {void}
+     */
+    onRecord: (entry) => {
+      if (entry.kind === 'stilstand') appLog.warn('stilstand', 'Hoofdthread stond stil', { durationMs: entry.stalledMs, data: { runningDuring: entry.runningDuring } });
+      else if (entry.kind === 'taak') appLog.warn('taak', `Trage taak: ${entry.task}`, { durationMs: entry.durationMs, data: { queries: entry.queries, dbMs: entry.dbMs, externalCalls: entry.externalCalls, externalMs: entry.externalMs } });
+      else appLog.warn('traag', `${entry.method} ${entry.path} (${entry.status}${entry.aborted ? ', afgebroken' : ''})`, { tenantId: entry.tenantId, requestId: entry.requestId, durationMs: entry.durationMs, data: { queries: entry.queries, dbMs: entry.dbMs, externalCalls: entry.externalCalls, externalMs: entry.externalMs } });
+    },
+    /**
+     * Legt een mislukte achtergrondtaak vast.
+     * @param {string} name Naam van de taak.
+     * @param {Error} error De fout.
+     * @returns {void}
+     */
+    onTaskError: (name, error) => appLog.error('taak', `Taak mislukt: ${name}`, { data: { fout: error && error.message } }),
+  });
+  app.locals.slowLog = slowLog;
+  app.use(slowLog.middleware);
   app.use((req, res, next) => withRequestCache(() => withScope(() => { bindStream(req); next(); })));
   // Foutmeldingen met foutcode, en details voor beheerders met de debugmodus aan (platform/error-report.js).
   const errorReport = createErrorReport({
+    /**
+     * Zet een 500-fout in het centrale logboek (met foutcode en request-id; de stacktrace wordt geschoond).
+     * @param {{ req: object, errorId: string, error: Error }} info De fout en het verzoek.
+     * @returns {void}
+     */
+    onError: ({ req, errorId, error }) => appLog.error('fout', `${req.method} ${normalizePath(req.originalUrl || req.url)}`, {
+      tenantId: req.tenantId || null, requestId: req.requestId, errorCode: errorId, data: { stack: String((error && error.stack) || error).slice(0, 1200) },
+    }),
     /**
      * Of dit verzoek foutdetails mag krijgen: debugmodus van de actieve omgeving aan en de gebruiker is beheerder.
      * @param {object} req Het verzoek.
@@ -655,6 +738,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use('/api/plan/learn', express.json({ limit: '256kb' }));
   // Documentopmaak: het logo komt als data-adres mee (hoogstens 300 kB, met de overhead van base64 dus ruim 400 kB).
   app.use('/api/admin/document-layout', express.json({ limit: '600kb' }));
+  app.use('/api/admin/mail-layout', express.json({ limit: '600kb' }));
   // Tekening + eindplan voor het meetcorpus (alleen als de organisatie dat aanzet, zie /api/plan/corpus).
   app.use('/api/plan/corpus', express.json({ limit: '12mb' }));
   // Een plan bevat de achtergrondafbeelding (base64).
@@ -1749,13 +1833,16 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (req.tenantId !== tenant.id || (user.home_tenant_id || user.tenant_id) !== tenant.id) return false;
     return Boolean(user.platform_admin) || (!multitenancyOn() && Roles.can(user, 'beheer'));
   };
+  // Servertaken (afvinklijst voor wat op de Proxmox-host moet gebeuren; platform/host-tasks.js).
+  const hostTasks = createHostTasks({ statusDir: env.UPDATE_STATUS_DIR || '', settings: settingsFor(tenant.id) });
+  registerHostTaskRoutes(app, { hostTasks, audit, mainTenantId: tenant.id, canUpdate });
   app.locals.systemUpdate = systemUpdate;
   app.locals.recordSystemUpdate = registerSystemUpdateRoutes(app, { systemUpdate, store, audit, mainTenantId: tenant.id, canUpdate }).recordFinished;
 
   // ---------- Beheer: bewaking en meldingen (platform/monitoring.js) ----------
   // Controles en incidenten; de controles zelf worden onderaan geregistreerd (ze hebben stores nodig die hier nog niet bestaan).
   const monitor = createMonitor({
-    db: database, settingsFor: (id) => settingsFor(id), mainTenantId: tenant.id, mailerFor,
+    appLog, db: database, settingsFor: (id) => settingsFor(id), mainTenantId: tenant.id, mailerFor,
     listTenantIds: () => allEnvironmentIds(),
     /**
      * Link naar Beheer > Bewaking voor in een melding.
@@ -1768,6 +1855,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     },
   });
   app.locals.monitor = monitor;
+  registerAppLogRoutes(app, { appLog, canPlatform: canUpdate, environmentIds: () => allEnvironmentIds() });
   registerMonitoringRoutes(app, { monitor, settingsFor: (id) => settingsFor(id), audit, requireJson, canPlatform: canUpdate, mainTenantId: tenant.id, mailerFor });
 
   // ---------- Beheer: back-ups ----------
@@ -1795,7 +1883,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (backupRunning) return backupRunning;
     backupRunning = (async () => {
       try {
-        const backup = await backups.createBackup({ db: database, dir: backupDir, vault });
+        // In productie in een eigen proces, zodat het kopiëren van de hele database de verzoeken niet stilzet.
+        const backup = backupInChild
+          ? await backups.createBackupInChild({ dir: backupDir, env })
+          : await backups.createBackup({ db: database, dir: backupDir, vault });
         backups.pruneBackups(backupDir, Math.max(1, settings.get('backupKeepDays')));
         if (req) audit(req, 'backup_gemaakt', { name: backup.name, size: backup.size }, undefined, tenant.id);
         else store.audit({ tenantId: tenant.id, action: 'backup_gemaakt', detail: { name: backup.name, size: backup.size, automatisch: true } });
@@ -1946,7 +2037,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // aiFromLive: testomgeving zonder eigen sleutel gebruikt die van live.
     const aiFrom = aiTenantOf(req.tenantId);
     const settings = settingsFor(req.tenantId).view();
-    if (req.tenantId !== tenant.id) { delete settings.storefront; delete settings.shopPlanner; delete settings.shopOrdering; delete settings.shopShipping; delete settings.shopPayment; delete settings.shopAnalytics; delete settings.mollieApiKey; }
+    if (req.tenantId !== tenant.id) { delete settings.storefront; delete settings.shopPlanner; delete settings.shopOrdering; delete settings.shopShipping; delete settings.shopPayment; delete settings.shopAnalytics; delete settings.shopSeo; delete settings.mollieApiKey; }
     res.json({ settings, via: auth.session(req)?.via || null,
       // De eigen webshop (winkel/) toont alleen de hoofdtenant: de schakelaar hoort alleen daar.
       storefrontAllowed: req.tenantId === tenant.id,
@@ -1973,7 +2064,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       return res.status(400).json({ error: 'invalid_setting', field: platformField,
         message: FIELDS[platformField].internal ? 'Deze instelling wijzig je in de module zelf.' : (platformField === 'theme' ? 'Kleuren wijzig je in Beheer > Kleuren.' : 'Deze instelling wijzig je in Hoofdbeheer.') });
     }
-    if (req.tenantId !== tenant.id && ['storefront', 'shopPlanner', 'shopOrdering', 'shopShipping', 'shopPayment', 'shopAnalytics', 'mollieApiKey'].some((key) => [...Object.keys(patch), ...resets].includes(key))) {
+    if (req.tenantId !== tenant.id && ['storefront', 'shopPlanner', 'shopOrdering', 'shopShipping', 'shopPayment', 'shopAnalytics', 'shopSeo', 'mollieApiKey'].some((key) => [...Object.keys(patch), ...resets].includes(key))) {
       return res.status(400).json({ error: 'invalid_setting', field: 'storefront', message: 'De eigen webshop geldt alleen voor de hoofdtenant.' });
     }
     const codeAfter = patch.accessCode !== undefined ? String(patch.accessCode).trim()
@@ -1995,7 +2086,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       audit(req, 'instellingen_gewijzigd', { fields: changed });
     }
     const responseSettings = settings.view();
-    if (req.tenantId !== tenant.id) { delete responseSettings.storefront; delete responseSettings.shopPlanner; delete responseSettings.shopOrdering; delete responseSettings.shopShipping; delete responseSettings.shopPayment; delete responseSettings.shopAnalytics; delete responseSettings.mollieApiKey; }
+    if (req.tenantId !== tenant.id) { delete responseSettings.storefront; delete responseSettings.shopPlanner; delete responseSettings.shopOrdering; delete responseSettings.shopShipping; delete responseSettings.shopPayment; delete responseSettings.shopAnalytics; delete responseSettings.shopSeo; delete responseSettings.mollieApiKey; }
     res.json({ settings: responseSettings, changed });
   });
 
@@ -2253,7 +2344,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // Opslag van offertes, werkorders en webshop (ook gebruikt door de testdata).
   const quoteStore = createQuoteStore(database, { vault });
-  const workOrderStore = createWorkOrderStore(database, { vault, staffRoles: (tid) => store.roles.keysWith(tid, 'uitvoerder') });
+  const workOrderStore = createWorkOrderStore(database, {
+    vault, staffRoles: (tid) => store.roles.keysWith(tid, 'uitvoerder'),
+    // Waar de klanten van een omgeving wonen (de live-tenant en de eigen omgeving) en welke rollen klant zijn: voor het automatisch koppelen op naam.
+    customerScopeOf: (tid) => { const home = homeOf(tid); return { tenantIds: home === tid ? [tid] : [home, tid], roleKeys: store.roles.keysOfKind(home, 'klant') }; },
+  });
   const shopStore = createShopStore(database);
   const photoStore = createPhotoStore(database, { vault });
   // Uren en materiaalverbruik op werkorders; voorraadbeheer haakt in via workLogStore.hook().
@@ -2301,7 +2396,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const invoiceSender = createInvoiceSender({
     invoices: invoiceStore, settingsFor: (id) => settingsFor(id), mailerFor, mailBody,
     colorsOf: documentColorsOf,
+    // De betaallink in de mail (invoice-payments.js); de betaalfuncties worden verderop gemaakt, de aanroep komt pas later.
+    payLinkOf: (tenantId, invoice) => invoicePayments.linkFor(tenantId, invoice),
   });
+  const paymentReminderStore = createPaymentReminderStore(database);
   const shopOrders = createShopOrders({
     db: database, invoices: invoiceStore, debtors: debtorStore, stock: stockStore, sender: invoiceSender,
     settingsFor: (id) => settingsFor(id), fetchImpl: shopFetch,
@@ -2393,10 +2491,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
      * @param {string} search De zoektekst.
      * @returns {object[]} De klanten met id, gebruikersnaam, naam, bedrijf, e-mail, telefoon en adres.
      */
-    searchCustomers: (req, search) => {
+    searchCustomers: async (req, search) => {
       const tid = req.tenantId || tenant.id;
       const home = homeOf(tid);
-      return store.listCustomerPage(home === tid ? [tid] : [home, tid], { search, limit: 20, activeOnly: true }).items
+      return (await store.listCustomerPageAsync(home === tid ? [tid] : [home, tid], { search, limit: 20, activeOnly: true })).items
         .map((customer) => ({ id: customer.id, username: customer.username, displayName: customer.displayName, companyName: customer.companyName,
           email: customer.email, phone: customer.phone, address: customer.address, vatNumber: customer.vatNumber, paymentDays: customer.paymentDays, documentLanguage: customer.documentLanguage }));
     },
@@ -2411,6 +2509,19 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     photoCounts: (tid, ids) => photoStore.counts(tid, ids),
     loggedOf: (tid, ids) => workLogStore.counts(tid, ids),
     outsourcingOf: (tid) => outsourcingStore.marks(tid),
+    can: (user, right) => Roles.can(user, right),
+    // Klantrecords voor de klantkeuze en de controle op een gekozen klant (zoals bij de offerte).
+    searchCustomers: async (req, search) => {
+      const tid = req.tenantId || tenant.id;
+      const home = homeOf(tid);
+      return (await store.listCustomerPageAsync(home === tid ? [tid] : [home, tid], { search, limit: 20, activeOnly: true })).items
+        .map((customer) => ({ id: customer.id, username: customer.username, displayName: customer.displayName, companyName: customer.companyName, email: customer.email, phone: customer.phone, address: customer.address }));
+    },
+    customerOf: (req, id) => {
+      const tid = req.tenantId || tenant.id;
+      const home = homeOf(tid);
+      return store.getCustomer(home === tid ? [tid] : [home, tid], id);
+    },
     // Voorraad: reserveren na elke wijziging, afboeken bij Gereed (zie stock.js).
     onChange: (tid, id, user) => stockStore.onWorkOrderChange(tid, id, user),
     // Medewerkers horen bij de live-tenant; in een testomgeving komen de
@@ -2598,10 +2709,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
        * Maakt een werkorder zonder offerte (status Nieuw, niet ingepland, geen uitvoerder) en reserveert het materiaal.
        * @param {object} req Het verzoek.
        * @param {object} data De werkorderdata (titel, klant, instructies, stappen, materiaal, interne notitie).
+       * @param {string|null} [customerId] Id van het klantrecord (al gecontroleerd), of null.
        * @returns {object} De werkorder.
        */
-      createWorkOrder: (req, data) => {
-        const workOrder = workOrderStore.createReceived({ id: req.user.id, tenant_id: req.tenantId }, data);
+      createWorkOrder: (req, data, customerId = null) => {
+        const workOrder = workOrderStore.createReceived({ id: req.user.id, tenant_id: req.tenantId }, data, { customerId });
         try { stockStore.onWorkOrderChange(req.tenantId, workOrder.id, req.user); } catch (error) { console.warn(`Voorraad bij werkorder ${workOrder.id} niet bijgewerkt: ${error.message}`); }
         return workOrder;
       },
@@ -2660,11 +2772,15 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const priceFactorStore = createPriceFactorStore(database, { stock: stockStore, settingsOf: (tenantId) => settingsFor(tenantId), treeOf: (tenantId) => shopContentStore.publicContent(tenantId).tree });
   stockStore.setPricer((tenantId, item) => priceFactorStore.priceFor(tenantId, item));
   registerPriceFactorRoutes(app, { priceFactors: priceFactorStore, suppliers: supplierStore, settingsOf: (tenantId) => settingsFor(tenantId), treeOf: (tenantId) => shopContentStore.publicContent(tenantId).tree, requireRight, requireJson, audit });
+  // Producttekst door de AI: de browser vraagt per portie van 5 artikelen, dus ruimer dan de limiet voor plannen (de dagelijkse limiet telt per artikel).
+  const itemTextLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 120, keyFn: (req) => `${req.tenantId || tenant.id}|${clientKey(req)}` });
+  registerItemTextRoutes(app, { drafts: createItemTextDraftStore(database), stock: stockStore, requireRight, requireJson, audit, settingsFor, aiTenantOf, currentItemTextWriter, dailyFor, limiter: itemTextLimiter, aiUsage });
   registerOrderReadRoute(app, { stock: stockStore, suppliers: supplierStore, requireRight, audit, settingsFor, aiTenantOf, currentOrderReader, dailyFor, limiter: analyzeLimiter, aiUsage });
   // Verpakkingseenheden per artikel (zie packagings.js).
   registerPackagingRoutes(app, { packagings: packagingStore, requireRight, requireJson, audit });
   registerPurchaseOrderRoutes(app, {
     purchaseOrders: purchaseOrderStore, requireRight, requireJson, audit, proposalsEnabled,
+    mail: createPurchaseOrderMailer({ purchaseOrders: purchaseOrderStore, suppliers: supplierStore, settingsFor: (id) => settingsFor(id), mailerFor, mailBody, colorsOf: documentColorsOf }),
     // Een ontvangst kan een backorder leverbaar maken: zulke bestellingen krijgen een markering en staan weer in Te picken.
     afterReceive: (tenantId, itemIds) => { try { webOrders.markBackorderReady(tenantId, itemIds); } catch (error) { console.warn(`Backorders na ontvangst: ${error.message}`); } },
   });
@@ -2680,7 +2796,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     loggedOf: (tid, woId) => workLogStore.list(tid, woId),
     articlesOf: (tid) => stockStore.saleInfo(tid),
     catalog: () => loadArticles(),
-    sender: invoiceSender, shopOrders,
+    sender: invoiceSender, shopOrders, paymentReminders: paymentReminderStore,
     mailConfigured: (req) => mailerFor(settingsFor(req.tenantId || tenant.id)).configured(),
     shopOf: (req) => settingsFor(req.tenantId || tenant.id).get('shopSource'),
     syncLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, keyFn: (req) => req.tenantId || tenant.id }),
@@ -2728,8 +2844,25 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const portalStore = createPortalStore(database);
   // Verstuurde seizoensherinneringen (season-reminders.js; de verzendronde staat onderaan).
   const seasonReminderStore = createSeasonReminderStore(database, { roles: store.roles });
+  // Facturen online betalen door de klant (Mollie, zie invoice-payments.js); de webhook is openbaar en vraagt de uitkomst zelf bij Mollie op.
+  const invoicePayments = createInvoicePayments({ db: database, invoices: invoiceStore, mollie: createMollie(mollieFetch ? { fetchImpl: mollieFetch } : {}), settingsFor: (id) => settingsFor(id), linkKey: vault.derive('factuur-betaallink') });
+  registerInvoicePayLinkRoutes(app, { invoicePayments, tenantId: tenant.id, limiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: (req) => `factuur-betaallink:${clientKey(req)}` }) });
+  invoicePayments.onPaid((tenantId, invoice) => store.audit({ tenantId, userId: null, action: 'factuur_betaald_online', detail: { number: invoice.number, total: invoice.total } }));
+  const invoiceWebhookLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 120, keyFn: (req) => `mollie-factuur:${clientKey(req)}` });
+  app.post('/api/public/invoice-payment/:invoiceId/webhook', invoiceWebhookLimiter, express.urlencoded({ extended: false, limit: '2kb' }), async (req, res) => {
+    const paymentId = String(req.body && req.body.id || '');
+    if (!validPaymentId(paymentId)) return res.status(200).end();
+    try {
+      await invoicePayments.sync(tenant.id, String(req.params.invoiceId), { paymentId });
+    } catch (failure) {
+      console.error(`Webhook van Mollie voor factuurbetaling ${paymentId} mislukt: ${failure.message}`);
+      return res.status(502).end();
+    }
+    res.status(200).end();
+  });
   registerPortalRoutes(app, {
     portal: portalStore, store, quotes: quoteStore, workorders: workOrderStore, photos: photoStore, requests: serviceRequestStore,
+    invoicePayments, invoiceSender, payLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 40, keyFn: (req) => `factuur-betalen:${req.user ? req.user.id : clientKey(req)}` }),
     requireRight, requireJson, audit, remoteIp, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
   });
 
@@ -2759,13 +2892,111 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    * @returns {Map<string, number>} Het kortingspercentage per artikelcode.
    */
   const categoryDiscountsOf = (tenantId) => (sanitizeCategoryDiscounts(settingsFor(tenantId).get('categoryDiscounts')).rules.length ? storefrontData.catalogOf(tenantId).discountByCode : new Map());
-  const webOrders = createWebOrderStore(database, { stock: stockStore, categoryDiscountsOf });
+  // Levermethoderegels per categorie (Beheer > Webshop > Levermethodes, zie delivery-rules.js): per artikelcode de regels van zijn diepste categorie met regels, onthouden zolang de catalogus en de instelling gelijk blijven.
+  const deliveryRulesCache = new Map();
+  /**
+   * De levermethoderegels van de categorie per artikelcode.
+   * @param {string} tenantId De omgeving.
+   * @returns {Map<string, object[]>} De regels per artikelcode (leeg zonder regels per categorie).
+   */
+  const deliveryRulesOf = (tenantId) => {
+    const clean = sanitizeCategoryRules(settingsFor(tenantId).get('deliveryRules'));
+    if (!clean.categories.length) {
+      deliveryRulesCache.delete(tenantId);
+      return new Map();
+    }
+    const catalog = storefrontData.catalogOf(tenantId);
+    const key = JSON.stringify(clean);
+    const cached = deliveryRulesCache.get(tenantId);
+    if (cached && cached.catalog === catalog && cached.key === key) return cached.rules;
+    const resolve = resolveDeliveryRules(flattenCategories(shopContentStore.publicContent(tenantId).tree), clean);
+    const rules = new Map();
+    for (const product of [...catalog.products, ...catalog.variantProducts]) {
+      const found = resolve(product.treeSlug || product.categorySlug);
+      if (found.length) rules.set(product.code, found);
+    }
+    deliveryRulesCache.set(tenantId, { catalog, key, rules });
+    return rules;
+  };
+  const webOrders = createWebOrderStore(database, { stock: stockStore, categoryDiscountsOf, deliveryRulesOf });
+  app.use('/api/admin/delivery-rules', express.json({ limit: '32kb' }));
+  registerDeliveryPreviewRoutes(app, { db: database, requireRight, settingsFor, deliveryRulesOf, leadInfoOf: (tenantId, codes, options) => storefrontData.leadInfoOf(tenantId, codes, options) });
+  registerDeliveryRuleRoutes(app, { settingsOf: (req) => settingsFor(req.tenantId), flatTreeOf: (tenantId) => flattenCategories(shopContentStore.publicContent(tenantId).tree), audit, requireJson });
   // Kortingen per productcategorie voor zakelijke klanten (Beheer > Webshop > Zakelijke kortingen, zie category-discounts.js).
   app.use('/api/admin/category-discounts', express.json({ limit: '32kb' }));
   registerCategoryDiscountRoutes(app, { settingsOf: (req) => settingsFor(req.tenantId), treeOf: (tenantId) => shopContentStore.publicContent(tenantId).tree, audit, requireJson });
   // Bestellen als gast: de toegang van een gast tot zijn bestelling (persoonlijke link, zie webshop/guest-orders.js).
   const guestOrders = createGuestOrders({ orders: webOrders, vault });
   const webOrderMail = createOrderMailer({ orders: webOrders, settingsFor: (id) => settingsFor(id), mailerFor, mailBody, guestLinkOf: guestOrders.linkOf });
+  // Voorraadmeldingen: een bezoeker laat zijn adres achter bij een artikel dat niet op voorraad is en krijgt één mail zodra het terug is.
+  const stockAlerts = createStockAlerts(database);
+  // Zoektermen zonder resultaat (webshop/search-misses.js): voor het overzicht in Beheer.
+  const searchMisses = createSearchMisses(database);
+  // Eigen koopfunneltelling (webshop/funnel.js): tellers in het geheugen, elke minuut naar de database.
+  const funnel = createFunnel(database);
+  setInterval(() => { try { funnel.flush(); } catch (error) { console.error('Funneltelling wegschrijven mislukt:', error.message); } }, 60 * 1000).unref();
+  /**
+   * Wist funneltellingen van meer dan 400 dagen oud (elk uur).
+   * @returns {number} Het aantal gewiste rijen.
+   */
+  app.locals.funnelPurge = () => funnel.purgeOld(tenant.id);
+  app.locals.funnel = funnel;
+  // Offerte aanvragen vanuit de winkelwagen van een zakelijke klant (webshop/quote-requests.js): maakt een conceptofferte in Offertes.
+  const quoteRequests = createQuoteRequests({
+    /**
+     * Maakt de offerte als concept met het nummer en de geldigheid uit het bedrijfsprofiel.
+     * @param {{ id: string, tenant_id: string }} user De klant die aanvraagt (eigenaar van het concept).
+     * @param {object} data De inhoud van de offerte.
+     * @param {string} customerId Het klantaccount.
+     * @returns {object} De offerte.
+     */
+    createDraft: (user, data, customerId) => {
+      const profile = settingsFor(user.tenant_id).get('quoteProfile');
+      return quoteStore.create(user, { ...data, validUntil: QuoteCore.addDays(data.date, profile.validDays || 30) }, { status: 'concept', prefix: profile.numberPrefix, customerId });
+    },
+    /**
+     * Zoekt een offerte van deze klant met het merkteken van een eerdere aanvraag (zelfde winkelwagen) sinds een moment.
+     * @param {string} tenantId Id van de omgeving.
+     * @param {string} ownerId Het klantaccount dat aanvroeg.
+     * @param {string} marker Het merkteken in de interne notitie.
+     * @param {string} since Tijdstip (ISO).
+     * @returns {?{ id: string, number: string }} De offerte, of niets.
+     */
+    findRecent: (tenantId, ownerId, marker, since) => database.prepare("SELECT id, number FROM quotes WHERE tenant_id = ? AND owner_id = ? AND deleted_at IS NULL AND created_at > ? AND data LIKE ? LIMIT 1").get(tenantId, String(ownerId), since, `%${marker}%`) || null,
+    settingsFor: (id) => settingsFor(id), mailerFor, mailBody,
+  });
+  /**
+   * Wist zoektermen zonder resultaat die al 90 dagen niet meer zijn gezocht (elk uur).
+   * @returns {number} Het aantal gewiste termen.
+   */
+  app.locals.searchMissesPurge = () => searchMisses.purgeOld(tenant.id);
+  let stockAlertsBusy = false;
+  /**
+   * Mailt de voorraadmeldingen waarvan het artikel weer te bestellen is en wist ze daarna; een melding met een mislukte mail blijft staan voor de volgende ronde (elk uur).
+   * @returns {Promise<{ sent: number, purged: number }>} Het aantal verstuurde en verlopen meldingen.
+   */
+  app.locals.stockAlertsRun = async () => {
+    const result = { sent: 0, purged: 0 };
+    if (stockAlertsBusy) return result;
+    stockAlertsBusy = true;
+    try {
+      result.purged = stockAlerts.purgeOld(tenant.id);
+      for (const alert of stockAlerts.due(tenant.id)) {
+        try {
+          if (await webOrderMail.sendStockAlert(tenant.id, alert)) {
+            stockAlerts.remove(tenant.id, alert.id);
+            result.sent += 1;
+          }
+        } catch (failure) {
+          console.error(`Voorraadmelding niet verstuurd voor ${alert.code}: ${mailFailure(failure)}`);
+        }
+      }
+    } finally {
+      stockAlertsBusy = false;
+    }
+    return result;
+  };
+  app.locals.stockAlerts = stockAlerts;
   const webReturns = createWebReturnStore(database, { orders: webOrders, stock: stockStore });
   const webReturnMail = createReturnMailer({ returns: webReturns, settingsFor: (id) => settingsFor(id), mailerFor, mailBody });
   const webOrderInvoices = createWebOrderInvoices({ orders: webOrders, invoices: invoiceStore, returns: webReturns, debtors: debtorStore, stock: stockStore, sender: invoiceSender, settingsFor: (id) => settingsFor(id) });
@@ -2779,11 +3010,17 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     await webOrderInvoices.mailIfFinalized(tenantId, outcome);
   });
   webPayments.onPaid((tenantId, order) => webOrderMail.sendPlaced(tenantId, order));
+  webPayments.onPaid((tenantId) => { funnel.count(tenantId, 'paid'); });
   /**
    * Laat onbetaalde online webshopbestellingen vervallen die langer wachten dan de bewaartijd (elk uur).
    * @returns {Promise<{ expired: number }>} Het aantal vervallen bestellingen.
    */
   app.locals.webPaymentsExpire = () => webPayments.expireUnpaid(tenant.id);
+  /**
+   * Stuurt de eenmalige betalingsherinnering bij online bestellingen die na een uur niet betaald zijn (elk uur).
+   * @returns {Promise<{ sent: number }>} Het aantal verstuurde herinneringen.
+   */
+  app.locals.webPaymentsRemind = () => webPayments.remindUnpaid(tenant.id, { send: (order) => webOrderMail.sendPaymentReminder(tenant.id, order), canSend: () => webOrderMail.mailReady(tenant.id) });
   /**
    * Geeft de voorraad vrij van webshopbestellingen op rekening waarvan de reserveringstermijn voorbij is (elk uur).
    * @returns {{ released: number }} Het aantal vrijgegeven bestellingen.
@@ -2802,6 +3039,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
   registerPackingSlipRoutes(app, { slips: packingSlips, audit, requireJson });
   // Opmaak van de PDF-documenten per organisatie: logo, kop, kleuren, lettertype, voettekst en een voorbeeld (verkoop/document-layout.js).
+  // Opmaak en teksten van de e-mails per organisatie (platform/mail-layout.js): kleuren van het thema als terugval.
+  configureMailLayout({ colorsOf: documentColorsOf });
+  registerMailLayoutRoutes(app, { settingsOf: (req) => settingsFor(req.tenantId), mailerFor, audit, requireJson });
   registerDocumentLayoutRoutes(app, { settingsOf: (req) => settingsFor(req.tenantId), colorsOf: documentColorsOf, invoicePdf, packingSlipsPdf, audit, requireJson });
   // Orderpick-app voor het magazijn (webshop/orderpick.js, recht orderpick); verzendlabels via een koppeling per vervoerder (DPD volgt).
   registerOrderpickRoutes(app, {
@@ -2814,6 +3054,12 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     receipts: createGoodsReceipt(database, { purchaseOrders: purchaseOrderStore, release: (tenantId, itemIds) => webOrders.markBackorderReady(tenantId, itemIds) }),
     requireJson, audit,
   });
+  // Openstaande taken op het dashboard (volgen de rechten van de gebruiker).
+  // Kengetallen voor beheerders op het dashboard (platform/kpis.js).
+  registerKpiRoutes(app, { identify, db: database });
+  registerOpenTaskRoutes(app, { identify, canUpdate, sources: { hostTasks, orders: webOrders, purchaseOrders: purchaseOrderStore, priceFactors: priceFactorStore, proposalsEnabled,
+    shopEnabled: (tenantId) => Boolean(settingsFor(tenantId).get('storefront')), stockEnabled: (tenantId) => ModuleTools.isOn(moduleFlagsOf(tenantId), 'voorraad') } });
+
   registerWebOrderRoutes(app, { orders: webOrders, requireJson, audit, invoices: webOrderInvoices, payments: webPayments, returns: webReturns });
   // Offerte omzetten naar bestelling (verkoop/quote-orders.js).
   const quoteOrders = createQuoteOrders(database, { orders: webOrders });
@@ -2841,6 +3087,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   registerWebReturnRoutes(app, { returns: webReturns, requireJson, audit, credits: webOrderInvoices, mail: webReturnMail, refundOf: refundOfReturn });
   // Margerapportage van de webshop: omzet, inkoop (FIFO-voorraadlagen) en marge (web-sales.js).
   registerWebSalesRoutes(app, { sales: createWebSalesStore(database, { stock: stockStore }) });
+  registerSearchMissRoutes(app, { misses: searchMisses });
+  registerFunnelRoutes(app, { funnel });
   registerShopContentRoutes(app, { content: shopContentStore, requireJson, audit, mainTenantId: tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
     unplacedOf: (tenantId) => storefrontData.catalogOf(tenantId, { preview: true }).categories.filter((category) => category.loose).map((category) => ({ name: category.name, count: category.count, groupSlug: category.groupSlug })) });
   // Openbare vlaggen voor het dashboard en de modules (geen geheimen).
@@ -3093,7 +3341,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // De klantlink heeft het adres van de openbare pagina nodig; dat kent
     // alleen de browser (padprefix achter een proxy).
     const extra = testdata.seedFeatures(
-      { db: database, quotes: quoteStore, quoteOrders, workorders: workOrderStore, shop: shopStore, photos: photoStore, worklog: workLogStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, stock: stockStore, suppliers: supplierStore, packagings: packagingStore, purchaseOrders: purchaseOrderStore, itemImages: itemImageStore, requests: serviceRequestStore, invoices: invoiceStore, sprinklers: sprinklerStore, seasonReminders: seasonReminderStore, settings: settingsFor(tenantRow.id) },
+      { db: database, quotes: quoteStore, quoteOrders, workorders: workOrderStore, shop: shopStore, photos: photoStore, worklog: workLogStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, stock: stockStore, suppliers: supplierStore, packagings: packagingStore, purchaseOrders: purchaseOrderStore, itemImages: itemImageStore, requests: serviceRequestStore, invoices: invoiceStore, sprinklers: sprinklerStore, seasonReminders: seasonReminderStore, paymentReminders: paymentReminderStore, settings: settingsFor(tenantRow.id) },
       testSet, { users: out.byKey, quoteIds: out.quoteIds, tenantId: tenantRow.id },
       { shareBase: validShareBase(req.body?.shareBase) },
     );
@@ -3190,9 +3438,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, loginGuard, twoFactor, tokens: accountTokens, mailerFor, settingsFor: (id) => settingsFor(id), mailBody });
   storefrontRouter = createStorefront({
     addressLookup, addressGuard, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore, data: storefrontData, itemImages: itemImageStore,
-    orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, orderSlips, returns: webReturns, guestOrders, payments: webPayments,
+    orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, orderSlips, returns: webReturns, guestOrders, stockAlerts, searchMisses, funnel, quoteRequests, payments: webPayments,
     vies, captcha, captchaGate,
     onOrder: (req, order) => audit(req, 'webshop_bestelling_geplaatst', { number: order.number, total: order.total, ...(order.guest ? { gast: true } : {}) }, order.userId, tenant.id),
+    onQuoteRequest: (req, quote, viewer, mailed) => audit(req, 'webshop_offerte_aangevraagd', { number: quote.number, mailed: Boolean(mailed) }, viewer.id, tenant.id),
     onGuestAccount: (req, order, user) => audit(req, 'webshop_gastbestelling_gekoppeld', { number: order.number }, user.id, tenant.id),
     onReturn: (req, record) => audit(req, 'webshop_retour_aangevraagd', { number: record.number }, record.userId, tenant.id),
     onSlip: (req, order, action) => audit(req, `webshop_pakbon_${action}`, { number: order.number }, order.userId, tenant.id),
@@ -3322,6 +3571,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     for (const environment of allEnvironments()) {
       const environmentSettings = settingsFor(environment.id);
       const removed = store.applyRetention(environment.id, { ipDays: environmentSettings.get('ipRetentionDays'), auditDays: environmentSettings.get('auditRetentionDays') });
+      removed.appLogs = appLog.prune(environment.id, environmentSettings.get('logRetentionDays'), environmentSettings.get('logErrorRetentionDays'));
       removed.aiUsage = aiUsage.prune(environment.id, environmentSettings.get('auditRetentionDays'));
       removed.drawings = store.purgeStaleDrawings(environment.id, DRAWING_RETENTION_DAYS);
       removed.accountTokens = accountTokens.purgeExpired(environment.id);
@@ -3368,6 +3618,22 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       .flatMap((live) => [live, ...live.environments.filter((environment) => !environment.disabled)])
       .map((environment) => environment.id);
     return seasonReminders.runAll(activeIds, today);
+  };
+  // Betalingsherinneringen en aanmaningen voor vervallen facturen (payment-reminders.js), alleen in omgevingen met de module Facturen aan.
+  const paymentReminders = createPaymentReminderRunner(paymentReminderStore, {
+    invoices: invoiceStore, sender: invoiceSender, settingsFor: (id) => settingsFor(id), mailerFor, mailBody, userTenantsOf: (id) => [id],
+    enabled: (id) => ModuleTools.isOn(moduleFlagsOf(id), 'facturen'),
+  });
+  /**
+   * Betalingsherinneringen in alle actieve omgevingen versturen (elk uur vanuit main).
+   * @param {string} [today] De dag als JJJJ-MM-DD (tests).
+   * @returns {Promise<object>} Aantallen per omgeving.
+   */
+  app.locals.paymentRemindersAll = async (today) => {
+    const activeIds = inScopeOnly(store.listTenants()).filter((live) => !live.disabled)
+      .flatMap((live) => [live, ...live.environments.filter((environment) => !environment.disabled)])
+      .map((environment) => environment.id);
+    return paymentReminders.runAll(activeIds, today);
   };
   // Inkooporders, ook voor de uurlijkse bestelvoorstellen hieronder (tests kunnen autoPropose hier vervangen).
   app.locals.purchaseOrders = purchaseOrderStore;
@@ -3442,8 +3708,11 @@ if (require.main === module) {
   const db = openDatabase(dataDir);
   console.log(isPg(db) ? `Database: PostgreSQL (schema ${db.schema})` : 'Database: SQLite (aquatech.db in de datamap)');
   const backupDir = process.env.BACKUP_DIR || path.join(dataDir, 'backups');
-  const app = createApp({ secret, db, env: process.env, vault: createVault(master.key), backupDir });
-  const { settings } = app.locals;
+  const app = createApp({ secret, db, env: process.env, vault: createVault(master.key), backupDir, backupInChild: true });
+  const { settings, slowLog } = app.locals;
+  // Elke externe aanroep telt mee bij het verzoek dat hem deed; stilstand van de hoofdthread komt in het log van trage verzoeken.
+  globalThis.fetch = timedFetch(globalThis.fetch);
+  slowLog.startStallWatch();
 
   if (!app.locals.hasAdminAccount()) {
     console.log('Nog geen beheerder: open de app in de browser en maak het eerste beheerdersaccount aan.');
@@ -3454,7 +3723,7 @@ if (require.main === module) {
    * systeemupdate.
    * @returns {Promise<void>}
    */
-  const runPurchaseProposals = () => (app.locals.systemUpdate.maintenance().active ? Promise.resolve() : app.locals.purchaseProposalsAll())
+  const runPurchaseProposals = () => (app.locals.systemUpdate.maintenance().active ? Promise.resolve() : slowLog.trackTask('bestelvoorstellen', () => app.locals.purchaseProposalsAll()))
     .then((changed) => { if (changed && Object.keys(changed).length) console.log(`Bestelvoorstellen bijgewerkt: ${JSON.stringify(changed)}`); })
     .catch((error) => console.error('Bestelvoorstellen bijwerken mislukt:', error.message));
   /**
@@ -3465,37 +3734,50 @@ if (require.main === module) {
     // Tijdens een systeemupdate niets op de achtergrond; de volgende ronde (na de update) haalt het in.
     if (app.locals.systemUpdate.maintenance().active) return;
     try {
-      const removed = app.locals.maintenance();
+      const removed = slowLog.trackTask('onderhoud bewaartermijnen', () => app.locals.maintenance());
       const total = Object.values(removed).reduce((sum, count) => sum + count, 0);
       if (total) console.log(`Bewaartermijnen toegepast: ${JSON.stringify(removed)}`);
     } catch (err) {
       console.error('Onderhoud mislukt:', err);
     }
     try {
-      const freed = app.locals.webOrdersRelease();
+      const freed = slowLog.trackTask('reserveringen vrijgeven', () => app.locals.webOrdersRelease());
       if (freed.released) console.log(`Reserveringen van webshopbestellingen op rekening vrijgegeven: ${freed.released}`);
     } catch (error) {
       console.error('Reserveringen van webshopbestellingen vrijgeven mislukt:', error.message);
     }
-    app.locals.webPaymentsExpire()
+    slowLog.trackTask('onbetaalde bestellingen laten vervallen', () => app.locals.webPaymentsExpire())
       .then((out) => { if (out.expired) console.log(`Onbetaalde webshopbestellingen vervallen: ${out.expired}`); })
       .catch((error) => console.error('Onbetaalde webshopbestellingen laten vervallen mislukt:', error.message));
-    app.locals.seasonRemindersAll()
+    slowLog.trackTask('betalingsherinneringen', () => app.locals.webPaymentsRemind())
+      .then((out) => { if (out.sent) console.log(`Betalingsherinneringen verstuurd: ${out.sent}`); })
+      .catch((error) => console.error('Betalingsherinneringen mislukt:', error.message));
+    slowLog.trackTask('voorraadmeldingen', () => app.locals.stockAlertsRun())
+      .then((out) => { if (out.sent || out.purged) console.log(`Voorraadmeldingen: ${out.sent} verstuurd, ${out.purged} verlopen`); })
+      .catch((error) => console.error('Voorraadmeldingen mislukt:', error.message));
+    slowLog.trackTask('oude funneltellingen', async () => app.locals.funnelPurge())
+      .catch((error) => console.error('Oude funneltellingen wissen mislukt:', error.message));
+    slowLog.trackTask('oude zoektermen', async () => app.locals.searchMissesPurge())
+      .catch((error) => console.error('Oude zoektermen wissen mislukt:', error.message));
+    slowLog.trackTask('betalingsherinneringen facturen', () => app.locals.paymentRemindersAll())
+      .then((sent) => { if (Object.keys(sent).length) console.log(`Betalingsherinneringen facturen: ${JSON.stringify(sent)}`); })
+      .catch((error) => console.error('Betalingsherinneringen facturen mislukt:', error.message));
+    slowLog.trackTask('seizoensherinneringen', () => app.locals.seasonRemindersAll())
       .then((sent) => { if (Object.keys(sent).length) console.log(`Seizoensherinneringen: ${JSON.stringify(sent)}`); })
       .catch((error) => console.error('Seizoensherinneringen mislukt:', error.message));
     // Een halve minuut later, zodat de server bij het opstarten eerst luistert (niet blokkerend).
     setTimeout(runPurchaseProposals, 30 * 1000).unref();
-    app.locals.backupIfDue()
+    slowLog.trackTask('back-up', () => app.locals.backupIfDue())
       .then((backup) => { if (backup) console.log(`Versleutelde back-up gemaakt: ${backup.name} (${backup.size} bytes) in ${backupDir}`); })
       .catch((err) => console.error('Back-up mislukt:', err.message))
-      .then(() => app.locals.driveBackupSync())
+      .then(() => slowLog.trackTask('back-up naar Google Drive', () => app.locals.driveBackupSync()))
       .then((out) => { if (out && out.uploaded.length) console.log(`Back-ups naar Google Drive: ${out.uploaded.join(', ')}`); })
       .catch((err) => console.error('Back-up naar Google Drive mislukt:', err.message));
   };
   runMaintenance();
   setInterval(runMaintenance, 60 * 60 * 1000).unref();
   // Bewaking: elke 5 minuten (de monitor slaat zelf de eerste twee minuten na het starten en onderhoudsmodus over).
-  setInterval(() => (app.locals.systemUpdate.maintenance().active ? Promise.resolve() : app.locals.monitorRun()
+  setInterval(() => (app.locals.systemUpdate.maintenance().active ? Promise.resolve() : slowLog.trackTask('bewaking', () => app.locals.monitorRun())
     .catch((error) => console.error('Bewaking mislukt:', error.message))), 5 * 60 * 1000).unref();
   // Eerst prijs en voorraad, daarna de bestellingen (dan is de verkoop al afgeboekt).
   try {
@@ -3503,21 +3785,28 @@ if (require.main === module) {
   } catch (error) {
     console.error('Afgeronde systeemupdate vastleggen mislukt:', error.message);
   }
-  setInterval(() => (app.locals.systemUpdate.maintenance().active ? Promise.resolve() : app.locals.shopSyncAll()
+  setInterval(() => (app.locals.systemUpdate.maintenance().active ? Promise.resolve() : slowLog.trackTask('webshopsynchronisatie', () => app.locals.shopSyncAll())
     .catch((err) => console.error('Webshopsynchronisatie mislukt:', err.message))
-    .then(() => app.locals.shopOrdersAll())
+    .then(() => slowLog.trackTask('webshopbestellingen ophalen', () => app.locals.shopOrdersAll()))
     .catch((err) => console.error('Webshopbestellingen ophalen mislukt:', err.message))
-    .then(() => app.locals.vismaAll())
+    .then(() => slowLog.trackTask('doorsturen naar Visma', () => app.locals.vismaAll()))
     .catch((err) => console.error('Doorsturen naar Visma mislukt:', err.message))), 10 * 60 * 1000).unref();
   if (!settings.get('anthropicApiKey')) console.log('Geen API-sleutel ingesteld: automatisch herkennen met AI staat uit (tekenen, lokale herkenning en de toverstaf werken wel).');
 
   const server = app.listen(port, () => {
     console.log(`Aquatech ${readVersion()} luistert op poort ${port}`);
+    // Na het starten de belangrijkste shoppagina's alvast opvragen, zodat de eerste bezoeker niet op een koude cache wacht.
+    if (process.env.WARM_UP !== '0') {
+      setTimeout(() => warmShop({ baseUrl: `http://127.0.0.1:${port}`, log: (message) => console.warn(message) })
+        .then((visited) => { if (visited.length) console.log(`Webshop opgewarmd: ${visited.length} pagina's`); })
+        .catch((error) => console.warn('Opwarmen van de webshop mislukt:', error.message)), 2000).unref();
+    }
   });
   // Netjes stoppen bij `docker stop` (SIGTERM) in plaats van na 10 s geforceerd.
   for (const sig of ['SIGTERM', 'SIGINT']) {
     process.on(sig, () => {
       server.close(() => {
+        try { app.locals.appLog.stop(); } catch { /* het logboek mag het afsluiten niet breken */ }
         try { db.close(); } catch { /* al dicht */ }
         process.exit(0);
       });

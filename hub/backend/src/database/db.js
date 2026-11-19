@@ -1386,6 +1386,168 @@ const MIGRATIONS = [
   CREATE UNIQUE INDEX monitor_incidents_open ON monitor_incidents (tenant_id, check_key) WHERE state = 'open';
   CREATE INDEX monitor_incidents_recent ON monitor_incidents (tenant_id, state, last_at);
   `,
+  // 73: zoekmachineteksten en merk per artikel (webshop/seo.js): eigen titel en omschrijving voor zoekresultaten (leeg = automatisch
+  // uit naam en omschrijving) en het merk voor de gestructureerde gegevens van het product.
+  `
+  ALTER TABLE stock_items ADD COLUMN seo_title TEXT NOT NULL DEFAULT '';
+  ALTER TABLE stock_items ADD COLUMN seo_description TEXT NOT NULL DEFAULT '';
+  ALTER TABLE stock_items ADD COLUMN brand TEXT NOT NULL DEFAULT '';
+  `,
+  // 74: levermethode en levertijd (webshop/delivery-rules.js, delivery-times.js): toegestane methodes per artikel als JSON-lijst
+  // (leeg = geen beperking), een eigen levertijd per artikel (dagen, leeg = afleiden) en de levertijd van een leverancier per artikel.
+  `
+  ALTER TABLE stock_items ADD COLUMN delivery_rules TEXT NOT NULL DEFAULT '[]';
+  ALTER TABLE stock_items ADD COLUMN lead_days_min INTEGER;
+  ALTER TABLE stock_items ADD COLUMN lead_days_max INTEGER;
+  ALTER TABLE item_suppliers ADD COLUMN lead_days INTEGER;
+  `,
+  // 75: concepten van producttekst door de AI (artikelen/item-text-drafts.js): per artikel hoogstens één concept van omschrijving en
+  // zoekmachineteksten, met de controlemeldingen en een vingerafdruk van de live tekst bij het schrijven. Pas na handmatige goedkeuring
+  // komt de tekst in stock_items.
+  `
+  CREATE TABLE item_text_drafts (
+    id              TEXT PRIMARY KEY,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id),
+    item_id         TEXT NOT NULL REFERENCES stock_items(id),
+    description     TEXT NOT NULL DEFAULT '',
+    seo_title       TEXT NOT NULL DEFAULT '',
+    seo_description TEXT NOT NULL DEFAULT '',
+    warnings        TEXT NOT NULL DEFAULT '[]',
+    notes           TEXT NOT NULL DEFAULT '',
+    model           TEXT NOT NULL DEFAULT '',
+    base_hash       TEXT NOT NULL DEFAULT '',
+    edited          INTEGER NOT NULL DEFAULT 0,
+    created_by      TEXT,
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX item_text_drafts_item ON item_text_drafts (tenant_id, item_id);
+  `,
+  // 76: voorraadmeldingen in de eigen webshop (webshop/stock-alerts.js): een bezoeker laat zijn e-mailadres achter bij een artikel
+  // dat niet op voorraad is en krijgt één mail zodra het weer te bestellen is; daarna wordt de rij gewist (het adres wordt niet
+  // langer bewaard dan nodig). Hoogstens één melding per artikel en adres.
+  `
+  CREATE TABLE stock_alerts (
+    id         TEXT PRIMARY KEY,
+    tenant_id  TEXT NOT NULL REFERENCES tenants(id),
+    item_code  TEXT NOT NULL,
+    email      TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX stock_alerts_unique ON stock_alerts (tenant_id, item_code, email);
+  CREATE INDEX stock_alerts_email ON stock_alerts (tenant_id, email);
+  `,
+  // 77: zoektermen in de eigen webshop zonder resultaat (webshop/search-misses.js): per omgeving en term een teller, zodat de beheerder
+  // ziet wat bezoekers zoeken en niet vinden. Alleen de genormaliseerde term, nooit wie zocht; na 90 dagen zonder nieuwe zoekopdracht gewist.
+  `
+  CREATE TABLE shop_search_misses (
+    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+    term      TEXT NOT NULL,
+    hits      INTEGER NOT NULL,
+    first_at  TEXT NOT NULL,
+    last_at   TEXT NOT NULL,
+    PRIMARY KEY (tenant_id, term)
+  );
+  CREATE INDEX shop_search_misses_last ON shop_search_misses (tenant_id, last_at);
+  `,
+  // 78: eigen koopfunneltelling van de webshop (webshop/funnel.js): per omgeving, dag en stap een teller. Alleen aantallen, nooit wie het
+  // was; na 400 dagen gewist.
+  `
+  CREATE TABLE shop_funnel_days (
+    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+    day       TEXT NOT NULL,
+    step      TEXT NOT NULL,
+    hits      INTEGER NOT NULL,
+    PRIMARY KEY (tenant_id, day, step)
+  );
+  `,
+  // 79: werkorder aan een klantrecord (work_orders.customer_id, een klantaccount zoals bij offertes). De losse naam- en adresvelden in de data blijven
+  // staan (momentopname voor de werkbon); de koppeling komt uit de offerte, de melding of de keuze in het formulier. Bestaande werkorders worden
+  // hier gekoppeld via hun offerte of melding; de rest koppelt `workorders.autoLink` (alleen bij een eenduidige naam) of de gebruiker.
+  `
+  ALTER TABLE work_orders ADD COLUMN customer_id TEXT REFERENCES users(id);
+  CREATE INDEX work_orders_customer ON work_orders (tenant_id, customer_id);
+  UPDATE work_orders SET customer_id = (SELECT q.customer_id FROM quotes q WHERE q.id = work_orders.quote_id AND q.tenant_id = work_orders.tenant_id
+    AND q.customer_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = q.customer_id)) WHERE quote_id IS NOT NULL;
+  UPDATE work_orders SET customer_id = (SELECT sr.customer_id FROM service_requests sr WHERE sr.tenant_id = work_orders.tenant_id AND sr.work_order_id = work_orders.id
+    AND sr.customer_id IS NOT NULL AND EXISTS (SELECT 1 FROM users u WHERE u.id = sr.customer_id) ORDER BY sr.created_at LIMIT 1) WHERE customer_id IS NULL;
+  `,  // 80: inkooporder per e-mail naar de leverancier (artikelen/purchase-order-mail.js): wanneer en naar wie hij is verstuurd (alleen na een
+  // klik van een medewerker) en de melding van de laatste mislukte poging (leeg na een geslaagde verzending). Een order die nooit is
+  // verstuurd houdt lege waarden.
+  `
+  ALTER TABLE purchase_orders ADD COLUMN mail_sent_at TEXT;
+  ALTER TABLE purchase_orders ADD COLUMN mail_sent_to TEXT NOT NULL DEFAULT '';
+  ALTER TABLE purchase_orders ADD COLUMN mail_sent_by TEXT NOT NULL DEFAULT '';
+  ALTER TABLE purchase_orders ADD COLUMN mail_error TEXT NOT NULL DEFAULT '';
+  `,
+  // 81: miniatuur bij een artikelafbeelding (item-images.js): een kleine WebP (hoogstens 480 px, door de browser gemaakt) voor de kaartjes in de
+  // webshop, versleuteld zoals de afbeelding zelf. Leeg = nog geen miniatuur; de shop toont dan de gewone afbeelding.
+  `
+  ALTER TABLE item_images ADD COLUMN thumb TEXT;
+  `,
+  // 82: centraal applicatielogboek (platform/app-log.js): fouten, trage verzoeken, stilstand, mislukte taken en bewakingsincidenten per
+  // omgeving, met request-id en foutcode. scope 'platform' = regel zonder omgeving (staat onder de hoofdtenant). Geen persoonsgegevens of geheimen.
+  `
+  CREATE TABLE app_logs (
+    id           TEXT PRIMARY KEY,
+    tenant_id    TEXT NOT NULL REFERENCES tenants(id),
+    scope        TEXT NOT NULL DEFAULT 'tenant',
+    created_at   TEXT NOT NULL,
+    level        TEXT NOT NULL DEFAULT 'info',
+    source       TEXT NOT NULL,
+    request_id   TEXT NOT NULL DEFAULT '',
+    error_code   TEXT NOT NULL DEFAULT '',
+    message      TEXT NOT NULL DEFAULT '',
+    data         TEXT NOT NULL DEFAULT '{}',
+    duration_ms  INTEGER NOT NULL DEFAULT 0,
+    repeat_count INTEGER NOT NULL DEFAULT 1
+  );
+  CREATE INDEX app_logs_tenant_time ON app_logs (tenant_id, created_at);
+  CREATE INDEX app_logs_tenant_level ON app_logs (tenant_id, level, created_at);
+  CREATE INDEX app_logs_request ON app_logs (tenant_id, request_id);
+  `,
+  // 83: herhaalde logregels (taak, stilstand, traag) blijven na het wegschrijven één regel met teller: `created_at` = laatste keer,
+  // `first_at` = eerste keer (leeg = één keer voorgekomen).
+  `
+  ALTER TABLE app_logs ADD COLUMN first_at TEXT;
+  `,
+  // 84: online betalen van een factuur in het klantportaal (verkoop/invoice-payments.js): per poging één Mollie-betaling. Een factuur gaat pas op
+  // betaald na een opvraging bij Mollie zelf; status open|betaald|mislukt. Geen geheimen, alleen het Mollie-id en de betaalpagina.
+  `
+  CREATE TABLE invoice_payments (
+    id           TEXT PRIMARY KEY,
+    tenant_id    TEXT NOT NULL REFERENCES tenants(id),
+    invoice_id   TEXT NOT NULL,
+    mollie_id    TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'open',
+    amount       REAL NOT NULL,
+    checkout_url TEXT NOT NULL DEFAULT '',
+    method       TEXT NOT NULL DEFAULT '',
+    mode         TEXT NOT NULL DEFAULT '',
+    created_at   TEXT NOT NULL,
+    paid_at      TEXT
+  );
+  CREATE UNIQUE INDEX invoice_payments_mollie ON invoice_payments (tenant_id, mollie_id);
+  CREATE INDEX invoice_payments_invoice ON invoice_payments (tenant_id, invoice_id, created_at);
+  `,
+  // 85: automatische betalingsherinneringen en aanmaningen (verkoop/payment-reminders.js): per factuur welke stap is verstuurd (of bewust
+  // overgeslagen) en per klant een schakelaar om ze uit te zetten (users.reminders_off, 1 = geen herinneringen voor deze klant).
+  `
+  ALTER TABLE users ADD COLUMN reminders_off INTEGER NOT NULL DEFAULT 0;
+  CREATE TABLE invoice_reminders (
+    id           TEXT PRIMARY KEY,
+    tenant_id    TEXT NOT NULL REFERENCES tenants(id),
+    invoice_id   TEXT NOT NULL REFERENCES invoices(id),
+    step_key     TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'verstuurd',
+    sent_at      TEXT NOT NULL,
+    sent_to      TEXT NOT NULL DEFAULT '',
+    reason       TEXT NOT NULL DEFAULT '',
+    days_overdue INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (tenant_id, invoice_id, step_key)
+  );
+  CREATE INDEX invoices_due ON invoices (tenant_id, status, due_date, id);
+  `,
 ];
 
 /**
@@ -1573,11 +1735,14 @@ const checkName = (name) => { if (!SAFE_NAME.test(name)) throw new Error(`Ongeld
  */
 function tableColumns(db, table) {
   if (isPg(db)) {
-    return db.prepare(`SELECT c.column_name AS name, c.is_nullable = 'NO' AS notnull,
-        EXISTS (SELECT 1 FROM information_schema.key_column_usage k JOIN information_schema.table_constraints tc
-          ON tc.constraint_name = k.constraint_name AND tc.table_schema = k.table_schema
-          WHERE tc.constraint_type = 'PRIMARY KEY' AND k.table_schema = c.table_schema AND k.table_name = c.table_name AND k.column_name = c.column_name) AS pk
-      FROM information_schema.columns c WHERE c.table_schema = current_schema() AND c.table_name = ? ORDER BY c.ordinal_position`)
+    // pg_catalog i.p.v. information_schema: die views zijn traag (±150 ms per tabel), dit is ruim 50 keer sneller.
+    return db.prepare(`SELECT a.attname AS name, a.attnotnull AS notnull, COALESCE(a.attnum = ANY (pk.conkey), false) AS pk
+      FROM pg_attribute a
+      JOIN pg_class cl ON cl.oid = a.attrelid
+      JOIN pg_namespace n ON n.oid = cl.relnamespace
+      LEFT JOIN pg_constraint pk ON pk.conrelid = cl.oid AND pk.contype = 'p'
+      WHERE n.nspname = current_schema() AND cl.relname = ? AND cl.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
+      ORDER BY a.attnum`)
       .all(table).map((column) => ({ name: column.name, notnull: Boolean(column.notnull), pk: Boolean(column.pk) }));
   }
   return db.prepare(`PRAGMA table_info(${checkName(table)})`).all().map((column) => ({ name: column.name, notnull: Boolean(column.notnull), pk: column.pk > 0 }));

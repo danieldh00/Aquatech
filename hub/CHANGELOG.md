@@ -1,5 +1,294 @@
 # Changelog
 
+## 1.24.6
+
+Doorlichtingspunt 13 (synchrone databasebrug afbouwen), eerste stap: `store.listCustomerPageAsync` voert de totaal- en paginaquery van het klantenoverzicht tegelijk uit via `db.async` (pool bij PostgreSQL). `GET /api/customers`, `GET /api/quote-customers` en `GET /api/workorder-customers` gebruiken die; de hoofdthread staat tijdens de zoekopdracht (LIKE over zes kolommen) niet meer stil. De synchrone `listCustomerPage` blijft voor de AI-koppeling (MCP). Beide delen één querybouwer (`customerPageQueries`).
+
+## 1.24.5
+
+- Nieuw: `verkoop/payment-reminders.js` (instelling `paymentReminders`, `liveOnly`; store, uurlijkse runner `app.locals.paymentRemindersAll`). Stappen herinnering (7 dgn), aanmaning (21), laatste aanmaning (35, standaard uit); alleen de laatst passende stap, nooit dubbel (unieke rij per factuur+stap), niet bij betaald, gecrediteerd, klant uit, ouder dan `stopAfterDays` (90). Factuur-PDF als bijlage; Engelse facturen krijgen Engelse tekst (`DocText`).
+- Migratie: tabel `invoice_reminders` en kolom `users.reminders_off` (SQLite en PostgreSQL). Mailtypes `factuur_herinnering`, `factuur_aanmaning`, `factuur_laatste_aanmaning` in Mail-opmaak. `GET /api/invoices/:id` geeft `reminders`, de lijst `reminder`; `PATCH /api/customers/:id` accepteert `remindersOff`. Testdata en tests (`payment-reminders.test.js`).
+
+## 1.24.4
+
+Nieuwe sectie *Draaiboek VPS-verhuizing* (`beheer/index.html` formulier `s-vps`, `beheer/vps-draaiboek.js`, sectie `vps` in
+`beheer/indeling.js`, alleen zichtbaar voor wie Systeem > Updates mag zien): vaste tekst met zes fasen (tunnel, adres en
+hoofdsleutel blijven gelijk; database via back-up; proefrun met `local-db.sh restore`; oude server 14 dagen als terugval;
+mailconnector-IP, Drive, Visma en Mollie controleren; image alleen `amd64`). De vinkjes staan per browser in localStorage.
+Geen migratie, geen backend. `deploy/apps01/README.md` verwijst ernaar.
+
+## 1.24.3
+
+Blok *Kengetallen* op het dashboard (`dashboard/kpis.js`, `GET /api/kpis`, `platform/kpis.js`, geen migratie): alleen met recht
+`beheer`; elke tegel hoort bij een recht (`facturen`: openstaand bedrag incl. btw van definitieve facturen en credits, vervallen
+facturen; `offertes`: verzonden offertes zonder antwoord; `planning`: werkorders met een geplande datum in de huidige week
+(maandag-zondag, geannuleerde niet) en het aantal uitvoerders). Een aggregatiequery per tegel op `tenant_id`; de tegels linken
+naar de module. Test: `test/kpis.test.js`.
+
+## 1.24.2
+
+Betaallink in de factuurmail (geen migratie). `invoicePayments.linkFor` maakt een ondertekende link `/app/api/public/invoice-pay/<factuur>/<handtekening>` (HMAC met `vault.derive('factuur-betaallink')`, niets opgeslagen); `invoice-pay-routes.js` controleert de handtekening, de verloopdatum (`linkExpired`) en de status, start een Mollie-betaling en stuurt door; bij terugkeer (`?teruggekeerd=1`) volgt een opvraging bij Mollie. Alleen als online betalen aan staat; veld `{betaallink}` en een regel onder `{betaling}` in de standaardmail (`mail.payOnline`, nl en en). Limiet per bezoeker.
+
+## 1.24.1
+
+- `platform/mail-graph.js`: Graph-verzender (client credentials, `Mail.Send` als toepassingsmachtiging, `sendMail` met `saveToSentItems`, bericht met bijlagen tot ongeveer 3,5 MB (base64), inline afbeeldingen via `contentId`); vaste hosts `login.microsoftonline.com` en `graph.microsoft.com`, tenant- en client-ID gevalideerd, token per (tenant, app, geheim) kort onthouden.
+- `mailServer.mode` kent nu `graph` met `graphTenantId` en `graphClientId`; het clientgeheim is de versleutelde, `liveOnly` instelling `mailGraphSecret` (alleen via `/api/admin/mail`, veld `graphSecret`; `graphSecretSet` in het antwoord). Geen migratie.
+- `mailFailure` kent EGRAPH_AUTH/DENIED/MAILBOX/THROTTLED/SIZE/ERROR met advies; de bewaking controleert het token (`verify`). Tests: `createApp({ graphFetch })`.
+
+## 1.24.0
+
+Het eindimage bevat alleen nog `backend/src` en `tools/release-info.js` (dat `update.sh` uit het image haalt); de tests en
+overige tools (codestijl, bench, minify, release-notes) blijven buiten het image (`hub/Dockerfile`, `hub/.dockerignore`,
+bewaakt door `test/dockerfile.test.js`). Verouderde verwijzingen naar Supabase als productiedatabase gecorrigeerd in
+`release.yml`, `ci.yml`, `compose.yml`, `deploy/apps01/README.md` en `DOCS.md` (Supabase is terugvaloptie; app-updates gaan
+via de updatetimer, Drive-back-ups zitten in de app).
+
+## 1.23.9
+
+Servertaken (`platform/host-tasks.js`, `host-tasks-routes.js`, `GET|PUT /api/admin/host-tasks`, alleen `canUpdate`): lijst `HOST_TASKS`, afvinken door de server via `update/status/host-tasks.json` of met de hand (instelling `hostTasks`). `servertaken.sh openstaand` voert open taken uit op een vaste commit (`TASKS_REF`) en legt ze vast; `setup-app-update.sh` accepteert `SETUP_REF`. Eerste taak: updaten vanuit de app opnieuw inrichten. Geen migratie.
+
+## 1.23.8
+
+- `mailFailure` onderscheidt time-out, geweigerd (ECONNREFUSED), DNS-fout en geen route; `createMailer` legt host en poort vast op de fout (`mailHost`, `mailPort`; nooit het wachtwoord).
+- `netguard.publicAddress` geeft bij meerdere adressen het IPv4-adres voorrang, zodat een container zonder IPv6 niet vastloopt op een IPv6-adres.
+- `deploy/apps01/pve/diagnose-mail.sh`: alleen-lezen test van poort 25/465/587 vanaf de Proxmox-host, apps01 en de app-container.
+
+## 1.23.7
+
+Beheer > Systeem: `beheer/collapse-list.js` (`BeheerCollapse.render`) klapt lange lijsten in tot de eerste vijf regels met een knop *Toon alle (n)* / *Toon minder*. Gebruikt voor de back-uplijst, de Drive-bestanden en het Drive-logboek. Alleen frontend, geen migratie.
+
+## 1.23.6
+
+- Nieuw: `verkoop/invoice-payments.js` (tabel `invoice_payments`, migratie 84): per poging één Mollie-betaling. Hergebruikt de Mollie-sleutel en het webadres van de webshop (`configOf`), dus alleen in de hoofdtenant. De uitkomst komt altijd uit een opvraging bij Mollie (metadata `invoiceId` en bedrag moeten kloppen); de overgang naar betaald gebeurt één keer (voorwaardelijke update) en roept `invoices.setPaid` en de auditregel `factuur_betaald_online` aan.
+- Nieuw: portaalroutes `GET /api/portal/invoices/:id/pdf`, `POST …/pay` en `POST …/check` (recht `portaal`, alleen eigen facturen, geen concepten of creditfacturen), `api/portal` geeft `invoices`; openbare webhook `POST /api/public/invoice-payment/:id/webhook` (limiet per bezoeker). `invoices.list` kreeg de filters `customerId`, `kinds` en `statuses`. Testdata vult `invoice_payments`.
+
+## 1.23.5
+
+- Nieuw: belletje in `dashboard/account.js` (`setupBell`, op elke pagina met kopbalk) op basis van `GET /api/tasks`; ververst bij openen en elke 3 minuten. Het dashboardblok deelt hetzelfde verzoek via `getJson`. Alleen met recht `beheer` of `voorraad`.
+
+## 1.23.4
+
+- `tableColumns` gebruikt op PostgreSQL `pg_catalog` i.p.v. `information_schema` (±150 ms → ±1 ms per tabel); tenant verwijderen, leegmaken en terugzetten uit back-up wordt daardoor niet trager bij meer tabellen.
+- Testrun gebruikt goedkope scrypt-kosten (`AQUATECH_TEST_SCRYPT_N`, via `node --import test/helpers/fast-scrypt.js`); `scryptParams` negeert die variabele in productie en bij niet-machten van twee onder 1024. Productie blijft 2^17.
+- Test goods-receipt controleert veldnamen i.p.v. losse tekst ("1.5" kwam toevallig in een tijdstempel voor en maakte de test af en toe rood).
+
+## 1.23.3
+
+- Migratie 83: `app_logs.first_at`. Herhalingen van de bronnen taak, stilstand en traag werken ook na het wegschrijven de bestaande regel bij (`created_at` = laatste keer, `first_at` = eerste keer, `repeat_count`, langste duur) zolang er binnen een uur een nieuwe komt en de regel jonger is dan 24 uur. Fouten blijven los (eigen foutcode en verzoek-id).
+- De stilstandmelding heeft een vaste tekst ("Hoofdthread stond stil"); de duur staat in het veld Duur.
+- Excel-export: kolommen *Tijdstip (laatste)* en *Eerste keer*.
+
+## 1.23.2
+
+- Nieuw: `GET /api/tasks` (`platform/open-tasks.js`, ingelogd; taken volgen de rechten `beheer` en `voorraad`, per omgeving) en het dashboardblok `dashboard/tasks.js`. Nieuw: `webOrders.listUnprocessed` (status Nieuw; online alleen na betaling).
+
+## 1.23.1
+
+In de release-image wordt de frontend in een aparte bouwstap verkleind (`backend/tools/minify-frontend.js`, esbuild als
+devDependency, alleen in de bouwstap). Alle eigen `.js` en `.css` worden verkleind (witruimte, commentaar, syntaxis; geen
+hernoemen van globale namen); `vendor/` en `.min.`-bestanden blijven ongewijzigd. De broncode in de repo blijft leesbaar,
+de bestandsnamen en `?v=<versie>`-adressen blijven gelijk (de inhoud verandert alleen mee met een nieuwe versie, dus
+Cloudflare-cache en cache-busting werken zoals voorheen). De backend wordt niet verkleind (draait op de server, niet in de
+browser).
+
+## 1.23.0
+
+- Knop *Nu controleren op updates* (`POST /api/admin/system-update/check`, 6 per 10 minuten, audit `update_controle`): de app zet `request.json` met `{"check":true}` klaar; `deploy/apps01/update.sh` haalt dan alleen `:latest` op en werkt `status.json`/`releases.json` bij, zonder te installeren. Het scherm toont `checking` tot de host een nieuwe `checkedAt` heeft. Het hostscript moet hiervoor opnieuw worden ingericht (`setup-app-update.sh`); met het oude script wordt de aanvraag wel gecontroleerd maar als onleesbaar gemeld.
+- Testlog: een mislukte of afgeremde login (POST `/api/auth/login`, 400/401/403/429) telt niet meer als `[traag]`; onder `node --test` (of `SLOW_LOG_QUIET=1`) schrijft het trage-verzoekenlog niets naar de console, het logboek in het geheugen blijft.
+
+## 1.22.9
+
+Webshopkop rustiger: de knop *Product zoeken* (dubbel met de productgroepen) is weg, de navigatiebalk is licht met kleine hoofdletter-items en een dun pijltje, *Over ons* is groen, de zoekbalk is zachter (afgerond) en Account/Winkelwagen tonen alleen een icoon (met aria-label), op mobiel ook de beheerknop. Alleen `storefront-pages.js`, `storefront.css` en `storefront-menu.js`.
+
+## 1.22.8
+
+`shopSource.syncSchedule` (`night` standaard | `hourly` | `tenmin`, geen migratie). `runAll` slaat een omgeving over tot `fullSyncDue` (webshop/shop-sync.js) aan de beurt is: dagwisseling 04:00 Nederlandse tijd (na de back-up), na een mislukte poging hoogstens elk uur opnieuw. Gewijzigde artikelen gaan nog steeds meteen via `schedule()`. Aanleiding: het logboek van 2026-11-19 toonde elke 10 minuten een "trage taak" van ~165 s met ruim 5300 queries en 2 s stilstand van de hoofdthread.
+
+## 1.22.7
+
+- De webshoppagina's bevatten de `google-site-verification`-meta (Search Console), in de `<head>`.
+
+## 1.22.6
+
+Winkelwagenpagina (`cartPage`) in het nieuwe webshopontwerp: de sectie krijgt de klasse `cart-page` en de stijl hangt in `storefront.css` onder `.cart-page`, zodat bestellingen, retouren en groothandel (die `.cart` en `.cart-table` delen) ongewijzigd blijven. Gedrag ongewijzigd. Huisstijl blijft aangehouden via de bestaande `--at-*`-variabelen.
+
+## 1.22.5
+
+Orderpick: `showList` in `orderpick.js` verborg de ontvangstschermen (`#rc-*`) niet, waardoor na Ontvangen → Picken beide lijsten zichtbaar bleven. Nu verbergt het alle andere schermen. Nieuwe test `orderpick-modes.test.js` wisselt meerdere keren heen en weer.
+
+## 1.22.4
+
+Productpagina (`productPage`) in het nieuwe webshopontwerp: alleen CSS onder `.product-detail` en `.product-details` in `storefront.css`; markup en gedrag ongewijzigd. Huisstijl blijft aangehouden via de bestaande `--at-*`-variabelen.
+
+## 1.22.3
+
+- `beheer/index.html`: het stappenplan (inklapbaar, boven de velden) vervangt de handleiding onderaan; de Google-stappen zijn bijgewerkt (Google Drive API, Google Auth Platform, publicatiestatus In productie, Webtoepassing met het redirect-adres, de scope drive.file).
+- Label "Aantal back-ups op Drive bewaren" korter gemaakt ("Aantal back-ups bewaren"), zodat beide velden op dezelfde hoogte staan.
+
+## 1.22.2
+
+Categoriepagina (`browsePage`) in het nieuwe webshopontwerp: alleen CSS onder `.browse` in `storefront.css`, markup en gedrag ongewijzigd. De kruimelbalk bovenaan wordt ook op de productpagina rustiger; de startpagina blijft ongewijzigd. Huisstijl blijft aangehouden via de bestaande `--at-*`-variabelen.
+
+## 1.22.1
+
+- `GET /api/stock/price-proposals` (recht `voorraad`) geeft de open prijsvoorstellen (`openProposals` in price-factor.js). Het artikelscherm toont een melding met Goedkeuren/Negeren (beheerders, via bestaande `apply`/`reject`) en de lijst een label. Geen migratie, prijslogica ongewijzigd.
+
+## 1.22.0
+
+Gedeelde oplossing in `shared/brand.css` (onder 700 px): in elke `.tablewrap`-tabel is de identificerende kolom sticky (de eerste, of de tweede als de eerste een selectievakje heeft), compact (max. 46vw/190 px, omschrijvingen wrappen) en met opake achtergrond en schaduw. `AquatechCommon.wrapWideTables` (`shared/common.js`) zet tabellen die buiten een `.tablewrap` te breed worden (planner, klantdossier, back-up terugzetten, enz.) in een scrollbare wikkel. Desktop ongewijzigd; geen migratie. De begrenzing van de vaste kolom (`max-width` op de cel) is gemeten in Chromium op 375 px met een lange artikelnaam. De selectors gebruiken `:has()`; in een browser zonder `:has` (Firefox vóór 121, Safari vóór 15.4) valt de regel weg en schuift de tabel zoals voorheen.
+
+## 1.21.9
+
+Levertijd tonen (fase 3 van de levermethode-spec): `delivery-times.js` (`etaPhrase`, `etaSentence`) en `delivery-rules.js` (`describeRules`); nieuw invulveld `{levertijd}` in de mailtypes *Orderbevestiging* (online betaald en op rekening; leeg bij afhalen of zonder levertijd), aanvulling in de melding aan het bedrijf; blok *Verwachte levertijd* op de bestelpagina (alleen bij status nieuw, zonder volgcode); beperking per artikel op de productpagina (`leadInfoOf` geeft ook de regels van artikel en hoofdartikel); `GET /api/stock/items/:id/delivery-preview` (recht `voorraad`, `webshop/delivery-preview.js`) en overzicht in het artikelformulier; levermethode en levertijd bij een bestelling in Beheer en kolom *Levertijd bij bestellen* in de Excel. Geen migratie.
+
+## 1.21.8
+
+- `artikelen/item-images.js` (server): `setThumb` accepteert naast WebP ook JPEG (zelfde grenzen: 480 px, 100 kB, controle op inhoud); `thumbFile` herkent het formaat aan de bytes en levert het juiste `Content-Type`.
+- Browser (`makeThumb`): probeert WebP en valt terug op JPEG als de browser WebP niet kan coderen.
+
+## 1.21.7
+
+Centraal applicatielogboek, deel 2: `GET /api/admin/logs` (`platform/app-log-routes.js`: filters niveau/bron/periode, zoeken op tekst, request-id of foutcode, cursor-paginering; platformregels en een andere omgeving alleen met canPlatform), `appLog.list/sources`, Beheer-sectie Logboek (`beheer/logboek.js`, Excel-export tot 5000 regels) en de instellingen `logRetentionDays`/`logErrorRetentionDays` in het formulier Sessies en bewaartermijnen.
+
+## 1.21.6
+
+Centraal applicatielogboek, deel 1 (`platform/app-log.js`, migratie 82 `app_logs`): gebufferd schrijven (2 s of 50 regels), herhalingen samengevoegd, max. 600 regels per bron per minuut, harde grens van 100.000 regels per omgeving, redactie van geheimen, e-mailadressen en IBAN. Request-id per verzoek (kop `X-Request-Id`, ook in de 500-melding). Bronnen: 500-fouten (met foutcode), trage verzoeken, stilstand, trage en mislukte taken, bewakingsincidenten. Bewaartermijn via instellingen `logRetentionDays` (14) en `logErrorRetentionDays` (30), uurlijks opgeruimd in het onderhoud.
+
+## 1.21.5
+
+- `artikelen/item-images.js`: `storeImage` herkent AVIF/HEIC (ftyp-merk) en geeft `unsupported_format` (415) in plaats van de misleidende melding over 8000 pixels; het overnemen meldt zulke artikelen met `convert: true` en `itemId`.
+- Nieuwe route `GET /api/stock/items/:id/shop-image` (recht `voorraad`, tenant-gebonden, importlimiet): bytes van de afbeelding van het gekoppelde webshopproduct van dat artikel, via `download` (netguard, geen adres uit het verzoek). Antwoord `application/octet-stream` met sandbox-CSP, `no-store`.
+- Browser (`artikelen/item-images.js`): `convertFailed` haalt de bytes op, zet ze met `createImageBitmap` en canvas om naar JPEG (max 1200 px) plus WebP-miniatuur en bewaart ze per artikel; een browser die AVIF niet kan lezen krijgt een duidelijke melding per artikel.
+
+## 1.21.4
+
+- `webshop/assets/`: WebP-varianten van `hero-tuin`, `banner-druppelslang`, `banner-pomp` en `zakelijk-achtergrond` (met `-klein` voor smalle schermen), gemaakt met `tools/shop-webp.py`; de JPEG's blijven staan (terugval en bestaande verwijzingen in Beheer).
+- `storefront-pages.js` `imageHtml`: een standaardafbeelding met WebP-variant wordt een `picture` met `srcset`/`sizes` en de JPEG als `img`; geüploade afbeeldingen (`media:`) en bestanden zonder WebP blijven een gewone `img`. De standaard hero krijgt `fetchpriority="high"` (bovenaan de pagina, al met afmetingen); de rest laadt lazy. CSS: `picture { display: contents; }` zodat de opmaak gelijk blijft.
+- Gewicht van de afbeeldingen op de startpagina: ongeveer 443 kB JPEG naar ongeveer 126 kB (breed scherm) of 63 kB (smal scherm) WebP.
+
+## 1.21.3
+
+- Migratie 81 (`item_images.thumb`, ook in `PG_MIGRATIONS`): versleutelde WebP-miniatuur (hoogstens 480 px en 100 kB, AAD `<tenant>:artikel-afbeelding-klein:<id>`).
+- `artikelen/item-images.js`: `setThumb` (controle op inhoud: alleen WebP binnen de grenzen), `thumbFile` (valt terug op de gewone afbeelding), `thumbsPending` en `thumbCandidates`; routes `PUT /api/stock/images/:id/thumb` en `GET /api/stock/images-thumbs` (recht `voorraad`, tenant-gebonden); een upload kan `thumb` meesturen (een ongeldige miniatuur laat de upload wel slagen).
+- Shop: `artikelfoto/<id>/klein` (zelfde limiet en `immutable` cache als de foto); kaartjes (productlijst, assortimentstegels) gebruiken `productImageSrc(root, image, { small: true })`, de productpagina blijft de grote foto tonen.
+- Browser (`artikelen/item-images.js`): maakt de miniatuur met een canvas (geen native npm-module); de knop *Afbeeldingen en miniaturen* neemt eerst de afbeeldingen uit de oude webshop over en maakt daarna de ontbrekende miniaturen in porties van 25.
+- `deploy/apps01/README.md`: stappen voor de Cloudflare-cacheregel voor `/artikelfoto/` en `/media/` (dashboardinstelling).
+
+## 1.21.2
+
+- `webshop/warm-up.js`: twee seconden na het starten haalt de server één voor één de startpagina, de winkelwagen en een paar groepen, categorieën en producten op via 127.0.0.1 (User-Agent met "bot": geen koopfunneltelling, geen medewerkersweergave). Dat vult de catalogus en de omschrijvingen in het geheugen. Een fout of een uitgeschakelde shop stopt niets; uitzetten kan met `WARM_UP=0`. Er wordt niets bewaard behalve wat de pagina's al cachen (geen klantgegevens, geen gerenderde pagina's).
+
+## 1.21.1
+
+- Catalogus (`storefront-data.js`): stale-while-revalidate. Een verlopen catalogus (tot 2 minuten oud) wordt voor pagina's van het assortiment (alleen GET/HEAD, niet winkelwagen, afrekenen, bestellingen, account, groothandel) meteen getoond terwijl `warm` hem op de achtergrond ververst. Alle andere aanroepen van `catalogOf` en elke POST rekenen met een verse catalogus (prijzen, voorraad, klantprijzen); de cache blijft per omgeving en bevat niets klantspecifieks. Zonder `db.async` (SQLite) verandert er niets.
+- Databasepool: verbindingen blijven 5 minuten open (`IDLE_MS`, was 10 s), zodat de eerste aanvraag na rust geen nieuwe verbinding hoeft op te bouwen.
+
+## 1.21.0
+
+- Nieuwe instelling `mailLayout` (per organisatie, `internal`, alleen via `GET|PUT /api/admin/mail-layout`, `POST …/preview` en `POST …/test`; geen migratie): logo (documentopmaak, eigen of geen), positie, kop (balk of wit met lijn), kop-, knop- en accentkleur (terugval: eigen → documentopmaak → thema → huisstijl), bedrijfsgegevens in de voet, eigen voettekst en per mailtype een afwijkend onderwerp en eigen tekst met invulvelden (`platform/mail-layout.js`).
+- `renderMail` vervangt de vaste HTML van `mailBody` (die nu een dunne laag is): e-mailveilige tabellen met inline styles, knop met `bgcolor`, logo als ingebed data-adres dat `mailer.send` omzet in een `cid:`-bijlage (`inlineImages`, hoogstens twee afbeeldingen). Alle ±25 aanroepen geven `mailStyleOf(settings)` mee.
+- `composeFor(settings, type, values)` stelt onderwerp en alinea's samen uit de eigen of standaardtekst (precies de teksten van vóór deze wijziging). Een alinea waarvan alle velden leeg zijn vervalt; onbekende velden of een ontbrekend verplicht veld (de link) worden bij opslaan geweigerd; de tekst over het herroepingsrecht blijft altijd automatisch onderaan de orderbevestiging.
+- Mailtypes met instelbare tekst: orderbevestiging (betaald/op rekening), verzonden (met/zonder volgcode, ophalen, ook als deellevering), betalingsherinnering (open/mislukt), artikel weer op voorraad, retour (ontvangen/goedgekeurd/afgewezen/afgehandeld), account (uitnodiging/wachtwoord/bevestigen) en inkooporder. Interne meldingen, nieuws en door de medewerker nagekeken mails (offerte, afspraak, factuur) krijgen de opmaak maar houden hun tekst.
+- `settings.tenantId` toegevoegd aan het instellingenobject (voor de thema-terugval).
+
+## 1.20.2
+
+- Betalingsherinnering (#262) geldt nu ook voor gastbestellingen: `webOrders.unpaidOnline` filtert niet meer op `user_id` en `reminderAllowed` eist alleen voor een account een bevestigd, gelijk adres. Limieten ongewijzigd: één per bestelling (`pay.reminderAt`), één per adres per 24 uur (ook over gasten en accounts heen), alleen zolang de reservering loopt, alleen met mailserver en webadres, naam opgeschoond. De mail bevat de persoonlijke gastlink (`?k=`).
+- Inkooporder per e-mail naar de leverancier (migratie 80: `purchase_orders.mail_sent_at|mail_sent_to|mail_sent_by|mail_error`): `artikelen/purchase-order-mail.js` (`draft`, `send`), `artikelen/purchase-order-pdf.js` (PDF met de documentopmaak van de organisatie), routes `GET /api/purchase-orders/:id/pdf`, `GET …/mail-draft` en `POST …/send` (recht `voorraad`, 30 per 10 minuten per gebruiker, audit `inkooporder_naar_leverancier_gemaild`). Alleen orders met status besteld of deels ontvangen; één adres tot drie, geen stuurtekens in onderwerp of adres, een lopende verzending blokkeert een tweede klik (409 `busy`) en een al verstuurde order vraagt `resend: true` (409 `already_sent`; het scherm meldt dat hij al is verstuurd), een databasefout bij het vastleggen na een geslaagde verzending geeft geen fout, een mislukte poging komt als leesbare melding op de order en wordt bij een geslaagde poging gewist. Opmaak via de bestaande `mailBody`; instelbare mailopmaak volgt later.
+
+## 1.20.1
+
+- Gedeeld tabelpatroon (`beheer/beheer.css`): `.tablewrap` krijgt `max-width: 100%`, kaarten/panelen/rasterkinderen mogen krimpen (`min-width: 0`), en rasterkolommen met `minmax(Npx, 1fr)` (N ≥ 200) in alle CSS gebruiken `minmax(min(100%, Npx), 1fr)` zodat ze een telefoon niet verbreden. `test/mobile-tables.test.js` bewaakt dit.
+- Producttekst-blok (`#tx-detail`) verhuisd naar het artikelscherm (`item-texts.js` `showItem`); `GET /api/stock/item-texts/:itemId` geeft nu ook `ai` (aan/sleutel/dagrest). Zelfde backend, feitencontrole, bevestiging bij waarschuwingen en goedkeuring. Varianten en gearchiveerde artikelen krijgen het blok niet. Het tabblad Teksten opent het artikel bij Beoordelen.
+
+## 1.20.0
+
+- Migratie 79: `work_orders.customer_id` (verwijzing naar users, index `(tenant_id, customer_id)`), gevuld uit `quotes.customer_id` en `service_requests.customer_id`. Werkorderdata (`customer.*`) blijft de momentopname voor werkbon en pdf.
+- `workorders.create/createReceived/update` nemen `customerId`; `update` laat de koppeling staan bij `undefined`. API: `customerId` in `PUT /api/workorders/:id` (recht `klanten`, klant moet een actieve klant van de organisatie zijn), `GET /api/workorder-customers`, `POST /api/workorders/link-customers` (`workorders.autoLink`: alleen een eenduidige, exacte naam of bedrijfsnaam, alleen op de knop, nooit automatisch op de achtergrond zodat een bewuste ontkoppeling blijft). Werkorderantwoord heeft `customerId` en `customerAccount`.
+- Klantkaart (`customers.overview`) toont ook werkorders met `customer_id`; verwijderen van een klant ontkoppelt zijn werkorders; MCP `maak_concept_werkorder` en `plan_omzetten` geven `customerId` door. Het klantportaal en de planning zijn ongewijzigd.
+
+## 1.19.9
+
+- Instelling `shopPayment` krijgt `quoteRequest` (standaard aan) en `quoteRequestMin` (1 tot 1.000.000 euro excl. btw, standaard 500, ongeldig = 500) in `sanitizePayment`; `quoteRequests.offered(tenantId, cart)` vervangt `qualifies(cart)` bij de knop en de route (`qualifies(cart, minimum)` blijft de zuivere controle). Geen migratie.
+
+## 1.19.8
+
+- Migratie 78 `shop_funnel_days` (omgeving, dag, stap, teller; geen persoonsgegevens; na 400 dagen gewist via het uurlijkse onderhoud). `webshop/funnel.js` (`createFunnel`: `count`, `flush`, `report`, `purgeOld`): tellers in het geheugen, elke minuut en bij elk overzicht in één transactie naar de database, dus een warme shoppagina kost nog steeds 0 queries. Stappen `product`, `cart_add`, `cart`, `checkout`, `order`, `paid` en daarnaast `checkout_login` en `signup`; medewerkers, voorbeelden (`?voorbeeld=1`) en robots (`looksLikeBot`) tellen niet mee. Dag in Nederlandse tijd.
+- `GET /api/admin/shop-funnel?days=` (Beheer). Tabblad Funnel in `frontend/webshop-bestellingen/funnel.js`. `shop_funnel_days` staat met reden in `NO_TESTDATA` (alleen echte bezoekers).
+
+## 1.19.7
+
+- Dezelfde winkelwagen binnen tien minuten geeft geen tweede concept of mail (merkteken in de interne notitie) en elke aanvraag staat in het auditlog (`webshop_offerte_aangevraagd`).
+- `webshop/quote-requests.js` (`qualifies`, `request`; drempel `QUOTE_REQUEST_MIN_EXCL` = 500 excl. btw, een constante, geen instelling): `POST /winkelwagen/offerte/` (alleen ingelogde zakelijke klant, 5 per uur per klant, prijzen en btw uit `priceCart`, nooit uit de browser) maakt via `quoteStore.create` een concept met `customer_id` = de klant, een interne notitie met de herkomst en de bedrijfsgegevens, en mailt `quoteProfile.email` (mislukt de mail, dan staat het concept er toch). Geen migratie.
+- `POST /bestelling/:id/opnieuw/` (via `orderAccessOf`: eigenaar of gast met toegang; `addCartLines` telt op bij de wagen, onbekende codes in `?niet=`). Een afronding op groothandelsvoorwaarden gebeurt zoals altijd in de winkelwagen zelf.
+
+## 1.19.6
+
+- `plannerPromoMark`/`isIrrigationGroup` in storefront-pages.js (merkteken `<!--planner-promo:…-->` op de startpagina en boven de producten van een hoofdcategorie met "beregening" in naam of adres); `storefront.js` vervangt het door het blok als `shopPlanner` aan staat (zoals het kopje Planner) en haalt het anders weg. De knop leidt naar `planner/` (ingelogd direct door naar de planner). Stijl `.planner-promo` in storefront.css via de `--at-shop-*`-variabelen. Geen migratie; de meting `planner_to_cart` bestond al.
+
+## 1.19.5
+
+- Instelling `shopPayment.paymentReminder` (standaard aan). Uurlijkse taak `betalingsherinneringen` (`app.locals.webPaymentsRemind`, `webPayments.remindUnpaid`): bestellingen met status `nieuw`, online betaling open of mislukt, ouder dan een uur en met een lopende reservering; eerst een opvraging bij Mollie, betaald = geen mail. Eén mail per bestelling (`data.pay.reminderAt`, pas gezet na een gelukte verzending, dus een mislukte mail wordt volgende ronde herhaald); hoogstens 50 per ronde. Geen migratie.
+- Misbruikbeperking: een herinnering gaat alleen bij een account-bestelling (nooit bij een gastbestelling) naar een bevestigd adres dat gelijk is aan dat van de bestelling, hoogstens één per e-mailadres per 24 uur (`orders.reminderAllowed`), en de naam in de aanhef wordt opgeschoond (geen links, regeleinden, max. 60 tekens). Zonder mailserver gaan er geen Mollie-opvragingen uit.
+
+## 1.19.4
+
+- Migratie 77 (`shop_search_misses`, SQLite en PostgreSQL): per omgeving en genormaliseerde term een teller; alleen de term, nooit wie zocht. Termen met een e-mailadres of een lang cijfer, kortere dan 2 of langere dan 40 tekens worden niet bewaard; hoogstens 500 termen per omgeving (de minst gezochte valt weg); na 90 dagen zonder nieuwe zoekopdracht gewist (uurlijkse taak). Alleen een zoekopdracht zonder enig resultaat telt (niet met het voorraadfilter, niet in het voorbeeld).
+- `GET /zoeken/suggesties/?q=` (max. 6 producten, `no-store`, eigen limiet 120 per minuut) en het script `zoeksuggesties.js` (toetsenbord, ARIA-combobox, tekst via `textContent`); zonder script werkt zoeken zoals voorheen.
+- `GET /api/admin/shop-search-misses` (beheerders) en het tabblad Zoektermen in `webshop-bestellingen/`.
+
+## 1.19.3
+
+- Nieuw `webshop/search.js` (zuivere functies): normaliseren zonder accenten en leestekens, relevantiescore (exacte code, beginnende code, begin van de naam, alle woorden in de naam, voorraad als tiebreak), en een ruimere tweede ronde met stam, verwante woorden (`SYNONYM_GROUPS`) en tikfouten (Damerau-Levenshtein, 1 fout vanaf 5 tekens, 2 vanaf 8). Varianten blijven één eenheid met het hoofdartikel. De zoekpagina meldt het bij ruimer zoeken.
+
+## 1.19.2
+
+- Voorraadmelding (migratie 76, `stock_alerts`, `webshop/stock-alerts.js`): formulier op de productpagina (alleen met bestellen aan en een mailserver), captcha-actie `stock_alert`, limiet per bezoeker en per adres (10 open), honeypot; elk uur mailt `stockAlertsRun` de meldingen waarvan het artikel weer te bestellen is en wist ze, na 180 dagen of bij een gearchiveerd artikel vervalt een melding.
+- Product en variant geven `stockQty`; `stockText` toont "Nog N op voorraad" bij 1 tot en met 5.
+
+## 1.19.1
+
+Winkelwagen: `shippingHint`/`shippingBlock` (kosten, levertijd, drempelbalk met `<progress>`), betaalnotitie naar de echte betaalwijzen, cookie `aquatech_laatste_lijst` (`rememberList`/`lastListPath`, alleen categorie of groep, nooit een zoekterm, alleen als bestellen aan staat) voor Verder winkelen, aantalformulier dat zichzelf verstuurt (`winkelwagen.js`) en een kaartweergave op smalle schermen. Afrekenen: verzendmethode als keuzekaarten (radio, `chosenShipping` in afrekenen.js), kop *Bezorg- en factuuradres* zolang het afleveradres gelijk is, dropshipping alleen in het formulier van zakelijke klanten. `trustStrip` op productpagina, winkelwagen en afrekenen (alleen punten met gegevens). Zoeken zonder resultaat: `noResults`. `shipping.optionsFor` geeft `freeFrom` mee.
+
+## 1.19.0
+
+- Migratie 75: tabel `item_text_drafts` (één concept per artikel: omschrijving, zoekmachinetitel en -omschrijving, waarschuwingen, vingerafdruk van de live tekst bij het schrijven). Wordt gewist met het artikel (`removeRow`, samenvoegen).
+- `artikelen/item-text-writer.js`: AI-schrijver met de sleutel en het model van de organisatie (`aiTenantOf`), gestructureerde uitvoer, opdracht die alleen de bronvelden toestaat; webadressen en tags worden uit het antwoord gehaald. Verbruik komt als functie `product_tekst` in Beheer > AI-kosten.
+- `artikelen/item-text-check.js`: bronvelden uit het artikel (`buildFacts`) en feitencontrole (`checkText`): losse getallen, getal + eenheid (schrijfwijzen als 2,5/2.5, meter/m), codes (PN10, DN25) en beweringen (keuren, garantie, waterdicht, …) moeten in de bron staan, anders een waarschuwing; ook een melding als er weinig gegevens zijn.
+- `artikelen/item-text-drafts.js`: opslag en routes onder `/api/stock/item-texts` (recht `voorraad`): lijst met filters, detail, `generate` (hoogstens 5 per verzoek, 3 tegelijk, deels mislukken kan, een fatale fout als geen tegoed stopt de portie, dagelijks maximum telt per artikel), aanpassen, afwijzen, goedkeuren. Goedkeuren bepaalt de waarschuwingen opnieuw, eist `acknowledgeWarnings` bij waarschuwingen en `overwrite` als de live tekst sinds het schrijven is gewijzigd. Varianten en gearchiveerde artikelen krijgen geen concept. De routes vallen onder `configuration.routes` van de module voorraad.
+- Frontend: tabblad Teksten (`artikelen/item-texts.js`).
+
+## 1.18.1
+
+- Pagina's in `shop_content` bewaren hun inhoud als `blocks` (nieuw bestand `webshop/page-blocks.js`: `text`, `image`, `products` (codes of categorie), `faq`, `cta`; maximaal 40 blokken, 40 vragen per FAQ-blok, 12 artikelen). Een pagina met alleen `body` krijgt die tekst als één tekstblok (`blocksOf`, `normalizePage`).
+- `contentPage` tekent de blokken (`renderPageBlocks`) en zet FAQPage-gegevens uit alle FAQ-blokken (voor `veelgestelde-vragen` zonder FAQ-blok nog steeds uit de koppen). Wat in de gegevens staat, staat ook zichtbaar op de pagina.
+- `llms.txt` toont de omschrijving van een pagina. Sitemap en `llms.txt` bestaan nog steeds alleen als de shop is vrijgegeven; een concept komt er nooit in.
+- Editor in `beheer/webshop-inhoud.js` met blokken toevoegen, verplaatsen en verwijderen. Geen migratie.
+
+## 1.18.0
+
+- Migratie 74: `stock_items.delivery_rules` (JSON), `lead_days_min`/`lead_days_max` en `item_suppliers.lead_days`.
+- `webshop/delivery-rules.js`: regels `{ method, minQty, maxQty }` per artikel (variant erft van het hoofdartikel) en per categorie (instelling `deliveryRules`, Beheer > Webshop > Levermethodes, `/api/admin/delivery-rules`); rangorde artikel > hoofdartikel > diepste categorie. `blockedMethods` laat de zwaarste methode een gemengde wagen meenemen; ophalen valt buiten de regels.
+- `webshop/delivery-times.js`: levertijd per methode (`leadDays` + `dayType` in `shopShipping`, standaard DPD 1-2 kalenderdagen, pallet 3-5 werkdagen, eigen transport 5-10 werkdagen, ophalen direct), eigen levertijd per artikel, afleiding uit de verwachte datum van een inkooporder of de leverancierstijd; onbekend = "Levertijd op aanvraag". Indicatief; `data.shipping.eta` is een momentopname op de bestelling.
+- `shipping.js`: `qtyTiers` per land bij pallet en eigen transport (gaat voor de weegklassen), `quantityOf`, geblokkeerde methodes met reden in `optionsFor`.
+- `priceCart` geeft `delivery` (geblokkeerde methodes, levertijd per regel); `shippingQuote` voegt per optie `lead`/`leadText` toe. Productpagina toont de levertijd (`leadInfoOf` in storefront-data.js).
+- Tests: `test/delivery.test.js`.
+
+## 1.17.3
+
+- Migratie 73: `stock_items.seo_title`, `seo_description` (70 en 160 tekens, opgeschoond via `item-details.js`) en `brand`; de variant erft per veld van het hoofdartikel (`shownDetails`), de EAN is altijd die van het artikel zelf.
+- Categorieknopen in de menuboom (`seoTitle`, `seoDescription`, `normalizeTree`, editor `webshop-menu.js`) en pagina's (`seoTitle`, `normalizePage`) krijgen eigen zoekmachineteksten; de pagina's gebruiken `Seo.pageTitleOf` en de eigen omschrijving, anders de automatische tekst.
+- Product-JSON-LD krijgt `brand` en `gtin13`/`gtin8` (alleen bij een enkel artikel of variant, nooit bij een prijsbereik, en alleen een geldige EAN); de prijs blijft de consumentenprijs incl. btw.
+- Nieuwe instelling `shopSeo` {indexing} (standaard uit, `liveOnly`, alleen hoofdtenant, Beheer > Webshop > Zoekmachines): zolang uit krijgt elke shoppagina `noindex` (meta en `X-Robots-Tag`), zonder canonical, OpenGraph of JSON-LD; `robots.txt` is `Disallow: /`; sitemap, llms.txt en productfeed geven 404. Open vraagt ook een ingevuld webadres (`Seo.indexingOn`).
+- Let op: zolang `shopSeo.indexing` uit staat laat `seoHead` ook OpenGraph en Twitter-kaart weg (gedeelde links krijgen dan geen voorbeeld); dat geldt ook voor een omgeving die al een webadres had ingevuld.
+
+## 1.17.2
+
+- Nieuw `platform/slow-log.js` + `database/query-stats.js`: elk verzoek of elke achtergrondtaak vanaf `SLOW_REQUEST_MS` (standaard 1000) komt als `[traag]` in het log en in een geheugenlogboek (laatste 500 regels, `app.locals.slowLog`). Per regel: duur, methode, genormaliseerd pad (id's, tokens, e-mailadressen en querystring weg), status, omgeving, aantal databasequeries en -tijd (synchrone brug en `db.async`-pool, ook wachten op een pool-verbinding) en externe aanroepen (`fetch`). Geen koppen, lichamen of gebruikersgegevens.
+- Stilstandsbewaking van de hoofdthread (`SLOW_STALL_MS`, standaard 1000): een regel `[stilstand]` met de verzoeken en taken die toen liepen.
+- Achtergrondtaken (onderhoud, back-up, Drive, bewaking, webshopsynchronisatie, Visma, bestelvoorstellen, herinneringen) worden gemeten.
+- Back-up in een eigen proces (`backup.js` `createBackupInChild`, lagere prioriteit): bij PostgreSQL kopieerde `copyDatabase` alle tabellen synchroon in de hoofdthread, waardoor alle verzoeken tot een halve minuut wachtten. Zelfde bestandsformaat en sleutel; tests en `createApp` zonder `backupInChild` blijven in-process.
+
 ## 1.17.1
 
 Bestellen als gast (webshop):

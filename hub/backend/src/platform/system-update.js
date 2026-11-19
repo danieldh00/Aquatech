@@ -24,6 +24,7 @@ const STEPS = ['ophalen', 'onderhoud', 'back-up', 'herstarten', 'controleren', '
 const MAX_FILE_BYTES = 256 * 1024;
 const MAINTENANCE_MAX_MS = 30 * 60 * 1000;
 const CACHE_MS = 2000;
+const CHECK_MAX_MS = 3 * 60 * 1000;
 const LIMITS = { releases: 30, items: 20, title: 200, text: 1000, message: 300 };
 
 /**
@@ -150,11 +151,13 @@ function sanitizeStatus(raw) {
  * Maakt de koppeling met het hostscript.
  * @param {object} options statusDir en requestDir (leeg = niet ingericht op deze server), currentVersion (de draaiende
  *   versie volgens package.json) en now (klok, voor tests).
- * @returns {object} configured, maintenance, view, request, cancel, setAuto, auto en finishedRun.
+ * @returns {object} configured, maintenance, view, request, requestCheck, cancel, setAuto, auto en finishedRun.
  */
 function createSystemUpdate({ statusDir = '', requestDir = '', currentVersion, now = () => Date.now() }) {
   const configured = Boolean(statusDir && requestDir);
   let maintenanceCache = { at: 0, value: { active: false } };
+  // Laatste handmatige controle van de app (op de seconde afgerond, zoals checkedAt van de host).
+  let lastCheckAt = 0;
 
   /**
    * Wijzigingstijd van run.json (verandert pas als de host het bestand herschrijft).
@@ -240,7 +243,10 @@ function createSystemUpdate({ statusDir = '', requestDir = '', currentVersion, n
     const releases = newer && notes.version === status.available
       ? notes.releases.filter((release) => compareVersions(release.version, currentVersion) > 0 && compareVersions(release.version, status.available) <= 0)
       : [];
-    return { configured: true, running: currentVersion, available: status.available, newer, releases, status, pending: pending(), auto: auto(), maintenance: maintenance() };
+    // De handmatige controle loopt tot de host een nieuwe checkedAt heeft neergezet (hoogstens drie minuten).
+    const checkedAtMs = status.checkedAt ? Date.parse(status.checkedAt) : 0;
+    const checking = lastCheckAt > 0 && checkedAtMs < lastCheckAt && now() - lastCheckAt < CHECK_MAX_MS;
+    return { configured: true, running: currentVersion, available: status.available, newer, releases, status, pending: pending(), auto: auto(), maintenance: maintenance(), checking };
   }
 
   /**
@@ -258,6 +264,23 @@ function createSystemUpdate({ statusDir = '', requestDir = '', currentVersion, n
     const entry = { id: crypto.randomUUID(), version: current.available, requestedAt: new Date(now()).toISOString(), by: String(userId || ''), byName: cleanText(byName, 80) };
     writeJsonFile(requestDir, 'request.json', entry);
     return { request: entry };
+  }
+
+  /**
+   * Vraagt de host om nu naar een nieuwe versie te zoeken (een aanvraag zonder versie, met `check: true`). De host
+   * haalt dan :latest op en werkt status.json bij; er wordt niets geïnstalleerd.
+   * @param {object} input userId en byName (wie).
+   * @returns {{ checking: true, started: boolean }|{ error: string, status: number, message: string }} Gelukt of een fout.
+   */
+  function requestCheck({ userId, byName }) {
+    if (!configured) return { error: 'not_configured', status: 501, message: 'Updaten vanuit de app is op deze server niet ingericht.' };
+    const current = view();
+    if (current.maintenance.active || current.status.state === 'bezig') return { error: 'busy', status: 409, message: 'Er loopt al een update.' };
+    if (current.pending) return { error: 'pending', status: 409, message: 'Er staat al een update aangevraagd.' };
+    if (current.checking) return { checking: true, started: false };
+    lastCheckAt = Math.floor(now() / 1000) * 1000;
+    writeJsonFile(requestDir, 'request.json', { id: crypto.randomUUID(), check: true, requestedAt: new Date(now()).toISOString(), by: String(userId || ''), byName: cleanText(byName, 80) });
+    return { checking: true, started: true };
   }
 
   /**
@@ -300,7 +323,7 @@ function createSystemUpdate({ statusDir = '', requestDir = '', currentVersion, n
     return status;
   }
 
-  return { configured, maintenance, view, request, cancel, setAuto, auto, finishedRun };
+  return { configured, maintenance, view, request, requestCheck, cancel, setAuto, auto, finishedRun };
 }
 
 module.exports = { createSystemUpdate, compareVersions, sanitizeStatus, sanitizeReleases, MAINTENANCE_MAX_MS };

@@ -25,7 +25,12 @@ a.brand.home { color: inherit; text-decoration: none; }
 .filters input[type=search] { flex: 1 1 260px; }
 input, select { font: inherit; font-family: var(--at-font); padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
 
-.tablewrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; box-sizing: border-box; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+/* Gedeeld tabelpatroon voor smalle schermen: een tabel scrolt horizontaal binnen zijn eigen .tablewrap en duwt de kaart nooit breder.
+   Een rasterkolom of flexkind krimpt standaard niet onder de breedte van zijn inhoud (min-width: auto); daarom mogen kaarten,
+   panelen en rasterkinderen hier wel krimpen. */
+.card, .card-form, .tabpane, .cols > *, .card-grid > *, .form-grid > *, .do-layout > *, .row > * { min-width: 0; }
+.card-form, .card { max-width: 100%; box-sizing: border-box; }
 table.grid { width: 100%; border-collapse: collapse; font-size: 14px; }
 table.grid th, table.grid td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; white-space: nowrap; }
 table.grid th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); background: #fafbfc; }
@@ -113,10 +118,11 @@ table.grid.matrix td.na { color: var(--line); }
 .guide summary { cursor: pointer; font-weight: 600; color: var(--primary); }
 .guide ol { margin: 8px 0 0; padding-left: 20px; line-height: 1.5; }
 .guide code { font-size: 13px; }
+.guide pre { margin: 6px 0; padding: 8px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; font-size: 12.5px; background: var(--at-green-soft); border-radius: 6px; }
 .card-form.settings [hidden] { display: none !important; }
 
 /* AI-kosten */
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 6px 0 14px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 10px; margin: 6px 0 14px; }
 .stat { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
 .stat b { display: block; font-size: 22px; color: var(--primary-dark); }
 .stat span { color: var(--muted); font-size: 13px; }
@@ -191,7 +197,7 @@ dl.kv dd { margin: 0; }
 .sc-pick { padding: 0; border: 2px solid transparent; background: none; cursor: pointer; border-radius: 6px; }
 .sc-pick:hover, .sc-pick:focus-visible { border-color: var(--primary); }
 .sc-pick img { display: block; width: 80px; height: 60px; object-fit: cover; border-radius: 4px; }
-.sc-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.sc-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr)); gap: 12px; }
 .sc-gallery figure { margin: 0; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--panel); }
 .sc-gallery img { display: block; width: 100%; height: 120px; object-fit: cover; background: var(--panel); }
 .sc-gallery figcaption { padding: 8px 10px; font-size: 13px; overflow-wrap: anywhere; }
@@ -306,6 +312,10 @@ dl.kv dd { margin: 0; }
 .mon-tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 0 6px; border-radius: 999px; border: 1px solid var(--at-teal); color: var(--at-navy); vertical-align: middle; }
 .mon-badge { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; color: var(--at-surface); background: var(--at-warn); }
 .mon-badge.bad { background: var(--at-danger); }
+.mon-badge.info { background: var(--at-teal); }
+.log-filters { margin-bottom: 8px; }
+.log-data { margin: 4px 0 0; max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+#log-table .nowrap { white-space: nowrap; }
 .mon-platform h4 { margin: 4px 0 10px; font-size: 14px; }
 .mon-platform code { font-size: 12px; }
 
@@ -321,5 +331,36 @@ dl.kv dd { margin: 0; }
 .do-preview-head h3 { margin: 0; }
 .do-kinds { display: flex; gap: 6px; }
 .do-kinds .btn[aria-pressed="true"] { background: var(--at-navy); color: var(--at-surface); }
+.ml-frame { display: block; width: 100%; max-width: 600px; height: 560px; margin: 10px auto; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
 .do-canvas-wrap { margin: 10px 0; border: 1px solid var(--line); border-radius: 6px; background: #fff; overflow: hidden; }
 .do-canvas-wrap canvas { display: block; width: 100%; height: auto; }
+
+/* Pagina-editor met blokken (webshop-inhoud.js). */
+.pb-title { margin: 18px 0 4px; }
+.pb-list { display: flex; flex-direction: column; gap: 12px; margin: 8px 0; }
+.pb-block { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px 14px; background: var(--bg, #fff); min-width: 0; }
+.pb-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.pb-tools { display: flex; gap: 6px; flex-wrap: wrap; }
+.pb-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 10px 14px; align-items: start; }
+.pb-fields label { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.pb-fields textarea, .pb-fields input:not([type=checkbox]), .pb-fields select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; max-width: 100%; box-sizing: border-box; }
+.pb-fields .pb-faq, .pb-fields > div, .pb-fields > p { grid-column: 1 / -1; }
+.pb-faq { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 8px 14px; padding: 8px 0; border-top: 1px dashed var(--line); }
+.pb-faq .btn { justify-self: start; }
+.pb-block .sc-editor { min-height: 140px; }
+.pb-add { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 14px; }
+
+/* Servertaken (Beheer > Systeem > Updates) */
+#ht-card { margin-bottom: 16px; }
+.ht-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
+.ht-item { padding: 8px 0; border-top: 1px solid var(--line); }
+.ht-item p { margin: 2px 0 0 26px; }
+.ht-item.done strong { text-decoration: line-through; color: var(--muted); }
+.ht-code { margin: 0 0 8px; padding: 8px 10px; overflow-x: auto; font-size: 12px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--at-preview-bg); border: 1px solid var(--line); border-radius: 6px; }
+
+/* Draaiboek VPS-verhuizing (beheer/vps-draaiboek.js) */
+.vps-plan h4 { margin: 18px 0 6px; }
+.vps-steps { list-style: none; margin: 0; padding: 0; }
+.vps-steps li { padding: 6px 0; border-top: 1px solid var(--line); font-size: 0.9rem; }
+.vps-steps .chk { align-items: flex-start; margin: 0; }
+.vps-steps code { overflow-wrap: anywhere; }

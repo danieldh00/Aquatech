@@ -13,6 +13,453 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.24.6',
+      date: '2026-11-19',
+      title: 'Klanten zoeken houdt de server niet meer op',
+      items: [],
+    },
+    {
+      version: '1.24.5',
+      date: '2026-11-19',
+      title: 'Automatische betalingsherinneringen en aanmaningen',
+      items: [
+        { text: 'AquaTech mailt de klant nu automatisch een betalingsherinnering en aanmaningen als een factuur over de vervaldatum is. Je stelt het in onder Beheer > Modules > Facturen: betalingsherinneringen (aan/uit, na hoeveel dagen per stap). Standaard staat het uit.', for: ['facturen', 'beheer'] },
+        { text: 'Op de factuur zie je welke herinnering of aanmaning is verstuurd, en in de lijst staat de laatste stap bij de status.', for: ['facturen'] },
+        { text: 'Op de klantkaart zet je de automatische herinneringen voor één klant uit.', for: ['facturen', 'klanten'] },
+        { text: 'De teksten van de herinnering en aanmaningen pas je aan onder Mail-opmaak (groep Facturen).', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.24.4',
+      date: '2026-11-19',
+      title: 'Draaiboek voor de verhuizing naar een VPS',
+      items: [
+        { text: 'Beheer > Systeem heeft een afvinkbaar draaiboek voor de verhuizing naar een VPS: voorbereiden, inrichten, proefverhuizing, verhuisdag, controle en terugvallen.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.24.3',
+      date: '2026-11-19',
+      title: 'Kengetallen op het beheerdersdashboard',
+      items: [
+        { text: 'Het startscherm toont voor beheerders vier kengetallen: openstaand bedrag, vervallen facturen, open offertes en de bezetting van deze week.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.24.2',
+      date: '2026-11-19',
+      title: 'Betaallink in de factuurmail',
+      items: [
+        { text: 'De factuurmail bevat een link waarmee de klant de factuur direct online kan betalen (iDEAL en andere methodes via Mollie), ook zonder in te loggen. Na betaling staat de factuur automatisch op betaald.', for: ['facturen'] },
+      ],
+    },
+    {
+      version: '1.24.1',
+      date: '2026-11-19',
+      title: 'Mail versturen via Microsoft 365 (Graph)',
+      items: [
+        { text: 'Mail kan nu via Microsoft 365 (Graph) worden verstuurd in plaats van SMTP. Dat gaat over HTTPS, dus een geblokkeerde mailpoort bij de internetprovider is geen probleem meer. In Beheer > Instellingen > E-mail staat een stappenplan voor de app-registratie in Microsoft Entra, inclusief het beperken van de app tot één mailbox.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.24.0',
+      date: '2026-11-19',
+      title: 'Kleiner image en opgeschoonde documentatie',
+      items: [],
+    },
+    {
+      version: '1.23.9',
+      date: '2026-11-19',
+      title: 'Servertaken als afvinklijst',
+      items: [
+        { text: 'Commando\'s die op de server uitgevoerd moeten worden staan nu in Beheer > Systeem > Updates als afvinklijst, met één vast commando en een kopieerknop. Het dashboard toont wat nog openstaat.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.23.8',
+      date: '2026-11-19',
+      title: 'Duidelijkere mailfouten bij de testmail',
+      items: [
+        { text: 'Als de testmail of een andere mail niet lukt, noemt de melding nu de mailserver en poort en zegt ze wat er mis is: geen antwoord (vaak een geblokkeerde poort), geweigerde verbinding of onbekende servernaam.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.23.7',
+      date: '2026-11-19',
+      title: 'Lange back-uplijsten klappen in',
+      items: [
+        { text: 'De lijst met back-ups en de lijsten bij Back-ups naar Google Drive (bestanden en logboek) tonen nu de nieuwste vijf regels, met de knop "Toon alle" voor de rest.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.23.6',
+      date: '2026-11-19',
+      title: 'Facturen online betalen in het klantportaal',
+      items: [
+        { text: 'In het klantportaal staat nu het blok Facturen met uw definitieve en betaalde facturen, met een PDF per factuur.' },
+        { text: 'Staat online betalen aan, dan betaalt u een openstaande factuur met de knop "Nu betalen" via iDEAL of een andere methode van Mollie. Na de betaling staat de factuur meteen op betaald, ook bij de debiteuren van het bedrijf.' },
+      ],
+    },
+    {
+      version: '1.23.5',
+      date: '2026-11-19',
+      title: 'Meldingenbelletje met teller in de kopbalk',
+      items: [
+        { text: '[voorraad] In de kopbalk staat nu een belletje met het aantal openstaande taken (bestellingen verwerken, bestelvoorstellen, prijsvoorstellen). Een klik toont de lijst en brengt je direct naar het juiste scherm; bij één openstaand punt ga je meteen naar dat punt.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.23.4',
+      date: '2026-11-19',
+      title: 'Snellere en stabielere testsuite',
+      items: [],
+    },
+    {
+      version: '1.23.3',
+      date: '2026-11-19',
+      title: 'Logboek: herhaalde meldingen als één regel',
+      items: [
+        { text: 'In het Logboek staat een herhaalde melding (bijvoorbeeld een trage taak of stilstand) nu als één regel met het aantal en de eerste en laatste keer, ook in de Excel-export.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.23.2',
+      date: '2026-11-19',
+      title: 'Openstaande taken op het dashboard',
+      items: [
+        { text: 'Op het startscherm staat nu een blok "Openstaande taken" met de binnengekomen webshopbestellingen die nog niet verzonden zijn (de oudste vijf, met link naar elke bestelling).', for: ['beheer'] },
+        { text: 'Hetzelfde blok toont de bestelvoorstellen die klaarstaan bij lage voorraad, artikelen onder het minimum zonder voorkeursleverancier en open prijsvoorstellen. Zonder openstaande taken verdwijnt het blok.', for: ['voorraad'] },
+      ],
+    },
+    {
+      version: '1.23.1',
+      date: '2026-11-19',
+      title: 'Snellere pagina\'s door verkleinde scripts en stijlen',
+      items: [
+        { text: 'Pagina\'s laden sneller: de scripts en stijlen van de app zijn verkleind.' },
+      ],
+    },
+    {
+      version: '1.23.0',
+      date: '2026-11-19',
+      title: 'Handmatig controleren op updates',
+      items: [
+        { text: 'In Beheer > Systeem > Updates kun je nu met één klik controleren of er een nieuwe versie klaarstaat.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.22.9',
+      date: '2026-11-19',
+      title: 'Rustigere kop in de webshop',
+      items: [],
+    },
+    {
+      version: '1.22.8',
+      date: '2026-11-19',
+      title: 'Webshopsynchronisatie standaard één keer per nacht',
+      items: [
+        { text: 'De volledige vergelijking met de webshop draait nu standaard één keer per nacht in plaats van elke 10 minuten. In Beheer > Webshop kies je ook elk uur of elke 10 minuten.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.22.7',
+      date: '2026-11-19',
+      title: 'Google-verificatie voor de webshop',
+      items: [],
+    },
+    {
+      version: '1.22.6',
+      date: '2026-11-19',
+      title: 'Nieuw ontwerp voor de winkelwagen van de webshop',
+      items: [
+        { text: 'De winkelwagen in de webshop is overzichtelijker: de regels staan in een nette kaart, het totaal valt beter op en de knop "Naar afrekenen" is groot en makkelijk te raken, ook op mobiel.' },
+      ],
+    },
+    {
+      version: '1.22.5',
+      date: '2026-11-19',
+      title: 'Orderpick: wisselen tussen Picken en Ontvangen werkt weer',
+      items: [
+        { text: 'Van Ontvangen terug naar Picken laat nu alleen het pickscherm zien, in plaats van beide schermen onder elkaar.', for: ['orderpick'] },
+      ],
+    },
+    {
+      version: '1.22.4',
+      date: '2026-11-19',
+      title: 'Nieuw ontwerp voor de productpagina van de webshop',
+      items: [
+        { text: 'De productpagina in de webshop is overzichtelijker: grotere foto, duidelijke prijs en voorraad en een hoge winkelwagenknop die ook op mobiel makkelijk te raken is.' },
+      ],
+    },
+    {
+      version: '1.22.3',
+      date: '2026-11-19',
+      title: 'Stappenplan voor Google Drive-back-ups',
+      items: [
+        { text: 'Beheer > Systeem > Back-ups naar Google Drive heeft bovenaan een stappenplan om de Google-app in te stellen, en de velden staan netjes op één lijn.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.22.2',
+      date: '2026-11-19',
+      title: 'Nieuw ontwerp voor de categoriepagina van de webshop',
+      items: [
+        { text: 'Categoriepagina\'s in de webshop zijn rustiger en overzichtelijker: grotere productkaarten met duidelijke prijs en voorraad, nette filters en grotere knoppen op mobiel.' },
+      ],
+    },
+    {
+      version: '1.22.1',
+      date: '2026-11-19',
+      title: 'Prijsvoorstel goedkeuren bij het artikel',
+      items: [
+        { text: 'Na een nieuwe inkoopprijs zie je bij het artikel direct "Nieuwe verkoopprijs voorgesteld: oud → nieuw" met de knoppen Goedkeuren en Negeren. In de artikellijst staat een label Voorstel bij de verkoopprijs. De prijs verandert nooit vanzelf.', for: ['voorraad'] },
+      ],
+    },
+    {
+      version: '1.22.0',
+      date: '2026-11-19',
+      title: 'Tabellen op mobiel houden de artikelkolom in beeld',
+      items: [
+        { text: 'Op een telefoon blijft in alle tabellen de eerste kolom (artikel, nummer of naam) links staan als je de rest opzij schuift, zodat je altijd ziet om welk item het gaat.' },
+      ],
+    },
+    {
+      version: '1.21.9',
+      date: '2026-11-19',
+      title: 'Levertijd zichtbaar in shop, mail en Beheer',
+      items: [
+        { text: 'De webshop toont bij een artikel in gewone taal welke levermethode bij welk aantal geldt, bijvoorbeeld "pallet vanaf 100 stuks".' },
+        { text: 'De bestelpagina en de orderbevestigingsmail noemen de verwachte levertijd, steeds als indicatie en niet als toezegging.' },
+        { text: 'Bij een webshopbestelling staan de levermethode en de levertijd bij het bestellen, ook in de Excel-export.', for: ['webshop'] },
+        { text: 'Bij een artikel toont Beheer per levermethode de aantallen en de levertijd, op voorraad en niet op voorraad.', for: ['voorraad'] },
+      ],
+    },
+    {
+      version: '1.21.8',
+      date: '2026-11-19',
+      title: 'Miniaturen van artikelfoto\'s maken ook in Safari',
+      items: [
+        { text: '*Afbeeldingen en miniaturen* maakt de miniaturen nu ook in Safari (iPhone, iPad, Mac). Safari kan geen WebP maken, dus daar wordt de miniatuur een JPEG. Bij een eerdere poging gemaakte afbeeldingen krijgen bij een nieuwe run alsnog hun miniatuur.', for: ['voorraad'] },
+      ],
+    },
+    {
+      version: '1.21.7',
+      date: '2026-11-19',
+      title: 'Logboek in Beheer',
+      items: [
+        { text: 'Nieuw: Beheer > Systeem > Logboek. Zoek op foutcode of verzoek-id en filter op niveau, bron en periode; exporteren naar Excel kan ook. De bewaartermijn van het logboek stel je in bij Sessies en bewaartermijnen.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.21.6',
+      date: '2026-11-19',
+      title: 'Centraal logboek voor fouten en traagheid',
+      items: [
+        { text: 'Fouten, trage verzoeken en storingen worden nu bewaard in een centraal logboek (zoeken en bekijken in Beheer volgt). Elke foutmelding noemt ook een verzoek-id, zodat de beheerder precies kan terugvinden wat er gebeurde.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.21.5',
+      date: '2026-11-19',
+      title: 'Afbeeldingen uit de oude webshop overnemen werkt ook met AVIF',
+      items: [
+        { text: '*Afbeeldingen en miniaturen* neemt nu ook de foto\'s over die de oude webshop als AVIF aanbiedt (dat waren alle foto\'s). Je browser zet ze om naar JPEG en maakt meteen de miniatuur. Een eerdere poging die alles als mislukt toonde, kun je gewoon opnieuw starten.', for: ['voorraad'] },
+      ],
+    },
+    {
+      version: '1.21.4',
+      date: '2026-11-18',
+      title: 'Startpagina van de webshop laadt veel lichter',
+      items: [
+        { text: 'De grote afbeeldingen op de startpagina van de webshop (hoofdbanner, banners en het zakelijke blok) zijn nu ongeveer 70 procent kleiner, op een telefoon nog meer. De pagina laadt daardoor merkbaar sneller.' },
+      ],
+    },
+    {
+      version: '1.21.3',
+      date: '2026-11-18',
+      title: 'Snellere productkaartjes met miniaturen',
+      items: [
+        { text: 'Productkaartjes in de webshop gebruiken nu een kleine miniatuur van de foto (ongeveer een tiende van de grootte), zodat overzichten sneller laden, vooral op een telefoon. Nieuwe foto\'s krijgen er automatisch een. Voor bestaande foto\'s klik je onder Artikelen op *Afbeeldingen en miniaturen*.', for: ['voorraad'] },
+      ],
+    },
+    {
+      version: '1.21.2',
+      date: '2026-11-18',
+      title: 'Webshop is na een update meteen snel',
+      items: [
+        { text: 'Na een update of herstart warmt de webshop zichzelf op, zodat de eerste bezoekers niet 1 tot 3 seconden extra wachten.' },
+      ],
+    },
+    {
+      version: '1.21.1',
+      date: '2026-11-18',
+      title: 'Webshop opent ook na een rustig moment snel',
+      items: [
+        { text: 'De webshop opent nu ook voor de eerste bezoeker na een rustig moment snel: pagina\'s wachten niet meer op het opnieuw opbouwen van het assortiment.' },
+      ],
+    },
+    {
+      version: '1.21.0',
+      date: '2026-11-18',
+      title: 'Mail-opmaak en mailteksten zelf instellen',
+      items: [
+        { text: 'Nieuw: Beheer > Mail-opmaak. Stel het logo, de kleuren en de voettekst van je e-mails in en pas per soort mail het onderwerp en de tekst aan (orderbevestiging, verzending, retour, betalingsherinnering, account, inkooporder). Je ziet meteen een voorbeeld en kunt een testmail naar jezelf sturen.', for: ['beheer'] },
+        { text: 'Alle mails aan klanten staan nu in de huisstijl van je organisatie, met je logo erin.' },
+      ],
+    },
+    {
+      version: '1.20.2',
+      date: '2026-11-18',
+      title: 'Betalingsherinnering ook voor gasten en inkooporders mailen',
+      items: [
+        { text: 'Een bestelde inkooporder stuur je met één knop (*Versturen naar leverancier*) per e-mail naar de leverancier. Je ziet eerst de ontvanger, het onderwerp en de tekst en kunt ze aanpassen; de inkooporder gaat als PDF mee. Er gaat nooit iets vanzelf weg, en op de order staat wanneer en naar wie hij is verstuurd.', for: ['voorraad'] },
+        { text: 'Ook wie als gast bestelt en de online betaling niet afrondt, krijgt na een uur één herinnering met een link om af te rekenen, op het adres dat bij het afrekenen is ingevuld.' },
+      ],
+    },
+    {
+      version: '1.20.1',
+      date: '2026-11-18',
+      title: 'Tabellen kloppen op de telefoon en producttekst bij het artikel',
+      items: [
+        { text: 'Tabellen (zoals de prijshistorie en voorraadlagen van een artikel) blijven op de telefoon binnen hun kaart en scrollen zijdelings.' },
+        { text: 'De producttekst van een artikel schrijf, controleer en keur je nu goed in het artikel zelf. Het tabblad Teksten blijft voor in bulk concepten schrijven en opent het artikel om te beoordelen.', for: ['voorraad'] },
+      ],
+    },
+    {
+      version: '1.20.0',
+      date: '2026-11-18',
+      title: 'Werkorders hangen aan een klant',
+      items: [
+        { text: 'Een werkorder hangt nu echt aan een klant uit de klantenlijst. In de werkorder kies je de klant (adres, e-mail en telefoon worden ingevuld) of ontkoppel je hem weer; de werkorder staat dan ook op de klantkaart.', for: ['werkorders', 'klanten'] },
+        { text: 'Bestaande werkorders zijn gekoppeld via hun offerte of melding. Met *Koppel op naam* in het werkorderoverzicht koppel je de rest als de naam bij precies één klant past (alleen als je op de knop klikt, dus een bewuste ontkoppeling blijft staan); werkorders zonder klant krijgen het label *Niet gekoppeld* en zijn te filteren.', for: ['werkorders', 'klanten'] },
+        { text: 'De AI-koppeling zet bij een werkorder de gekozen klant (klantId) nu ook echt vast.', for: ['werkorders'] },
+      ],
+    },
+    {
+      version: '1.19.9',
+      date: '2026-11-18',
+      title: 'Drempelbedrag voor Offerte aanvragen instelbaar',
+      items: [
+        { text: 'In Beheer > Webshop > Betalen stel je in vanaf welk bedrag (excl. btw) een zakelijke klant in de winkelwagen een offerte kan aanvragen (standaard 500 euro), of zet je Offerte aanvragen helemaal uit.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.19.8',
+      date: '2026-11-18',
+      title: 'Eigen koopfunnelteller in de webshop',
+      items: [
+        { text: 'Webshopbestellingen heeft een tabblad Funnel: hoe vaak bezoekers een productpagina bekeken, iets in de winkelwagen legden, afrekenen openden, bestelden en online betaalden, met het aandeel ten opzichte van de vorige stap, per periode (7, 30, 90 dagen of 12 maanden) en met Excel-export. Het zijn aantallen, geen unieke bezoekers, en er wordt nooit bewaard wie het was.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.19.7',
+      date: '2026-11-18',
+      title: 'Offerte aanvragen en opnieuw bestellen in de webshop',
+      items: [
+        { text: 'Een zakelijke klant met een winkelwagen vanaf 500 euro excl. btw kan een offerte aanvragen in plaats van af te rekenen. Dat maakt een concept in Offertes (alleen zichtbaar voor medewerkers, bij "alle offertes") en je krijgt een mail. Je controleert het concept en verstuurt de offerte zelf.', for: ['beheer'] },
+        { text: 'Klanten kunnen een eerdere bestelling met één klik opnieuw bestellen: de artikelen komen in de winkelwagen met de actuele prijzen en voorraad; wat niet meer te koop is wordt gemeld.' },
+      ],
+    },
+    {
+      version: '1.19.6',
+      date: '2026-11-18',
+      title: 'Planner promoten in de webshop',
+      items: [
+        { text: 'De webshop prijst de gratis planner aan: een blok "Ontwerp je beregening gratis, bestel de complete lijst" op de startpagina en in de beregeningscategorieën. Het blok verdwijnt als je de planner uitzet in de instellingen.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.19.5',
+      date: '2026-11-18',
+      title: 'Herinnering bij niet afgeronde betaling',
+      items: [
+        { text: 'Een klant die een online betaling niet afrondt, krijgt na een uur één herinneringsmail met een link om alsnog te betalen, zolang de reservering loopt. Je zet dit uit in Beheer > Webshop > Betalen.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.19.4',
+      date: '2026-11-18',
+      title: 'Zoeksuggesties en zoektermen zonder resultaat',
+      items: [
+        { text: 'In de webshop verschijnen onder het zoekveld na twee tekens een paar passende producten. Bezoekers komen zo sneller bij het goede artikel.', for: ['beheer'] },
+        { text: 'Bij Webshopbestellingen staat een nieuw tabblad Zoektermen: wat bezoekers zochten zonder iets te vinden, met een Excel-export. Zo zie je welk artikel ontbreekt.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.19.3',
+      date: '2026-11-18',
+      title: 'Beter zoeken in de webshop',
+      items: [
+        { text: 'Zoeken in de webshop zet de juiste treffer bovenaan: een exacte artikelnummer (ook met streepje of spatie) komt eerst. Vind je niets precies, dan zoekt de webshop ook op meervouden, verwante woorden (sproeier en sprinkler) en kleine typefouten.' },
+      ],
+    },
+    {
+      version: '1.19.2',
+      date: '2026-11-18',
+      title: 'Voorraad in de webshop en voorraadmelding',
+      items: [
+        { text: 'Bij een kleine voorraad toont de webshop nu "Nog 3 op voorraad". Is een artikel uitverkocht, dan kan een bezoeker zijn e-mailadres achterlaten en krijgt één mail zodra het weer te bestellen is; het adres wordt daarna gewist.' },
+      ],
+    },
+    {
+      version: '1.19.1',
+      date: '2026-11-18',
+      title: 'Winkelwagen en afrekenen duidelijker',
+      items: [
+        { text: 'De winkelwagen toont nu al de verzendkosten, de levertijd en hoeveel er nog aan gratis bezorging ontbreekt.' },
+        { text: 'Bij het afrekenen kies je de verzendmethode uit kaarten met prijs en levertijd, en staat er een strook met levertijd, gratis-vanaf, bedenktijd en het telefoonnummer.' },
+        { text: 'Het aantal in de winkelwagen wordt direct bijgewerkt en op een telefoon staat elke regel als kaart. Verder winkelen brengt je terug naar de laatst bekeken categorie.' },
+        { text: 'Een zoekopdracht zonder resultaat geeft tips, de categorieën en ons telefoonnummer. Het blok Dropshipping zien alleen zakelijke klanten.' },
+      ],
+    },
+    {
+      version: '1.19.0',
+      date: '2026-11-18',
+      title: 'Producttekst laten schrijven door de AI',
+      items: [
+        { text: 'Nieuw tabblad Teksten bij Artikelen: de AI schrijft een concept van de omschrijving en de zoekmachineteksten, alleen met de gegevens die bij het artikel staan. Jij controleert en keurt goed; niets gaat vanzelf live.', for: ['voorraad'] },
+        { text: 'Getallen, eenheden en beweringen (zoals keuren of garantie) in een concept die niet in de artikelgegevens staan worden gemarkeerd. Goedkeuren vraagt dan een uitdrukkelijke bevestiging.', for: ['voorraad'] },
+        { text: 'Concepten schrijven kan voor één artikel of voor een selectie (bijvoorbeeld een categorie of alle artikelen zonder tekst); je keurt ze één voor één of in bulk goed of wijst ze af.', for: ['voorraad'] },
+      ],
+    },
+    {
+      version: '1.18.1',
+      date: '2026-11-18',
+      title: 'Webshoppagina\'s bouwen met blokken',
+      items: [
+        { text: 'Nieuwe pagina\'s voor de webshop maak je nu zonder code in Beheer > Webshop-inhoud > Pagina\'s: bouw ze uit blokken (tekst, afbeelding, artikelen, veelgestelde vragen en een knop met tekst), zet ze in de gewenste volgorde en bekijk eerst het voorbeeld.', for: ['beheer'] },
+        { text: 'Veelgestelde vragen op een pagina komen ook als gestructureerde gegevens (FAQPage) in de pagina, en pagina\'s met een korte omschrijving staan met die omschrijving in llms.txt (zodra de webshop is vrijgegeven voor zoekmachines).', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.18.0',
+      date: '2026-11-18',
+      title: 'Levermethode en levertijd per artikel',
+      items: [
+        { text: 'Per artikel of productcategorie bepaal je welke bezorgmethodes mogen, met een aantalgrens (bijvoorbeeld vanaf 100 stuks alleen pallet). Een bestelling met artikelen die verschillende methodes vragen gaat met de zwaarste methode (pallet) mee.', for: ['beheer', 'voorraad'] },
+        { text: 'Pallet en eigen transport kunnen een aantalstaffel krijgen naast de weegklassen. Per methode stel je de levertijd in, in kalender- of werkdagen.', for: ['beheer'] },
+        { text: 'De webshop toont een indicatieve levertijd bij het product en bij het afrekenen; is die niet bekend, dan staat er "Levertijd op aanvraag". Een artikel kan een eigen levertijd hebben, en als het niet op voorraad is volgt de levertijd uit de inkooporder of de levertijd van de leverancier.' },
+      ],
+    },
+    {
+      version: '1.17.3',
+      date: '2026-11-18',
+      title: 'SEO-opties voor de webshop',
+      items: [
+        { text: 'Per artikel stel je nu een eigen titel en omschrijving voor zoekmachines in, plus het merk. Laat je ze leeg, dan maakt de webshop er zelf een goede van.', for: ['beheer', 'voorraad'] },
+        { text: 'Ook categorieën (Webshop-inhoud > Menu) en pagina\'s krijgen een eigen titel voor zoekmachines.', for: ['beheer'] },
+        { text: 'Nieuw: Beheer > Webshop > Zoekmachines. Zolang je dat niet aanzet, blijft de webshop onzichtbaar voor Google: elke pagina op noindex, robots.txt blokkeert alles en de sitemap bestaat niet. Zet het aan zodra de webshop live gaat.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.17.2',
+      date: '2026-11-18',
+      title: 'Pagina\'s openen niet meer vast tijdens de back-up',
+      items: [
+        { text: 'De dagelijkse back-up draait voortaan los van de app, zodat pagina\'s niet meer tientallen seconden kunnen blijven hangen terwijl de database wordt gekopieerd.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.17.1',
       date: '2026-11-14',
       title: 'Bestellen in de webshop zonder account',

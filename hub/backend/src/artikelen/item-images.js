@@ -25,6 +25,10 @@ const DOWNLOAD_TIMEOUT_MS = 10000;
 const IMPORT_PAGE_SIZE = 25;
 const IMPORT_CONCURRENCY = 5;
 const IMAGE_ID_PATTERN = /^[0-9a-f-]{36}$/;
+/** Een miniatuur is een WebP van hoogstens zoveel pixels aan de lange kant en zoveel bytes. */
+const THUMB_MAX_SIDE = 480;
+const THUMB_MAX_BYTES = 100 * 1024;
+const THUMB_PAGE_SIZE = 25;
 
 /**
  * Het huidige moment.
@@ -59,7 +63,7 @@ function importableUrl(text) {
  * Maakt de opslag voor artikelafbeeldingen.
  * @param {object} db De database.
  * @param {{ vault: object, fetchImpl?: Function|null, resolveHost?: Function }} options vault = de kluis (sealBytes/openBytes), fetchImpl = eigen fetch (tests), resolveHost = zoekt een hostnaam op (alleen openbare adressen).
- * @returns {{ setForItem: Function, clearForItem: Function, file: Function, importFromShop: Function, prune: Function, pendingImport: Function, library: Function, forget: Function }} De functies.
+ * @returns {{ setForItem: Function, clearForItem: Function, shopImageBytes: Function, file: Function, thumbFile: Function, setThumb: Function, thumbsPending: Function, thumbCandidates: Function, importFromShop: Function, prune: Function, pendingImport: Function, library: Function, forget: Function }} De functies.
  */
 function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publicAddress }) {
   /**
@@ -75,6 +79,13 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
    * @returns {string} De context.
    */
   const aadOf = (tenantId, id) => `${tenantId}:artikel-afbeelding:${id}`;
+  /**
+   * De AAD waaronder de miniatuur van een afbeelding wordt versleuteld.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} id Id van de afbeelding.
+   * @returns {string} De context.
+   */
+  const thumbAadOf = (tenantId, id) => `${tenantId}:artikel-afbeelding-klein:${id}`;
   /** Ontsleutelde afbeeldingen in het geheugen: de shop toont dezelfde foto's steeds opnieuw. */
   const memory = createImageCache();
 
@@ -100,6 +111,8 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
     if (!raw || !raw.length) return { error: 'invalid_image', message: 'Dit is geen geldige afbeelding.', status: 400 };
     if (raw.length > MAX_IMAGE_BYTES) return { error: 'too_large', message: `De afbeelding is te groot (maximaal ${MAX_IMAGE_BYTES / 1024 / 1024} MB).`, status: 413 };
     const image = inspectImage(raw);
+    // AVIF (en HEIC) kan de server niet op inhoud controleren zonder een native module; de browser kan ze wel lezen en omzetten.
+    if (!image && /^ftyp(avif|avis|heic|heix|mif1)/.test(raw.toString('latin1', 4, 12))) return { error: 'unsupported_format', message: 'AVIF of HEIC: de browser zet dit om naar JPEG.', status: 415 };
     if (!image || image.width > MAX_SIDE || image.height > MAX_SIDE) return { error: 'invalid_image', message: 'Alleen JPEG, PNG of WebP tot 8000 pixels.', status: 400 };
     const contentHash = crypto.createHash('sha256').update(image.body).digest('hex');
     const existing = prepare('SELECT id FROM item_images WHERE tenant_id = ? AND content_hash = ?').get(tenantId, contentHash);
@@ -123,9 +136,86 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
     if (!item) return { error: 'not_found', message: 'Artikel niet gevonden.', status: 404 };
     const stored = storeImage(tenantId, fromBase64(input && input.data), { name: input && input.name });
     if (stored.error) return stored;
+    // Een meegestuurde miniatuur is een extraatje: een ongeldige wordt overgeslagen, de afbeelding zelf telt.
+    if (input && input.thumb && (stored.created || !hasThumb(tenantId, stored.imageId))) setThumb(tenantId, stored.imageId, input.thumb);
     prepare('UPDATE stock_items SET image_id = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(stored.imageId, currentTimestamp(), tenantId, item.id);
     prune(tenantId);
     return { imageId: stored.imageId };
+  }
+
+  /**
+   * Of een afbeelding al een miniatuur heeft.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} imageId Id van de afbeelding.
+   * @returns {boolean} true bij een bestaande miniatuur.
+   */
+  function hasThumb(tenantId, imageId) {
+    const row = prepare('SELECT thumb FROM item_images WHERE tenant_id = ? AND id = ?').get(tenantId, String(imageId));
+    return Boolean(row && row.thumb);
+  }
+
+  /**
+   * Bewaart de miniatuur van een afbeelding: een WebP of JPEG (Safari kan geen WebP maken) van hoogstens 480 pixels en 100 kB (gecontroleerd op inhoud).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} imageId Id van de afbeelding.
+   * @param {string} data De miniatuur als base64 (eventueel als data-URL).
+   * @returns {{ ok?: boolean, error?: string, message?: string, status?: number }} ok bij gelukt, of een fout.
+   */
+  function setThumb(tenantId, imageId, data) {
+    if (!IMAGE_ID_PATTERN.test(String(imageId))) return { error: 'not_found', message: 'Afbeelding niet gevonden.', status: 404 };
+    const raw = fromBase64(data);
+    const image = raw && raw.length && raw.length <= THUMB_MAX_BYTES ? inspectImage(raw) : null;
+    if (!image || !['image/webp', 'image/jpeg'].includes(image.mime) || image.width > THUMB_MAX_SIDE || image.height > THUMB_MAX_SIDE) {
+      return { error: 'invalid_thumb', message: `Een miniatuur is een WebP of JPEG van hoogstens ${THUMB_MAX_SIDE} pixels en ${THUMB_MAX_BYTES / 1024} kB.`, status: 400 };
+    }
+    const changed = prepare('UPDATE item_images SET thumb = ? WHERE tenant_id = ? AND id = ?').run(vault.sealBytes(image.body, thumbAadOf(tenantId, String(imageId))), tenantId, String(imageId));
+    if (changed && Number(changed.changes) === 0) return { error: 'not_found', message: 'Afbeelding niet gevonden.', status: 404 };
+    memory.remove(tenantId, `${imageId}:klein`);
+    return { ok: true };
+  }
+
+  /**
+   * De miniatuur van een afbeelding, of de afbeelding zelf als er nog geen miniatuur is.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} imageId Id van de afbeelding.
+   * @returns {{ mime: string, body: Buffer, fallback?: boolean }|null} De miniatuur of afbeelding (fallback = de gewone afbeelding, want er is nog geen miniatuur), of null als hij niet bestaat.
+   */
+  function thumbFile(tenantId, imageId) {
+    if (!IMAGE_ID_PATTERN.test(String(imageId))) return null;
+    const key = `${imageId}:klein`;
+    const remembered = memory.get(tenantId, key);
+    if (remembered) return remembered;
+    const row = prepare('SELECT thumb FROM item_images WHERE tenant_id = ? AND id = ?').get(tenantId, String(imageId));
+    /**
+     * De gewone afbeelding als terugval, gemarkeerd zodat hij maar kort wordt gecachet.
+     * @returns {{ mime: string, body: Buffer, fallback: boolean }|null} De afbeelding, of null.
+     */
+    const original = () => { const full = file(tenantId, imageId); return full ? { ...full, fallback: true } : null; };
+    if (!row || !row.thumb) return original();
+    let found;
+    try { const body = vault.openBytes(row.thumb, thumbAadOf(tenantId, String(imageId))); found = { mime: body[0] === 0xff && body[1] === 0xd8 ? 'image/jpeg' : 'image/webp', body }; } catch (error) { return original(); }
+    memory.set(tenantId, key, found);
+    return found;
+  }
+
+  /**
+   * Hoeveel gebruikte afbeeldingen nog geen miniatuur hebben.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {number} Het aantal.
+   */
+  function thumbsPending(tenantId) {
+    return Number(prepare('SELECT COUNT(*) AS n FROM item_images WHERE tenant_id = ? AND thumb IS NULL').get(tenantId).n);
+  }
+
+  /**
+   * De volgende afbeeldingen zonder miniatuur (op id, na `after`), voor het in porties aanmaken in de browser.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} [after] Het laatste id van de vorige portie ('' = begin).
+   * @returns {{ ids: string[], next: string|null }} De id's en het cursor-id voor de volgende portie (null = klaar).
+   */
+  function thumbCandidates(tenantId, after = '') {
+    const rows = prepare(`SELECT id FROM item_images WHERE tenant_id = ? AND thumb IS NULL AND id > ? ORDER BY id LIMIT ${THUMB_PAGE_SIZE}`).all(tenantId, String(after || ''));
+    return { ids: rows.map((row) => row.id), next: rows.length === THUMB_PAGE_SIZE ? rows[rows.length - 1].id : null };
   }
 
   /**
@@ -210,7 +300,7 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
    * koppelt de afbeelding aan alle artikelen met dat adres.
    * @param {string} tenantId Id van de omgeving.
    * @param {{ after?: string }} [options] Het laatste artikel-id van de vorige portie ('' = begin).
-   * @returns {Promise<{ processed: number, imported: number, reused: number, stored: number, failed: { code: string, url: string, reason: string }[], next: string|null, pending: number }>} Het resultaat; `stored` = hoeveel nieuwe afbeeldingen er echt zijn bewaard (imported en reused tellen artikelen); `next` is het cursor-id voor de volgende portie of null als alles gehad is.
+   * @returns {Promise<{ processed: number, imported: number, reused: number, stored: number, failed: { code: string, itemId: string, url: string, reason: string, convert: boolean }[], next: string|null, pending: number }>} Het resultaat; `stored` = hoeveel nieuwe afbeeldingen er echt zijn bewaard (imported en reused tellen artikelen); `next` is het cursor-id voor de volgende portie of null als alles gehad is.
    */
   async function importFromShop(tenantId, { after = '' } = {}) {
     const rows = prepare(`SELECT i.id, i.code, p.image ${CANDIDATES_SQL} AND i.id > ? ORDER BY i.id LIMIT ${IMPORT_PAGE_SIZE}`).all(tenantId, String(after || ''));
@@ -238,13 +328,13 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
         } else {
           try {
             const stored = storeImage(tenantId, await download(url), { name: url, sourceUrl: url });
-            if (stored.error) throw new Error(stored.message);
+            if (stored.error) throw Object.assign(new Error(stored.message), { convert: stored.error === 'unsupported_format' });
             imageId = stored.imageId;
             if (stored.created) result.stored += 1;
             known.set(url, imageId);
             result.imported += items.length;
           } catch (error) {
-            for (const item of items) result.failed.push({ code: item.code, url, reason: String(error.message || 'Mislukt.').slice(0, 120) });
+            for (const item of items) result.failed.push({ code: item.code, itemId: item.id, url, reason: String(error.message || 'Mislukt.').slice(0, 120), convert: Boolean(error.convert) });
             continue;
           }
         }
@@ -255,6 +345,23 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
     prune(tenantId);
     result.pending = pendingImport(tenantId);
     return result;
+  }
+
+  /**
+   * De bytes van de afbeelding van het gekoppelde webshopproduct van een artikel, voor de browser: die zet een formaat dat de server
+   * niet kan controleren (AVIF) om. Alleen het adres dat bij het artikel staat, nooit een adres uit het verzoek (geen SSRF).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} itemId Id van het artikel.
+   * @returns {Promise<{ body?: Buffer, error?: string, message?: string, status?: number }>} De bytes, of een fout.
+   */
+  async function shopImageBytes(tenantId, itemId) {
+    const row = prepare('SELECT p.image FROM stock_items i JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id WHERE i.tenant_id = ? AND i.id = ?').get(tenantId, String(itemId));
+    if (!row || !row.image) return { error: 'not_found', message: 'Geen afbeelding van de webshop bij dit artikel.', status: 404 };
+    try {
+      return { body: await download(row.image) };
+    } catch (error) {
+      return { error: 'download_failed', message: String(error.message || 'Ophalen mislukt.').slice(0, 120), status: 502 };
+    }
   }
 
   /**
@@ -288,7 +395,7 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
    */
   const forget = (tenantId) => memory.clearTenant(tenantId);
 
-  return { setForItem, clearForItem, file, importFromShop, prune, pendingImport, library, forget };
+  return { setForItem, clearForItem, shopImageBytes, file, thumbFile, setThumb, thumbsPending, thumbCandidates, importFromShop, prune, pendingImport, library, forget };
 }
 
 /**
@@ -326,6 +433,28 @@ function registerItemImageRoutes(app, { images, requireRight, requireJson, audit
     res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
     res.setHeader('Cache-Control', 'private, max-age=3600');
     res.type(file.mime).send(file.body);
+  });
+
+  // Miniaturen (480 px WebP, door de browser gemaakt) voor de kaartjes in de shop: opslaan, en de afbeeldingen zonder miniatuur in porties.
+  app.put('/api/stock/images/:id/thumb', requireJson, requireStock, (req, res) => {
+    const out = images.setThumb(tenantOf(req), req.params.id, req.body && req.body.data);
+    if (out.error) return res.status(out.status || 400).json({ error: out.error, message: out.message });
+    res.json({ ok: true });
+  });
+
+  app.get('/api/stock/images-thumbs', requireStock, (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const after = typeof req.query.after === 'string' ? req.query.after.slice(0, 64) : '';
+    res.json({ pending: images.thumbsPending(tenantOf(req)), ...images.thumbCandidates(tenantOf(req), after) });
+  });
+
+  // De afbeelding van het webshopproduct van een artikel als bytes, zodat de browser een AVIF kan omzetten (zie shopImageBytes).
+  app.get('/api/stock/items/:id/shop-image', requireStock, importLimiter, async (req, res) => {
+    const out = await images.shopImageBytes(tenantOf(req), req.params.id);
+    if (out.error) return res.status(out.status || 400).json({ error: out.error, message: out.message });
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.type('application/octet-stream').send(out.body);
   });
 
   // Mediabibliotheek: alle afbeeldingen met de artikelen die ze gebruiken, en de artikelen zonder afbeelding.
