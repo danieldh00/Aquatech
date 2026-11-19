@@ -1255,6 +1255,21 @@ const PG_MIGRATIONS = [
   // `first_at` = eerste keer (leeg = één keer voorgekomen).
   `
   ALTER TABLE app_logs ADD COLUMN first_at ${TEXT_TYPE};
+  // 84: betalingsherinneringen en aanmaningen (zie db.js).
+  `
+  ALTER TABLE users ADD COLUMN reminders_off BIGINT NOT NULL DEFAULT 0;
+  CREATE TABLE invoice_reminders (
+    id           ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id    ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    invoice_id   ${TEXT_TYPE} NOT NULL ${references('invoices(id)')},
+    step_key     ${TEXT_TYPE} NOT NULL,
+    status       ${TEXT_TYPE} NOT NULL DEFAULT 'verstuurd',
+    sent_at      ${TEXT_TYPE} NOT NULL,
+    sent_to      ${TEXT_TYPE} NOT NULL DEFAULT '',
+    reason       ${TEXT_TYPE} NOT NULL DEFAULT '',
+    days_overdue BIGINT NOT NULL DEFAULT 0,
+    UNIQUE (tenant_id, invoice_id, step_key)
+  );
   `,
 ];
 

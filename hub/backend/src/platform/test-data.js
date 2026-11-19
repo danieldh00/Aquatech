@@ -605,7 +605,7 @@ function sitePhotoPng(kind = 'oplevering', seed = 1, imageWidth = 480, imageHeig
  * @returns {object} Aantallen per soort aangemaakte gegevens.
  */
 function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
-  const { db, quotes, quoteOrders, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, suppliers, packagings, purchaseOrders, itemImages, requests, invoices, sprinklers, seasonReminders } = stores;
+  const { db, quotes, quoteOrders, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, suppliers, packagings, purchaseOrders, itemImages, requests, invoices, sprinklers, seasonReminders, paymentReminders } = stores;
   /**
    * Bereidt een SQL-opdracht voor.
    * @param {string} sql De SQL.
@@ -1012,6 +1012,8 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
     const shopInv = invoices.create(tenantId, admin, order.data, conf, { shopOrderId: '9001' });
     invoices.finalize(tenantId, admin, shopInv.id, conf, { skipStock: true });
     invoices.setPaid(tenantId, shopInv.id, true, order.paidOn);
+    // Een verstuurde betalingsherinnering bij de openstaande factuur over de vervaldatum.
+    if (paymentReminders && made[1]) paymentReminders.record(tenantId, made[1].id, 'herinnering', { sentTo: 'klant@voorbeeld.test', daysOverdue: 7 });
     counts.invoices = prepare('SELECT COUNT(*) AS n FROM invoices WHERE tenant_id = ?').get(tenantId).n;
     counts.debtors = prepare('SELECT COUNT(*) AS n FROM debtors WHERE tenant_id = ?').get(tenantId).n;
   }

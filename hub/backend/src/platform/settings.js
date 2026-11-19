@@ -11,6 +11,7 @@ const { sanitizeCaptcha } = require('../beveiliging/captcha');
 const { sanitizeOutsourcing } = require('../uitvoering/outsourcing');
 const { sanitizeInvoicing } = require('../verkoop/invoices');
 const { sanitizeSeasonReminders } = require('../uitvoering/season-reminders');
+const { sanitizePaymentReminders } = require('../verkoop/payment-reminders');
 const { sanitizeVisma, sanitizeVismaApp } = require('../verkoop/visma');
 const { sanitizeDriveBackup, sanitizeDriveState } = require('./drive-backup');
 const { sanitizeLabelTemplates } = require('../artikelen/labels');
@@ -138,6 +139,8 @@ const FIELDS = {
   // Seizoensherinneringen voor klanten (season-reminders.js): aan/uit, adres
   // van het klantportaal voor de knop in de mail, en de herinneringen.
   seasonReminders: { type: 'object', default: {}, sanitize: sanitizeSeasonReminders, liveOnly: true },
+  // Automatische betalingsherinneringen en aanmaningen voor vervallen facturen (verkoop/payment-reminders.js); mailt klanten, dus alleen live.
+  paymentReminders: { type: 'object', default: {}, sanitize: sanitizePaymentReminders, liveOnly: true },
   // Sjablonen voor etiketten met streepjescode (Artikelen > Etiket afdrukken; artikelen/labels.js), per omgeving.
   labelTemplates: { type: 'object', default: {}, sanitize: sanitizeLabelTemplates },
   // Opmaak van de PDF-documenten (verkoop/document-layout.js): logo, kop, kleuren, lettertype en voettekst; alleen via Beheer > Documentopmaak.

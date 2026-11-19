@@ -459,7 +459,11 @@ function registerInvoiceRoutes(app, ctx) {
   const validData = (data) => data && typeof data === 'object' && !Array.isArray(data);
 
   app.get('/api/invoices', requireInvoices, (req, res) => {
-    res.json({ items: invoices.list(tenantOf(req), { status: String(req.query.status || ''), from: String(req.query.from || ''), to: String(req.query.to || ''), workOrderId: String(req.query.workOrderId || '') }) });
+    const items = invoices.list(tenantOf(req), { status: String(req.query.status || ''), from: String(req.query.from || ''), to: String(req.query.to || ''), workOrderId: String(req.query.workOrderId || '') });
+    // Laatste verstuurde betalingsherinnering erbij (alleen voor facturen over de vervaldatum, één query).
+    const overdueIds = items.filter((invoice) => invoice.overdue).map((invoice) => invoice.id);
+    const latest = ctx.paymentReminders && overdueIds.length ? ctx.paymentReminders.latestByInvoice(tenantOf(req), overdueIds) : new Map();
+    res.json({ items: items.map((invoice) => (latest.has(invoice.id) ? { ...invoice, reminder: latest.get(invoice.id) } : invoice)) });
   });
 
   // Instellingen en artikelen vóór /:id.
@@ -524,7 +528,7 @@ function registerInvoiceRoutes(app, ctx) {
   app.get('/api/invoices/:id', requireInvoices, (req, res) => {
     const invoice = invoices.get(tenantOf(req), req.params.id);
     if (!invoice) return notFound(res);
-    res.json(invoice);
+    res.json({ ...invoice, reminders: ctx.paymentReminders ? ctx.paymentReminders.forInvoice(tenantOf(req), invoice.id) : [] });
   });
 
   // Nieuw: { workOrderId } (uit de werkorder; force = ook als er al een is) of { data }.
