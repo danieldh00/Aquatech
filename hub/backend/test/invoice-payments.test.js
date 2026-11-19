@@ -315,3 +315,10 @@ test('zonder online betalen staat er geen betaallink in de mail', async () => {
   await world.admin.put('/app/api/admin/settings', { shopPayment: { online: false, publicUrl: 'https://winkel.example/' } });
   assert.strictEqual((await mailLinkOf(world, invoiceId)).link, '');
 });
+
+test('de meldingspagina van de betaallink escapet titel en tekst', () => {
+  const { messagePage } = require('../src/verkoop/invoice-pay-routes');
+  const html = messagePage('Factuur <b>1</b>', '<script>alert(1)</script> & "x"');
+  assert.ok(!html.includes('<script>') && !html.includes('<b>'));
+  assert.ok(html.includes('&lt;script&gt;') && html.includes('&amp;'));
+});

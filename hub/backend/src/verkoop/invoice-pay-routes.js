@@ -3,12 +3,23 @@
 // is komt altijd uit de factuur zelf. Alleen de factuur van de link, nooit andere gegevens van de klant.
 
 /**
+ * Maakt tekst veilig voor gebruik in HTML.
+ * @param {*} value De tekst.
+ * @returns {string} De tekst met & < > " ' vervangen.
+ */
+const escapeHtml = (value) => String(value == null ? '' : value).replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
+
+/**
  * Een kleine, eigen pagina met een melding (geen scripts of opmaakbestanden nodig).
- * @param {string} title Kop van de pagina.
- * @param {string} text Uitleg.
+ * @param {string} rawTitle Kop van de pagina.
+ * @param {string} rawText Uitleg.
  * @returns {string} De HTML.
  */
-const messagePage = (title, text) => `<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>${title}</title></head><body><main><h1>${title}</h1><p>${text}</p></main></body></html>`;
+const messagePage = (rawTitle, rawText) => {
+  const title = escapeHtml(rawTitle);
+  const text = escapeHtml(rawText);
+  return `<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>${title}</title></head><body><main><h1>${title}</h1><p>${text}</p></main></body></html>`;
+};
 
 /**
  * Registreert de openbare betaallink van een factuur.
