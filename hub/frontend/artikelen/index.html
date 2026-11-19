@@ -489,81 +489,94 @@
       </div>
       <p id="d-variant-of" class="muted" hidden></p>
       <div id="d-stats" class="stats"></div>
-      <div class="cols">
-        <form id="move-form" class="card-form" novalidate>
-          <h3>Mutatie boeken</h3>
-          <div class="row">
-            <label>Soort<select name="kind">
-              <option value="ontvangst">Ontvangst (erbij)</option>
-              <option value="telling">Telling (stand wordt het getelde aantal)</option>
-              <option value="correctie">Correctie (+ of −)</option>
-            </select></label>
-            <label>Aantal<input name="qty" type="number" step="any" inputmode="decimal" required></label>
-            <label data-receipt-only title="Komt op deze partij in de voorraad (FIFO). Is hij anders dan de huidige inkoopprijs, dan wordt hij de nieuwe inkoopprijs; de oude blijft in de historie.">Inkoopprijs per eenheid (€)<input name="unitCost" type="number" min="0" step="0.0001" inputmode="decimal"></label>
-            <label class="grow">Opmerking<input name="note" maxlength="300" placeholder="Bijv. pakbon, leverancier of reden"></label>
+      <form id="move-form" class="card-form move-card" novalidate>
+        <h3>Mutatie boeken</h3>
+        <div class="row move-row">
+          <label>Soort<select name="kind">
+            <option value="ontvangst">Ontvangst (erbij)</option>
+            <option value="telling">Telling (stand wordt het getelde aantal)</option>
+            <option value="correctie">Correctie (+ of −)</option>
+          </select></label>
+          <label>Aantal<input name="qty" type="number" step="any" inputmode="decimal" required></label>
+          <label data-receipt-only title="Komt op deze partij in de voorraad (FIFO). Is hij anders dan de huidige inkoopprijs, dan wordt hij de nieuwe inkoopprijs; de oude blijft in de historie.">Inkoopprijs per eenheid (€)<input name="unitCost" type="number" min="0" step="0.0001" inputmode="decimal"></label>
+          <label class="grow">Opmerking<input name="note" maxlength="300" placeholder="Bijv. pakbon, leverancier of reden"></label>
+          <button class="btn primary" type="submit">Boeken</button>
+        </div>
+        <div class="err" role="alert"></div>
+      </form>
+      <form id="edit-form" class="card-form" novalidate>
+        <h3>Gegevens</h3>
+        <p class="muted small" id="d-parent-note" hidden>Dit is een hoofdartikel: de voorraad zit bij de varianten. Eenheid, btw en omzetgroep gelden voor alle varianten; prijzen zijn de standaard voor nieuwe varianten.</p>
+        <div class="item-groups">
+          <fieldset class="item-group">
+            <legend>Basis</legend>
+            <div class="form-grid">
+          <label>Artikelcode<input name="code" maxlength="40" required></label>
+          <label>Eenheid<select name="unit" data-units></select></label>
+          <label class="span-2">Omschrijving<input name="name" maxlength="200" required></label>
+          <label title="Het artikelnummer van de fabrikant (8 of 13 cijfers, staat onder de streepjescode op de verpakking). Leeg = het etiket krijgt de artikelcode als streepjescode.">EAN<input name="ean" maxlength="20" inputmode="numeric" autocomplete="off" placeholder="8 of 13 cijfers"></label>
+          <label title="Het merk staat in de gestructureerde gegevens van de productpagina (voor zoekmachines). Een variant neemt het merk van het hoofdartikel over zolang hij er zelf geen heeft.">Merk<input name="brand" maxlength="60" autocomplete="off"></label>
+              <label class="span-2">Notities<textarea name="notes" rows="2" maxlength="1000"></textarea></label>
+            </div>
+          </fieldset>
+          <fieldset class="item-group">
+            <legend>Prijzen en prijsbepaling</legend>
+            <div class="form-grid">
+          <label>Inkoopprijs (€)<input name="costPrice" type="number" min="0" step="0.0001" inputmode="decimal"></label>
+          <label title="Vaste verkoopprijs: je vult de prijs zelf in. Inkoopprijs × factor: de prijs volgt uit de inkoopprijs (zie tabblad Prijsfactor).">Prijsbepaling<select name="priceMode"><option value="vast">Vaste verkoopprijs</option><option value="factor">Inkoopprijs × factor</option></select></label>
+          <label title="Leeg = de factor van de voorkeursleverancier, de categorie of de standaardfactor (tabblad Prijsfactor)">Eigen factor<input name="priceFactor" type="number" min="0.1" max="50" step="0.01" inputmode="decimal" placeholder="volgens instelling"></label>
+          <label>Verkoopprijs (€, excl. btw)<input name="salePrice" type="number" min="0" step="0.01" inputmode="decimal"></label>
+          <label>Zakelijke prijs excl. btw<input name="businessPrice" type="number" min="0" step="0.01" inputmode="decimal" placeholder="= verkoopprijs"></label>
+          <label>Btw<select name="vatRate"><option value="21">21%</option><option value="9">9%</option><option value="0">0%</option></select></label>
+          <label>Omzetgroep<select name="revenueGroup"><option value="producten">Producten</option><option value="arbeid">Arbeid</option><option value="overig">Overig</option></select></label>
+              <output class="margin-hint muted small span-2" data-margin></output>
+            </div>
+          </fieldset>
+          <div class="item-stack">
+          <fieldset class="item-group">
+            <legend>Voorraad en locatie</legend>
+            <div class="form-grid">
+          <label>Locatie<input name="location" maxlength="60"></label>
+          <label>Minimumvoorraad<input name="minQty" type="number" min="0" step="any" inputmode="decimal"></label>
+          <label title="Het bestelvoorstel vult aan tot dit aantal; leeg of lager dan het minimum = 2× minimum">Bestellen tot<input name="reorderQty" type="number" min="0" step="any" inputmode="decimal" placeholder="2× minimum"></label>
+            </div>
+          </fieldset>
+          <fieldset class="item-group">
+            <legend>Verpakking en staffel</legend>
+            <div class="form-grid">
+          <label title="Groothandel: een klant bestelt alleen per dit aantal (leeg = 1)">Verpakkingseenheid<input name="packSize" type="number" min="1" max="100000" step="1" inputmode="numeric" placeholder="1"></label>
+          <label title="Groothandel: het kleinste aantal dat een klant kan bestellen (leeg = 1)">Minimale afname<input name="orderMinQty" type="number" min="1" max="100000" step="1" inputmode="numeric" placeholder="1"></label>
+          <label title="Groothandel: korting per aantal, in de vorm aantal:korting%, bijvoorbeeld 50:10, 100:15 (vanaf 50 stuks 10%, vanaf 100 stuks 15%)">Staffelkorting<input name="priceTiers" maxlength="120" placeholder="bijv. 50:10, 100:15"></label>
+          <label title="Planner: hoeveel meter (of stuks) één eenheid van dit artikel bevat, bijvoorbeeld 50 voor een rol van 50 m. De planner rekent daarmee om naar hele eenheden. Leeg = alleen bij dezelfde eenheid.">Inhoud per eenheid<input name="unitContent" type="number" min="0" max="100000" step="any" inputmode="decimal" placeholder="bijv. 50"></label>
+          <label>Gewicht (gram)<input name="weightGrams" type="number" min="0" max="1000000" step="1" placeholder="standaard"></label>
+            </div>
+          </fieldset>
           </div>
-          <div class="row"><button class="btn primary" type="submit">Boeken</button></div>
-          <div class="err" role="alert"></div>
-        </form>
-        <form id="edit-form" class="card-form" novalidate>
-          <h3>Gegevens</h3>
-          <div class="row">
-            <label>Artikelcode<input name="code" maxlength="40" required></label>
-            <label class="grow">Omschrijving<input name="name" maxlength="200" required></label>
-            <label>Eenheid<select name="unit" data-units></select></label>
-            <label title="Het artikelnummer van de fabrikant (8 of 13 cijfers, staat onder de streepjescode op de verpakking). Leeg = het etiket krijgt de artikelcode als streepjescode.">EAN<input name="ean" maxlength="20" inputmode="numeric" autocomplete="off" placeholder="8 of 13 cijfers"></label>
-          </div>
-          <div class="row">
-            <label>Locatie<input name="location" maxlength="60"></label>
-            <label>Minimumvoorraad<input name="minQty" type="number" min="0" step="any" inputmode="decimal"></label>
-            <label title="Het bestelvoorstel vult aan tot dit aantal; leeg of lager dan het minimum = 2× minimum">Bestellen tot<input name="reorderQty" type="number" min="0" step="any" inputmode="decimal" placeholder="2× minimum"></label>
-            <label>Inkoopprijs (€)<input name="costPrice" type="number" min="0" step="0.0001" inputmode="decimal"></label>
-          </div>
-          <div class="row">
-            <label>Verkoopprijs (€, excl. btw)<input name="salePrice" type="number" min="0" step="0.01" inputmode="decimal"></label>
-            <label>Btw<select name="vatRate"><option value="21">21%</option><option value="9">9%</option><option value="0">0%</option></select></label>
-            <label>Zakelijke prijs excl. btw<input name="businessPrice" type="number" min="0" step="0.01" inputmode="decimal" placeholder="= verkoopprijs"></label>
-            <label>Gewicht (gram)<input name="weightGrams" type="number" min="0" max="1000000" step="1" placeholder="standaard"></label>
-            <label>Omzetgroep<select name="revenueGroup"><option value="producten">Producten</option><option value="arbeid">Arbeid</option><option value="overig">Overig</option></select></label>
-            <label class="chk"><input type="checkbox" name="shopSync"> Naar de webshop</label>
-          </div>
-          <div class="row pricing-row">
-            <label title="Vaste verkoopprijs: je vult de prijs zelf in. Inkoopprijs × factor: de prijs volgt uit de inkoopprijs (zie tabblad Prijsfactor).">Prijsbepaling<select name="priceMode"><option value="vast">Vaste verkoopprijs</option><option value="factor">Inkoopprijs × factor</option></select></label>
-            <label title="Leeg = de factor van de voorkeursleverancier, de categorie of de standaardfactor (tabblad Prijsfactor)">Eigen factor<input name="priceFactor" type="number" min="0.1" max="50" step="0.01" inputmode="decimal" placeholder="volgens instelling"></label>
-            <output class="margin-hint muted small" data-margin></output>
-          </div>
-          <div class="row">
-            <label title="Groothandel: een klant bestelt alleen per dit aantal (leeg = 1)">Verpakkingseenheid<input name="packSize" type="number" min="1" max="100000" step="1" inputmode="numeric" placeholder="1"></label>
-            <label title="Groothandel: het kleinste aantal dat een klant kan bestellen (leeg = 1)">Minimale afname<input name="orderMinQty" type="number" min="1" max="100000" step="1" inputmode="numeric" placeholder="1"></label>
-            <label title="Groothandel: korting per aantal, in de vorm aantal:korting%, bijvoorbeeld 50:10, 100:15 (vanaf 50 stuks 10%, vanaf 100 stuks 15%)">Staffelkorting<input name="priceTiers" maxlength="120" placeholder="bijv. 50:10, 100:15"></label>
-            <label title="Planner: hoeveel meter (of stuks) één eenheid van dit artikel bevat, bijvoorbeeld 50 voor een rol van 50 m. De planner rekent daarmee om naar hele eenheden. Leeg = alleen bij dezelfde eenheid.">Inhoud per eenheid<input name="unitContent" type="number" min="0" max="100000" step="any" inputmode="decimal" placeholder="bijv. 50"></label>
-          </div>
-          <p class="muted small" id="d-parent-note" hidden>Dit is een hoofdartikel: de voorraad zit bij de varianten. Eenheid, btw en omzetgroep gelden voor alle varianten; prijzen zijn de standaard voor nieuwe varianten.</p>
-          <p class="muted small" id="d-shop"></p>
-          <label>Notities<textarea name="notes" rows="2" maxlength="1000"></textarea></label>
-          <label title="Staat op de productpagina en in de productfeed. Een lege regel begint een nieuwe alinea, een regel die met • begint is een lijstpunt.">Omschrijving in de webshop<textarea name="description" rows="5" maxlength="5000"></textarea></label>
-          <label title="Eén specificatie per regel, als naam: waarde (bijvoorbeeld Aansluiting: 3/4 inch). Komt als tabel op de productpagina.">Specificaties (naam: waarde per regel)<textarea name="specifications" rows="4" maxlength="8000"></textarea></label>
-          <div class="row">
-            <label title="Het merk staat in de gestructureerde gegevens van de productpagina (voor zoekmachines). Een variant neemt het merk van het hoofdartikel over zolang hij er zelf geen heeft.">Merk<input name="brand" maxlength="60" autocomplete="off"></label>
-            <label title="De titel in zoekresultaten. Leeg = de naam van het artikel met de naam van de shop. Maximaal 70 tekens.">Titel voor zoekmachines<input name="seoTitle" maxlength="70" autocomplete="off" placeholder="Leeg = naam – Aquatechshop.nl"></label>
-          </div>
-          <div class="row">
-            <label title="Welke bezorgmethodes bij welk aantal (in de basiseenheid) mogen, als methode:van-tot, gescheiden door komma's. Bijvoorbeeld dpd:1-99, pallet:100- (vanaf 100 alleen pallet). Leeg = de regels van de categorie, anders geen beperking. Ophalen kan altijd. Een gemengde bestelling gaat met de zwaarste methode mee.">Toegestane levermethodes<input name="deliveryRules" maxlength="300" autocomplete="off" placeholder="Leeg = geen beperking, bijv. dpd:1-99, pallet:100-"></label>
-            <label title="Eigen levertijd van dit artikel in dagen (de soort dagen volgt de gekozen methode). Leeg = de standaard van de methode, of bij niet op voorraad de verwachte inkoop of de levertijd van de leverancier.">Levertijd van (dagen)<input name="leadMin" type="number" min="0" max="365" step="1" inputmode="numeric" placeholder="standaard"></label>
-            <label>Levertijd tot (dagen)<input name="leadMax" type="number" min="0" max="365" step="1" inputmode="numeric" placeholder="= van"></label>
-          </div>
-          <div id="d-delivery-preview" class="tablewrap" hidden></div>
-          <label title="De tekst onder de titel in zoekresultaten. Leeg = het begin van de omschrijving. Maximaal 160 tekens.">Omschrijving voor zoekmachines<textarea name="seoDescription" rows="2" maxlength="160"></textarea></label>
-          <p class="muted small" id="d-details-shop" hidden><span></span> <button class="btn small" type="button" id="d-details-copy">Overnemen uit webshop</button></p>
-          <div class="row">
-            <button class="btn primary" type="submit">Opslaan</button>
-            <button class="btn danger" type="button" id="d-remove">Verwijderen</button>
-            <button class="btn" type="button" id="d-restore" hidden>Terugzetten uit archief</button>
-            <button class="btn" type="button" id="d-publish" hidden title="Maakt dit artikel (met varianten) aan als nieuw product in de gekoppelde webshop">In webshop zetten</button>
-          </div>
-          <div class="err" role="alert"></div>
-        </form>
-      </div>
+          <fieldset class="item-group item-group-wide">
+            <legend>Webshop</legend>
+            <p class="muted small" id="d-shop"></p>
+            <div class="form-grid">
+          <label class="chk"><input type="checkbox" name="shopSync"> Naar de webshop</label>
+          <label title="De titel in zoekresultaten. Leeg = de naam van het artikel met de naam van de shop. Maximaal 70 tekens.">Titel voor zoekmachines<input name="seoTitle" maxlength="70" autocomplete="off" placeholder="Leeg = naam – Aquatechshop.nl"></label>
+              <label class="full" title="Staat op de productpagina en in de productfeed. Een lege regel begint een nieuwe alinea, een regel die met • begint is een lijstpunt.">Omschrijving in de webshop<textarea name="description" rows="5" maxlength="5000"></textarea></label>
+              <label class="full" title="Eén specificatie per regel, als naam: waarde (bijvoorbeeld Aansluiting: 3/4 inch). Komt als tabel op de productpagina.">Specificaties (naam: waarde per regel)<textarea name="specifications" rows="4" maxlength="8000"></textarea></label>
+              <label class="full" title="De tekst onder de titel in zoekresultaten. Leeg = het begin van de omschrijving. Maximaal 160 tekens.">Omschrijving voor zoekmachines<textarea name="seoDescription" rows="2" maxlength="160"></textarea></label>
+          <label title="Welke bezorgmethodes bij welk aantal (in de basiseenheid) mogen, als methode:van-tot, gescheiden door komma's. Bijvoorbeeld dpd:1-99, pallet:100- (vanaf 100 alleen pallet). Leeg = de regels van de categorie, anders geen beperking. Ophalen kan altijd. Een gemengde bestelling gaat met de zwaarste methode mee.">Toegestane levermethodes<input name="deliveryRules" maxlength="300" autocomplete="off" placeholder="Leeg = geen beperking, bijv. dpd:1-99, pallet:100-"></label>
+          <label title="Eigen levertijd van dit artikel in dagen (de soort dagen volgt de gekozen methode). Leeg = de standaard van de methode, of bij niet op voorraad de verwachte inkoop of de levertijd van de leverancier.">Levertijd van (dagen)<input name="leadMin" type="number" min="0" max="365" step="1" inputmode="numeric" placeholder="standaard"></label>
+          <label>Levertijd tot (dagen)<input name="leadMax" type="number" min="0" max="365" step="1" inputmode="numeric" placeholder="= van"></label>
+            </div>
+            <div id="d-delivery-preview" class="tablewrap" hidden></div>
+            <p class="muted small" id="d-details-shop" hidden><span></span> <button class="btn small" type="button" id="d-details-copy">Overnemen uit webshop</button></p>
+          </fieldset>
+        </div>
+        <div class="row actions">
+          <button class="btn primary" type="submit">Opslaan</button>
+          <button class="btn danger" type="button" id="d-remove">Verwijderen</button>
+          <button class="btn" type="button" id="d-restore" hidden>Terugzetten uit archief</button>
+          <button class="btn" type="button" id="d-publish" hidden title="Maakt dit artikel (met varianten) aan als nieuw product in de gekoppelde webshop">In webshop zetten</button>
+        </div>
+        <div class="err" role="alert"></div>
+      </form>
       <section id="tx-detail" class="card-form tx-detail" hidden aria-labelledby="tx-detail-title">
         <div class="tx-detail-head"><h3 id="tx-detail-title">Producttekst</h3></div>
         <p class="muted small">De AI schrijft een concept van de omschrijving en de zoekmachineteksten, alleen met de gegevens van dit artikel. Niets gaat live zonder jouw goedkeuring.</p>
