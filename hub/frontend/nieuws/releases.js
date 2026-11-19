@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.27.1',
+      date: '2026-11-19',
+      title: 'Mail via Microsoft Graph automatisch instellen werkt weer',
+      items: [
+        { text: 'Automatisch instellen van Microsoft Graph-mail (Beheer > Instellingen > E-mail) werkt weer: Microsoft weigerde de eerder gebruikte inlog-app. Bij een fout staat er nu een duidelijke melding met verwijzing naar de handleiding in hetzelfde scherm.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.27.0',
       date: '2026-11-19',
       title: 'Artikelscherm overzichtelijker',

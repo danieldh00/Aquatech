@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.27.1
+
+- `mail-graph-setup.js`: standaard inlog-client is nu Microsoft Graph Command Line Tools (`14d82eec-…`, device code flow) in plaats van de Azure CLI-client, die Microsoft met AADSTS65002 weigert voor Graph-tokens van app-registraties. Nog steeds te vervangen met `GRAPH_SETUP_CLIENT_ID`.
+- `loginProblem`: AADSTS-codes uit de Microsoft-inlog (65002, 65001, 90094/90095, 700016, 50105, 53003, 50076) worden Nederlandse meldingen met verwijzing naar de handleiding; ook een mislukte start geeft nu de oorzaak.
+- Test uitgebreid in `test/mail-graph-setup.test.js`.
+
 ## 1.27.0
 
 Alleen frontend (`frontend/artikelen/index.html` en `artikelen.css`): het formulier `#edit-form` blijft één formulier met dezelfde veldnamen, maar is verdeeld in `fieldset.item-group`-groepen in een raster (`.item-groups`); `#move-form` is een compacte rij (`.move-card`). Verkoopprijs blijft alleen-lezen bij prijsbepaling factor. Geen API- of databasewijziging.
