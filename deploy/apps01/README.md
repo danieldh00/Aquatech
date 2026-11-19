@@ -9,7 +9,7 @@ Productie draait op de VM `apps01` (Debian 13, Docker) in `/opt/apps/aquatech`:
 | `.env` | `AQUATECH_TAG`, `TZ`, `TUNNEL_TOKEN`, `COMPOSE_PROFILES=tunnel` (niet in git) |
 | `data/` | `/data` van de container (sessiesleutel, hoofdsleutel, back-ups) |
 | `secrets/master-key` | hoofdsleutel (uid 1000, mode 400; kopie in wachtwoordkluis) |
-| `secrets/database-url` | verbindings-URL van Supabase met wachtwoord (uid 1000, mode 400) |
+| `secrets/database-url` | terugvaloptie: verbindings-URL van Supabase met wachtwoord (uid 1000, mode 400); productie gebruikt `database-url-local` |
 | `compose.localdb.yml` | alleen met eigen PostgreSQL: de database-container naast de app (`.env`: `COMPOSE_FILE=compose.yml:compose.localdb.yml`) |
 | `pgdata/` | alleen met eigen PostgreSQL: de databasebestanden (root/uid 999) |
 | `secrets/database-url-local` | alleen met eigen PostgreSQL: verbindings-URL van de app naar de eigen database (uid 1000, mode 400) |
@@ -165,17 +165,20 @@ noemt de regel waarmee je bewust opnieuw begint.
 **Nieuwe hoofdversie van PostgreSQL**: niet automatisch (de image staat op `postgres:17`). Dump met `backup`, zet
 `POSTGRES_TAG` in `.env`, verplaats `pgdata/`, start een lege container en `restore` de back-up.
 
+**Verhuizen naar een VPS**: het afvinkbare draaiboek staat in de app (Beheer > Systeem > *Draaiboek VPS-verhuizing*).
+
 **Op de nieuwe webserver**: kopieer `/opt/apps/aquatech` (of zet een back-up terug met `restore`) en draai `db-local.sh status`
 om te controleren; er is niets aan het adres van Supabase of de host gebonden.
 
-## Database (PostgreSQL)
+## Supabase (PostgreSQL, terugvaloptie)
 
-PostgreSQL is de enige database; zonder `DATABASE_URL_FILE` (of `DATABASE_URL`) start de app niet. Productie draait op de
-eigen PostgreSQL-container (zie *Eigen PostgreSQL* hierboven); Supabase blijft als bevroren kopie en terugvaloptie staan.
-Een mislukte update zet alleen de vorige image terug; de database blijft staan. Back-ups: dagelijks en vóór elke update
-versleuteld in `data/backups` (alle rijen, gecomprimeerd; terugzetten van losse records in de app), plus de
-`pg_dump`-back-ups van de eigen database (hele database terugzetten met `db-local.sh restore`). Back-ups in het oude
-SQLite-formaat (van vóór deze wijziging) leest de app niet meer.
+Productie draaide van 2026-10-20 tot de overstap naar de eigen PostgreSQL-container op Supabase (schema `aquatech`, Session
+pooler); dit blijft een terugvaloptie (zie *Eigen PostgreSQL* hierboven). `compose.yml` heeft `DATABASE_URL_FILE`.
+
+De app heeft geen andere database: zonder `DATABASE_URL_FILE` (of `DATABASE_URL`) start hij niet. Back-ups: dagelijks en vóór elke update
+versleuteld in `data/backups` (alle rijen, gecomprimeerd; losse records zet je terug in de app), plus de `pg_dump`-back-ups van de
+eigen database (hele database terugzetten met `db-local.sh restore`). Back-ups in het oude SQLite-formaat (van vóór deze wijziging)
+leest de app niet meer.
 
 **Wachtwoord van de database gewijzigd**: nieuwe URL in `secrets/database-url`
 (uid 1000, mode 400) en `docker compose up -d --force-recreate aquatech`.

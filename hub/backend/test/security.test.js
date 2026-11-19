@@ -9,7 +9,7 @@ const crypto = require('crypto');
 const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 
-const { createStore, passwordProblem, hashPassword, verifyPassword, needsRehash } = require('../src/platform/store');
+const { createStore, passwordProblem, hashPassword, scryptParams, verifyPassword, needsRehash } = require('../src/platform/store');
 const { createSettings } = require('../src/platform/settings');
 const { createVault, loadOrCreateMasterKey } = require('../src/beveiliging/vault');
 const { createClient, listen } = require('./helpers/http-client');
@@ -79,7 +79,12 @@ test('wachtwoordbeleid en sterkere hash met automatische upgrade', async () => {
   assert.match(passwordProblem('jan.devries-2026', 'jan.devries'), /gebruikersnaam/);
   assert.strictEqual(passwordProblem('paard batterij nietje'), null);
   const hash = await hashPassword(PW);
-  assert.match(hash, /^scrypt\$131072\$8\$1\$/);
+  assert.match(hash, /^scrypt\$\d+\$8\$1\$/);
+  // Productie rekent altijd met 2^17; alleen de testrun mag dat verlagen (en NODE_ENV=production negeert dat).
+  assert.strictEqual(scryptParams({}).N, 131072);
+  assert.strictEqual(scryptParams({ AQUATECH_TEST_SCRYPT_N: '1024' }).N, 1024);
+  assert.strictEqual(scryptParams({ AQUATECH_TEST_SCRYPT_N: '1024', NODE_ENV: 'production' }).N, 131072);
+  assert.strictEqual(scryptParams({ AQUATECH_TEST_SCRYPT_N: '1000' }).N, 131072);
   assert.ok(await verifyPassword(PW, hash));
   assert.ok(!(await verifyPassword('fout', hash)));
 
@@ -389,6 +394,10 @@ test('mailserver en webshop alleen op een openbaar adres (geen toegang tot het e
   const lookup = (addresses) => async () => addresses.map((address) => ({ address }));
   await assert.rejects(publicAddress('intern.example', { lookup: lookup(['93.184.215.14', '192.168.2.251']) }), { code: 'private_host' });
   assert.strictEqual(await publicAddress('smtp.example', { lookup: lookup(['93.184.215.14']) }), '93.184.215.14');
+  // IPv4 gaat voor bij een gemengde lijst; alleen IPv6 geeft het eerste IPv6-adres; een privé-adres blijft altijd geweigerd.
+  assert.strictEqual(await publicAddress('dual.example', { lookup: lookup(['2606:4700::1111', '93.184.215.14']) }), '93.184.215.14');
+  assert.strictEqual(await publicAddress('v6.example', { lookup: lookup(['2606:4700::1111', '2606:4700::1112']) }), '2606:4700::1111');
+  await assert.rejects(publicAddress('mixed.example', { lookup: lookup(['2606:4700::1111', '10.0.0.1']) }), { code: 'private_host' });
 
   const { createMailer } = require('../src/platform/mailer');
   const settings = { get: (key) => (key === 'mailServer' ? { host: 'mail.intern', port: 25, from: 'a@b.nl' } : '') };

@@ -242,7 +242,7 @@ kleuren mogen afwijken.
 Plannen worden automatisch op twee plekken bewaard: in de browser van het
 toestel en, een paar seconden na elke wijziging, in **Mijn plannen** op de
 server (database in Supabase/PostgreSQL, zie *Database: PostgreSQL
-(PostgreSQL)*; zonder databaseverbinding het bestand `/data/aquatech.db`). Via **Mijn plannen** in de planner (of op het dashboard) open je
+(PostgreSQL)*). Via **Mijn plannen** in de planner (of op het dashboard) open je
 een eerder plan. Iedere gebruiker ziet daar alleen de eigen plannen.
 **Opslaan** downloadt daarnaast nog steeds een `.aquaplan.json`-bestand en
 **Openen** laadt zo'n bestand als nieuw plan.
@@ -817,7 +817,7 @@ Elke sectie heeft een eigen adres, bijvoorbeeld `.../beheer/#mail`,
 | Toegangscode (optioneel, gedeelde beheerderscode) | leeg |
 | Modules op het dashboard aan/uit | alle aan |
 
-- De instellingen staan in de database (`/data/aquatech.db`) en werken
+- De instellingen staan in de database en werken
   meteen, zonder herstart.
 - Geheimen (API-sleutel, toegangscode) gaan nooit terug naar de browser; je
   ziet alleen of ze zijn ingesteld en van de sleutel de laatste 4 tekens.
@@ -876,7 +876,7 @@ docker compose up -d --build        # http://<server>:3300
 - **HTTPS**: zet er een reverse proxy (Caddy, Traefik, nginx) of een
   Cloudflare-tunnel voor die `X-Forwarded-Proto: https` meestuurt; dan
   krijgen de inlogcookies de `Secure`-vlag.
-- **Overzetten** van een eerdere installatie: kopieer `aquatech.db`,
+- **Overzetten** van een eerdere installatie: zet de PostgreSQL-database over (`pg_dump`/`pg_restore`, zie `deploy/apps01/README.md`) en kopieer
   `master-key` en `session-secret` uit de oude `/data`-map naar het volume; alle plannen,
   gebruikers, instellingen en inlogs gaan mee. Heeft die database nog geen
   beheerdersaccount, dan verschijnt bij de eerste aanmelding het scherm om
@@ -1083,12 +1083,13 @@ Terugzetten: zet het bestand uit Drive terug in de back-upmap en kies het in *Te
   versleutelde opslag in de EU.
 - De versleutelde back-ups uit `/data/backups` (of `BACKUP_DIR` op een
   andere schijf) naar een andere locatie kopiëren: dat kan in de app zelf
-  naar Google Drive (zie *Back-ups naar Google Drive*); periodiek een
-  terugzettest; de hoofdsleutel apart bewaren.
+  naar Google Drive (zie *Back-ups naar Google Drive*, in de app onder
+  Beheer > Systeem); periodiek een terugzettest; de hoofdsleutel apart
+  bewaren.
 - HTTPS via de Cloudflare-tunnel of een reverse proxy; poort 3300 niet
   rechtstreeks open zetten naar internet (alleen de tunnel).
-- Host bijwerken (`git pull && docker compose up -d --build` voor de app,
-  en het besturingssysteem/Docker zelf).
+- App bijwerken gaat automatisch (`release.yml` bouwt het image, de updatetimer op de server rolt het uit, of *Nu updaten*
+  in Beheer > Systeem > Updates); alleen het besturingssysteem en Docker zelf blijven handwerk.
 - AVG: verwerkersovereenkomst met hosting- en AI-aanbieder (Anthropic, alleen
   als AI-herkenning aanstaat), privacyverklaring voor klanten en een
   register van verwerkingen.

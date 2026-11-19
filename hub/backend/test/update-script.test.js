@@ -254,3 +254,14 @@ test('servertaken.sh schijf: de draaiende en de twee nieuwste versies blijven, d
   const few = spawnSync('bash', [servertaken, 'schijf-check'], { env: { ...env, FAKE_TAGS: '1.14.1 1.14.0' }, encoding: 'utf8', timeout: 30000 });
   assert.match(few.stdout, /0 oude versie\(s\)/, 'met een oude naast de draaiende gebeurt niets (die is de tweede van de twee nieuwste)');
 });
+
+test('update.sh: een check-aanvraag werkt alleen de status bij en installeert niets, ook met automatisch aan', { skip: !bashAvailable }, () => {
+  const setup = install();
+  fs.writeFileSync(path.join(setup.requestDir, 'request.json'), `{"id":"${REQUEST_ID}","check":true}`);
+  const out = setup.run({ FAKE_LATEST: '1.14.2' });
+  assert.strictEqual(out.status, 0, out.output);
+  assert.strictEqual(out.tag, '1.14.1', 'niets geïnstalleerd');
+  assert.ok(!fs.existsSync(path.join(setup.requestDir, 'request.json')), 'aanvraag is weggehaald');
+  assert.strictEqual(readStatus(setup.statusDir, 'status.json').available, '1.14.2');
+  assert.strictEqual(readStatus(setup.statusDir, 'run.json'), null, 'de stand van de laatste uitrol blijft ongemoeid');
+});

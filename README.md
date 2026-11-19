@@ -1,7 +1,8 @@
 # AquaTech Hub
 
 AquaTech Hub is een modulair, ERP-achtig pakket voor beregeningsbedrijven, met een eigen webshop. Na het inloggen
-kom je op een dashboard met een tegel per module (beheerders krijgen een zijbalk). Alles draait als één
+kom je op een dashboard met een tegel per module (beheerders krijgen een zijbalk), voor beheerders een blok *Kengetallen* (openstaand bedrag, vervallen facturen, open offertes, bezetting van de week; `GET /api/kpis`, per tegel het eigen recht) en een blok *Openstaande taken*
+(webshopbestellingen verwerken, bestelvoorstellen goedkeuren, prijsvoorstellen beoordelen; volgt de rechten, `GET /api/tasks`; hetzelfde aantal staat als belletje met teller in de kopbalk). Alles draait als één
 webserver in Docker (poort 3300) met PostgreSQL als enige database (een eigen container naast de app, of een externe server zoals Supabase).
 
 | Onderdeel | Wat het doet |
@@ -15,13 +16,13 @@ webserver in Docker (poort 3300) met PostgreSQL als enige database (een eigen co
 | Webshopbestellingen | Bestellingen (verzendmethode DPD, pallet, eigen transport of Afhalen in Nunspeet, tarieven, aantalstaffel voor pallet en levertijd per methode in Beheer > Webshop > Verzending; toegestane methodes per artikel of categorie met aantalgrenzen, bijvoorbeeld vanaf 100 stuks alleen pallet, in Beheer > Webshop > Levermethodes; een indicatieve levertijd bij het product en bij het afrekenen, anders *Levertijd op aanvraag*; de beperking per artikel in gewone taal op de productpagina, de verwachte levertijd als indicatie op de bestelpagina en in de orderbevestiging (invulveld `{levertijd}` in Beheer > Mail-opmaak) en in Beheer de levermethode en levertijd bij de bestelling en per artikel), betalingen, terugbetalen, pakbonnen en de lijst *Te picken* (alle pakbonnen in één PDF; bij dropshipping de eigen pakbon van de klant), backorders en deelleveringen (per regel besteld, geleverd en backorder, *Deellevering toestaan*, verwachte datum uit inkoop), retouren en de margerapportage. Het magazijn pickt met de rol *Picker* (recht `orderpick`, API `/api/orderpick`, zonder prijzen of klantgegevens): gepickte aantallen worden verzonden, minder gepickt blijft op backorder, de pakbon komt per zending en het DPD-label heeft een haak voor de koppeling. |
 | Orderpick | Het scherm voor het magazijn (`orderpick/`, rol *Picker*): te picken bestellingen, de regels op volgorde van magazijnlocatie, scannen met scanner of camera (groen of rood met trillen), aantal vooraf ingevuld met OK en +/−, *Niet aanwezig*, *Order gepickt* met pakbon en verzendlabel. De voortgang blijft op het toestel bewaard en een pick zonder verbinding wacht in de offline wachtrij tot er weer bereik is. Dezelfde pagina heeft het tabblad *Ontvangen* (goederenontvangst, `orderpick/#ontvangst`): een bestelde inkooporder kiezen of het ordernummer, de leveranciersreferentie of een artikel scannen, de artikelen scannen en aantallen bevestigen (deelontvangst, meer dan besteld alleen met waarschuwing), waarna de voorraad stijgt (FIFO) en backorders van webshopbestellingen weer in Te picken komen. De picker ziet daar geen prijzen. Niet offline. |
 | Klanten | Klantenlijst met zoeken en Excel-export, klant aanmaken (adres via postcode, met of zonder inlog, op verzoek een uitnodiging) en een klantkaart met offertes, werkorders en facturen. Een e-mailadres hoort bij hoogstens één actief account. Een zakelijke klant hoeft geen KvK-nummer te hebben; bij een door VIES geldig bevonden btw-nummer uit een ander EU-land is het adres vrij te typen. |
-| Meldingen, Klantportaal, Klantdossier | Storingen en onderhoud melden, opleverdossier en installatiedossier per locatie. |
+| Meldingen, Klantportaal, Klantdossier | Storingen en onderhoud melden, opleverdossier en installatiedossier per locatie; in het portaal ook facturen met PDF en online betalen via Mollie (de factuurmail bevat ook een betaallink). |
 | Uitbesteden, Nieuws, Profiel | Werk tussen organisaties, berichten en versielogboek, eigen voorkeuren en tweestapsverificatie. |
 | Beheer, Hoofdbeheer | Instellingen, gebruikers en rollen, back-ups, updates installeren vanuit de app, testomgevingen; platform: organisaties, hoofdbeheerders, multitenancy. Kleuren, de opmaak van alle documenten (factuur, pakbon, offerte, werkbon, klantdossier: logo, kop, lettertype, voettekst, met voorbeeld), de mail-opmaak (Beheer > Mail-opmaak: logo, kleuren, voettekst en per soort mail het onderwerp en de tekst met invulvelden, met voorbeeld en testmail) en de Visma-koppeling zijn per organisatie. |
 
 ### Beheer in het kort
 
-- **Instellingen** (Beheer → Instellingen) staan in de database en werken zonder herstart: AI-sleutel, mail,
+- **Instellingen** (Beheer → Instellingen) staan in de database en werken zonder herstart: AI-sleutel, mail (SMTP, Exchange-connector of Microsoft 365 via Graph met een app-registratie in Entra: HTTPS, dus geen SMTP-poorten nodig; stappenplan in de app),
   webshop, Mollie, seizoensherinneringen enz. (Visma staat onder Facturen → Visma). Docker-omgevingsvariabelen zijn alleen startwaarden.
   Geheimen worden versleuteld opgeslagen en nooit volledig getoond.
 - **Testomgeving**: elke organisatie kan een testomgeving maken met eigen gegevens en testdata. Koppelingen naar
@@ -46,7 +47,9 @@ webserver in Docker (poort 3300) met PostgreSQL als enige database (een eigen co
   een nieuwe versie zelf binnen een kwartier. Tijdens de update staat de site ongeveer een minuut in onderhoudsmodus
   (bekijken kan, opslaan niet); start de nieuwe versie niet goed, dan gaat de server terug naar de vorige. De app
   rolt zelf niets uit: het updatescript op de server pakt de aanvraag op (zie `deploy/apps01/README.md`, eenmalig
-  inrichten met `setup-app-update.sh`).
+  inrichten met `setup-app-update.sh`). Onder de update-knop staat de **afvinklijst Servertaken**: wat er op de
+  Proxmox-host nog moet gebeuren, met één vast commando (kopieerknop); de server vinkt gelukte taken zelf af, handmatig
+  afvinken kan ook, en het dashboard toont de open taken.
 - **Logboek** (Beheer > Systeem > Logboek): één plek voor fouten, trage verzoeken, stilstand van de server, mislukte taken en
   bewakingsmeldingen. Elke foutmelding in de app noemt een foutcode en verzoek-id; zoek die in het logboek (filters op niveau,
   bron, periode en tekst, Excel-export). Gebufferd en begrensd opgeslagen in de database (`app_logs`), bewaartermijn instelbaar

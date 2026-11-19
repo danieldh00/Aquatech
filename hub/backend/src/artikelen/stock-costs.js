@@ -87,7 +87,7 @@ function parsePrice(value) {
 
 /**
  * Maakt de opslag voor inkoopprijzen en voorraadlagen.
- * @param {object} db De database (SQLite of PostgreSQL).
+ * @param {object} db De database (PostgreSQL).
  * @returns {object} De functies (zie hieronder); de schrijvende lopen binnen de transactie van de aanroeper.
  */
 function createStockCosts(db) {

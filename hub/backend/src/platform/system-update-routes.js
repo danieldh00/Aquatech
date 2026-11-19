@@ -9,7 +9,7 @@ const { createRateLimiter } = require('../beveiliging/rate-limit');
 // Tijdens de onderhoudsmodus blijven deze schrijfverzoeken werken: inloggen en uitloggen (alleen een sessieregel; zo kan
 // de beheerder de voortgang blijven volgen), en de webhook van Mollie (die vraagt de
 // betaalstand zelf op en is herhaalbaar; Mollie probeert het anders later opnieuw, maar dan blijft een betaling langer open).
-const MAINTENANCE_OPEN = [/^\/api\/auth\/(login|logout)$/, /^\/mollie\/webhook\//];
+const MAINTENANCE_OPEN = [/^\/api\/auth\/(login|logout)$/, /^\/mollie\/webhook\//, /^\/api\/public\/invoice-payment\/[^/]+\/webhook$/];
 const MAINTENANCE_MESSAGE = 'Er wordt een update geïnstalleerd. Opslaan kan even niet; probeer het over een minuut opnieuw.';
 
 /**
@@ -77,6 +77,15 @@ function registerSystemUpdateRoutes(app, { systemUpdate, store, audit, mainTenan
     if (out.error) return res.status(out.status).json({ error: out.error, message: out.message });
     audit(req, 'update_aangevraagd', { versie: out.request.version, van: systemUpdate.view().running }, undefined, mainTenantId);
     console.log(`Update naar ${out.request.version} aangevraagd door ${req.user.display_name}`);
+    res.status(202).json(systemUpdate.view());
+  });
+
+  // Handmatig controleren op een nieuwe versie: alleen kijken, geen wachtwoord nodig; wel begrensd (elke controle haalt het image op).
+  const checkLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 6, keyFn: (req) => `update-controle:${req.user ? req.user.id : ''}` });
+  app.post('/api/admin/system-update/check', checkLimiter, (req, res) => {
+    const out = systemUpdate.requestCheck({ userId: req.user.id, byName: req.user.display_name });
+    if (out.error) return res.status(out.status).json({ error: out.error, message: out.message });
+    if (out.started) audit(req, 'update_controle', {}, undefined, mainTenantId);
     res.status(202).json(systemUpdate.view());
   });
 

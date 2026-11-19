@@ -989,6 +989,12 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
         { workOrderId: workOrder.id, quoteId: quote ? quote.id : null, customerId: quote ? quote.customerId : null });
       if (invoiceIndex < 2) invoices.finalize(tenantId, admin, invoice.id, conf);
       if (invoiceIndex === 0) invoices.setPaid(tenantId, invoice.id, true, InvCore.addDays(date, 9));
+      // Online betalen (invoice-payments.js): de eerste factuur is via Mollie betaald, bij de tweede is een betaling niet gelukt.
+      if (invoiceIndex < 2) {
+        const total = invoices.get(tenantId, invoice.id).total;
+        prepare('INSERT INTO invoice_payments (id, tenant_id, invoice_id, mollie_id, status, amount, method, mode, created_at, paid_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .run(crypto.randomUUID(), tenantId, invoice.id, `tr_testdata${invoiceIndex}`, invoiceIndex === 0 ? 'betaald' : 'mislukt', total, invoiceIndex === 0 ? 'ideal' : '', 'test', `${date}T10:00:00.000Z`, invoiceIndex === 0 ? `${InvCore.addDays(date, 9)}T10:00:00.000Z` : null);
+      }
       made.push(invoice);
     });
     if (made[0]) invoices.credit(tenantId, admin, made[0].id, conf);

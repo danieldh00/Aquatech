@@ -1,5 +1,100 @@
 # Changelog
 
+## 1.24.4
+
+Nieuwe sectie *Draaiboek VPS-verhuizing* (`beheer/index.html` formulier `s-vps`, `beheer/vps-draaiboek.js`, sectie `vps` in
+`beheer/indeling.js`, alleen zichtbaar voor wie Systeem > Updates mag zien): vaste tekst met zes fasen (tunnel, adres en
+hoofdsleutel blijven gelijk; database via back-up; proefrun met `local-db.sh restore`; oude server 14 dagen als terugval;
+mailconnector-IP, Drive, Visma en Mollie controleren; image alleen `amd64`). De vinkjes staan per browser in localStorage.
+Geen migratie, geen backend. `deploy/apps01/README.md` verwijst ernaar.
+
+## 1.24.3
+
+Blok *Kengetallen* op het dashboard (`dashboard/kpis.js`, `GET /api/kpis`, `platform/kpis.js`, geen migratie): alleen met recht
+`beheer`; elke tegel hoort bij een recht (`facturen`: openstaand bedrag incl. btw van definitieve facturen en credits, vervallen
+facturen; `offertes`: verzonden offertes zonder antwoord; `planning`: werkorders met een geplande datum in de huidige week
+(maandag-zondag, geannuleerde niet) en het aantal uitvoerders). Een aggregatiequery per tegel op `tenant_id`; de tegels linken
+naar de module. Test: `test/kpis.test.js`.
+
+## 1.24.2
+
+Betaallink in de factuurmail (geen migratie). `invoicePayments.linkFor` maakt een ondertekende link `/app/api/public/invoice-pay/<factuur>/<handtekening>` (HMAC met `vault.derive('factuur-betaallink')`, niets opgeslagen); `invoice-pay-routes.js` controleert de handtekening, de verloopdatum (`linkExpired`) en de status, start een Mollie-betaling en stuurt door; bij terugkeer (`?teruggekeerd=1`) volgt een opvraging bij Mollie. Alleen als online betalen aan staat; veld `{betaallink}` en een regel onder `{betaling}` in de standaardmail (`mail.payOnline`, nl en en). Limiet per bezoeker.
+
+## 1.24.1
+
+- `platform/mail-graph.js`: Graph-verzender (client credentials, `Mail.Send` als toepassingsmachtiging, `sendMail` met `saveToSentItems`, bericht met bijlagen tot ongeveer 3,5 MB (base64), inline afbeeldingen via `contentId`); vaste hosts `login.microsoftonline.com` en `graph.microsoft.com`, tenant- en client-ID gevalideerd, token per (tenant, app, geheim) kort onthouden.
+- `mailServer.mode` kent nu `graph` met `graphTenantId` en `graphClientId`; het clientgeheim is de versleutelde, `liveOnly` instelling `mailGraphSecret` (alleen via `/api/admin/mail`, veld `graphSecret`; `graphSecretSet` in het antwoord). Geen migratie.
+- `mailFailure` kent EGRAPH_AUTH/DENIED/MAILBOX/THROTTLED/SIZE/ERROR met advies; de bewaking controleert het token (`verify`). Tests: `createApp({ graphFetch })`.
+
+## 1.24.0
+
+Het eindimage bevat alleen nog `backend/src` en `tools/release-info.js` (dat `update.sh` uit het image haalt); de tests en
+overige tools (codestijl, bench, minify, release-notes) blijven buiten het image (`hub/Dockerfile`, `hub/.dockerignore`,
+bewaakt door `test/dockerfile.test.js`). Verouderde verwijzingen naar Supabase als productiedatabase gecorrigeerd in
+`release.yml`, `ci.yml`, `compose.yml`, `deploy/apps01/README.md` en `DOCS.md` (Supabase is terugvaloptie; app-updates gaan
+via de updatetimer, Drive-back-ups zitten in de app).
+
+## 1.23.9
+
+Servertaken (`platform/host-tasks.js`, `host-tasks-routes.js`, `GET|PUT /api/admin/host-tasks`, alleen `canUpdate`): lijst `HOST_TASKS`, afvinken door de server via `update/status/host-tasks.json` of met de hand (instelling `hostTasks`). `servertaken.sh openstaand` voert open taken uit op een vaste commit (`TASKS_REF`) en legt ze vast; `setup-app-update.sh` accepteert `SETUP_REF`. Eerste taak: updaten vanuit de app opnieuw inrichten. Geen migratie.
+
+## 1.23.8
+
+- `mailFailure` onderscheidt time-out, geweigerd (ECONNREFUSED), DNS-fout en geen route; `createMailer` legt host en poort vast op de fout (`mailHost`, `mailPort`; nooit het wachtwoord).
+- `netguard.publicAddress` geeft bij meerdere adressen het IPv4-adres voorrang, zodat een container zonder IPv6 niet vastloopt op een IPv6-adres.
+- `deploy/apps01/pve/diagnose-mail.sh`: alleen-lezen test van poort 25/465/587 vanaf de Proxmox-host, apps01 en de app-container.
+
+## 1.23.7
+
+Beheer > Systeem: `beheer/collapse-list.js` (`BeheerCollapse.render`) klapt lange lijsten in tot de eerste vijf regels met een knop *Toon alle (n)* / *Toon minder*. Gebruikt voor de back-uplijst, de Drive-bestanden en het Drive-logboek. Alleen frontend, geen migratie.
+
+## 1.23.6
+
+- Nieuw: `verkoop/invoice-payments.js` (tabel `invoice_payments`, migratie 84): per poging één Mollie-betaling. Hergebruikt de Mollie-sleutel en het webadres van de webshop (`configOf`), dus alleen in de hoofdtenant. De uitkomst komt altijd uit een opvraging bij Mollie (metadata `invoiceId` en bedrag moeten kloppen); de overgang naar betaald gebeurt één keer (voorwaardelijke update) en roept `invoices.setPaid` en de auditregel `factuur_betaald_online` aan.
+- Nieuw: portaalroutes `GET /api/portal/invoices/:id/pdf`, `POST …/pay` en `POST …/check` (recht `portaal`, alleen eigen facturen, geen concepten of creditfacturen), `api/portal` geeft `invoices`; openbare webhook `POST /api/public/invoice-payment/:id/webhook` (limiet per bezoeker). `invoices.list` kreeg de filters `customerId`, `kinds` en `statuses`. Testdata vult `invoice_payments`.
+
+## 1.23.5
+
+- Nieuw: belletje in `dashboard/account.js` (`setupBell`, op elke pagina met kopbalk) op basis van `GET /api/tasks`; ververst bij openen en elke 3 minuten. Het dashboardblok deelt hetzelfde verzoek via `getJson`. Alleen met recht `beheer` of `voorraad`.
+
+## 1.23.4
+
+- `tableColumns` gebruikt op PostgreSQL `pg_catalog` i.p.v. `information_schema` (±150 ms → ±1 ms per tabel); tenant verwijderen, leegmaken en terugzetten uit back-up wordt daardoor niet trager bij meer tabellen.
+- Testrun gebruikt goedkope scrypt-kosten (`AQUATECH_TEST_SCRYPT_N`, via `node --import test/helpers/fast-scrypt.js`); `scryptParams` negeert die variabele in productie en bij niet-machten van twee onder 1024. Productie blijft 2^17.
+- Test goods-receipt controleert veldnamen i.p.v. losse tekst ("1.5" kwam toevallig in een tijdstempel voor en maakte de test af en toe rood).
+
+## 1.23.3
+
+- Migratie 83: `app_logs.first_at`. Herhalingen van de bronnen taak, stilstand en traag werken ook na het wegschrijven de bestaande regel bij (`created_at` = laatste keer, `first_at` = eerste keer, `repeat_count`, langste duur) zolang er binnen een uur een nieuwe komt en de regel jonger is dan 24 uur. Fouten blijven los (eigen foutcode en verzoek-id).
+- De stilstandmelding heeft een vaste tekst ("Hoofdthread stond stil"); de duur staat in het veld Duur.
+- Excel-export: kolommen *Tijdstip (laatste)* en *Eerste keer*.
+
+## 1.23.2
+
+- Nieuw: `GET /api/tasks` (`platform/open-tasks.js`, ingelogd; taken volgen de rechten `beheer` en `voorraad`, per omgeving) en het dashboardblok `dashboard/tasks.js`. Nieuw: `webOrders.listUnprocessed` (status Nieuw; online alleen na betaling).
+
+## 1.23.1
+
+In de release-image wordt de frontend in een aparte bouwstap verkleind (`backend/tools/minify-frontend.js`, esbuild als
+devDependency, alleen in de bouwstap). Alle eigen `.js` en `.css` worden verkleind (witruimte, commentaar, syntaxis; geen
+hernoemen van globale namen); `vendor/` en `.min.`-bestanden blijven ongewijzigd. De broncode in de repo blijft leesbaar,
+de bestandsnamen en `?v=<versie>`-adressen blijven gelijk (de inhoud verandert alleen mee met een nieuwe versie, dus
+Cloudflare-cache en cache-busting werken zoals voorheen). De backend wordt niet verkleind (draait op de server, niet in de
+browser).
+
+## 1.23.0
+
+- Knop *Nu controleren op updates* (`POST /api/admin/system-update/check`, 6 per 10 minuten, audit `update_controle`): de app zet `request.json` met `{"check":true}` klaar; `deploy/apps01/update.sh` haalt dan alleen `:latest` op en werkt `status.json`/`releases.json` bij, zonder te installeren. Het scherm toont `checking` tot de host een nieuwe `checkedAt` heeft. Het hostscript moet hiervoor opnieuw worden ingericht (`setup-app-update.sh`); met het oude script wordt de aanvraag wel gecontroleerd maar als onleesbaar gemeld.
+- Testlog: een mislukte of afgeremde login (POST `/api/auth/login`, 400/401/403/429) telt niet meer als `[traag]`; onder `node --test` (of `SLOW_LOG_QUIET=1`) schrijft het trage-verzoekenlog niets naar de console, het logboek in het geheugen blijft.
+
+## 1.22.9
+
+Webshopkop rustiger: de knop *Product zoeken* (dubbel met de productgroepen) is weg, de navigatiebalk is licht met kleine hoofdletter-items en een dun pijltje, *Over ons* is groen, de zoekbalk is zachter (afgerond) en Account/Winkelwagen tonen alleen een icoon (met aria-label), op mobiel ook de beheerknop. Alleen `storefront-pages.js`, `storefront.css` en `storefront-menu.js`.
+
+## 1.22.8
+
+`shopSource.syncSchedule` (`night` standaard | `hourly` | `tenmin`, geen migratie). `runAll` slaat een omgeving over tot `fullSyncDue` (webshop/shop-sync.js) aan de beurt is: dagwisseling 04:00 Nederlandse tijd (na de back-up), na een mislukte poging hoogstens elk uur opnieuw. Gewijzigde artikelen gaan nog steeds meteen via `schedule()`. Aanleiding: het logboek van 2026-11-19 toonde elke 10 minuten een "trage taak" van ~165 s met ruim 5300 queries en 2 s stilstand van de hoofdthread.
+
 ## 1.22.7
 
 - De webshoppagina's bevatten de `google-site-verification`-meta (Search Console), in de `<head>`.

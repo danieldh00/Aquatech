@@ -5,17 +5,19 @@
 const { domainToASCII } = require('node:url');
 const nodemailer = require('nodemailer');
 const { publicAddress, privateAllowed } = require('../beveiliging/netguard');
+const { createGraphSender, parseSender, validTenantId, validClientId } = require('./mail-graph');
 
 const MAIL_TEXT = { host: 200, user: 200, from: 200, replyTo: 200 };
 // mode: 'smtp' = inloggen met gebruikersnaam en wachtwoord; 'connector' =
-// Exchange Online-connector op IP-basis (poort 25, geen inlog, TLS verplicht).
-const MAIL_DEFAULTS = { mode: 'smtp', host: '', port: 587, secure: false, user: '', from: '', replyTo: '' };
+// Exchange Online-connector op IP-basis (poort 25, geen inlog, TLS verplicht); 'graph' = Microsoft Graph (HTTPS, app-registratie
+// in Entra; het clientgeheim staat apart en versleuteld in mailGraphSecret).
+const MAIL_DEFAULTS = { mode: 'smtp', host: '', port: 587, secure: false, user: '', from: '', replyTo: '', graphTenantId: '', graphClientId: '' };
 
 /**
  * Schoont de gegevens van de mailserver op (zonder wachtwoord; dat is een eigen
  * geheim). Afzender en antwoordadres zonder regeleinden (geen kop-injectie).
  * @param {object} raw De ruwe invoer.
- * @returns {{ mode: string, host: string, port: number, secure: boolean, user: string, from: string, replyTo: string }} De opgeschoonde instellingen.
+ * @returns {{ mode: string, host: string, port: number, secure: boolean, user: string, from: string, replyTo: string, graphTenantId: string, graphClientId: string }} De opgeschoonde instellingen.
  */
 function sanitizeMail(raw) {
   const input = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
@@ -24,8 +26,12 @@ function sanitizeMail(raw) {
   const port = Number(input.port);
   out.port = Number.isInteger(port) && port > 0 && port < 65536 ? port : MAIL_DEFAULTS.port;
   out.secure = input.secure === true || input.secure === 'true';
-  out.mode = input.mode === 'connector' ? 'connector' : 'smtp';
-  if (out.mode === 'connector') out.user = '';
+  out.mode = ['connector', 'graph'].includes(input.mode) ? input.mode : 'smtp';
+  if (out.mode !== 'smtp') out.user = '';
+  const graphTenantId = typeof input.graphTenantId === 'string' ? input.graphTenantId.trim() : '';
+  const graphClientId = typeof input.graphClientId === 'string' ? input.graphClientId.trim() : '';
+  out.graphTenantId = validTenantId(graphTenantId) ? graphTenantId : '';
+  out.graphClientId = validClientId(graphClientId) ? graphClientId : '';
   // Geen kop-injectie via afzender of antwoordadres.
   for (const field of ['from', 'replyTo']) out[field] = out[field].replace(/[\r\n]/g, '');
   return out;
@@ -74,14 +80,26 @@ function inlineImages(html) {
 }
 
 /**
+ * Legt vast bij welke mailserver (host, poort, beveiliging) een fout hoort, zodat de melding aan de gebruiker die
+ * kan noemen. Het wachtwoord komt hier nooit in.
+ * @param {Error} error De fout van nodemailer.
+ * @param {{ host: string, port: number, secure: boolean }} server De instelling mailServer.
+ * @returns {Error} Dezelfde fout, met mailHost, mailPort en mailSecure.
+ */
+function tagServer(error, server) {
+  if (error && typeof error === 'object' && !error.mailHost) Object.assign(error, { mailHost: server.host, mailPort: server.port, mailSecure: Boolean(server.secure) });
+  return error;
+}
+
+/**
  * Maakt de mailer van een tenant. De mailserver moet een openbaar adres hebben
  * (zie netguard.js); er wordt verbonden met het gevonden adres, het certificaat
  * blijft op naam gecontroleerd.
  * @param {object} settings Instellingen van de tenant (mailServer en mailPassword).
- * @param {object} [options] createTransport en resolveHost, te vervangen in tests.
+ * @param {object} [options] createTransport, resolveHost en fetchImpl (voor Graph), te vervangen in tests.
  * @returns {{ configured: Function, send: Function, verify: Function, config: Function }} De mailfuncties.
  */
-function createMailer(settings, { createTransport = nodemailer.createTransport, resolveHost = publicAddress } = {}) {
+function createMailer(settings, { createTransport = nodemailer.createTransport, resolveHost = publicAddress, fetchImpl } = {}) {
   /**
    * De ingestelde mailserver.
    * @returns {object} De instelling mailServer.
@@ -93,7 +111,16 @@ function createMailer(settings, { createTransport = nodemailer.createTransport, 
    */
   const configured = () => {
     const server = config();
+    if (server.mode === 'graph') return Boolean(server.graphTenantId && server.graphClientId && parseSender(server.from).address && settings.get('mailGraphSecret'));
     return Boolean(server.host && server.from);
+  };
+  /**
+   * De Graph-verzender met de ingestelde app-gegevens.
+   * @returns {{ send: Function, verify: Function }} De functies van createGraphSender.
+   */
+  const graphSender = () => {
+    const server = config();
+    return createGraphSender({ tenantId: server.graphTenantId, clientId: server.graphClientId, clientSecret: settings.get('mailGraphSecret'), from: server.from }, fetchImpl ? { fetchImpl } : {});
   };
   /**
    * Maakt de verbinding (transport) met de ingestelde mailserver. De server moet een openbaar adres hebben; er wordt
@@ -134,15 +161,28 @@ function createMailer(settings, { createTransport = nodemailer.createTransport, 
     if (!configured()) throw Object.assign(new Error('Er is geen mailserver ingesteld.'), { code: 'not_configured' });
     const list = (Array.isArray(to) ? to : [to]).filter(validEmail);
     if (!list.length) throw Object.assign(new Error('Geen geldig e-mailadres.'), { code: 'invalid_to' });
-    const { transport, server } = await openTransport();
     const inline = inlineImages(html);
-    return transport.sendMail({
-      from: server.from, to: list.join(', '), bcc: bcc && validEmail(bcc) ? bcc.trim() : undefined, replyTo: replyTo && validEmail(replyTo) ? replyTo : server.replyTo || undefined,
-      subject: String(subject || '').replace(/[\r\n]/g, ' ').slice(0, 300), text, html: inline.html,
-      attachments: Array.isArray(attachments) && attachments.length ? attachments.slice(0, 5).map((attachment) => ({
-        filename: String(attachment.filename || 'bijlage').replace(/[\r\n"\\/]/g, '').slice(0, 120), content: attachment.content, contentType: attachment.contentType,
-      })).concat(inline.attachments) : (inline.attachments.length ? inline.attachments : undefined),
-    });
+    if (config().mode === 'graph') {
+      return graphSender().send({
+        to: list, bcc: bcc && validEmail(bcc) ? bcc.trim() : undefined, replyTo: replyTo && validEmail(replyTo) ? replyTo : config().replyTo || undefined,
+        subject: String(subject || '').replace(/[\r\n]/g, ' ').slice(0, 300), text, html: inline.html,
+        attachments: (Array.isArray(attachments) ? attachments.slice(0, 5) : []).map((attachment) => ({
+          filename: String(attachment.filename || 'bijlage').replace(/[\r\n"\\/]/g, '').slice(0, 120), content: attachment.content, contentType: attachment.contentType,
+        })).concat(inline.attachments),
+      });
+    }
+    const { transport, server } = await openTransport();
+    try {
+      return await transport.sendMail({
+        from: server.from, to: list.join(', '), bcc: bcc && validEmail(bcc) ? bcc.trim() : undefined, replyTo: replyTo && validEmail(replyTo) ? replyTo : server.replyTo || undefined,
+        subject: String(subject || '').replace(/[\r\n]/g, ' ').slice(0, 300), text, html: inline.html,
+        attachments: Array.isArray(attachments) && attachments.length ? attachments.slice(0, 5).map((attachment) => ({
+          filename: String(attachment.filename || 'bijlage').replace(/[\r\n"\\/]/g, '').slice(0, 120), content: attachment.content, contentType: attachment.contentType,
+        })).concat(inline.attachments) : (inline.attachments.length ? inline.attachments : undefined),
+      });
+    } catch (error) {
+      throw tagServer(error, server);
+    }
   }
   /**
    * Controleert of de mailserver bereikbaar is en de inloggegevens accepteert, zonder iets te versturen (SMTP-verify
@@ -152,10 +192,13 @@ function createMailer(settings, { createTransport = nodemailer.createTransport, 
    */
   async function verify() {
     if (!configured()) throw Object.assign(new Error('Er is geen mailserver ingesteld.'), { code: 'not_configured' });
-    const { transport } = await openTransport();
+    if (config().mode === 'graph') return graphSender().verify();
+    const { transport, server } = await openTransport();
     try {
       await transport.verify();
       return true;
+    } catch (error) {
+      throw tagServer(error, server);
     } finally {
       if (typeof transport.close === 'function') transport.close();
     }
@@ -193,6 +236,12 @@ function mailFailure(error) {
   if (['not_configured', 'invalid_to', 'invalid_host'].includes(code)) return `Versturen mislukt: ${error.message}`;
   // Geen code en geen antwoord: geen fout van de mailserver maar van de app (bijv. bij het opbouwen van de mail).
   if (!code && !reply) return 'Versturen mislukt door een interne fout; de oorzaak staat in het serverlog.';
+  if (code === 'EGRAPH_AUTH') return withReply('Microsoft weigert de aanmelding van de app. Controleer tenant-ID, client-ID en het clientgeheim (een geheim verloopt; maak zo nodig een nieuw geheim aan in Entra).');
+  if (code === 'EGRAPH_DENIED') return withReply('Microsoft weigert de app toegang tot de mailbox. Controleer of de machtiging Mail.Send (toepassing) is verleend met beheerderstoestemming en of een Application Access Policy deze mailbox toestaat.');
+  if (code === 'EGRAPH_MAILBOX') return withReply('de afzender-mailbox is niet gevonden of heeft geen Exchange Online-mailbox. Gebruik het volledige e-mailadres van een bestaande mailbox als afzender.');
+  if (code === 'EGRAPH_THROTTLED') return withReply('Microsoft beperkt het versturen even (te veel berichten). Probeer het later opnieuw.');
+  if (code === 'EGRAPH_SIZE') return 'Versturen mislukt: het bericht met bijlagen is te groot voor verzenden via Microsoft Graph (hoogstens ongeveer 2,5 MB aan bijlagen in totaal).';
+  if (code === 'EGRAPH_ERROR') return withReply('Microsoft Graph gaf een fout.');
   const connectionProblem = ['ETIMEDOUT', 'ECONNECTION', 'ESOCKET', 'EDNS'].includes(code);
   if (code === 'EAUTH') return withReply('de mailserver weigert de inloggegevens. Controleer gebruikersnaam en wachtwoord (bij Microsoft 365 of Gmail vaak een app-wachtwoord) in Beheer → Integraties → E-mail.');
   // Eerst TLS: een certificaatfout komt van nodemailer vaak als ESOCKET, maar de oplossing is een andere. Alleen bij
@@ -203,7 +252,24 @@ function mailFailure(error) {
     return withReply('de beveiligde verbinding (TLS) met de mailserver lukt niet. Controleer de poort en de instelling SSL/TLS; een ongeldig certificaat wordt niet geaccepteerd.');
   }
   if (connectionProblem) {
-    return withReply('de mailserver is niet bereikbaar. Controleer server en poort (587 met STARTTLS of 465 met SSL/TLS) en of de server naar buiten mag verbinden.');
+    const where = error.mailHost ? `${error.mailHost}:${error.mailPort}` : 'de mailserver';
+    const text = `${code} ${String(error && error.message || '')}`;
+    if (code === 'EDNS' || /ENOTFOUND|EAI_AGAIN/.test(text)) {
+      return withReply(`de naam van ${where} is niet gevonden. Controleer de servernaam en of de server DNS kan gebruiken.`);
+    }
+    if (/ECONNREFUSED/.test(text)) {
+      return withReply(`${where} weigert de verbinding. Controleer de poort (587 met STARTTLS of 465 met SSL/TLS) en of de mailserver die poort aanbiedt.`);
+    }
+    if (/ENETUNREACH|EHOSTUNREACH/.test(text)) {
+      return withReply(`${where} is vanaf de server niet bereikbaar (geen route naar het netwerk; bij een IPv6-adres kan dat aan ontbrekend IPv6 liggen).`);
+    }
+    if (error.mailPort === 443 && (code === 'ETIMEDOUT' || code === 'ECONNECTION')) {
+      return withReply(`${where} is niet bereikbaar (HTTPS). Controleer of de server naar buiten mag verbinden en of DNS werkt.`);
+    }
+    if (code === 'ETIMEDOUT' || /timeout|never received/i.test(text)) {
+      return withReply(`${where} geeft geen antwoord (time-out). Meestal blokkeert een firewall of de internetprovider uitgaand verkeer naar die poort (bij consumentenabonnementen vaak poort 25). Probeer 587 met STARTTLS of 465 met SSL/TLS, en controleer of de server naar buiten mag verbinden.`);
+    }
+    return withReply(`${where} is niet bereikbaar. Controleer server en poort (587 met STARTTLS of 465 met SSL/TLS) en of de server naar buiten mag verbinden.`);
   }
   if (code === 'EENVELOPE') {
     return withReply(error.command === 'MAIL FROM'

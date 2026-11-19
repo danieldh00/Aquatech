@@ -1251,6 +1251,29 @@ const PG_MIGRATIONS = [
   CREATE INDEX app_logs_tenant_level ON app_logs (tenant_id, level, created_at);
   CREATE INDEX app_logs_request ON app_logs (tenant_id, request_id);
   `,
+  // 83: herhaalde logregels (taak, stilstand, traag) blijven na het wegschrijven één regel met teller: `created_at` = laatste keer,
+  // `first_at` = eerste keer (leeg = één keer voorgekomen).
+  `
+  ALTER TABLE app_logs ADD COLUMN first_at ${TEXT_TYPE};
+  `,
+  // 84: online betalen van een factuur (zie db.js).
+  `
+  CREATE TABLE invoice_payments (
+    id           ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id    ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    invoice_id   ${TEXT_TYPE} NOT NULL,
+    mollie_id    ${TEXT_TYPE} NOT NULL,
+    status       ${TEXT_TYPE} NOT NULL DEFAULT 'open',
+    amount       DOUBLE PRECISION NOT NULL,
+    checkout_url ${TEXT_TYPE} NOT NULL DEFAULT '',
+    method       ${TEXT_TYPE} NOT NULL DEFAULT '',
+    mode         ${TEXT_TYPE} NOT NULL DEFAULT '',
+    created_at   ${TEXT_TYPE} NOT NULL,
+    paid_at      ${TEXT_TYPE}
+  );
+  CREATE UNIQUE INDEX invoice_payments_mollie ON invoice_payments (tenant_id, mollie_id);
+  CREATE INDEX invoice_payments_invoice ON invoice_payments (tenant_id, invoice_id, created_at);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

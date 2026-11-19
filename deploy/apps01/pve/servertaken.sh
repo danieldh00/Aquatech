@@ -8,7 +8,14 @@
 #   bash servertaken.sh update           nu updaten naar de nieuwste versie in GHCR (met back-up en terugval)
 #   bash servertaken.sh schijf           toont wat de schijf vult en ruimt na bevestiging op (oude app-images, build-cache, journal)
 #                                        en werkt update.sh op de server bij (met UPDATE_SH_REF=<volledige commit>; zonder blijft hij ongemoeid)
+#   bash servertaken.sh openstaand       voert alle nog openstaande servertaken uit (de afvinklijst in Beheer > Systeem > Updates)
+#                                        en onthoudt op de server welke gedaan zijn (met TASKS_REF=<volledige commit>)
 #   bash servertaken.sh help             deze uitleg
+#
+# Servertaken (openstaand): de lijst staat in de app (hub/backend/src/platform/host-tasks.js, `HOST_TASKS`); elke taak heeft
+# hieronder een functie `hosttask_<id met underscores>`. Een nieuwe taak = één regel in HOST_TASKS én één functie hier (en
+# een regel in HOST_TASK_IDS). Wat gedaan is, staat in update/status/host-tasks.json (de app leest dat en vinkt af).
+# Het vaste commando voor Daniël staat in de app; het haalt de nieuwste master-commit op en gebruikt die als TASKS_REF.
 #
 # Opties: --yes (of YES=1) = geen bevestigingsvraag (voor automatisering). `migraties` en `update` herstarten de app,
 # `schijf` verwijdert oude images; ze vragen daarom eerst om bevestiging; `status` en `logs` wijzigen niets.
@@ -369,6 +376,98 @@ remote_disk_run() {
   df -h / | tail -n1
 }
 
+# ---------- servertaken (openstaand) ----------
+# Alle taken, oudste eerst. Zelfde id's als HOST_TASKS in hub/backend/src/platform/host-tasks.js (een test bewaakt dat).
+HOST_TASK_IDS=(
+  001-app-update-opnieuw-inrichten
+)
+HOST_TASKS_LEDGER="host-tasks.json"
+# Functienaam van een taak (streepjes worden underscores).
+hosttask_function() { printf 'hosttask_%s' "${1//-/_}"; }
+# Id's die al gedaan zijn (uit update/status/host-tasks.json; alleen id's in het vaste formaat).
+ledger_done_ids() {
+  grep -oE '"[0-9]{3}-[a-z0-9-]{1,80}":"[^"]*"' "$APP_DIR/update/status/$HOST_TASKS_LEDGER" 2>/dev/null | cut -d'"' -f2 || true
+}
+# Schrijft het logboek opnieuw met de gedane id's (+ eventueel één nieuwe) in één keer (tijdelijk bestand + mv, zoals update.sh).
+ledger_write() { # [nieuwe id]
+  local status_dir="$APP_DIR/update/status" now_text entries="" id tmp
+  mkdir -p "$status_dir"
+  now_text="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  for id in $(ledger_done_ids); do
+    if [[ "$id" != "${1:-}" ]]; then entries+="${entries:+,}\"$id\":\"$(ledger_time "$id")\""; fi
+  done
+  if [[ -n "${1:-}" ]]; then entries+="${entries:+,}\"$1\":\"$now_text\""; fi
+  tmp="$(mktemp "$status_dir/.tmp.XXXXXX")"
+  printf '{"done":{%s},"checkedAt":"%s"}\n' "$entries" "$now_text" > "$tmp"
+  chmod 644 "$tmp"
+  mv -f "$tmp" "$status_dir/$HOST_TASKS_LEDGER"
+}
+# Tijdstip waarop een id als gedaan is vastgelegd (leeg tijdstip → nu).
+ledger_time() {
+  local at
+  at="$(grep -oE "\"$1\":\"[^\"]*\"" "$APP_DIR/update/status/$HOST_TASKS_LEDGER" 2>/dev/null | head -n1 | cut -d'"' -f4 || true)"
+  printf '%s' "${at:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
+}
+# Taken die nog niet gedaan zijn, één id per regel.
+pending_host_tasks() {
+  local done_ids id
+  done_ids="$(ledger_done_ids)"
+  for id in "${HOST_TASK_IDS[@]}"; do
+    grep -qx -- "$id" <<<"$done_ids" || echo "$id"
+  done
+}
+# De commit waarop de taken draaien (TASKS_REF, 40 tekens): een root-script op de server loopt nooit mee met een branch.
+need_tasks_ref() {
+  [[ "${TASKS_REF:-}" =~ ^[0-9a-f]{40}$ ]] || { echo "FOUT: geef TASKS_REF=<volledige commit van 40 tekens> mee (het vaste commando uit de app doet dat zelf)." >&2; exit 2; }
+}
+# Haalt een bestand uit de repo op TASKS_REF en controleert de syntaxis (pad in $2, doel in $1).
+fetch_task_file() { # <doel> <pad in de repo>
+  local base="${TASKS_BASE:-https://raw.githubusercontent.com/danieldh00/Aquatech}"
+  curl -fsSL -m 60 "$base/$TASKS_REF/$2" -o "$1" || { echo "FOUT: ophalen van $2 mislukt." >&2; return 1; }
+  bash -n "$1" || { echo "FOUT: $2 is geen geldig script." >&2; return 1; }
+}
+
+# Taak 001: setup-app-update.sh opnieuw draaien (update.sh, compose.yml en units vernieuwen, container opnieuw). Veilig herhaalbaar.
+hosttask_001_app_update_opnieuw_inrichten() {
+  local dir rc=0
+  dir="$(mktemp -d)"
+  fetch_task_file "$dir/setup-app-update.sh" deploy/apps01/setup-app-update.sh || { rm -rf "$dir"; return 1; }
+  SETUP_REF="$TASKS_REF" APP_DIR="$APP_DIR" bash "$dir/setup-app-update.sh" || rc=$?
+  rm -rf "$dir"
+  return "$rc"
+}
+
+# Toont wat er openstaat. Uitgangscode 10 = er is iets te doen (two_step vraagt dan om bevestiging).
+remote_openstaand_check() {
+  local pending
+  need_tasks_ref
+  pending="$(pending_host_tasks)"
+  if [[ -z "$pending" ]]; then
+    ledger_write
+    echo "Alle servertaken zijn gedaan. Niets te doen."
+    return 0
+  fi
+  echo "Openstaande servertaken (uit commit ${TASKS_REF:0:10}):"
+  for id in $pending; do echo "  - $id"; done
+  return 10
+}
+# Voert de openstaande taken één voor één uit en legt elke gelukte taak vast. Bij een fout stopt het (de rest blijft open).
+remote_openstaand_run() {
+  local id
+  need_tasks_ref
+  for id in $(pending_host_tasks); do
+    echo; echo "== Taak $id =="
+    if "$(hosttask_function "$id")"; then
+      ledger_write "$id"
+      echo "Taak $id gedaan en vastgelegd."
+    else
+      echo "FOUT: taak $id is mislukt; de overige taken zijn niet uitgevoerd. Draai het commando opnieuw als het probleem opgelost is." >&2
+      return 1
+    fi
+  done
+  echo; echo "Alle servertaken zijn gedaan."
+}
+
 remote_main() {
   exec </dev/null
   cd "$APP_DIR" 2>/dev/null || { echo "FOUT: $APP_DIR bestaat niet op de server (zet APP_DIR)." >&2; exit 1; }
@@ -383,6 +482,8 @@ remote_main() {
     update-run) remote_update_run ;;
     schijf-check) remote_disk_check ;;
     schijf-run) remote_disk_run ;;
+    openstaand-check) remote_openstaand_check ;;
+    openstaand-run) remote_openstaand_run ;;
     *) echo "Onbekende opdracht: $action" >&2; exit 2 ;;
   esac
 }
@@ -397,7 +498,7 @@ fi
 # =====================================================================================================================
 NAME="${APPS01_NAME:-apps01}"
 die() { echo "FOUT: $*" >&2; exit 1; }
-usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 ARGS=()
 for argument in "$@"; do
@@ -409,7 +510,7 @@ for argument in "$@"; do
 done
 ACTION="${ARGS[0]:-status}"
 case "$ACTION" in
-  status | logs | migraties | update | schijf) ;;
+  status | logs | migraties | update | schijf | openstaand) ;;
   help) usage ;;
   *) usage ;;
 esac
@@ -460,6 +561,7 @@ if [[ "$MODE" == "ssh" && "$SSH_TARGET" == *@* && "${SSH_TARGET%%@*}" != "root" 
 remote() { # <opdracht> [argumenten...]
   local environment=(SERVERTAKEN_REMOTE=1 "APP_DIR=$APP_DIR" "LOG_SINCE=${LOG_SINCE:-24h}")
   [[ -n "${UPDATE_SH_REF:-}" ]] && environment+=("UPDATE_SH_REF=$UPDATE_SH_REF")
+  [[ -n "${TASKS_REF:-}" ]] && environment+=("TASKS_REF=$TASKS_REF")
   if [[ "$MODE" == "pct" ]]; then
     pct exec "$GUEST_ID" -- env "${environment[@]}" bash -s -- "$@" <"$0"
   else
@@ -501,5 +603,6 @@ case "$ACTION" in
   logs) remote logs "${ARGS[@]:1}" ;;
   migraties) two_step migraties "De app wordt na een back-up herstart en is daarbij ca. 1 minuut niet beschikbaar; bij het starten draaien de migraties." ;;
   schijf) two_step schijf "Oude app-images, build-cache en oude journal worden verwijderd en update.sh op de server wordt bijgewerkt (de draaiende en de twee nieuwste versies blijven; volumes, back-ups en database blijven onaangeroerd). De app blijft gewoon draaien." ;;
+  openstaand) two_step openstaand "De openstaande servertaken worden nu uitgevoerd (ze staan hierboven; de app kan daarbij even herstarten). Elke gelukte taak wordt afgevinkt in de app." ;;
   update) two_step update "De app wordt na een back-up vervangen door de nieuwste versie (ca. 1-3 minuten onderhoudsmodus). Lukt het niet, dan zet update.sh de vorige versie terug." ;;
 esac

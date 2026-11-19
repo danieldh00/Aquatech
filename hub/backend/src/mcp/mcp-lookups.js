@@ -150,7 +150,7 @@ function createMcpLookups(db, { today = () => new Date().toISOString().slice(0, 
     const shown = groups.slice(0, limit);
     const invoicesByGroup = new Map(shown.map((group) => [group.key, []]));
     if (shown.length) {
-      // Per debiteur de tien oudste facturen, in één query (ROW_NUMBER werkt in SQLite en PostgreSQL).
+      // Per debiteur de tien oudste facturen, in één query (ROW_NUMBER).
       const keys = shown.map((group) => group.key);
       const rows = prepare(`SELECT group_key, number, status, kind, customer_name, invoice_date, due_date, total FROM (
           SELECT ${GROUP_KEY} AS group_key, number, status, kind, customer_name, invoice_date, due_date, total,

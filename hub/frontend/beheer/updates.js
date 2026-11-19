@@ -56,6 +56,7 @@
    * @returns {boolean} true bij een openstaande aanvraag, een lopende uitrol of de onderhoudsmodus.
    */
   const busy = (view) => {
+    if (view.checking) return true;
     const status = view.status || {};
     if (awaiting && ((status.requestId === awaiting.id && status.state !== 'bezig') || Date.now() - awaiting.at > 20 * 60 * 1000)) awaiting = null;
     return Boolean(awaiting || view.pending || status.state === 'bezig' || (view.maintenance && view.maintenance.active));
@@ -68,6 +69,7 @@
    */
   function stateText(view) {
     const status = view.status || {};
+    if (view.checking) return 'Er wordt gezocht naar een nieuwe versie…';
     if (awaiting && !view.pending && status.state !== 'bezig') return 'De server pakt de update op…';
     if (view.pending) return `Update naar ${view.pending.version} aangevraagd${view.pending.by ? ` door ${view.pending.by}` : ''}. De server begint zo.`;
     if (status.state === 'bezig') return STEP_TEXT[status.step] || 'Bezig met de update…';
@@ -107,6 +109,7 @@
     byId('up-checked').textContent = when(view.status && view.status.checkedAt);
     byId('up-state').textContent = stateText(view);
     byId('up-form').hidden = !view.newer || following;
+    byId('up-check').disabled = Boolean(view.checking || view.pending || (view.status && view.status.state === 'bezig') || (view.maintenance && view.maintenance.active));
     byId('up-pending-actions').hidden = !view.pending;
     byId('up-auto').checked = view.auto !== false;
     byId('up-notes').innerHTML = notesHtml(view.releases);
@@ -165,6 +168,26 @@
   }
 
   /**
+   * Vraagt de server nu naar een nieuwe versie te zoeken; de pagina volgt de stand tot de controle klaar is.
+   * @returns {Promise<void>}
+   */
+  async function checkNow() {
+    byId('up-err').textContent = '';
+    byId('up-check').disabled = true;
+    try {
+      const response = await fetch('api/admin/system-update/check', { method: 'POST' });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || window.AquatechCommon.statusMessage(response.status));
+      render(body);
+      clearTimeout(pollTimer);
+      pollTimer = setTimeout(refresh, 2000);
+    } catch (error) {
+      byId('up-err').textContent = error.message;
+      refresh();
+    }
+  }
+
+  /**
    * Trekt een aanvraag in die de server nog niet heeft opgepakt.
    * @returns {Promise<void>}
    */
@@ -206,6 +229,56 @@
     }
   }
 
+  /**
+   * Haalt de servertaken op en tekent de afvinklijst met het ene commando.
+   * @returns {Promise<void>}
+   */
+  async function loadHostTasks() {
+    const errorBox = byId('ht-err');
+    try {
+      const response = await fetch('api/admin/host-tasks', { cache: 'no-store' });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || window.AquatechCommon.statusMessage(response.status));
+      errorBox.textContent = '';
+      byId('ht-list').innerHTML = body.tasks.map((task) => `
+        <li class="ht-item${task.done ? ' done' : ''}">
+          <label class="field chk"><input type="checkbox" data-task="${esc(task.id)}" ${task.done ? 'checked' : ''} ${task.doneBy === 'server' ? 'disabled' : ''}> <strong>${esc(task.title)}</strong></label>
+          <p class="muted small">${esc(task.description)}</p>
+          <p class="muted small">${task.done ? `Gedaan ${esc(when(task.doneAt))} (${task.doneBy === 'server' ? 'gemeld door de server' : `afgevinkt door ${esc(task.doneByName || 'een beheerder')}`})` : `Toegevoegd ${esc(task.addedAt)}`}</p>
+        </li>`).join('');
+      byId('ht-command').textContent = body.command;
+      byId('ht-command-box').hidden = body.pending === 0;
+    } catch (error) {
+      errorBox.textContent = error.message;
+    }
+  }
+
+  /**
+   * Vinkt een servertaak af of weer open.
+   * @param {Event} event De change-gebeurtenis van een vinkje.
+   * @returns {Promise<void>}
+   */
+  async function toggleHostTask(event) {
+    const box = event.target.closest('input[data-task]');
+    if (!box) return;
+    try {
+      const response = await fetch(`api/admin/host-tasks/${encodeURIComponent(box.dataset.task)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ done: box.checked }) });
+      if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message || window.AquatechCommon.statusMessage(response.status));
+    } catch (error) {
+      byId('ht-err').textContent = error.message;
+    }
+    loadHostTasks();
+  }
+
+  /**
+   * Kopieert het servercommando naar het klembord.
+   * @returns {Promise<void>}
+   */
+  async function copyHostCommand() {
+    const button = byId('ht-copy');
+    try { await navigator.clipboard.writeText(byId('ht-command').textContent); button.textContent = 'Gekopieerd'; } catch (error) { button.textContent = 'Selecteer en kopieer de tekst hierboven'; }
+  }
+
   let bound = false;
   /**
    * Opent de sectie: knoppen koppelen (één keer) en de stand laden.
@@ -215,9 +288,13 @@
     if (!bound) {
       bound = true;
       byId('up-form').addEventListener('submit', startUpdate);
+      byId('up-check').addEventListener('click', checkNow);
       byId('up-cancel').addEventListener('click', cancelUpdate);
       byId('up-auto').addEventListener('change', saveAuto);
+      byId('ht-list').addEventListener('change', toggleHostTask);
+      byId('ht-copy').addEventListener('click', copyHostCommand);
     }
+    loadHostTasks();
     started = true;
     refresh();
   }

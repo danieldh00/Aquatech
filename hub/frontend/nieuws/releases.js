@@ -13,6 +13,138 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.24.4',
+      date: '2026-11-19',
+      title: 'Draaiboek voor de verhuizing naar een VPS',
+      items: [
+        { text: 'Beheer > Systeem heeft een afvinkbaar draaiboek voor de verhuizing naar een VPS: voorbereiden, inrichten, proefverhuizing, verhuisdag, controle en terugvallen.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.24.3',
+      date: '2026-11-19',
+      title: 'Kengetallen op het beheerdersdashboard',
+      items: [
+        { text: 'Het startscherm toont voor beheerders vier kengetallen: openstaand bedrag, vervallen facturen, open offertes en de bezetting van deze week.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.24.2',
+      date: '2026-11-19',
+      title: 'Betaallink in de factuurmail',
+      items: [
+        { text: 'De factuurmail bevat een link waarmee de klant de factuur direct online kan betalen (iDEAL en andere methodes via Mollie), ook zonder in te loggen. Na betaling staat de factuur automatisch op betaald.', for: ['facturen'] },
+      ],
+    },
+    {
+      version: '1.24.1',
+      date: '2026-11-19',
+      title: 'Mail versturen via Microsoft 365 (Graph)',
+      items: [
+        { text: 'Mail kan nu via Microsoft 365 (Graph) worden verstuurd in plaats van SMTP. Dat gaat over HTTPS, dus een geblokkeerde mailpoort bij de internetprovider is geen probleem meer. In Beheer > Instellingen > E-mail staat een stappenplan voor de app-registratie in Microsoft Entra, inclusief het beperken van de app tot één mailbox.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.24.0',
+      date: '2026-11-19',
+      title: 'Kleiner image en opgeschoonde documentatie',
+      items: [],
+    },
+    {
+      version: '1.23.9',
+      date: '2026-11-19',
+      title: 'Servertaken als afvinklijst',
+      items: [
+        { text: 'Commando\'s die op de server uitgevoerd moeten worden staan nu in Beheer > Systeem > Updates als afvinklijst, met één vast commando en een kopieerknop. Het dashboard toont wat nog openstaat.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.23.8',
+      date: '2026-11-19',
+      title: 'Duidelijkere mailfouten bij de testmail',
+      items: [
+        { text: 'Als de testmail of een andere mail niet lukt, noemt de melding nu de mailserver en poort en zegt ze wat er mis is: geen antwoord (vaak een geblokkeerde poort), geweigerde verbinding of onbekende servernaam.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.23.7',
+      date: '2026-11-19',
+      title: 'Lange back-uplijsten klappen in',
+      items: [
+        { text: 'De lijst met back-ups en de lijsten bij Back-ups naar Google Drive (bestanden en logboek) tonen nu de nieuwste vijf regels, met de knop "Toon alle" voor de rest.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.23.6',
+      date: '2026-11-19',
+      title: 'Facturen online betalen in het klantportaal',
+      items: [
+        { text: 'In het klantportaal staat nu het blok Facturen met uw definitieve en betaalde facturen, met een PDF per factuur.' },
+        { text: 'Staat online betalen aan, dan betaalt u een openstaande factuur met de knop "Nu betalen" via iDEAL of een andere methode van Mollie. Na de betaling staat de factuur meteen op betaald, ook bij de debiteuren van het bedrijf.' },
+      ],
+    },
+    {
+      version: '1.23.5',
+      date: '2026-11-19',
+      title: 'Meldingenbelletje met teller in de kopbalk',
+      items: [
+        { text: '[voorraad] In de kopbalk staat nu een belletje met het aantal openstaande taken (bestellingen verwerken, bestelvoorstellen, prijsvoorstellen). Een klik toont de lijst en brengt je direct naar het juiste scherm; bij één openstaand punt ga je meteen naar dat punt.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.23.4',
+      date: '2026-11-19',
+      title: 'Snellere en stabielere testsuite',
+      items: [],
+    },
+    {
+      version: '1.23.3',
+      date: '2026-11-19',
+      title: 'Logboek: herhaalde meldingen als één regel',
+      items: [
+        { text: 'In het Logboek staat een herhaalde melding (bijvoorbeeld een trage taak of stilstand) nu als één regel met het aantal en de eerste en laatste keer, ook in de Excel-export.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.23.2',
+      date: '2026-11-19',
+      title: 'Openstaande taken op het dashboard',
+      items: [
+        { text: 'Op het startscherm staat nu een blok "Openstaande taken" met de binnengekomen webshopbestellingen die nog niet verzonden zijn (de oudste vijf, met link naar elke bestelling).', for: ['beheer'] },
+        { text: 'Hetzelfde blok toont de bestelvoorstellen die klaarstaan bij lage voorraad, artikelen onder het minimum zonder voorkeursleverancier en open prijsvoorstellen. Zonder openstaande taken verdwijnt het blok.', for: ['voorraad'] },
+      ],
+    },
+    {
+      version: '1.23.1',
+      date: '2026-11-19',
+      title: 'Snellere pagina\'s door verkleinde scripts en stijlen',
+      items: [
+        { text: 'Pagina\'s laden sneller: de scripts en stijlen van de app zijn verkleind.' },
+      ],
+    },
+    {
+      version: '1.23.0',
+      date: '2026-11-19',
+      title: 'Handmatig controleren op updates',
+      items: [
+        { text: 'In Beheer > Systeem > Updates kun je nu met één klik controleren of er een nieuwe versie klaarstaat.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.22.9',
+      date: '2026-11-19',
+      title: 'Rustigere kop in de webshop',
+      items: [],
+    },
+    {
+      version: '1.22.8',
+      date: '2026-11-19',
+      title: 'Webshopsynchronisatie standaard één keer per nacht',
+      items: [
+        { text: 'De volledige vergelijking met de webshop draait nu standaard één keer per nacht in plaats van elke 10 minuten. In Beheer > Webshop kies je ook elk uur of elke 10 minuten.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.22.7',
       date: '2026-11-19',
       title: 'Google-verificatie voor de webshop',

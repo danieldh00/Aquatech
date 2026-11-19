@@ -155,6 +155,8 @@
     renderRecent(me);
     renderNews(me);
     if (window.AquatechToday && window.AquatechToday.start(me)) greet(me);
+    if (window.AquatechKpis) window.AquatechKpis.start(me);
+    if (window.AquatechTasks) window.AquatechTasks.start(me);
     renderMyPlans(me);
     window.AquatechSupport.load(me);
     // Terug op het overzicht via de knop Terug: dagoverzicht en plannen bijwerken.

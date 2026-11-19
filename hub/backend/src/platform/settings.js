@@ -20,6 +20,7 @@ const { sanitizePriceFactors } = require('../artikelen/price-factor');
 const { sanitizeDocumentLayout } = require('../verkoop/document-layout');
 const { sanitizeMailLayout } = require('./mail-layout');
 const { sanitizeMonitoring } = require('./monitoring-notify');
+const { sanitizeHostTasks } = require('./host-tasks');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const Theme = require(path.join(FRONTEND_DIR, 'shared', 'theme.js'));
@@ -116,12 +117,16 @@ const FIELDS = {
   // Bewaking (platform/monitoring.js, Beheer > Systeem > Bewaking; alleen via /api/admin/monitoring): ontvangers, webhook,
   // heartbeat-adres (alleen de hoofdtenant), herinneringen, herstelmelding, gedempte controles en drempels van de platformcontroles.
   monitoring: { type: 'object', default: {}, sanitize: sanitizeMonitoring, internal: true, liveOnly: true },
+  // Servertaken die met de hand zijn afgevinkt (platform/host-tasks.js, Beheer > Systeem > Updates; alleen via /api/admin/host-tasks).
+  hostTasks: { type: 'object', default: {}, sanitize: sanitizeHostTasks, internal: true, liveOnly: true },
   // Bedrijfsgegevens, uurtarief en standaardteksten voor offertes (quotes.js).
   quoteProfile: { type: 'object', default: {}, sanitize: sanitizeProfile },
   // Eigen SMTP-server voor offertes en bevestigingen (mailer.js); het
   // wachtwoord staat apart en versleuteld.
   mailServer: { type: 'object', default: {}, sanitize: sanitizeMail, liveOnly: true },
   mailPassword: { type: 'secret', default: '', min: 1, liveOnly: true },
+  // Clientgeheim van de Entra-app voor mail via Microsoft Graph (mailServer.mode 'graph').
+  mailGraphSecret: { type: 'secret', default: '', min: 8, max: 300, liveOnly: true },
   // Webshopkoppeling (shop.js): webadres, ophaalwijze, btw en handmatige
   // koppeling; de sleutels van de WooCommerce REST API staan apart en versleuteld.
   shopSource: { type: 'object', default: {}, sanitize: sanitizeShop, liveOnly: true },

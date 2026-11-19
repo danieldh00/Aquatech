@@ -650,8 +650,8 @@
       $('#b-now').disabled = !enabled;
       list.innerHTML = !enabled ? 'Back-ups zijn op deze server niet beschikbaar.'
         : !items.length ? 'Nog geen back-ups.'
-          : `<ul class="timeline">${items.map((backup) => `<li><a href="../api/admin/backups/${encodeURIComponent(backup.name)}" download>${esc(backup.name)}</a> · ${esc(when(backup.createdAt))} · ${esc(size(backup.size))}${driveNames.has(backup.name) ? ' · op Drive' : ''}
-            <button class="btn small danger" data-backup-del="${esc(backup.name)}">Verwijderen</button></li>`).join('')}</ul>`;
+          : window.BeheerCollapse.render(items.map((backup) => `<li><a href="../api/admin/backups/${encodeURIComponent(backup.name)}" download>${esc(backup.name)}</a> · ${esc(when(backup.createdAt))} · ${esc(size(backup.size))}${driveNames.has(backup.name) ? ' · op Drive' : ''}
+            <button class="btn small danger" data-backup-del="${esc(backup.name)}">Verwijderen</button></li>`), { expanded: window.BeheerCollapse.isExpanded(list) });
       list.querySelectorAll('[data-backup-del]').forEach((button) => {
         /**
          * Verwijdert deze back-up na bevestiging.
@@ -1396,12 +1396,16 @@
     try {
       const result = await api('mail');
       const config = result.config;
-      for (const key of ['host', 'port', 'user', 'from', 'replyTo']) formElement[key].value = config[key] ?? '';
+      for (const key of ['host', 'port', 'user', 'from', 'replyTo', 'graphTenantId', 'graphClientId']) formElement[key].value = config[key] ?? '';
       formElement.mode.value = config.mode || 'smtp';
       formElement.secure.value = String(Boolean(config.secure));
       formElement.password.value = '';
       formElement.password.placeholder = result.passwordSet ? '•••••••• (ingesteld; leeg = ongewijzigd)' : '';
-      const ok = Boolean(config.host && config.from);
+      formElement.graphSecret.value = '';
+      formElement.graphSecret.placeholder = result.graphSecretSet ? '•••••••• (ingesteld; leeg = ongewijzigd)' : '';
+      const ok = config.mode === 'graph'
+        ? Boolean(config.graphTenantId && config.graphClientId && config.from && result.graphSecretSet)
+        : Boolean(config.host && config.from);
       $('#m-state').textContent = ok ? 'De mailserver is ingesteld.' : 'Nog geen mailserver ingesteld.';
       $('#m-state').className = `state ${ok ? 'ok' : 'off'}`;
       mailMode();
@@ -1419,9 +1423,12 @@
   function mailMode(changed) {
     const formElement = $('#s-mail');
     const connector = formElement.mode.value === 'connector';
+    const graph = formElement.mode.value === 'graph';
     $('[data-connector]', formElement).hidden = !connector;
-    $('[data-login]', formElement).hidden = connector;
-    if (changed) {
+    $('[data-login]', formElement).hidden = connector || graph;
+    $('[data-smtp]', formElement).hidden = graph;
+    $('[data-graph]', formElement).hidden = !graph;
+    if (changed && !graph) {
       formElement.port.value = connector ? 25 : 587;
       formElement.secure.value = 'false';
       const domain = (formElement.from.value.match(/@([^>\s]+)/) || [])[1];
@@ -1459,10 +1466,12 @@
   async function saveMail() {
     const formElement = $('#s-mail');
     const connector = formElement.mode.value === 'connector';
+    const graph = formElement.mode.value === 'graph';
     const body = {
-      config: { mode: formElement.mode.value, host: formElement.host.value.trim(), port: Number(formElement.port.value) || (connector ? 25 : 587), secure: formElement.secure.value === 'true', user: connector ? '' : formElement.user.value.trim(), from: formElement.from.value.trim(), replyTo: formElement.replyTo.value.trim() },
+      config: { graphTenantId: formElement.graphTenantId.value.trim(), graphClientId: formElement.graphClientId.value.trim(), mode: formElement.mode.value, host: formElement.host.value.trim(), port: Number(formElement.port.value) || (connector ? 25 : 587), secure: formElement.secure.value === 'true', user: connector || graph ? '' : formElement.user.value.trim(), from: formElement.from.value.trim(), replyTo: formElement.replyTo.value.trim() },
     };
-    if (!connector && formElement.password.value) body.password = formElement.password.value;
+    if (!connector && !graph && formElement.password.value) body.password = formElement.password.value;
+    if (graph && formElement.graphSecret.value) body.graphSecret = formElement.graphSecret.value;
     await api('mail', { method: 'PUT', body });
     await loadMail();
   }

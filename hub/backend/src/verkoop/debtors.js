@@ -52,7 +52,7 @@ function sanitizeDebtor(raw) {
 
 /**
  * Maakt de opslag voor debiteuren (tabel debtors) bovenop de database.
- * @param {object} db Databaseverbinding (node:sqlite of pgdb, zelfde interface).
+ * @param {object} db Databaseverbinding (pgdb).
  * @returns {{ ensure: Function, get: Function, list: Function, numbers: Function, update: Function, nextNumber: Function }} De opslagfuncties.
  */
 function createDebtorStore(db) {
