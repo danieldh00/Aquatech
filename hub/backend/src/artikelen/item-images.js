@@ -155,7 +155,7 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
   }
 
   /**
-   * Bewaart de miniatuur van een afbeelding: alleen een WebP van hoogstens 480 pixels en 100 kB (gecontroleerd op inhoud).
+   * Bewaart de miniatuur van een afbeelding: een WebP of JPEG (Safari kan geen WebP maken) van hoogstens 480 pixels en 100 kB (gecontroleerd op inhoud).
    * @param {string} tenantId Id van de omgeving.
    * @param {string} imageId Id van de afbeelding.
    * @param {string} data De miniatuur als base64 (eventueel als data-URL).
@@ -165,8 +165,8 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
     if (!IMAGE_ID_PATTERN.test(String(imageId))) return { error: 'not_found', message: 'Afbeelding niet gevonden.', status: 404 };
     const raw = fromBase64(data);
     const image = raw && raw.length && raw.length <= THUMB_MAX_BYTES ? inspectImage(raw) : null;
-    if (!image || image.mime !== 'image/webp' || image.width > THUMB_MAX_SIDE || image.height > THUMB_MAX_SIDE) {
-      return { error: 'invalid_thumb', message: `Een miniatuur is een WebP van hoogstens ${THUMB_MAX_SIDE} pixels en ${THUMB_MAX_BYTES / 1024} kB.`, status: 400 };
+    if (!image || !['image/webp', 'image/jpeg'].includes(image.mime) || image.width > THUMB_MAX_SIDE || image.height > THUMB_MAX_SIDE) {
+      return { error: 'invalid_thumb', message: `Een miniatuur is een WebP of JPEG van hoogstens ${THUMB_MAX_SIDE} pixels en ${THUMB_MAX_BYTES / 1024} kB.`, status: 400 };
     }
     const changed = prepare('UPDATE item_images SET thumb = ? WHERE tenant_id = ? AND id = ?').run(vault.sealBytes(image.body, thumbAadOf(tenantId, String(imageId))), tenantId, String(imageId));
     if (changed && Number(changed.changes) === 0) return { error: 'not_found', message: 'Afbeelding niet gevonden.', status: 404 };
@@ -193,7 +193,7 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
     const original = () => { const full = file(tenantId, imageId); return full ? { ...full, fallback: true } : null; };
     if (!row || !row.thumb) return original();
     let found;
-    try { found = { mime: 'image/webp', body: vault.openBytes(row.thumb, thumbAadOf(tenantId, String(imageId))) }; } catch (error) { return original(); }
+    try { const body = vault.openBytes(row.thumb, thumbAadOf(tenantId, String(imageId))); found = { mime: body[0] === 0xff && body[1] === 0xd8 ? 'image/jpeg' : 'image/webp', body }; } catch (error) { return original(); }
     memory.set(tenantId, key, found);
     return found;
   }
