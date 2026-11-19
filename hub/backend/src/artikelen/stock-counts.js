@@ -641,6 +641,8 @@ function registerStockCountRoutes(app, { counts, getUser, requireRight, requireJ
   const countLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 600, keyFn: (req) => `telling-ingave:${req.tenantId}:${req.user && req.user.id}` });
   const changeLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 60, keyFn: (req) => `telling-wijzigen:${req.tenantId}:${req.user && req.user.id}` });
   const readLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 600, keyFn: (req) => `telling-lezen:${req.tenantId}:${req.user && req.user.id}` });
+  // Een pdf bouwen is synchroon rekenwerk over alle regels van de telling: strakker dan de gewone leesroutes.
+  const pdfLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 10, keyFn: (req) => `telling-pdf:${req.tenantId}:${req.user && req.user.id}` });
   const closeLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 5, keyFn: (req) => `telling-afsluiten:${req.tenantId}:${req.user && req.user.id}` });
   /**
    * Zet de kop die caching van tellingen voorkomt.
@@ -700,14 +702,14 @@ function registerStockCountRoutes(app, { counts, getUser, requireRight, requireJ
     res.send(buffer);
   };
 
-  app.get('/api/stock-counts/:id/telstaat.pdf', requireStock, readLimiter, (req, res) => {
+  app.get('/api/stock-counts/:id/telstaat.pdf', requireStock, pdfLimiter, (req, res) => {
     const out = counts.report(req.tenantId, req.params.id);
     if (!out) return res.status(404).json({ error: 'not_found', message: 'Telling niet gevonden.' });
     audit(req, 'voorraadtelling_telstaat', { number: out.count.number });
     sendPdf(res, stockCountFileName(out.count, 'telstaat'), stockCountReportPdf(out, { ...documentOptionsOf(req.tenantId), onlyDifferences: req.query.alleen === 'verschillen' }));
   });
 
-  app.get('/api/stock-counts/:id/telformulier.pdf', requireStock, readLimiter, (req, res) => {
+  app.get('/api/stock-counts/:id/telformulier.pdf', requireStock, pdfLimiter, (req, res) => {
     const out = counts.report(req.tenantId, req.params.id);
     if (!out) return res.status(404).json({ error: 'not_found', message: 'Telling niet gevonden.' });
     const location = typeof req.query.locatie === 'string' ? req.query.locatie.slice(0, 60) : undefined;
