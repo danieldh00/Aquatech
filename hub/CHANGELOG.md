@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.22.2
+
+Categoriepagina (`browsePage`) in het nieuwe webshopontwerp: alleen CSS onder `.browse` in `storefront.css`, markup en gedrag ongewijzigd. De kruimelbalk bovenaan wordt ook op de productpagina rustiger; de startpagina blijft ongewijzigd. Huisstijl blijft aangehouden via de bestaande `--at-*`-variabelen.
+
+## 1.22.1
+
+- `GET /api/stock/price-proposals` (recht `voorraad`) geeft de open prijsvoorstellen (`openProposals` in price-factor.js). Het artikelscherm toont een melding met Goedkeuren/Negeren (beheerders, via bestaande `apply`/`reject`) en de lijst een label. Geen migratie, prijslogica ongewijzigd.
+
 ## 1.22.0
 
 Gedeelde oplossing in `shared/brand.css` (onder 700 px): in elke `.tablewrap`-tabel is de identificerende kolom sticky (de eerste, of de tweede als de eerste een selectievakje heeft), compact (max. 46vw/190 px, omschrijvingen wrappen) en met opake achtergrond en schaduw. `AquatechCommon.wrapWideTables` (`shared/common.js`) zet tabellen die buiten een `.tablewrap` te breed worden (planner, klantdossier, back-up terugzetten, enz.) in een scrollbare wikkel. Desktop ongewijzigd; geen migratie. De begrenzing van de vaste kolom (`max-width` op de cel) is gemeten in Chromium op 375 px met een lange artikelnaam. De selectors gebruiken `:has()`; in een browser zonder `:has` (Firefox vóór 121, Safari vóór 15.4) valt de regel weg en schuift de tabel zoals voorheen.

@@ -13,6 +13,22 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.22.2',
+      date: '2026-11-19',
+      title: 'Nieuw ontwerp voor de categoriepagina van de webshop',
+      items: [
+        { text: 'Categoriepagina\'s in de webshop zijn rustiger en overzichtelijker: grotere productkaarten met duidelijke prijs en voorraad, nette filters en grotere knoppen op mobiel.' },
+      ],
+    },
+    {
+      version: '1.22.1',
+      date: '2026-11-19',
+      title: 'Prijsvoorstel goedkeuren bij het artikel',
+      items: [
+        { text: 'Na een nieuwe inkoopprijs zie je bij het artikel direct "Nieuwe verkoopprijs voorgesteld: oud → nieuw" met de knoppen Goedkeuren en Negeren. In de artikellijst staat een label Voorstel bij de verkoopprijs. De prijs verandert nooit vanzelf.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.22.0',
       date: '2026-11-19',
       title: 'Tabellen op mobiel houden de artikelkolom in beeld',
