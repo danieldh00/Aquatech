@@ -26,8 +26,8 @@
 // verkoopprijs in Aquatech.
 //
 // Wanneer: na elke wijziging van prijs of stand (alleen de gewijzigde
-// artikelen, enkele seconden later, schedule()), elke 10 minuten alles
-// (runAll() vanuit server.js) en met de knop in Beheer > Webshop.
+// artikelen, enkele seconden later, schedule()), alles volgens de instelling
+// `syncSchedule` (standaard één keer per nacht; runAll() vanuit server.js) en met de knop in Beheer > Webshop.
 //
 // Varianten (stock.js): een hoofdartikel hoort bij een variabel product, elke
 // variant bij een variatie daaronder (shop_product_id = id van de variatie).
@@ -42,6 +42,33 @@ const { fetchProducts, fetchProductWithVariations, updateProducts, createProduct
 const VARIABLE_ON_PLAIN = 'In de webshop is dit een product met variaties, maar dit artikel heeft voorraad of boekingen. Maak een nieuw hoofdartikel en zet de varianten daaronder.';
 
 const DEBOUNCE_MS = 3000;
+const SYNC_SCHEDULES = ['night', 'hourly', 'tenmin'];
+
+/**
+ * Dagsleutel in Nederlandse tijd met de dagwisseling om 04:00 (de nachtelijke synchronisatie valt na de back-up).
+ * @param {Date} moment Het moment.
+ * @returns {string} Datum (jjjj-mm-dd) van de synchronisatiedag.
+ */
+const syncDayOf = (moment) => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Amsterdam' }).format(new Date(moment.getTime() - 4 * 3600 * 1000));
+
+/**
+ * Bepaalt of een volledige synchronisatie nu aan de beurt is.
+ * @param {string} schedule 'night' (één keer per nacht, standaard), 'hourly' of 'tenmin'.
+ * @param {{ syncedAt?: string|null, lastAttemptAt?: string|null, lastError?: string|null }|null} status De laatste (geslaagde) synchronisatie en poging.
+ * @param {Date} [now] Het huidige moment.
+ * @returns {boolean} true als er nu gesynchroniseerd moet worden.
+ */
+function fullSyncDue(schedule, status, now = new Date()) {
+  const synced = status && status.syncedAt ? new Date(status.syncedAt) : null;
+  const attempt = status && status.lastAttemptAt ? new Date(status.lastAttemptAt) : null;
+  // Na een mislukte poging hoogstens elk uur opnieuw (niet elke 10 minuten tegen een onbereikbare webshop).
+  if (status && status.lastError && attempt && now - attempt < 3600 * 1000) return false;
+  if (!synced) return true;
+  if (schedule === 'tenmin') return now - synced >= 9 * 60 * 1000;
+  if (schedule === 'hourly') return now - synced >= 55 * 60 * 1000;
+  return syncDayOf(now) !== syncDayOf(synced);
+}
+
 /**
  * Rondt af op twee decimalen.
  * @param {number} value Het getal.
@@ -525,7 +552,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
   }
 
   /**
-   * Synchroniseert alle omgevingen met een webshopkoppeling (elke 10 minuten vanuit server.js).
+   * Synchroniseert alle omgevingen met een webshopkoppeling (elke 10 minuten aangeroepen; per omgeving alleen als `syncSchedule` het toelaat, standaard één keer per nacht).
    * @param {string[]} tenantIds De omgevingen.
    * @returns {Promise<object>} Resultaat per omgeving.
    */
@@ -535,11 +562,13 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
       let shopConfig;
       try { shopConfig = configOf(id); } catch { continue; }
       if (!shopConfig.url) continue;
+      if (!fullSyncDue(shopConfig.syncSchedule, shop.status(id), new Date())) continue;
       try {
         out[id] = await run(id, { full: true });
       } catch (error) {
         log.warn(`Webshop (${id}): synchronisatie mislukt: ${error.code || error.message}`);
-        if (error instanceof SourceError) shop.setStatus(id, { error: error.message });
+        // Ook bij een onverwachte fout een melding (zonder interne tekst), anders volgt de uur-wachttijd niet.
+        shop.setStatus(id, { error: error instanceof SourceError ? error.message : 'De synchronisatie is mislukt (zie het log).' });
       }
     }
     return out;
@@ -548,4 +577,4 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
   return { sync, run, schedule, runAll, publish, exclOf, rawOf, matcher };
 }
 
-module.exports = { createShopSync, exclOf, rawOf };
+module.exports = { createShopSync, exclOf, rawOf, fullSyncDue, SYNC_SCHEDULES };
