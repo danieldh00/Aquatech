@@ -105,6 +105,22 @@ function allowedAt(rules, qty) {
 }
 
 /**
+ * De regels van een artikel in gewone taal, bijvoorbeeld "Bezorging door DPD tot 99 stuks · Bezorging per pallet vanaf 100 stuks".
+ * @param {{ method: string, minQty: number, maxQty: ?number }[]} rules De geldende regels (leeg of null = geen beperking).
+ * @param {(method: string) => string} labelOf De naam van een methode (uit de verzendinstelling).
+ * @param {string} unit De eenheid van het artikel (stuk, meter, ...).
+ * @returns {string} De tekst, of leeg zonder regels.
+ */
+function describeRules(rules, labelOf, unit) {
+  if (!rules || !rules.length) return '';
+  const unitText = String(unit || 'stuks').trim() || 'stuks';
+  return [...rules].sort((left, right) => left.minQty - right.minQty || RULE_METHODS.indexOf(left.method) - RULE_METHODS.indexOf(right.method)).map((rule) => {
+    const range = rule.maxQty == null ? (rule.minQty <= 1 ? 'in elk aantal' : `vanaf ${rule.minQty} ${unitText}`) : (rule.minQty <= 1 ? `tot ${rule.maxQty} ${unitText}` : `van ${rule.minQty} tot ${rule.maxQty} ${unitText}`);
+    return `${labelOf(rule.method)} ${range}`.trim();
+  }).join(' · ');
+}
+
+/**
  * Welke bezorgmethodes een winkelwagen toestaat. Een methode mag als voor elk artikel met regels de methode zelf is toegestaan of
  * zwaarder is dan alles wat dat artikel toestaat (de zwaarste methode neemt de hele bestelling mee).
  * @param {{ name: string, qty: number, rules: ?object[] }[]} lines Per regel de naam, het aantal in de basiseenheid en de geldende regels (null = geen).
@@ -192,4 +208,4 @@ function registerDeliveryRuleRoutes(app, { settingsOf, flatTreeOf, audit, requir
   });
 }
 
-module.exports = { RULE_METHODS, sanitizeRules, checkRules, sanitizeCategoryRules, checkCategoryRules, allowedAt, blockedMethods, effectiveRules, resolverFor, registerDeliveryRuleRoutes };
+module.exports = { describeRules, RULE_METHODS, sanitizeRules, checkRules, sanitizeCategoryRules, checkCategoryRules, allowedAt, blockedMethods, effectiveRules, resolverFor, registerDeliveryRuleRoutes };

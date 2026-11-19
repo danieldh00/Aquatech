@@ -89,6 +89,29 @@ function leadText(lead) {
 }
 
 /**
+ * De korte tekst bij de levertijd die op een bestelling is vastgelegd (data.shipping.eta).
+ * @param {?{ text?: string, min?: ?number, max?: ?number }} eta De momentopname; oudere bestellingen hebben er geen.
+ * @returns {string} "ca. 1-2 dagen", "direct" of "op aanvraag"; leeg zonder momentopname.
+ */
+function etaPhrase(eta) {
+  if (!eta || typeof eta !== 'object') return '';
+  if (eta.min == null || eta.max == null) return 'op aanvraag';
+  return eta.max === 0 ? 'direct' : `ca. ${String(eta.text || '').trim()}`.trim();
+}
+
+/**
+ * De zin over de verwachte levertijd van een bestelling, altijd als indicatie en nooit als belofte. Afhalen heeft geen levertijd (leeg).
+ * @param {?{ method?: string, eta?: object }} shipping De verzending van de bestelling (data.shipping).
+ * @returns {string} De zin, of leeg bij afhalen of zonder vastgelegde levertijd.
+ */
+function etaSentence(shipping) {
+  if (!shipping || shipping.method === 'ophalen' || !shipping.eta) return '';
+  if (shipping.eta.min == null || shipping.eta.max == null) return 'Levertijd op aanvraag: we laten je weten wanneer je bestelling geleverd kan worden.';
+  const unitText = shipping.eta.max === 0 ? 'Je bestelling kan direct worden verzonden' : `Verwachte levertijd: ${etaPhrase(shipping.eta)}`;
+  return `${unitText}. Dit is een indicatie en geen toezegging: we zijn afhankelijk van externe partijen.`;
+}
+
+/**
  * De langste van meerdere levertijden (de bestelling is zo snel als het langzaamste artikel). Eén onbekende levertijd maakt het geheel onbekend.
  * @param {(?{ min: number, max: number, dayType: string })[]} leads De levertijden per artikel (null = onbekend).
  * @returns {?{ min: number, max: number, dayType: string }} De langste, of null als er niets is of één onbekend is.
@@ -105,4 +128,4 @@ function slowestOf(leads) {
   return leads.reduce((slowest, lead) => (calendarMax(lead) > calendarMax(slowest) ? lead : slowest));
 }
 
-module.exports = { DAY_TYPES, MAX_LEAD_DAYS, UNKNOWN_TEXT, sanitizeLead, sanitizeDayType, leadFor, leadText, slowestOf, daysUntil };
+module.exports = { etaPhrase, etaSentence, DAY_TYPES, MAX_LEAD_DAYS, UNKNOWN_TEXT, sanitizeLead, sanitizeDayType, leadFor, leadText, slowestOf, daysUntil };

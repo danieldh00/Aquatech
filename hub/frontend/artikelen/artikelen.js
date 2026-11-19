@@ -123,6 +123,28 @@
   });
 
   /**
+   * Toont onder de levervelden wat de webshop met dit artikel doet: per levermethode het aantalbereik en de levertijd (op voorraad en niet op voorraad).
+   * @param {object} item Het artikel (id).
+   * @returns {Promise<void>}
+   */
+  const renderDeliveryPreview = async (item) => {
+    const box = $('#d-delivery-preview');
+    box.hidden = true;
+    box.dataset.itemId = item && item.id ? String(item.id) : '';
+    if (!box.dataset.itemId) return;
+    try {
+      const preview = await api(`stock/items/${encodeURIComponent(item.id)}/delivery-preview`);
+      // Een trager antwoord van een eerder geopend artikel mag het overzicht van het huidige artikel niet overschrijven.
+      if (!box.isConnected || box.dataset.itemId !== String(item.id)) return;
+      const rows = preview.methods.map((method) => `<tr><td>${esc(method.label)}</td><td>${esc(method.quantities)}</td><td>${esc(method.leadInStock)}</td><td>${esc(method.leadOutOfStock)}</td></tr>`).join('');
+      box.innerHTML = `<table class="grid"><caption class="muted small">In de webshop (${esc(preview.rulesSource)}; levertijden zijn indicatief)</caption><thead><tr><th>Levermethode</th><th>Aantal</th><th>Op voorraad</th><th>Niet op voorraad</th></tr></thead><tbody>${rows}</tbody></table>`;
+      box.hidden = !rows;
+    } catch (failure) {
+      box.hidden = true;
+    }
+  };
+
+  /**
    * Vult omschrijving en specificaties in het artikelformulier en toont wat de oude webshop heeft (12): zolang het
    * artikel zelf niets heeft, toont de shop die tekst; met de knop neem je hem over om aan te passen.
    * @param {HTMLFormElement} formElement Het formulier.
@@ -138,6 +160,7 @@
     formElement.deliveryRules.value = rulesText(item.deliveryRules);
     formElement.leadMin.value = item.leadDays ? item.leadDays.min : '';
     formElement.leadMax.value = item.leadDays ? item.leadDays.max : '';
+    renderDeliveryPreview(item);
     const hasShop = Boolean(item.shopDescription) || Boolean((item.shopSpecifications || []).length);
     const note = $('#d-details-shop');
     note.hidden = !hasShop;

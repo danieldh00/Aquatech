@@ -8,7 +8,7 @@ const Times = require('../src/webshop/delivery-times');
 const Shipping = require('../src/webshop/shipping');
 const { flatten } = require('../src/webshop/category-discounts');
 const { DEFAULT_TREE } = require('../src/webshop/category-tree');
-const { setup, PERSON } = require('./helpers/webshop-world');
+const { setup, until, PERSON } = require('./helpers/webshop-world');
 const { postForm, postCheckout } = require('./helpers/http-client');
 
 /** De hoofdcategorie en haar subcategorie in de standaardboom. */
@@ -331,4 +331,81 @@ test('artikel: regels en levertijd bewaren, controleren en bij een variant erven
   const wrong = await admin.put(`/app/api/stock/items/${made.body.id}/suppliers`, { suppliers: [{ supplierId: supplier.body.id, leadDays: '-3' }] });
   assert.strictEqual(wrong.status, 400);
   assert.strictEqual(wrong.body.field, 'leadDays');
+});
+
+test('levertijd tonen: zin voor mail en pagina, regels in gewone taal', () => {
+  assert.strictEqual(Times.etaPhrase(null), '');
+  assert.strictEqual(Times.etaPhrase({ text: '1-2 dagen', min: 1, max: 2 }), 'ca. 1-2 dagen');
+  assert.strictEqual(Times.etaPhrase({ text: 'Direct', min: 0, max: 0 }), 'direct');
+  assert.strictEqual(Times.etaPhrase({ text: 'Levertijd op aanvraag', min: null, max: null }), 'op aanvraag');
+  assert.strictEqual(Times.etaSentence(null), '');
+  assert.strictEqual(Times.etaSentence({ method: 'ophalen', eta: { text: 'Direct', min: 0, max: 0 } }), '', 'afhalen heeft geen levertijd');
+  assert.strictEqual(Times.etaSentence({ method: 'dpd' }), '', 'oudere bestelling zonder momentopname');
+  assert.match(Times.etaSentence({ method: 'dpd', eta: { text: '3-5 werkdagen', min: 3, max: 5 } }), /Verwachte levertijd: ca\. 3-5 werkdagen\. Dit is een indicatie en geen toezegging/);
+  assert.match(Times.etaSentence({ method: 'dpd', eta: { text: 'Levertijd op aanvraag', min: null, max: null } }), /^Levertijd op aanvraag/);
+  /**
+   * De naam van een methode in de test.
+   * @param {string} method De methode.
+   * @returns {string} De naam.
+   */
+  const labelOf = (method) => ({ dpd: 'DPD', pallet: 'Pallet' }[method]);
+  assert.strictEqual(Rules.describeRules(null, labelOf, 'st'), '');
+  assert.strictEqual(Rules.describeRules([{ method: 'pallet', minQty: 100, maxQty: null }, { method: 'dpd', minQty: 1, maxQty: 99 }], labelOf, 'st'), 'DPD tot 99 st · Pallet vanaf 100 st');
+  assert.strictEqual(Rules.describeRules([{ method: 'dpd', minQty: 5, maxQty: 9 }], labelOf, ''), 'DPD van 5 tot 9 stuks');
+});
+
+test('levertijd zichtbaar: mail, bestelpagina, productpagina en artikeloverzicht in Beheer', async () => {
+  const world = await deliveryWorld();
+  // Productpagina: de beperking staat in gewone taal bij het artikel (regels van de categorie).
+  /**
+   * Het adres van de productpagina van een testartikel.
+   * @param {string} code De artikelcode.
+   * @returns {string} Het deel van het adres na /product/.
+   */
+  const slug = (code) => `artikel-${code.toLowerCase()}-${code.toLowerCase()}`;
+  const page = await world.customer.get(`/product/${slug('LOS')}/`);
+  assert.match(page.text, /Bezorging: Bezorging door DPD tot 9 st · Bezorging per pallet vanaf 10 st/);
+  assert.doesNotMatch((await world.customer.get(`/product/${slug('VRIJ')}/`)).text, /class="delivery-note/, 'zonder regels geen melding');
+  // Bestelling: de bestelpagina toont de indicatieve levertijd, de mail de zin.
+  await optionsAfter(world, [['VRIJ', 1]]);
+  const placed = await postCheckout(world.base, world.customer, { ...PERSON, shippingMethod: 'dpd' });
+  assert.strictEqual(placed.status, 303, placed.text.slice(0, 300));
+  const order = (await world.admin.get(`/app/api/admin/web-orders/${(await world.admin.get('/app/api/admin/web-orders')).body.items[0].id}`)).body.order;
+  assert.strictEqual(order.shipping.eta.text, '2-3 dagen');
+  const detail = await world.customer.get(`/bestelling/${order.id}/`);
+  assert.match(detail.text, /Verwachte levertijd<\/strong><br>Ca\. 2-3 dagen/);
+  assert.match(detail.text, /geen toezegging/);
+  // De bevestigingsmail (op rekening) noemt de levertijd als indicatie en de melding aan het bedrijf ook.
+  const confirmation = await until(() => world.sent.find((message) => /Bevestiging van je bestelling/.test(message.subject)));
+  assert.match(confirmation.text, /Verwachte levertijd: ca\. 2-3 dagen\. Dit is een indicatie en geen toezegging/);
+  // Afhalen: geen levertijdzin in de mail.
+  await optionsAfter(world, [['VRIJ', 1]]);
+  assert.strictEqual((await postCheckout(world.base, world.customer, { ...PERSON, shippingMethod: 'ophalen' })).status, 303);
+  const pickup = await until(() => world.sent.filter((message) => /Bevestiging van je bestelling/.test(message.subject) && true)[1]);
+  assert.doesNotMatch(pickup.text, /Verwachte levertijd/);
+  // Artikeloverzicht in Beheer: per methode aantallen en levertijd, op en niet op voorraad.
+  // Een afhaalbestelling toont geen levertijd op de bestelpagina, ook niet met een momentopname.
+  assert.strictEqual((await postCheckout(world.base, world.customer, { ...PERSON, shippingMethod: 'ophalen' })).status, 303);
+  const pickupId = (await world.admin.get('/app/api/admin/web-orders')).body.items.find((entry) => entry.id !== order.id).id;
+  const pickupPage = await world.customer.get(`/bestelling/${pickupId}/`);
+  assert.doesNotMatch(pickupPage.text, /Verwachte levertijd/);
+  // Het overzicht in Beheer toont direct wat net is opgeslagen (de shop onthoudt levertijden 30 seconden).
+  const before = (await world.admin.get(`/app/api/stock/items/${world.ids.VRIJ}/delivery-preview`)).body;
+  assert.ok(before.methods.every((method) => /^2-3 /.test(method.leadInStock)));
+  assert.strictEqual((await world.admin.put(`/app/api/stock/items/${world.ids.VRIJ}`, { leadDays: { min: 4, max: 6 } })).status, 200);
+  assert.ok((await world.admin.get(`/app/api/stock/items/${world.ids.VRIJ}/delivery-preview`)).body.methods.every((method) => /^4-6 /.test(method.leadInStock)), 'geen oude gegevens uit het geheugen');
+  const preview = await world.admin.get(`/app/api/stock/items/${world.ids.LOS}/delivery-preview`);
+  assert.strictEqual(preview.status, 200, JSON.stringify(preview.body));
+  assert.strictEqual(preview.body.rulesSource, 'regels van de categorie');
+  const dpd = preview.body.methods.find((method) => method.method === 'dpd');
+  assert.deepStrictEqual([dpd.quantities, dpd.leadInStock, dpd.leadOutOfStock], ['tot 9 st', '1-2 dagen', 'op aanvraag']);
+  assert.strictEqual(preview.body.methods.find((method) => method.method === 'pallet').quantities, 'vanaf 10 st');
+  const own = before;
+  assert.strictEqual(own.rulesSource, 'geen beperkingen');
+  assert.ok(own.methods.every((method) => /^2-3 (werk)?dagen$/.test(method.leadInStock)), 'het artikel overschrijft elke methode');
+  assert.ok(own.methods.some((method) => method.method === 'ophalen'));
+  // Rechten en tenantgrens.
+  assert.strictEqual((await world.shoppers[0].client.get(`/app/api/stock/items/${world.ids.LOS}/delivery-preview`)).status, 403);
+  assert.strictEqual((await world.vreemd.get(`/app/api/stock/items/${world.ids.LOS}/delivery-preview`)).status, 404);
+  assert.strictEqual((await world.admin.get('/app/api/stock/items/bestaat-niet/delivery-preview')).status, 404);
 });

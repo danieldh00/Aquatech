@@ -882,10 +882,10 @@ function detailsSection(details) {
  * @param {object[]} groups Alle hoofdcategorieën.
  * @param {string} [chosenCode] Artikelnummer van de gekozen variant (alleen bij een hoofdartikel; anders de eerste op voorraad).
  * @param {Map<string, { description: string, specifications: object[] }>} [details] Omschrijving en specificaties per artikelcode (storefront-data.detailsOf).
- * @param {{ packagingsFor?: Function, packCode?: string, leadTextFor?: Function, trust?: { freeFrom?: number, online?: boolean }, stockAlert?: ?{ status: string } }} [packaging] `stockAlert` zet het formulier voor de voorraadmelding bij een artikel dat niet op voorraad is (met de uitkomst van een eerdere aanmelding in `status`) packagingsFor(artikelcode) = de verpakkingen die de bezoeker mag kiezen (zie storefront.js) en packCode = de gekozen verpakking (leeg = per stuk).
+ * @param {{ packagingsFor?: Function, packCode?: string, leadTextFor?: Function, deliveryNoteFor?: Function, trust?: { freeFrom?: number, online?: boolean }, stockAlert?: ?{ status: string } }} [packaging] `stockAlert` zet het formulier voor de voorraadmelding bij een artikel dat niet op voorraad is (met de uitkomst van een eerdere aanmelding in `status`) packagingsFor(artikelcode) = de verpakkingen die de bezoeker mag kiezen (zie storefront.js) en packCode = de gekozen verpakking (leeg = per stuk).
  * @returns {string} De HTML-pagina.
  */
-function productPage(product, groups, chosenCode = '', details = new Map(), { packagingsFor = () => [], packCode = '', leadTextFor = () => '', trust = {}, stockAlert = null } = {}) {
+function productPage(product, groups, chosenCode = '', details = new Map(), { packagingsFor = () => [], packCode = '', leadTextFor = () => '', deliveryNoteFor = () => '', trust = {}, stockAlert = null } = {}) {
   const root = '../../';
   const variants = product.variants || [];
   const chosen = variants.length ? (variants.find((variant) => variant.code === chosenCode) || variants.find((variant) => variant.inStock) || variants[0]) : null;
@@ -919,6 +919,7 @@ function productPage(product, groups, chosenCode = '', details = new Map(), { pa
     <p class="price">${escapeHtml(formatPrice(pack ? pack.price : shownPrice(shown)))} <small>${activeShop.business ? `excl. ${shown.vatRate}% btw · per ${escapeHtml(pack ? `${pack.name} (${pack.factor} ${product.unit})` : product.unit)}<br><span class="price-incl">incl. btw ${escapeHtml(formatPrice(pack ? pack.priceIncl : shown.priceBusinessIncl))}</span>` : `incl. ${shown.vatRate}% btw · per ${escapeHtml(pack ? `${pack.name} (${pack.factor} ${product.unit})` : product.unit)}`}</small></p>
     <p class="stock ${(pack ? pack.inStock : shown.inStock) ? 'in' : 'out'}">${stockText(pack ? pack.inStock : shown.inStock, pack ? null : (shown.stockQty === undefined ? null : shown.stockQty))}</p>
     ${leadTextFor(shown.code, pack ? pack.inStock : shown.inStock) ? `<p class="lead-time">${escapeHtml(leadTextFor(shown.code, pack ? pack.inStock : shown.inStock))}</p>` : ''}
+    ${deliveryNoteFor(shown.code) ? `<p class="delivery-note note">Bezorging: ${escapeHtml(deliveryNoteFor(shown.code))}</p>` : ''}
     ${activeShop.ordering ? orderForm(root, pack ? pack.cartCode : shown.code, pack ? pack.inStock : shown.inStock, 'product-order', viewedItem) : '<button class="button" type="button" disabled>In winkelwagen</button>\n    <p class="note">Online bestellen volgt binnenkort.</p>'}
     ${stockAlert && !(pack ? pack.inStock : shown.inStock) ? stockAlertForm(root, shown.code, stockAlert.status) : ''}
     ${parentLink}
