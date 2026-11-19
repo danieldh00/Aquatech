@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.26.0
+
+- Nieuw: `verkoop/person-data.js` met `GET /api/customers/:id/privacy-export` (Excel) en `POST /api/customers/:id/anonymize` (bevestiging met de naam, geweigerd bij openstaande bestellingen of werkorders), recht `beheer`, audit `klant_inzage_export` en `klant_geanonimiseerd`.
+- Anonimiseren: account (lege huls zonder inlog), offertes, werkorders, conceptfacturen, bestellingen, retouren, meldingen met foto's, plannen, debiteuren, voorraadmeldingen en IP-adressen. Bewaard blijven definitieve facturen met de offerte, werkorder, bestelling en debiteur waarop ze rusten.
+
+## 1.25.9
+
+SQLite is volledig verwijderd; PostgreSQL is de enige database.
+
+- `database/db.js`: geen `node:sqlite`, geen SQLite-migraties (`MIGRATIONS`), geen `openSqlite`/`isPg`-takken. Zonder `DATABASE_URL`/`DATABASE_URL_FILE` start de app niet en meldt dat duidelijk. Nieuwe migraties alleen nog in `PG_MIGRATIONS`.
+- Back-ups (`backup.js`, formaatversie 2): alle rijen als gzip-regels JSON uit één leestransactie, versleuteld zoals voorheen (zelfde bestandsnaam en bewaring). Een back-up in het oude SQLite-formaat (versie 1) wordt met een duidelijke melding geweigerd. Terugzetten uit back-up leest het bestand in een tijdelijk schema naast de database (`openScratch`/`dropScratch`) en ruimt dat altijd op. `db-copy.js` is `table-rows.js` geworden; `migrate-to-postgres.js` en `switch-to-supabase.sh` zijn verwijderd.
+- De werkthread van pgdb vergeet na een ROLLBACK ook het onthouden schema (search_path wordt door de rollback teruggedraaid).
+- `update.sh`: geen SQLite-databasekopie meer; altijd eerst een app-back-up.
+- Docker/CI: `docker-compose.yml` heeft een PostgreSQL-container, de smoketests in `ci.yml` en `release.yml` starten er een; de job `test` in CI doet alleen `npm audit` (de tests draaien in `test-postgres`). Tests vereisen `TEST_DATABASE_URL`.
+- De ruis `role "root" does not exist` in de PostgreSQL-log van CI kwam van de healthcheck `pg_isready` zonder gebruiker; die gebruikt nu `-U postgres`.
+- Docs (README, DOCS, CLAUDE, AGENTS, deploy-README) bijgewerkt.
+
+## 1.25.8
+
+- `platform/mail-graph-setup.js`: automatische inrichting met de device code flow (inlog-client standaard de openbare Azure CLI-client, te vervangen met `GRAPH_SETUP_CLIENT_ID`; scopes Application.ReadWrite.All, AppRoleAssignment.ReadWrite.All, Organization.Read.All). Maakt (of hergebruikt) de app *AquaTech Hub mail*, de service principal, de app-roltoewijzing Mail.Send en een clientgeheim van 12 maanden. Het token van de beheerder wordt niet bewaard; het device-code blijft server-side; sessie gebonden aan omgeving en gebruiker; routes `/api/admin/mail/graph-setup` (start, poll, annuleren) met limieten en audit `mail_graph_ingericht`. Beperken tot één mailbox (Application Access Policy) kan niet via Graph en blijft een handmatige stap.
+- `mailServer.graphSecretExpires` (JJJJ-MM-DD) en bewakingscontrole `mail-secret` (waarschuwing vanaf 30 dagen, fout bij verlopen, hint zonder datum).
+
+## 1.25.7
+
+- Nieuwe catalogus `platform/kpi-catalog.js` (vaste KPI's met module, recht, periode en berekening); instelling `dashboardKpis` {items [{key, enabled}], period} per omgeving; `GET /api/admin/kpi-catalog` voor het keuzescherm (`beheer/dashboard-kpis.js`, bewaart bij elke wijziging). `GET /api/kpis` toont alleen aan staande KPI's waarvan de module aan staat en waarvoor de gebruiker het recht heeft, in de gekozen volgorde. Nieuwe KPI's komen automatisch achteraan met hun standaardstand. Standaard aan: openstaand, vervallen, gefactureerd, open offertes; bezetting staat uit. Geen migratie.
+
+## 1.25.6
+
+Instelling `quoteTemplates` (per organisatie, `internal` + `notInView`, alleen via `GET|PUT /api/quote-templates` en `DELETE /api/quote-templates/:id`; kiezen met recht `offertes`, bewaren en verwijderen met `beheer`, audit `offertesjabloon_bewaard`/`_verwijderd`). `verkoop/quote-templates.js`: hoogstens 30 sjablonen met een unieke naam (hoofdletters tellen niet), per sjabloon inleiding, voorwaarden en hoogstens 60 regels (zonder interne notitie en klantkeuze). Een bestaande naam wordt vervangen. In de offerte-editor: kaart *Sjabloon* (Toepassen vervangt inleiding en voorwaarden, met vraag als er al andere tekst staat, en voegt de regels onderaan toe; geen migratie). Test: `test/quote-templates.test.js`.
+
 ## 1.25.5
 
 `server.js` opgesplitst (doorlichtingspunt 12, eerste stap): alle routes onder `/api/platform` (tenants, testomgevingen, multitenancy, testdata, gebruikers per organisatie) staan nu in `platform/platform-routes.js` (`registerPlatformRoutes`). Geen wijziging in gedrag; `server.js` is ruim 220 regels korter.

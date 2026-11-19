@@ -13,6 +13,47 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.26.0',
+      date: '2026-11-19',
+      title: 'AVG-inzage en wissen per persoon',
+      items: [
+        { text: 'Op de klantkaart staat een kaart Privacy (AVG): met één klik een Excel met alle persoonsgegevens van de klant (inzage), en een wisfunctie die de gegevens anonimiseert na bevestiging met de naam van de klant. Definitieve facturen en de stukken waarop ze rusten blijven zeven jaar bewaard.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.25.9',
+      date: '2026-11-19',
+      title: 'SQLite is uit het systeem gehaald',
+      items: [
+        { text: 'De app draait alleen nog op PostgreSQL. Back-ups hebben een nieuw formaat; oude back-ups (SQLite) kunnen niet meer in de app worden teruggezet.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.25.8',
+      date: '2026-11-19',
+      title: 'Graph-mail automatisch instellen',
+      items: [
+        { text: 'Graph-mail stel je automatisch in: je krijgt een Microsoft-code en -link, logt in als globale beheerder en de app maakt zelf de registratie, de machtiging en het geheim aan.', for: ['beheer'] },
+        { text: 'Een maand voordat het clientgeheim van de Graph-mail verloopt (en zodra het verlopen is) geeft Bewaking een melding.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.25.7',
+      date: '2026-11-19',
+      title: 'KPI\'s op het dashboard zelf kiezen',
+      items: [
+        { text: 'Kies zelf welke KPI\'s je op het dashboard ziet, in welke volgorde en over welke periode (Beheer > Modules > Dashboard: KPI\'s). Er zijn nu ook KPI\'s voor gefactureerde omzet, geaccepteerde offertes, open werkorders, webshopbestellingen, voorraad onder het minimum en inkooporders onderweg. Bezetting staat standaard uit.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.25.6',
+      date: '2026-11-19',
+      title: 'Offertesjablonen',
+      items: [
+        { text: 'Offertesjablonen: kies in de offerte een sjabloon met een vaste inleiding, voorwaarden en standaardregels (bijv. voorrijkosten) in plaats van alles te typen. De beheerder bewaart een offerte als sjabloon met één klik.', for: ['offertes'] },
+      ],
+    },
+    {
       version: '1.25.5',
       date: '2026-11-19',
       title: 'Hoofdbeheer-routes in eigen bestand',
