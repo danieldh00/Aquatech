@@ -21,7 +21,9 @@ running() { sed -n 's/^AQUATECH_TAG=//p' "$APP_DIR/.env" | tail -n1; }
 case "$1" in
   pull) exit 0 ;;
   image)
-    if [[ "$2" == "inspect" ]]; then echo "$FAKE_LATEST"; fi; exit 0 ;;
+    if [[ "$2" == "inspect" ]]; then echo "$FAKE_LATEST"; fi
+    if [[ "$2" == "ls" ]]; then for tag in $FAKE_TAGS; do echo "$tag"; done; fi
+    exit 0 ;;
   run) echo '{"version":"'"$FAKE_LATEST"'","releases":[{"version":"'"$FAKE_LATEST"'","date":"2026-11-13","title":"Nieuw","items":[{"text":"Punt"}]}]}'; exit 0 ;;
   inspect)
     if [[ "$(running)" == "$FAKE_BAD" ]]; then echo starting; else echo healthy; fi; exit 0 ;;
@@ -87,6 +89,14 @@ const readStatus = (dir, name) => (fs.existsSync(path.join(dir, name)) ? JSON.pa
  * @returns {void}
  */
 const putRequest = (requestDir, version) => fs.writeFileSync(path.join(requestDir, 'request.json'), JSON.stringify({ id: REQUEST_ID, version, requestedAt: new Date().toISOString(), by: 'u1', byName: 'Baas' }));
+
+/**
+ * De versies waarvan de nep-docker een `rmi` (image verwijderen) kreeg.
+ * @param {string} state De logmap van de nep-docker.
+ * @returns {string[]} De verwijderde tags, gesorteerd.
+ */
+const removedTags = (state) => fs.readFileSync(path.join(state, 'calls.log'), 'utf8').split('\n')
+  .map((line) => /^rmi ghcr\.io\/danieldh00\/aquatech:(.+)$/.exec(line)).filter(Boolean).map((match) => match[1]).sort();
 
 const bashAvailable = spawnSync('bash', ['-c', 'command -v flock']).status === 0;
 
@@ -184,4 +194,32 @@ test('update.sh: zelfde of oudere versie op GHCR doet niets', { skip: !bashAvail
   putRequest(setup.requestDir, '1.14.0');
   setup.run({ FAKE_LATEST: '1.14.0' });
   assert.strictEqual(readStatus(setup.statusDir, 'run.json').state, 'geweigerd');
+});
+
+test('update.sh: na een geslaagde update blijven alleen de nieuwe en de vorige versie van het image staan', { skip: !bashAvailable }, () => {
+  const setup = install({ current: '1.14.1' });
+  const out = setup.run({ FAKE_LATEST: '1.14.2', FAKE_TAGS: '1.14.2 1.14.1 1.14.0 1.13.9 latest' });
+  assert.strictEqual(out.status, 0, out.output);
+  assert.deepStrictEqual(removedTags(setup.state), ['1.13.9', '1.14.0'], 'alleen de oudere versies, niet de nieuwe, de vorige en latest');
+});
+
+test('update.sh: een mislukte update ruimt geen images op (de terugval heeft ze nodig)', { skip: !bashAvailable }, () => {
+  const setup = install({ current: '1.14.1' });
+  const out = setup.run({ FAKE_LATEST: '1.14.2', FAKE_BAD: '1.14.2', FAKE_TAGS: '1.14.2 1.14.1 1.14.0' });
+  assert.strictEqual(out.status, 1, out.output);
+  assert.deepStrictEqual(removedTags(setup.state), []);
+});
+
+test('servertaken.sh schijf: de draaiende en de twee nieuwste versies blijven, de rest wordt opgeruimd', { skip: !bashAvailable }, () => {
+  const setup = install({ current: '1.14.1' });
+  const servertaken = path.join(__dirname, '..', '..', '..', 'deploy', 'apps01', 'pve', 'servertaken.sh');
+  const env = { ...process.env, PATH: `${path.join(setup.root, 'bin')}:${process.env.PATH}`, SERVERTAKEN_REMOTE: '1', APP_DIR: setup.appDir, FAKE_STATE: setup.state, FAKE_TAGS: '1.14.5 1.14.4 1.14.3 1.14.2 1.14.1 1.14.0 latest' };
+  const check = spawnSync('bash', [servertaken, 'schijf-check'], { env, encoding: 'utf8', timeout: 30000 });
+  assert.strictEqual(check.status, 10, check.stdout + check.stderr);
+  assert.match(check.stdout, /3 oude versie\(s\)/, 'draaiend (1.14.1) en twee nieuwste (1.14.5, 1.14.4) blijven: 1.14.3, 1.14.2 en 1.14.0 zijn op te ruimen');
+  const run = spawnSync('bash', [servertaken, 'schijf-run'], { env, encoding: 'utf8', timeout: 30000 });
+  assert.strictEqual(run.status, 0, run.stdout + run.stderr);
+  assert.deepStrictEqual(removedTags(setup.state), ['1.14.0', '1.14.2', '1.14.3']);
+  const few = spawnSync('bash', [servertaken, 'schijf-check'], { env: { ...env, FAKE_TAGS: '1.14.1 1.14.0' }, encoding: 'utf8', timeout: 30000 });
+  assert.match(few.stdout, /0 oude versie\(s\)/, 'met een oude naast de draaiende gebeurt niets (die is de tweede van de twee nieuwste)');
 });
