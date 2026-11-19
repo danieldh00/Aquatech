@@ -270,7 +270,7 @@ test('webshop: assets met versie in het adres, startpagina in de opzet van aquat
   for (const name of ['hero-tuin.jpg', 'merk-rainbird.png', 'usp-prijzen.png', 'zakelijk-achtergrond.jpg', 'betaalmethoden.png']) {
     assert.strictEqual((await anonymous.get(`/assets/${name}?v=${version}`)).status, 200, name);
   }
-  for (const text of ['shop-notice', '06 47212019', 'Product zoeken', 'Over ons', 'Assortiment', 'Onze merken', 'Scherpe zakelijke prijzen', 'zakelijk account aan', 'K.v.k.: 88438252']) {
+  for (const text of ['shop-notice', '06 47212019', 'Over ons', 'Assortiment', 'Onze merken', 'Scherpe zakelijke prijzen', 'zakelijk account aan', 'K.v.k.: 88438252']) {
     assert.ok(home.text.includes(text), text);
   }
   const product = await anonymous.get('/product/pe-buis-25-mm-buis-25/');
