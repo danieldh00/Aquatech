@@ -160,7 +160,7 @@ const FIELDS = {
   // dan houdt een uurlijkse taak per voorkeursleverancier een concept-inkooporder bij die de beheerder goedkeurt. Per
   // omgeving, standaard aan (Beheer > Modules > Artikelen: bestelvoorstellen). Bewust geen liveOnly: de taak maakt alleen
   // concepten in de eigen omgeving en stuurt niets naar een leverancier of ander extern systeem.
-  // Kengetallen op het beheerdersdashboard: welke aan staan, in welke volgorde, welke periode (platform/kpi-catalog.js).
+  // KPI's op het beheerdersdashboard: welke aan staan, in welke volgorde, welke periode (platform/kpi-catalog.js).
   dashboardKpis: { type: 'object', default: DEFAULT_DASHBOARD_KPIS, sanitize: sanitizeDashboardKpis },
   purchaseProposals: { type: 'object', default: { enabled: true }, sanitize: sanitizePurchaseProposals },
   // Prijsfactor op de inkoopprijs (Artikelen > Prijsfactor; alleen via /api/stock/price-factors).
