@@ -3511,7 +3511,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const summary = {};
     for (const tenantId of activeIds) {
       try {
-        const changed = stockStore.repriceAll(tenantId, 'onderhoud');
+        const changed = priceFactorStore.repriceAll(tenantId, null, 'onderhoud');
         if (changed) summary[tenantId] = changed;
       } catch (error) {
         console.error(`Verkoopprijzen bijwerken voor omgeving ${tenantId} mislukt:`, error.message);

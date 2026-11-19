@@ -7,5 +7,5 @@ titel: Verkoopprijs volgt de factor automatisch
 
 ## Changelog
 - Prijsvoorstellen en de goedkeuringsstap (routes `apply`, `reject`, `reopen`, `price-proposals`, melding in het artikelscherm, taak op het dashboard) zijn verwijderd.
-- `stock.repriceItem`/`repriceAll`/`receiptCost`: een nieuwe inkoopprijs (formulier, inkoopprijs toevoegen, ontvangst, inkooporder) of factorwijziging zet de verkoopprijs direct goed; opslaan van de instelling en het uurlijkse onderhoud (`pricesRefreshAll`) rekenen alle artikelen opnieuw (ook oude open voorstellen).
+- `stock.repriceItem`/`applyAutoPrices`/`receiptCost`: een nieuwe inkoopprijs (formulier, inkoopprijs toevoegen, ontvangst, inkooporder) of factorwijziging zet de verkoopprijs direct goed; opslaan van de instelling en het uurlijkse onderhoud (`pricesRefreshAll`) rekenen alle artikelen opnieuw (ook oude open voorstellen).
 - Auditlog `verkoopprijs_automatisch` met artikel, oud, nieuw en bron. Geen migratie; de tabel `price_proposal_rejections` blijft ongebruikt.

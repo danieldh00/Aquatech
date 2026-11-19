@@ -4,7 +4,7 @@
 // Per artikel kies je tussen een vaste prijs (zoals altijd) en prijs volgens factor. De verkoopprijs volgt automatisch, zonder
 // goedkeuring: een nieuwe inkoopprijs (artikel bewerken, handmatige inkoopprijs, ontvangst of inkooporder) of een andere factor
 // (artikel, leverancier, categorie, standaard of afronding) zet hem direct goed, en elke automatische wijziging komt met oud, nieuw
-// en bron in het auditlog (stock.repriceItem / stock.repriceAll). Artikelen met een vaste prijs doen niet mee.
+// en bron in het auditlog (stock.repriceItem / stock.applyAutoPrices). Artikelen met een vaste prijs doen niet mee.
 // Kortingen voor zakelijke klanten (category-discounts.js) rekenen over de uitkomst; verpakkingen zonder eigen prijs volgen
 // de stukprijs. De instelling `priceFactors` bewaart standaardfactor, afronding en de factoren per categorie en leverancier.
 const { placeIn } = require('../webshop/category-tree');
@@ -185,7 +185,7 @@ const ROWS_SQL = `SELECT i.id, i.code, i.name, i.unit, i.cost_price, i.sale_pric
 /**
  * Maakt de opslaglaag voor de prijsfactor.
  * @param {object} db De database.
- * @param {{ stock: object, settingsOf: Function, treeOf: Function }} ctx stock = voorraadopslag (repriceAll), settingsOf(tenantId) = de instellingen van de omgeving,
+ * @param {{ stock: object, settingsOf: Function, treeOf: Function }} ctx stock = voorraadopslag (applyAutoPrices), settingsOf(tenantId) = de instellingen van de omgeving,
  *   treeOf(tenantId) = de categorieboom van de webshop van de omgeving.
  * @returns {object} configOf, view, repriceAll en priceFor.
  */
@@ -289,10 +289,13 @@ function createPriceFactorStore(db, { stock, settingsOf, treeOf }) {
    * Zet de verkoopprijs van alle artikelen in de modus factor goed volgens de instelling (na een wijziging van de instelling).
    * @param {string} tenantId Id van de omgeving.
    * @param {object|null} user Wie de instelling wijzigde.
+   * @param {string} [source] Bron voor het auditlog.
    * @returns {number} Aantal artikelen waarvan de prijs wijzigde.
    */
-  function repriceAll(tenantId, user) {
-    return stock.repriceAll(tenantId, 'factorinstelling', user);
+  function repriceAll(tenantId, user, source = 'factorinstelling') {
+    // Eén bulkberekening voor de hele omgeving (geen query per artikel); alleen afwijkende prijzen worden geschreven.
+    const changes = rowsOf(tenantId).filter((row) => row.newPrice !== null && (row.oldPrice === null || Math.abs(row.oldPrice - row.newPrice) >= 0.005));
+    return stock.applyAutoPrices(tenantId, changes, source, user);
   }
 
   /**

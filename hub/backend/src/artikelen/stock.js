@@ -2046,17 +2046,28 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   }
 
   /**
-   * Rekent alle artikelen in de modus factor opnieuw uit (na een wijziging van factor, afronding, leverancier of categorie) en zet de prijzen door.
+   * Zet berekende verkoopprijzen door (alleen artikelen in de modus factor), in blokken van 200 per transactie, met een auditregel per wijziging.
+   * De berekening zelf gebeurt in bulk door de aanroeper (price-factor.js), niet per artikel.
    * @param {string} tenantId Id van de omgeving.
+   * @param {{ id: string, code: string, oldPrice: ?number, newPrice: number }[]} changes De afwijkende prijzen.
    * @param {string} source Bron voor het auditlog.
    * @param {object|null} [user] Wie de aanleiding gaf.
    * @returns {number} Aantal artikelen waarvan de prijs wijzigde.
    */
-  function repriceAll(tenantId, source, user = null) {
-    const ids = prepare("SELECT id FROM stock_items WHERE tenant_id = ? AND archived = 0 AND has_variants = 0 AND price_mode = 'factor'").all(tenantId).map((row) => row.id);
+  function applyAutoPrices(tenantId, changes, source, user = null) {
     let changed = 0;
-    for (let start = 0; start < ids.length; start += 200) {
-      transaction(db, () => { for (const id of ids.slice(start, start + 200)) if (repriceItem(tenantId, id, source, user)) changed += 1; });
+    for (let start = 0; start < changes.length; start += 200) {
+      transaction(db, () => {
+        const update = prepare(`UPDATE stock_items SET sale_price = ?, updated_at = ?, shop_dirty = CASE WHEN shop_sync = 1 AND shop_product_id IS NOT NULL THEN 1 ELSE shop_dirty END
+          WHERE tenant_id = ? AND id = ? AND has_variants = 0 AND archived = 0 AND price_mode = 'factor'`);
+        for (const change of changes.slice(start, start + 200)) {
+          const price = Math.round(Number(change.newPrice) * 100) / 100;
+          if (!Number.isFinite(price) || price < 0 || price > MAX_QTY) continue;
+          if (!Number(update.run(price, currentTimestamp(), tenantId, change.id).changes)) continue;
+          logPriceChange(tenantId, change, change.oldPrice, price, source, user);
+          changed += 1;
+        }
+      });
     }
     if (changed) dirty(tenantId);
     return changed;
@@ -2182,7 +2193,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     units, addUnit, removeUnit, setVariants, articleChoices, mergeSuggestions, mergeIntoVariants, unmergePreview, unmergeVariants,
     list, get, create, update, remove, move, importCatalog, importShop, mirrorShop, movements, reservations: reservationsOf,
     syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode,
-    reorderProposal, reserveOrder, releaseOrder, issueOrder, issueOrderPart, shortageFor, onDirty: setDirtyHook, setPricer, setPriceLogger, setSalePrices, repriceItem, repriceAll, receiptCost,
+    reorderProposal, reserveOrder, releaseOrder, issueOrder, issueOrderPart, shortageFor, onDirty: setDirtyHook, setPricer, setPriceLogger, setSalePrices, repriceItem, applyAutoPrices, receiptCost,
     addCostPrice, setLayerCost, stockValue: costs.stockValue,
   };
 }
