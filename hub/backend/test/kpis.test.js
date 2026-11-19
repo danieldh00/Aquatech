@@ -93,7 +93,7 @@ test('kengetallen tellen alleen de eigen omgeving en negeren concepten, betaalde
   const admin = { rights: ['beheer', 'facturen', 'offertes', 'planning'] };
   const main = buildKpis({ user: admin, tenantId: mainId }, { db, today: TODAY });
   assert.deepStrictEqual(values(main), { openstaand: 342, vervallen: 1, offertes: 2, bezetting: 2 });
-  assert.match(main.find((tile) => tile.key === 'offertes').detail, /1500,00 euro/);
+  assert.match(main.find((tile) => tile.key === 'offertes').detail, /€ 1\.500,00/);
   const other = buildKpis({ user: admin, tenantId: otherId }, { db, today: TODAY });
   assert.deepStrictEqual(values(other), { openstaand: 7777, vervallen: 1, offertes: 1, bezetting: 1 });
 });

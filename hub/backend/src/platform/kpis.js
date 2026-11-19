@@ -16,6 +16,15 @@ function weekOf(date) {
 }
 
 /**
+ * Maakt een bedrag leesbaar in nl-NL-opmaak, zoals de waarde van een tegel.
+ * @param {number|string} amount Het bedrag.
+ * @returns {string} Bijv. "€ 7.777,00".
+ */
+function euros(amount) {
+  return `€ ${QuoteCore.round2(Number(amount)).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/**
  * Bouwt de kengetallen voor een gebruiker en omgeving; alleen voor wie `beheer` heeft.
  * @param {{ user: object, tenantId: string }} viewer De gebruiker (met rechten) en de omgeving.
  * @param {{ db: object, today?: string }} sources De database en eventueel een vaste datum (tests).
@@ -28,11 +37,11 @@ function buildKpis({ user, tenantId }, { db, today = QuoteCore.today() }) {
     const open = db.prepare("SELECT COALESCE(SUM(total), 0) AS amount, COUNT(*) AS count FROM invoices WHERE tenant_id = ? AND status = 'definitief'").get(tenantId);
     const overdue = db.prepare("SELECT COALESCE(SUM(total), 0) AS amount, COUNT(*) AS count FROM invoices WHERE tenant_id = ? AND status = 'definitief' AND kind = 'factuur' AND due_date < ?").get(tenantId, today);
     tiles.push({ key: 'openstaand', title: 'Openstaand bedrag', value: QuoteCore.round2(Number(open.amount)), unit: 'euro', detail: `${Number(open.count)} open factu${Number(open.count) === 1 ? 'ur' : 'ren'} (incl. btw)`, href: 'facturen/' });
-    tiles.push({ key: 'vervallen', title: 'Vervallen facturen', value: Number(overdue.count), unit: 'aantal', detail: `${QuoteCore.round2(Number(overdue.amount)).toFixed(2).replace('.', ',')} euro voorbij de vervaldatum`, href: 'facturen/' });
+    tiles.push({ key: 'vervallen', title: 'Vervallen facturen', value: Number(overdue.count), unit: 'aantal', detail: `${euros(overdue.amount)} voorbij de vervaldatum`, href: 'facturen/' });
   }
   if (Roles.can(user, 'offertes')) {
     const quotes = db.prepare("SELECT COUNT(*) AS count, COALESCE(SUM(total_excl), 0) AS amount FROM quotes WHERE tenant_id = ? AND status = 'verzonden' AND deleted_at IS NULL").get(tenantId);
-    tiles.push({ key: 'offertes', title: 'Open offertes', value: Number(quotes.count), unit: 'aantal', detail: `${QuoteCore.round2(Number(quotes.amount)).toFixed(2).replace('.', ',')} euro excl. btw wacht op antwoord`, href: 'offertes/' });
+    tiles.push({ key: 'offertes', title: 'Open offertes', value: Number(quotes.count), unit: 'aantal', detail: `${euros(quotes.amount)} excl. btw wacht op antwoord`, href: 'offertes/' });
   }
   if (Roles.can(user, 'planning')) {
     const week = weekOf(today);
