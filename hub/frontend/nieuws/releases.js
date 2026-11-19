@@ -13,6 +13,37 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.23.2',
+      date: '2026-11-19',
+      title: 'Openstaande taken op het dashboard',
+      items: [
+        { text: 'Op het startscherm staat nu een blok "Openstaande taken" met de binnengekomen webshopbestellingen die nog niet verzonden zijn (de oudste vijf, met link naar elke bestelling).', for: ['beheer'] },
+        { text: 'Hetzelfde blok toont de bestelvoorstellen die klaarstaan bij lage voorraad, artikelen onder het minimum zonder voorkeursleverancier en open prijsvoorstellen. Zonder openstaande taken verdwijnt het blok.', for: ['voorraad'] },
+      ],
+    },
+    {
+      version: '1.23.1',
+      date: '2026-11-19',
+      title: 'Snellere pagina\'s door verkleinde scripts en stijlen',
+      items: [
+        { text: 'Pagina\'s laden sneller: de scripts en stijlen van de app zijn verkleind.' },
+      ],
+    },
+    {
+      version: '1.23.0',
+      date: '2026-11-19',
+      title: 'Handmatig controleren op updates',
+      items: [
+        { text: 'In Beheer > Systeem > Updates kun je nu met één klik controleren of er een nieuwe versie klaarstaat.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.22.9',
+      date: '2026-11-19',
+      title: 'Rustigere kop in de webshop',
+      items: [],
+    },
+    {
       version: '1.22.8',
       date: '2026-11-19',
       title: 'Webshopsynchronisatie standaard één keer per nacht',

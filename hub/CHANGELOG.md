@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.23.2
+
+- Nieuw: `GET /api/tasks` (`platform/open-tasks.js`, ingelogd; taken volgen de rechten `beheer` en `voorraad`, per omgeving) en het dashboardblok `dashboard/tasks.js`. Nieuw: `webOrders.listUnprocessed` (status Nieuw; online alleen na betaling).
+
+## 1.23.1
+
+In de release-image wordt de frontend in een aparte bouwstap verkleind (`backend/tools/minify-frontend.js`, esbuild als
+devDependency, alleen in de bouwstap). Alle eigen `.js` en `.css` worden verkleind (witruimte, commentaar, syntaxis; geen
+hernoemen van globale namen); `vendor/` en `.min.`-bestanden blijven ongewijzigd. De broncode in de repo blijft leesbaar,
+de bestandsnamen en `?v=<versie>`-adressen blijven gelijk (de inhoud verandert alleen mee met een nieuwe versie, dus
+Cloudflare-cache en cache-busting werken zoals voorheen). De backend wordt niet verkleind (draait op de server, niet in de
+browser).
+
+## 1.23.0
+
+- Knop *Nu controleren op updates* (`POST /api/admin/system-update/check`, 6 per 10 minuten, audit `update_controle`): de app zet `request.json` met `{"check":true}` klaar; `deploy/apps01/update.sh` haalt dan alleen `:latest` op en werkt `status.json`/`releases.json` bij, zonder te installeren. Het scherm toont `checking` tot de host een nieuwe `checkedAt` heeft. Het hostscript moet hiervoor opnieuw worden ingericht (`setup-app-update.sh`); met het oude script wordt de aanvraag wel gecontroleerd maar als onleesbaar gemeld.
+- Testlog: een mislukte of afgeremde login (POST `/api/auth/login`, 400/401/403/429) telt niet meer als `[traag]`; onder `node --test` (of `SLOW_LOG_QUIET=1`) schrijft het trage-verzoekenlog niets naar de console, het logboek in het geheugen blijft.
+
+## 1.22.9
+
+Webshopkop rustiger: de knop *Product zoeken* (dubbel met de productgroepen) is weg, de navigatiebalk is licht met kleine hoofdletter-items en een dun pijltje, *Over ons* is groen, de zoekbalk is zachter (afgerond) en Account/Winkelwagen tonen alleen een icoon (met aria-label), op mobiel ook de beheerknop. Alleen `storefront-pages.js`, `storefront.css` en `storefront-menu.js`.
+
 ## 1.22.8
 
 `shopSource.syncSchedule` (`night` standaard | `hourly` | `tenmin`, geen migratie). `runAll` slaat een omgeving over tot `fullSyncDue` (webshop/shop-sync.js) aan de beurt is: dagwisseling 04:00 Nederlandse tijd (na de back-up), na een mislukte poging hoogstens elk uur opnieuw. Gewijzigde artikelen gaan nog steeds meteen via `schedule()`. Aanleiding: het logboek van 2026-11-19 toonde elke 10 minuten een "trage taak" van ~165 s met ruim 5300 queries en 2 s stilstand van de hoofdthread.
