@@ -13,7 +13,10 @@ FROM node:22-alpine
 WORKDIR /app/backend
 COPY backend/package*.json ./
 RUN npm ci --omit=dev
-COPY backend ./
+# Alleen wat de server draait: broncode en het hulpscript dat update.sh uit het image haalt.
+# Tests en andere tools (codestijl, bench, minify) blijven buiten het image.
+COPY backend/src ./src
+COPY backend/tools/release-info.js ./tools/release-info.js
 COPY --from=frontend-build /build/frontend-min ../frontend
 
 ENV PORT=3300
