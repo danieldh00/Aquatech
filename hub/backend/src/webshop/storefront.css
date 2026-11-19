@@ -53,10 +53,10 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .shop-bar { max-width: 1200px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .shop-brand { display: block; flex: none; }
 .shop-brand img { display: block; height: 44px; width: auto; }
-.shop-search { flex: 1 1 280px; display: flex; min-width: 0; }
-.shop-search input { flex: 1; min-width: 0; font: inherit; padding: 10px 14px; border: 2px solid var(--at-shop-navy); border-right: 0; border-radius: 8px 0 0 8px; background: var(--at-white); color: var(--at-ink); }
+.shop-search { flex: 1 1 280px; display: flex; min-width: 0; position: relative; max-width: 560px; }
+.shop-search input { flex: 1; min-width: 0; font: inherit; padding: 11px 56px 11px 20px; border: 1px solid transparent; border-radius: 999px; background: var(--at-page); color: var(--at-ink); }
 .shop-search input:focus { outline: 2px solid var(--at-shop-teal); outline-offset: 0; }
-.shop-search button { display: flex; align-items: center; justify-content: center; width: 48px; border: 0; border-radius: 0 8px 8px 0; background: var(--at-shop-green); color: var(--at-white); cursor: pointer; }
+.shop-search button { position: absolute; right: 4px; top: 4px; bottom: 4px; display: flex; align-items: center; justify-content: center; width: 38px; border: 0; border-radius: 50%; background: var(--at-shop-green); color: var(--at-white); cursor: pointer; }
 .shop-search button:hover { background: var(--at-shop-green-dark); }
 .shop-phone { display: flex; align-items: center; gap: 10px; color: var(--at-shop-navy); text-decoration: none; }
 .shop-phone svg { width: 34px; height: 34px; }
@@ -64,30 +64,29 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .shop-phone small { font-size: 0.75rem; }
 .shop-phone strong { font-size: 1.15rem; }
 .shop-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
-.shop-action { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; color: var(--at-shop-navy); text-decoration: none; font-weight: 600; font-size: 0.9rem; }
+.shop-action { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; color: var(--at-shop-navy); text-decoration: none; font-weight: 600; font-size: 0.9rem; }
 a.shop-action:hover { background: var(--at-page); }
 a.shop-action.shop-admin { background: var(--at-shop-green-dark); color: var(--at-white); }
 a.shop-action.shop-admin:hover { background: var(--at-shop-navy); }
+.shop-action:not(.shop-admin) span { display: none; }
 .shop-action.cart { cursor: default; opacity: 0.75; }
 .shop-action.cart b { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--at-shop-teal); color: var(--at-white); font-size: 0.8rem; }
 
-.shop-nav { background: var(--at-shop-navy); }
-.nav-bar { list-style: none; margin: 0 auto; padding: 0 16px; max-width: 1200px; display: flex; flex-wrap: nowrap; }
+.shop-nav { background: var(--at-white); border-top: 1px solid var(--at-line); border-bottom: 1px solid var(--at-line); }
+.nav-bar { list-style: none; margin: 0 auto; padding: 0 16px; max-width: 1200px; display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; }
 .nav-bar > li { flex: 0 1 auto; min-width: 0; white-space: nowrap; }
-/* Past het menu toch niet, dan kort de tekst af met een beletselteken (de uitklappers staan buiten deze elementen, dus niet afgekapt). */
-.nav-all-text, .nav-about > a, .nav-planner > a, .nav-group > .nav-heading { overflow: hidden; text-overflow: ellipsis; }
-.nav-all-text { min-width: 0; }
+.nav-about > a, .nav-planner > a, .nav-group > .nav-heading { overflow: hidden; text-overflow: ellipsis; }
 .nav-bar .nav-drop { white-space: normal; }
-.nav-group, .nav-all { position: relative; }
-.nav-all-button { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-width: 220px; padding: 12px 18px; background: var(--at-shop-green); color: var(--at-white); font-weight: 700; text-transform: uppercase; cursor: default; }
-.nav-all:hover .nav-all-button, .nav-all:focus-within .nav-all-button { background: var(--at-shop-green-dark); }
-.nav-about > a { display: block; padding: 12px 18px; color: var(--at-white); text-decoration: none; font-weight: 600; }
-.nav-about > a:hover { background: var(--at-shop-navy-dark); }
-.nav-group > .nav-heading { display: block; padding: 12px 18px; color: var(--at-white); font-weight: 600; cursor: default; }
-.nav-group:hover > .nav-heading, .nav-group:focus-within > .nav-heading { background: var(--at-shop-navy-dark); }
-/* Uitklappers: de balk en elk niveau (flyout) alleen via CSS; een kop is geen link maar klapt open bij aanwijzen of focus. */
+.nav-group { position: relative; }
+.nav-about > a, .nav-group > .nav-heading { display: block; padding: 14px 14px; color: var(--at-shop-navy); text-decoration: none; font-weight: 600; font-size: 0.85rem; letter-spacing: 0.03em; text-transform: uppercase; cursor: default; }
+.nav-about > a { cursor: pointer; }
+.nav-group > .nav-heading::after { content: ""; display: inline-block; width: 6px; height: 6px; margin: 0 0 3px 8px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); }
+.nav-about > a:hover, .nav-group:hover > .nav-heading, .nav-group:focus-within > .nav-heading { color: var(--at-shop-green-dark); }
+.nav-about:first-child > a { margin: 6px 0; padding: 8px 18px; border-radius: 999px; background: var(--at-shop-green-dark); color: var(--at-white); }
+.nav-about:first-child > a:hover { background: var(--at-shop-navy); color: var(--at-white); }
+
 .nav-drop { display: none; position: absolute; left: 0; top: 100%; z-index: 20; min-width: 280px; margin: 0; padding: 8px 0; list-style: none; background: var(--at-white); border: 1px solid var(--at-line); border-top: 3px solid var(--at-shop-teal); border-radius: 0 0 8px 8px; box-shadow: 0 10px 24px var(--at-shadow); }
-.nav-all:hover > .nav-drop, .nav-all:focus-within > .nav-drop, .nav-group:hover > .nav-drop, .nav-group:focus-within > .nav-drop, .has-sub:hover > .nav-fly, .has-sub:focus-within > .nav-fly { display: block; }
+.nav-group:hover > .nav-drop, .nav-group:focus-within > .nav-drop, .has-sub:hover > .nav-fly, .has-sub:focus-within > .nav-fly { display: block; }
 .nav-drop li { position: relative; }
 .nav-drop a, .nav-drop .nav-heading { display: block; padding: 8px 18px; text-decoration: none; font-size: 0.92rem; }
 .nav-drop .nav-heading { color: var(--at-shop-navy); cursor: default; }
@@ -113,21 +112,18 @@ a.shop-action.shop-admin:hover { background: var(--at-shop-navy); }
 /* Menubalk altijd op één regel: bij smallere schermen worden ruimte en letter kleiner (onder 800 px neemt het mobiele menu het over). */
 @media (max-width: 1180px) {
   .nav-bar { padding: 0 8px; }
-  .nav-all-button { min-width: 0; gap: 10px; padding: 12px 12px; }
-  .nav-about > a, .nav-planner > a, .nav-group > .nav-heading { padding: 12px 11px; font-size: 0.92rem; }
+  .nav-about > a, .nav-planner > a, .nav-group > .nav-heading { padding-left: 11px; padding-right: 11px; font-size: 0.85rem; }
 }
 @media (max-width: 980px) {
-  .nav-all-button { padding: 12px 9px; font-size: 0.85rem; }
-  .nav-about > a, .nav-planner > a, .nav-group > .nav-heading { padding: 12px 8px; font-size: 0.85rem; }
+  .nav-about > a, .nav-planner > a, .nav-group > .nav-heading { padding-left: 8px; padding-right: 8px; font-size: 0.78rem; }
 }
 @media (max-width: 880px) {
-  .nav-all-button { padding: 12px 7px; gap: 6px; font-size: 0.8rem; }
-  .nav-about > a, .nav-planner > a, .nav-group > .nav-heading { padding: 12px 6px; font-size: 0.8rem; }
+  .nav-about > a, .nav-planner > a, .nav-group > .nav-heading { padding-left: 6px; padding-right: 6px; font-size: 0.73rem; }
 }
 @media (max-width: 800px) {
   .shop-nav { display: none; }
   .shop-menu { display: block; }
-  .shop-action span, .shop-phone span { display: none; }
+  .shop-phone span, .shop-action.shop-admin span { display: none; }
   .shop-action.cart b { display: inline-flex; }
   /* Compacte kop: logo en iconen op één rij, de zoekbalk er direct onder. */
   .shop-bar { gap: 8px; padding: 8px 12px; flex-wrap: wrap; }
@@ -138,8 +134,8 @@ a.shop-action.shop-admin:hover { background: var(--at-shop-navy); }
   .shop-action { padding: 6px; }
   .shop-action.cart { position: relative; }
   .shop-action.cart b { position: absolute; top: -2px; right: -4px; min-width: 18px; height: 18px; padding: 0 4px; font-size: 0.7rem; }
-  .shop-search { order: 3; flex-basis: 100%; }
-  .shop-search input { padding: 8px 12px; }
+  .shop-search { order: 3; flex-basis: 100%; max-width: none; }
+  .shop-search input { padding: 8px 48px 8px 14px; }
   .shop-notice { font-size: 0.8rem; line-height: 1.3; padding: 6px 12px; }
 }
 
@@ -291,8 +287,8 @@ a.shop-action.shop-admin:hover { background: var(--at-shop-navy); }
 .button { border: 0; cursor: pointer; font: inherit; font-weight: 700; }
 .button.secondary { background: var(--at-white); color: var(--at-shop-navy); border: 1px solid var(--at-shop-navy); }
 .trap { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
-.nav-planner > a { display: block; padding: 12px 18px; color: var(--at-white); text-decoration: none; font-weight: 700; background: var(--at-shop-green-dark); }
-.nav-planner > a:hover { background: var(--at-shop-navy-dark); outline: 1px solid var(--at-white); outline-offset: -2px; }
+.nav-planner > a { display: block; margin: 6px 0; padding: 8px 18px; border-radius: 999px; color: var(--at-white); text-decoration: none; font-weight: 700; background: var(--at-shop-green-dark); }
+.nav-planner > a:hover { background: var(--at-shop-navy-dark); }
 
 /* Telefoon: twee producten naast elkaar. */
 @media (max-width: 520px) {
@@ -569,7 +565,6 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
 .stock-alert .button { justify-self: start; }
 
 /* Suggesties onder het zoekveld in de kop */
-.shop-search { position: relative; }
 .search-suggest { position: absolute; left: 0; right: 0; top: 100%; z-index: 30; margin: 4px 0 0; padding: 4px; list-style: none; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
 .search-suggest[hidden] { display: none; }
 .search-suggest li a { display: grid; gap: 2px; padding: 8px 10px; border-radius: 8px; color: inherit; text-decoration: none; }
@@ -658,4 +653,31 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
   .product-detail .price { font-size: 2rem; }
   .product-detail .product-order { flex-direction: row; }
   .product-details { padding: 4px 18px 18px; }
+}
+
+/* Winkelwagenpagina, nieuw ontwerp: regels als nette kaart, hoge aantalvelden en een duidelijke knop "Naar afrekenen". Alles hangt onder .cart-page, zodat bestellingen, retouren en groothandel ongewijzigd blijven. */
+.shop-main .cart-page { max-width: 1040px; }
+.cart-page h1 { font-size: 2.1rem; font-weight: 800; letter-spacing: -0.02em; }
+.cart-page .tablewrap { background: var(--at-white); border: 1px solid var(--at-line); border-radius: 20px; overflow: hidden; }
+.cart-page .cart-table th { padding: 14px 18px; background: var(--at-band); color: var(--at-muted); font-size: 0.85rem; font-weight: 700; }
+.cart-page .cart-table td { padding: 18px; vertical-align: middle; }
+.cart-page .cart-table tbody tr:last-child td { border-bottom: 0; }
+.cart-page .cart-table tfoot th, .cart-page .cart-table tfoot td { padding: 10px 18px; }
+.cart-page .cart-table tr.total th, .cart-page .cart-table tr.total td { font-size: 1.3rem; border-top: 1px solid var(--at-line); }
+.cart-page .cart-qty input { width: 84px; height: 48px; padding: 0 12px; border: 1.5px solid var(--at-line); border-radius: 12px; font-weight: 700; box-sizing: border-box; }
+.cart-page .cart-table form[action] .button.secondary, .cart-page .cart-qty .button.secondary { height: 48px; padding: 0 16px; border-radius: 12px; }
+.cart-page .shipping-hint { padding: 16px 20px; border-radius: 16px; }
+.cart-page .cart-actions { margin-top: 24px; gap: 16px; }
+.cart-page .cart-actions .button { display: inline-flex; align-items: center; justify-content: center; height: 54px; padding: 0 28px; border-radius: 12px; font-size: 1rem; }
+.cart-page .cart-actions .button:not(.secondary) { min-width: 240px; background: var(--at-shop-green-dark); font-size: 1.1rem; font-weight: 800; }
+.cart-page .cart-actions .button:not(.secondary):hover { filter: brightness(0.92); }
+.cart-page .trust-strip { margin-top: 28px; border-radius: 16px; padding: 18px 20px; }
+@media (max-width: 640px) {
+  .cart-page h1 { font-size: 1.7rem; }
+  .cart-page .tablewrap { background: transparent; border: 0; border-radius: 0; overflow: visible; }
+  .cart-page .cart-table tbody tr { padding: 16px; border-radius: 16px; }
+  .cart-page .cart-table tbody td { padding: 0; }
+  .cart-page .cart-table tfoot { padding: 12px 16px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 16px; }
+  .cart-page .cart-actions { flex-direction: column-reverse; align-items: stretch; }
+  .cart-page .cart-actions .button:not(.secondary) { min-width: 0; }
 }

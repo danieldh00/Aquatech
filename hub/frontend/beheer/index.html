@@ -505,12 +505,16 @@
             <span class="label">Aquatech als bron</span>
             <label class="chk"><input type="checkbox" name="push"> Verkoopprijzen uit Artikelen naar de webshop sturen</label>
             <label class="chk"><input type="checkbox" name="pushStock"> Ook de voorraad (beschikbaar = stand − gereserveerd); verkopen in de webshop worden in Aquatech afgeboekt</label>
-            <span class="muted small">Een wijziging gaat binnen enkele seconden naar de webshop, en elke 10 minuten wordt alles vergeleken. Een prijs die alleen in de webshop is gewijzigd, neemt Aquatech over. Zonder dit vinkje blijft de webshop leidend voor de prijzen.</span>
+            <span class="muted small">Een wijziging gaat binnen enkele seconden naar de webshop, en daarna wordt alles vergeleken volgens het schema hieronder. Een prijs die alleen in de webshop is gewijzigd, neemt Aquatech over. Zonder dit vinkje blijft de webshop leidend voor de prijzen.</span>
           </div>
           <div class="field">
             <span class="label">Artikellijst</span>
             <label class="chk"><input type="checkbox" name="mirror"> Webshop bepaalt de artikellijst: alle producten worden voorraadartikel, artikelen die niet in de webshop staan worden gearchiveerd</label>
             <span class="muted small">Zet dit uit zodra Aquatech de bron is: de lijst wordt dan niet meer aangepast aan de webshop.</span>
+          </div>
+          <div class="field">
+            <label>Alles vergelijken met de webshop<select name="syncSchedule"><option value="night">Eén keer per nacht (aanbevolen)</option><option value="hourly">Elk uur</option><option value="tenmin">Elke 10 minuten</option></select></label>
+            <span class="muted small">Een volledige ronde haalt alle producten op en belast de server enkele minuten. Wijzigingen in Aquatech gaan altijd meteen naar de webshop; de knop Nu synchroniseren blijft werken.</span>
           </div>
           <div class="row">
             <label class="chk"><input type="checkbox" name="pricesIncludeTax"> Prijzen in de webshop zijn incl. btw</label>
@@ -775,6 +779,9 @@
                 <dt>Laatst gecontroleerd</dt><dd id="up-checked">–</dd>
               </dl>
               <p class="muted small" id="up-state" role="status" aria-live="polite"></p>
+              <div class="form-actions" id="up-check-actions">
+                <button class="btn" type="button" id="up-check">Nu controleren op updates</button>
+              </div>
               <form id="up-form" class="form-grid" novalidate hidden>
                 <label class="field full">Bevestig met je wachtwoord
                   <input type="password" id="up-password" autocomplete="current-password" required maxlength="200">

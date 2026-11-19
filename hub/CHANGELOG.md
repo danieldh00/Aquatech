@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.22.8
+
+`shopSource.syncSchedule` (`night` standaard | `hourly` | `tenmin`, geen migratie). `runAll` slaat een omgeving over tot `fullSyncDue` (webshop/shop-sync.js) aan de beurt is: dagwisseling 04:00 Nederlandse tijd (na de back-up), na een mislukte poging hoogstens elk uur opnieuw. Gewijzigde artikelen gaan nog steeds meteen via `schedule()`. Aanleiding: het logboek van 2026-11-19 toonde elke 10 minuten een "trage taak" van ~165 s met ruim 5300 queries en 2 s stilstand van de hoofdthread.
+
+## 1.22.7
+
+- De webshoppagina's bevatten de `google-site-verification`-meta (Search Console), in de `<head>`.
+
+## 1.22.6
+
+Winkelwagenpagina (`cartPage`) in het nieuwe webshopontwerp: de sectie krijgt de klasse `cart-page` en de stijl hangt in `storefront.css` onder `.cart-page`, zodat bestellingen, retouren en groothandel (die `.cart` en `.cart-table` delen) ongewijzigd blijven. Gedrag ongewijzigd. Huisstijl blijft aangehouden via de bestaande `--at-*`-variabelen.
+
+## 1.22.5
+
+Orderpick: `showList` in `orderpick.js` verborg de ontvangstschermen (`#rc-*`) niet, waardoor na Ontvangen → Picken beide lijsten zichtbaar bleven. Nu verbergt het alle andere schermen. Nieuwe test `orderpick-modes.test.js` wisselt meerdere keren heen en weer.
+
+## 1.22.4
+
+Productpagina (`productPage`) in het nieuwe webshopontwerp: alleen CSS onder `.product-detail` en `.product-details` in `storefront.css`; markup en gedrag ongewijzigd. Huisstijl blijft aangehouden via de bestaande `--at-*`-variabelen.
+
+## 1.22.3
+
+- `beheer/index.html`: het stappenplan (inklapbaar, boven de velden) vervangt de handleiding onderaan; de Google-stappen zijn bijgewerkt (Google Drive API, Google Auth Platform, publicatiestatus In productie, Webtoepassing met het redirect-adres, de scope drive.file).
+- Label "Aantal back-ups op Drive bewaren" korter gemaakt ("Aantal back-ups bewaren"), zodat beide velden op dezelfde hoogte staan.
+
 ## 1.22.2
 
 Categoriepagina (`browsePage`) in het nieuwe webshopontwerp: alleen CSS onder `.browse` in `storefront.css`, markup en gedrag ongewijzigd. De kruimelbalk bovenaan wordt ook op de productpagina rustiger; de startpagina blijft ongewijzigd. Huisstijl blijft aangehouden via de bestaande `--at-*`-variabelen.
