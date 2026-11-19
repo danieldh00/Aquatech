@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.27.4',
+      date: '2026-11-19',
+      title: 'Leveranciers met backup instellen en terugzien',
+      items: [
+        { text: 'Bij een artikel zet je de leveranciers nu in volgorde (voorkeur, backup 1, backup 2) en geef je per leverancier aan of het artikel leverbaar is.', for: ['voorraad'] },
+        { text: 'Het bestelvoorstel en de inkooporder laten zien als er bij een backup wordt besteld, met het meerprijsverschil ten opzichte van de voorkeur.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.27.3',
       date: '2026-11-19',
       title: 'Meerdere leveranciers per artikel met backup',

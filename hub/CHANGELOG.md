@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.27.4
+
+- Artikelen > Leveranciers per artikel: prioriteit met ▲/▼ in plaats van de voorkeursknop, kolom voorraadstatus (`stockStatus`), nieuwe regels komen onderaan.
+- Bestelvoorstel en inkooporderregels tonen de backup-melding en het meerprijsverschil (`backup`).
+- Testdata: elk zesde artikel heeft een niet-leverbare voorkeur met een backup.
+
 ## 1.27.3
 
 - Migratie 88: `item_suppliers.rank` (prioriteit) en `stock_status` (`''` onbekend, `in_stock`, `out`); bestaande koppelingen behouden hun volgorde (voorkeur eerst).
