@@ -68,6 +68,16 @@
     try { bitmap = await createImageBitmap(file); } catch (error) { /* geen voorbeeld mogelijk: de server controleert */ }
     const thumb = bitmap ? await makeThumb(bitmap).catch(() => '') : '';
     if (!bitmap || (file.size <= KEEP_BYTES && Math.max(bitmap.width, bitmap.height) <= MAX_SIDE)) return { name: file.name, data: await readBase64(file), thumb };
+    return { ...(await encodeJpeg(bitmap, file.name)), thumb };
+  }
+
+  /**
+   * Zet een afbeelding om naar JPEG van hoogstens 1200 pixels (witte ondergrond).
+   * @param {ImageBitmap} bitmap de afbeelding
+   * @param {string} name de oorspronkelijke bestandsnaam
+   * @returns {Promise<{ name: string, data: string }>} bestandsnaam (.jpg) en base64-inhoud
+   */
+  async function encodeJpeg(bitmap, name) {
     const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(bitmap.width * scale);
@@ -77,7 +87,20 @@
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.86));
-    return { name: file.name.replace(/\.[^.]+$/, '') + '.jpg', data: await readBase64(blob || file), thumb };
+    if (!blob) throw new Error('Omzetten naar JPEG is mislukt.');
+    return { name: name.replace(/\.[^.]+$/, '') + '.jpg', data: await readBase64(blob) };
+  }
+
+  /**
+   * Zet bytes van een formaat dat de server niet kan controleren (AVIF) om naar JPEG plus miniatuur. Werkt alleen als de browser het formaat kan lezen.
+   * @param {Blob} blob de bytes
+   * @param {string} name de bestandsnaam voor het resultaat
+   * @returns {Promise<{ name: string, data: string, thumb: string }>} JPEG en miniatuur
+   */
+  async function convert(blob, name) {
+    let bitmap;
+    try { bitmap = await createImageBitmap(blob); } catch (error) { throw new Error('Deze browser kan dit afbeeldingsformaat (AVIF) niet lezen. Probeer een recente Chrome, Edge of Safari.'); }
+    return { ...(await encodeJpeg(bitmap, name)), thumb: await makeThumb(bitmap).catch(() => '') };
   }
 
   /**
@@ -131,8 +154,37 @@
       totals.failed.push(...part.failed);
       totals.pending = part.pending;
       if (onProgress) onProgress({ ...totals });
-      if (!part.next) return totals;
+      if (!part.next) break;
       after = part.next;
+    }
+    await convertFailed(totals, onProgress);
+    return totals;
+  }
+
+  /**
+   * Zet de afbeeldingen die de server niet kon controleren (AVIF van de oude webshop) om in de browser: de server geeft de bytes,
+   * de browser maakt JPEG en miniatuur en bewaart ze bij elk artikel met dat adres. Wat lukt verdwijnt uit de lijst met mislukte.
+   * @param {{ imported: number, stored: number, failed: object[], pending: number }} totals de totalen van importAll (wordt bijgewerkt)
+   * @param {Function} [onProgress] wordt na elke omgezette afbeelding aangeroepen met de totalen
+   * @returns {Promise<void>}
+   */
+  async function convertFailed(totals, onProgress) {
+    const byUrl = new Map();
+    for (const failure of totals.failed) if (failure.convert && failure.itemId) byUrl.set(failure.url, [...(byUrl.get(failure.url) || []), failure]);
+    for (const [url, failures] of byUrl) {
+      try {
+        const response = await fetch(`../api/stock/items/${encodeURIComponent(failures[0].itemId)}/shop-image`, { cache: 'no-store' });
+        if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message || AquatechCommon.statusMessage(response.status));
+        const picked = await convert(await response.blob(), failures[0].code);
+        for (const failure of failures) await upload(failure.itemId, picked);
+        totals.failed = totals.failed.filter((failure) => failure.url !== url);
+        totals.imported += failures.length;
+        totals.stored += 1;
+      } catch (error) {
+        for (const failure of failures) failure.reason = String(error.message).slice(0, 120);
+      }
+      totals.pending = Math.max(0, totals.pending - failures.length);
+      if (onProgress) onProgress({ ...totals });
     }
   }
 
