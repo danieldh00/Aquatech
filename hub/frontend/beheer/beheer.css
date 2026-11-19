@@ -348,3 +348,11 @@ dl.kv dd { margin: 0; }
 .pb-faq .btn { justify-self: start; }
 .pb-block .sc-editor { min-height: 140px; }
 .pb-add { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 14px; }
+
+/* Servertaken (Beheer > Systeem > Updates) */
+#ht-card { margin-bottom: 16px; }
+.ht-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
+.ht-item { padding: 8px 0; border-top: 1px solid var(--line); }
+.ht-item p { margin: 2px 0 0 26px; }
+.ht-item.done strong { text-decoration: line-through; color: var(--muted); }
+.ht-code { margin: 0 0 8px; padding: 8px 10px; overflow-x: auto; font-size: 12px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--at-preview-bg); border: 1px solid var(--line); border-radius: 6px; }

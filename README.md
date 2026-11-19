@@ -47,7 +47,9 @@ webserver in Docker (poort 3300) met PostgreSQL (een eigen container naast de ap
   een nieuwe versie zelf binnen een kwartier. Tijdens de update staat de site ongeveer een minuut in onderhoudsmodus
   (bekijken kan, opslaan niet); start de nieuwe versie niet goed, dan gaat de server terug naar de vorige. De app
   rolt zelf niets uit: het updatescript op de server pakt de aanvraag op (zie `deploy/apps01/README.md`, eenmalig
-  inrichten met `setup-app-update.sh`).
+  inrichten met `setup-app-update.sh`). Onder de update-knop staat de **afvinklijst Servertaken**: wat er op de
+  Proxmox-host nog moet gebeuren, met één vast commando (kopieerknop); de server vinkt gelukte taken zelf af, handmatig
+  afvinken kan ook, en het dashboard toont de open taken.
 - **Logboek** (Beheer > Systeem > Logboek): één plek voor fouten, trage verzoeken, stilstand van de server, mislukte taken en
   bewakingsmeldingen. Elke foutmelding in de app noemt een foutcode en verzoek-id; zoek die in het logboek (filters op niveau,
   bron, periode en tekst, Excel-export). Gebufferd en begrensd opgeslagen in de database (`app_logs`), bewaartermijn instelbaar
