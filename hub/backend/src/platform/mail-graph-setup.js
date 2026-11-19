@@ -10,8 +10,14 @@ const { withCause } = require('./error-report');
 
 const LOGIN = 'https://login.microsoftonline.com/organizations/oauth2/v2.0';
 const GRAPH = 'https://graph.microsoft.com/v1.0';
-/** De openbare Microsoft-client waarmee de beheerder inlogt (Azure CLI); te vervangen met GRAPH_SETUP_CLIENT_ID. */
-const DEFAULT_SETUP_CLIENT = '04b07795-8ddb-461a-bbee-02f9e1bf7b46';
+/**
+ * De openbare Microsoft-client waarmee de beheerder inlogt: "Microsoft Graph Command Line Tools" (Graph PowerShell). Die is
+ * bedoeld om met Graph-machtigingen als Application.ReadWrite.All in te loggen, met beheerderstoestemming bij de eerste keer.
+ * De Azure CLI-client (04b07795-…) werkt hiervoor niet meer: Microsoft weigert die met AADSTS65002. Te vervangen met GRAPH_SETUP_CLIENT_ID.
+ */
+const DEFAULT_SETUP_CLIENT = '14d82eec-204b-4c2f-b7e8-296a70dab67e';
+/** Verwijzing naar het handmatige stappenplan in hetzelfde scherm, achter elke inlogfout. */
+const MANUAL_HINT = 'Gebruik anders de handleiding hieronder (app registreren in Microsoft Entra).';
 const SCOPES = ['Application.ReadWrite.All', 'AppRoleAssignment.ReadWrite.All', 'Organization.Read.All'].map((scope) => `https://graph.microsoft.com/${scope}`).join(' ');
 const GRAPH_APP_ID = '00000003-0000-0000-c000-000000000000';
 const APP_NAME = 'AquaTech Hub mail';
@@ -27,6 +33,29 @@ const SECRET_MONTHS = 12;
  * @returns {Error} De fout.
  */
 const setupError = (message, status = 502) => Object.assign(new Error(message), { status, setup: true });
+
+/**
+ * Vertaalt een foutantwoord van de Microsoft-inlog naar een Nederlandse melding met verwijzing naar het stappenplan.
+ * @param {object} body Het JSON-antwoord van Microsoft (error, error_description).
+ * @returns {string} De melding voor de beheerder.
+ */
+function loginProblem(body) {
+  const description = String(body && body.error_description || '');
+  const found = /AADSTS(\d{4,7})/.exec(description);
+  const code = found ? found[1] : '';
+  const known = {
+    65002: 'Microsoft staat deze inlog-app niet meer toe voor het aanmaken van een app-registratie (AADSTS65002).',
+    65001: 'Er is nog geen toestemming gegeven voor de inlog-app. Log in als Globale beheerder en geef toestemming voor de organisatie (AADSTS65001).',
+    90094: 'Er is beheerderstoestemming nodig. Log in als Globale beheerder en geef toestemming voor de organisatie (AADSTS90094).',
+    90095: 'Er is beheerderstoestemming nodig. Log in als Globale beheerder en geef toestemming voor de organisatie (AADSTS90095).',
+    700016: 'De inlog-app is niet bekend in deze Microsoft-omgeving (AADSTS700016).',
+    50105: 'Dit account heeft geen toegang tot de inlog-app in deze omgeving (AADSTS50105).',
+    53003: 'Een beleid voor voorwaardelijke toegang blokkeert deze inlog (AADSTS53003).',
+    50076: 'Microsoft vraagt voor dit account meervoudige verificatie (MFA) (AADSTS50076); rond die af op de Microsoft-pagina en probeer opnieuw.',
+  };
+  const text = known[code] || (code ? `Microsoft weigerde de inlog (AADSTS${code}).` : 'Microsoft weigerde de inlog.');
+  return `${text} ${MANUAL_HINT}`;
+}
 
 /**
  * Maakt de inrichting van Graph-mail.
@@ -77,8 +106,8 @@ function createGraphSetup({ fetchImpl = fetch, now = Date.now, clientId = proces
   function expectOk(result, doing) {
     if (result.status >= 200 && result.status < 300) return;
     const code = result.body && result.body.error && result.body.error.code ? ` (${String(result.body.error.code).slice(0, 60)})` : '';
-    if (result.status === 401 || result.status === 403) throw setupError(`Microsoft weigerde ${doing}${code}. Log in met een account met de rol Globale beheerder (of Toepassingsbeheerder met Bevoorrechte-rolbeheerder) en probeer opnieuw, of gebruik het stappenplan.`);
-    throw setupError(`Microsoft gaf een fout bij ${doing} (${result.status})${code}.`);
+    if (result.status === 401 || result.status === 403) throw setupError(`Microsoft weigerde ${doing}${code}. Log in met een account met de rol Globale beheerder (of Toepassingsbeheerder met Bevoorrechte-rolbeheerder) en probeer opnieuw, of gebruik de handleiding hieronder.`);
+    throw setupError(`Microsoft gaf een fout bij ${doing} (${result.status})${code}. ${MANUAL_HINT}`);
   }
 
   /**
@@ -101,7 +130,7 @@ function createGraphSetup({ fetchImpl = fetch, now = Date.now, clientId = proces
     expectOk(existing, 'het zoeken naar de app');
     const found = existing.body.value || [];
     if (found.length > 1 || (found.length === 1 && !(found[0].tags || []).includes(APP_TAG))) {
-      throw setupError(`In deze Microsoft-omgeving bestaat al een app met de naam "${APP_NAME}" die niet door AquaTech is aangemaakt (of er zijn er meerdere). Hernoem of verwijder die in Entra en probeer opnieuw, of gebruik het stappenplan.`, 409);
+      throw setupError(`In deze Microsoft-omgeving bestaat al een app met de naam "${APP_NAME}" die niet door AquaTech is aangemaakt (of er zijn er meerdere). Hernoem of verwijder die in Entra en probeer opnieuw, of gebruik de handleiding hieronder.`, 409);
     }
     let application = found[0];
     if (!application) {
@@ -141,7 +170,7 @@ function createGraphSetup({ fetchImpl = fetch, now = Date.now, clientId = proces
     const { status, body } = await call(`${LOGIN}/devicecode`, {
       method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: clientId, scope: SCOPES }).toString(),
     });
-    if (status !== 200 || !body.device_code || !body.user_code) throw setupError('Microsoft gaf geen inlogcode. Gebruik het stappenplan.');
+    if (status !== 200 || !body.device_code || !body.user_code) throw setupError(`${status === 200 ? 'Microsoft gaf geen inlogcode.' : loginProblem(body)} ${status === 200 ? MANUAL_HINT : ''}`.trim());
     const id = crypto.randomBytes(16).toString('hex');
     const interval = Math.max(5, Number(body.interval) || 5);
     sessions.set(id, { tenantKey, userId, from, deviceCode: body.device_code, interval, nextPoll: 0, expiresAt: now() + Math.min(SESSION_MS, (Number(body.expires_in) || 900) * 1000) });
@@ -188,9 +217,9 @@ function createGraphSetup({ fetchImpl = fetch, now = Date.now, clientId = proces
       if (code === 'authorization_pending') return { status: 'pending' };
       if (code === 'slow_down') { session.interval += 5; session.nextPoll = now() + session.interval * 1000; return { status: 'pending' }; }
       sessions.delete(id);
-      if (code === 'authorization_declined') return { status: 'denied', message: 'De inlog is geweigerd.' };
+      if (code === 'authorization_declined' && !/AADSTS/.test(String(body.error_description || ''))) return { status: 'denied', message: `De inlog is geweigerd. ${MANUAL_HINT}` };
       if (code === 'expired_token') return { status: 'expired', message: 'De code is verlopen. Start opnieuw.' };
-      return { status: 'denied', message: 'Microsoft weigerde de inlog (zie het stappenplan voor een handmatige inrichting).' };
+      return { status: 'denied', message: loginProblem(body) };
     }
     // Het token blijft kort bij de sessie tot alles is ingesteld: mislukt een stap, dan kan dezelfde sessie opnieuw proberen.
     session.token = body.access_token;
@@ -273,4 +302,4 @@ function registerGraphSetupRoutes(app, { setup, settingsFor, requireAdmin, audit
   });
 }
 
-module.exports = { createGraphSetup, registerGraphSetupRoutes, APP_NAME };
+module.exports = { loginProblem, createGraphSetup, registerGraphSetupRoutes, APP_NAME };

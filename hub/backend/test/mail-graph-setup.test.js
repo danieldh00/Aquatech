@@ -4,7 +4,7 @@ const assert = require('node:assert');
 const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
-const { createGraphSetup } = require('../src/platform/mail-graph-setup');
+const { createGraphSetup, loginProblem } = require('../src/platform/mail-graph-setup');
 const { createLogin, listen } = require('./helpers/http-client');
 
 const SECRET = 'test-secret-graph-setup-0123456789';
@@ -198,4 +198,20 @@ test('API: inrichten zet mailServer en het versleutelde geheim; alleen beheerder
   }
   const row = db.prepare("SELECT value FROM settings WHERE key = 'mailGraphSecret'").get();
   assert.ok(row && !row.value.includes('Nieuw-Clientgeheim'), 'geheim versleuteld opgeslagen');
+});
+
+test('inrichting: gebruikt de Graph PowerShell-client en toont inlogfouten in het Nederlands met verwijzing naar de handleiding', async () => {
+  const microsoft = fakeMicrosoft();
+  const setup = createGraphSetup({ fetchImpl: microsoft.fetchImpl });
+  await setup.start({ tenantKey: 't1', userId: 'u1' });
+  const deviceRequest = microsoft.calls.find((call) => call.url.endsWith('/devicecode'));
+  assert.match(deviceRequest.body, /client_id=14d82eec-204b-4c2f-b7e8-296a70dab67e/);
+  assert.ok(!deviceRequest.body.includes('04b07795'), 'niet meer de Azure CLI-client');
+  const blocked = loginProblem({ error: 'invalid_grant', error_description: 'AADSTS65002: Consent between first party application ...' });
+  assert.match(blocked, /AADSTS65002/);
+  assert.match(blocked, /handleiding hieronder/);
+  assert.match(loginProblem({ error: 'invalid_grant', error_description: 'AADSTS90094: admin consent' }), /Globale beheerder/);
+  assert.match(loginProblem({}), /handleiding hieronder/);
+  const failing = createGraphSetup({ fetchImpl: async () => ({ status: 400, json: async () => ({ error: 'unauthorized_client', error_description: 'AADSTS700016: x' }) }) });
+  await assert.rejects(failing.start({ tenantKey: 't1', userId: 'u1' }), /AADSTS700016.*handleiding hieronder/);
 });
