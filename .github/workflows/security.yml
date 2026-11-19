@@ -1,0 +1,116 @@
+name: Security scans
+
+# Vindt lekken en kwetsbaarheden vóór productie: geheimen in de code (gitleaks), codeanalyse (CodeQL) en een scan van
+# het gebouwde image (Trivy). Draait bij code-wijzigingen in een PR, op master en wekelijks (nieuwe CVE's in bestaande code).
+# Secret scanning en push protection van GitHub zelf staan in de repo-instellingen (Settings > Code security), niet hier.
+on:
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    - cron: "17 4 * * 1"
+
+concurrency:
+  group: security-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Bepaalt of de PR code raakt (zelfde regel als ci.yml); een overgeslagen job telt als geslaagd.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.scope.outputs.code }}
+    steps:
+      - name: Raakt deze wijziging code?
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -z "$NUMBER" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files=$(gh api "repos/$REPO/pulls/$NUMBER/files" --paginate --jq '.[].filename') || { echo "code=true" >> "$GITHUB_OUTPUT"; exit 0; }
+          if echo "$files" | grep -Eq '^(hub/|deploy/|docker-compose\.yml|\.github/)'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+            echo "Geen code gewijzigd: beveiligingsscans overgeslagen."
+          fi
+
+  # Zoekt geheimen (sleutels, tokens, wachtwoorden) in de hele git-historie.
+  secrets:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        run: >-
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.21.2
+          detect --source /repo --redact --verbose --exit-code 1
+
+  # Statische codeanalyse van backend en frontend (JavaScript) en van de workflows zelf.
+  codeql:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript, actions]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}
+
+  # Bouwt het image (amd64) en scant het op bekende kwetsbaarheden met een beschikbare oplossing.
+  container:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Image bouwen
+        run: >-
+          docker buildx build --load -t hub:scan
+          --cache-from type=gha,scope=ci-linux/amd64
+          hub
+      - name: Trivy-scan (hoog en kritiek, alleen met oplossing)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: hub:scan
+          format: sarif
+          output: trivy.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Resultaat naar GitHub-beveiliging
+        if: always() && hashFiles('trivy.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy.sarif
+          category: trivy-container
