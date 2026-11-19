@@ -201,12 +201,13 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
     // Facturen: overzicht en export in een vast aantal queries, ongeacht het
     // aantal facturen (geen query per factuur of regel).
     for (let i = 0; i < 4; i++) {
-      const inv = (await client.post('/app/api/invoices', { data: { customer: { name: `Klant ${i}` }, lines: [{ description: 'Sproeier', qty: 2, price: 10 }] } })).body;
+      const inv = (await client.post('/app/api/invoices', { data: { ...(i === 0 ? { date: '2020-01-01', dueDate: '2020-01-15' } : {}), customer: { name: `Klant ${i}` }, lines: [{ description: 'Sproeier', qty: 2, price: 10 }] } })).body;
       assert.strictEqual((await client.post(`/app/api/invoices/${inv.id}/finalize`, {})).status, 200);
     }
     probe.reset();
+    // Met een factuur over de vervaldatum komt er één query bij voor de laatste betalingsherinnering (niet per factuur).
     assert.strictEqual((await client.get('/app/api/invoices')).body.items.length, 4);
-    assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
+    assert.ok(probe.stats.queries <= 3, probe.stats.sql.join('\n'));
     probe.reset();
     assert.strictEqual((await client.get('/app/api/invoices/export')).body.items.length, 4);
     assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));

@@ -611,6 +611,7 @@
     $('[data-clear="anthropicApiKey"]').disabled = !key.set;
     $('[data-clear="accessCode"]').disabled = !code.set;
     renderSeason(view.seasonReminders.value);
+    if (view.paymentReminders) renderPaymentReminders(view.paymentReminders.value);
     const followUpForm = $('#s-quote-followup');
     const followUp = view.quoteFollowUp?.value || {};
     followUpForm.enabled.checked = Boolean(followUp.enabled);
@@ -732,6 +733,37 @@
         </div>
         <label>Tekst in de mail en het portaal<textarea name="text" rows="3" maxlength="1000">${esc(item.text)}</textarea></label>
       </fieldset>`).join('');
+  }
+
+  /**
+   * Toont de instelling paymentReminders in het formulier Betalingsherinneringen.
+   * @param {object} config De instelling paymentReminders.
+   * @returns {void}
+   */
+  function renderPaymentReminders(config) {
+    const reminderForm = $('#s-payment-reminders');
+    reminderForm.enabled.checked = config.enabled;
+    reminderForm.stopAfterDays.value = config.stopAfterDays;
+    $('#s-payment-reminders-steps').innerHTML = config.steps.map((step) => `
+      <div class="field" data-key="${esc(step.key)}">
+        <label class="chk"><input type="checkbox" name="stepEnabled"${step.enabled ? ' checked' : ''}> ${esc(step.title)}</label>
+        <label>Dagen over de vervaldatum<input name="stepDays" type="number" min="1" max="364" step="1" required value="${step.days}"></label>
+      </div>`).join('');
+  }
+
+  /**
+   * Leest het formulier Betalingsherinneringen uit.
+   * @returns {object} De instelling paymentReminders.
+   */
+  function readPaymentReminders() {
+    const reminderForm = $('#s-payment-reminders');
+    return {
+      enabled: reminderForm.enabled.checked,
+      stopAfterDays: Number(reminderForm.stopAfterDays.value),
+      steps: [...reminderForm.querySelectorAll('[data-key]')].map((field) => ({
+        key: field.dataset.key, enabled: field.querySelector('[name="stepEnabled"]').checked, days: Number(field.querySelector('[name="stepDays"]').value),
+      })),
+    };
   }
 
   /** Hoogstens zoveel etiketsjablonen (gelijk aan de server). */
@@ -1338,6 +1370,15 @@
         return;
       }
       saveSettings(seasonForm, { seasonReminders: config }, 'Seizoensherinneringen opgeslagen');
+    };
+    const paymentRemindersForm = $('#s-payment-reminders');
+    /**
+     * Slaat de betalingsherinneringen op.
+     * @param {SubmitEvent} event het verzenden
+     */
+    paymentRemindersForm.onsubmit = (event) => {
+      event.preventDefault();
+      saveSettings(paymentRemindersForm, { paymentReminders: readPaymentReminders() }, 'Betalingsherinneringen opgeslagen');
     };
     const followUpForm = $('#s-quote-followup');
     /**

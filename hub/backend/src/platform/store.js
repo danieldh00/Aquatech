@@ -335,7 +335,7 @@ function createStore(db) {
   // ---------- Gebruikers ----------
   // Wat publicUser nodig heeft (zonder wachtwoord-hash en voorkeuren).
   const PUBLIC_USER_COLUMNS = ['id', 'tenant_id', 'username', 'display_name', 'role', 'kind', 'disabled', 'platform_admin',
-    'must_change_password', 'created_at', 'last_seen_at', 'email', 'phone', 'customer_group', 'company_name', 'kvk_number', 'vat_number', 'business_request', 'wholesale', 'wholesale_discount', 'address', 'payment_days', 'document_language'].map((column) => `u.${column}`).join(', ');
+    'must_change_password', 'created_at', 'last_seen_at', 'email', 'phone', 'customer_group', 'company_name', 'kvk_number', 'vat_number', 'business_request', 'wholesale', 'wholesale_discount', 'address', 'payment_days', 'document_language', 'reminders_off'].map((column) => `u.${column}`).join(', ');
 
   /**
    * Een gebruiker zoals de API hem toont (zonder wachtwoord-hash en voorkeuren).
@@ -351,7 +351,7 @@ function createStore(db) {
       companyName: user.company_name || '', kvkNumber: user.kvk_number || '', vatNumber: user.vat_number || '', businessRequest: user.business_request || '',
       wholesale: Boolean(Number(user.wholesale)), wholesaleDiscount: Number(user.wholesale_discount) || 0,
       paymentDays: user.payment_days === null || user.payment_days === undefined ? null : Number(user.payment_days),
-      documentLanguage: DocText.clean(user.document_language) };
+      documentLanguage: DocText.clean(user.document_language), remindersOff: Boolean(Number(user.reminders_off)) };
   }
 
   /**
@@ -728,6 +728,7 @@ function createStore(db) {
     if (input.wholesale !== undefined) prepare('UPDATE users SET wholesale = ? WHERE tenant_id = ? AND id = ?').run(input.wholesale ? 1 : 0, tenantId, user.id);
     if (input.wholesaleDiscount !== undefined) prepare('UPDATE users SET wholesale_discount = ? WHERE tenant_id = ? AND id = ?').run(input.wholesaleDiscount, tenantId, user.id);
     if (input.paymentDays !== undefined) prepare('UPDATE users SET payment_days = ? WHERE tenant_id = ? AND id = ?').run(input.paymentDays, tenantId, user.id);
+    if (input.remindersOff !== undefined) prepare('UPDATE users SET reminders_off = ? WHERE tenant_id = ? AND id = ?').run(input.remindersOff ? 1 : 0, tenantId, user.id);
     if (input.documentLanguage !== undefined) prepare('UPDATE users SET document_language = ? WHERE tenant_id = ? AND id = ?').run(DocText.clean(input.documentLanguage), tenantId, user.id);
     if (input.customerGroup === '') prepare('UPDATE users SET wholesale = 0, wholesale_discount = 0 WHERE tenant_id = ? AND id = ?').run(tenantId, user.id);
     if (input.business !== undefined) saveBusinessProfile(tenantId, user.id, input.business);

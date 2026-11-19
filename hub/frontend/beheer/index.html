@@ -452,6 +452,13 @@
           <div class="row"><button class="btn primary" type="submit">Opslaan</button></div>
           <div class="err" role="alert"></div>
         </form>
+        <form id="s-payment-reminders" class="card-form settings">
+          <h3>Betalingsherinneringen en aanmaningen</h3>
+          <p class="muted small">Elk uur kijkt AquaTech welke definitieve, onbetaalde facturen over de vervaldatum zijn en mailt de klant (met de factuur als PDF) volgens de stappen hieronder. Per factuur wordt elke stap hoogstens één keer verstuurd; wat verstuurd is staat op de factuur. Een betaalde of gecrediteerde factuur valt vanzelf af. Per klant zet je dit uit op de klantkaart. De teksten pas je aan onder <em>Mail-opmaak</em> (groep Facturen).</p>
+          <label class="chk"><input type="checkbox" name="enabled"> Betalingsherinneringen automatisch versturen</label>
+          <div id="s-payment-reminders-steps" class="form-grid"></div>
+          <label class="field">Niet meer automatisch mailen na (dagen over de vervaldatum)<input name="stopAfterDays" type="number" min="1" max="365" step="1" required><span class="hint">Oudere facturen pak je zelf op (bijvoorbeeld incasso); ze krijgen geen mails meer.</span></label>
+          <p class="muted small">Zet je dit voor het eerst aan, dan krijgt een factuur die al lang open staat alleen de laatst passende stap, niet alle stappen achter elkaar.</p>
         <form id="s-quote-followup" class="card-form settings">
           <h3>Offerte-opvolging</h3>
           <p class="muted small">Heeft een klant na het mailen van een offerte niet gereageerd, dan stuurt AquaTech na het gekozen aantal dagen automatisch een vriendelijke herinnering met de knop naar de digitale offerte. Er komt geen herinnering voor een offerte met antwoord, een verlopen offerte of een offerte die alleen via een link is gedeeld.</p>
