@@ -21,6 +21,7 @@ const backups = require('./backup');
 const { createDriveBackup, sanitizeDriveBackup, DriveError, CALLBACK_PATH: DRIVE_CALLBACK_PATH } = require('./platform/drive-backup');
 const { createQuoteStore, registerQuoteRoutes, validShareBase, mailBody, Core: QuoteCore } = require('./verkoop/quotes');
 const { createCustomerStore, registerCustomerRoutes } = require('./verkoop/customers');
+const { createGlobalSearch, registerSearchRoutes } = require('./platform/global-search');
 const { createMailer, mailFailure } = require('./platform/mailer');
 const { createWanIp } = require('./platform/wan-ip');
 const { createAddressLookup, createAddressGuard, registerAddressRoute } = require('./platform/address-lookup');
@@ -76,6 +77,7 @@ const { createLocationStore, registerLocationRoutes } = require('./uitvoering/lo
 const { createServiceRequestStore, registerServiceRequestRoutes } = require('./uitvoering/service-requests');
 const { createOutsourcingStore, registerOutsourcingRoutes } = require('./uitvoering/outsourcing');
 const { createSeasonReminderStore, createSeasonReminderRunner } = require('./uitvoering/season-reminders');
+const { createQuoteFollowUpRunner } = require('./verkoop/quote-follow-up');
 const { createStockStore, registerStockRoutes } = require('./artikelen/stock');
 const { createItemImageStore, registerItemImageRoutes } = require('./artikelen/item-images');
 const { registerLabelRoutes } = require('./artikelen/labels');
@@ -2468,6 +2470,21 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     invite: (customer) => shopAccounts.invite(customer),
   });
 
+  // Globaal zoeken (platform/global-search.js): klanten, offertes, werkorders, facturen en artikelen in één zoekveld.
+  const globalSearch = createGlobalSearch(database, {
+    // Een uitgezette module (Modules aan/uit) wordt niet doorzocht.
+    moduleOn: (tenantId, moduleId) => ModuleTools.isOn(moduleFlagsOf(tenantId), moduleId),
+    // Klanten horen bij de live-tenant; in een testomgeving komen de testklanten daarvan erbij (zoals tenantsOf hierboven).
+    searchCustomers: (user, text, limit) => {
+      const home = homeOf(user.tenant_id);
+      return store.listCustomerPage(home === user.tenant_id ? [home] : [home, user.tenant_id], { search: text, limit }).items;
+    },
+  });
+  registerSearchRoutes(app, {
+    search: globalSearch.search, identify,
+    limiter: createRateLimiter({ windowMs: 60 * 1000, max: 120, keyFn: (req) => `zoeken:${req.user?.id || clientKey(req)}` }),
+  });
+
   // De btw-controle bij VIES: gedeeld door de offertes (btw verleggen) en de webshop.
   const vies = createVies(viesFetch ? { fetchImpl: viesFetch } : {});
 
@@ -2492,10 +2509,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
      * @param {string} search De zoektekst.
      * @returns {object[]} De klanten met id, gebruikersnaam, naam, bedrijf, e-mail, telefoon en adres.
      */
-    searchCustomers: (req, search) => {
+    searchCustomers: async (req, search) => {
       const tid = req.tenantId || tenant.id;
       const home = homeOf(tid);
-      return store.listCustomerPage(home === tid ? [tid] : [home, tid], { search, limit: 20, activeOnly: true }).items
+      return (await store.listCustomerPageAsync(home === tid ? [tid] : [home, tid], { search, limit: 20, activeOnly: true })).items
         .map((customer) => ({ id: customer.id, username: customer.username, displayName: customer.displayName, companyName: customer.companyName,
           email: customer.email, phone: customer.phone, address: customer.address, vatNumber: customer.vatNumber, paymentDays: customer.paymentDays, documentLanguage: customer.documentLanguage }));
     },
@@ -2512,10 +2529,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     outsourcingOf: (tid) => outsourcingStore.marks(tid),
     can: (user, right) => Roles.can(user, right),
     // Klantrecords voor de klantkeuze en de controle op een gekozen klant (zoals bij de offerte).
-    searchCustomers: (req, search) => {
+    searchCustomers: async (req, search) => {
       const tid = req.tenantId || tenant.id;
       const home = homeOf(tid);
-      return store.listCustomerPage(home === tid ? [tid] : [home, tid], { search, limit: 20, activeOnly: true }).items
+      return (await store.listCustomerPageAsync(home === tid ? [tid] : [home, tid], { search, limit: 20, activeOnly: true })).items
         .map((customer) => ({ id: customer.id, username: customer.username, displayName: customer.displayName, companyName: customer.companyName, email: customer.email, phone: customer.phone, address: customer.address }));
     },
     customerOf: (req, id) => {
@@ -3644,6 +3661,23 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       .map((environment) => environment.id);
     return paymentReminders.runAll(activeIds, today);
   };
+  // Offerte-opvolging (quote-follow-up.js): herinnering aan klanten die niet op een gemailde offerte reageren.
+  const quoteFollowUp = createQuoteFollowUpRunner(quoteStore, {
+    settingsFor: (id) => settingsFor(id), mailerFor,
+    audit: (entry) => store.audit(entry),
+    enabled: (id) => ModuleTools.isOn(moduleFlagsOf(id), 'offertes'),
+  });
+  /**
+   * Offerte-opvolging in alle actieve omgevingen versturen (elk uur vanuit main).
+   * @param {Date} [now] Het moment (tests).
+   * @returns {Promise<object>} Aantallen per omgeving.
+   */
+  app.locals.quoteFollowUpAll = async (now) => {
+    const activeIds = inScopeOnly(store.listTenants()).filter((live) => !live.disabled)
+      .flatMap((live) => [live, ...live.environments.filter((environment) => !environment.disabled)])
+      .map((environment) => environment.id);
+    return quoteFollowUp.runAll(activeIds, now);
+  };
   // Inkooporders, ook voor de uurlijkse bestelvoorstellen hieronder (tests kunnen autoPropose hier vervangen).
   app.locals.purchaseOrders = purchaseOrderStore;
   /**
@@ -3774,6 +3808,9 @@ if (require.main === module) {
     slowLog.trackTask('seizoensherinneringen', () => app.locals.seasonRemindersAll())
       .then((sent) => { if (Object.keys(sent).length) console.log(`Seizoensherinneringen: ${JSON.stringify(sent)}`); })
       .catch((error) => console.error('Seizoensherinneringen mislukt:', error.message));
+    slowLog.trackTask('offerte-opvolging', () => app.locals.quoteFollowUpAll())
+      .then((sent) => { if (Object.keys(sent).length) console.log(`Offerte-opvolging: ${JSON.stringify(sent)}`); })
+      .catch((error) => console.error('Offerte-opvolging mislukt:', error.message));
     // Een halve minuut later, zodat de server bij het opstarten eerst luistert (niet blokkerend).
     setTimeout(runPurchaseProposals, 30 * 1000).unref();
     slowLog.trackTask('back-up', () => app.locals.backupIfDue())
