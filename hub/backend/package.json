@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "acorn": "^8.19.0",
-    "acorn-walk": "^8.3.5"
+    "acorn-walk": "^8.3.5",
+    "esbuild": "^0.25.12"
   }
 }
