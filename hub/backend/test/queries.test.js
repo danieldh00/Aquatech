@@ -290,17 +290,10 @@ test('queries: leveranciers en inkooporders kosten een vast aantal queries, onge
     const factorView = (await client.get('/app/api/stock/price-factors')).body;
     assert.strictEqual(factorView.preview.length, 12);
     assert.ok(probe.stats.queries <= 8, probe.stats.sql.join('\n'));
-    // Open prijsvoorstellen (lijst) en voor één artikel: een vast aantal queries.
+    // Een wijziging van de instelling zet alle prijzen in één ronde goed.
     probe.reset();
-    assert.strictEqual((await client.get('/app/api/stock/price-proposals')).body.items.length, factorView.changedCount);
-    assert.ok(probe.stats.queries <= 8, probe.stats.sql.join('\n'));
-    probe.reset();
-    assert.strictEqual((await client.get(`/app/api/stock/price-proposals?id=${ids[0]}`)).status, 200);
-    assert.ok(probe.stats.queries <= 8, probe.stats.sql.join('\n'));
-    probe.reset();
-    const changes = factorView.preview.filter((row) => row.changed).map((row) => ({ id: row.id, newPrice: row.newPrice }));
-    assert.strictEqual((await client.post('/app/api/stock/price-factors/apply', { items: changes })).body.updated, changes.length);
-    assert.ok(probe.stats.queries <= 8 + changes.length * 2, probe.stats.sql.join('\n'));
+    assert.strictEqual((await client.put('/app/api/stock/price-factors', { defaultFactor: 3 })).body.repriced, 12);
+    assert.ok(probe.stats.queries <= 8 + 12 * 6, probe.stats.sql.join('\n'));
   } finally {
     server.close();
   }

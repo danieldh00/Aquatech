@@ -461,6 +461,7 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
         kind: 'ontvangst', source: `inkoop:${row.number}`, note: `Inkooporder ${row.number}`, user, at: now,
         unitCost: line.unit_cost == null ? undefined : Number(line.unit_cost),
       });
+      if (line.unit_cost != null) stock.receiptCost(tenantId, line.item_id, Number(line.unit_cost), { user, note: `Inkooporder ${row.number}` });
       prepare('UPDATE purchase_order_lines SET received_qty = received_qty + ? WHERE tenant_id = ? AND id = ?').run(qty, tenantId, line.id);
     }
     const after = linesOf(tenantId, row.id);

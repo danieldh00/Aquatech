@@ -127,7 +127,9 @@ test('prijsfactor: instellen, rechten en scheiding tussen organisaties', async (
   assert.strictEqual((await staff.get('/app/api/stock/price-factors')).status, 200);
   assert.strictEqual((await klant.get('/app/api/stock/price-factors')).status, 403);
   assert.strictEqual((await staff.put('/app/api/stock/price-factors', config)).status, 403);
-  assert.strictEqual((await staff.post('/app/api/stock/price-factors/apply', { items: [{ id: 'x', newPrice: 1 }] })).status, 403);
+  // De goedkeuringsroutes bestaan niet meer.
+  assert.strictEqual((await admin.post('/app/api/stock/price-factors/apply', { items: [] })).status, 404);
+  assert.strictEqual((await admin.get('/app/api/stock/price-proposals')).status, 404);
   const saved = await admin.put('/app/api/stock/price-factors', config);
   assert.strictEqual(saved.status, 200, JSON.stringify(saved.body));
   assert.strictEqual(saved.body.config.defaultFactor, 1.8);
@@ -137,23 +139,30 @@ test('prijsfactor: instellen, rechten en scheiding tussen organisaties', async (
   assert.strictEqual((await admin.put('/app/api/stock/price-factors', { categories: [{ categorySlug: 'bestaat-niet', factor: 2 }] })).status, 400);
   assert.strictEqual((await admin.put('/app/api/stock/price-factors', { suppliers: [{ supplierId: 'x', factor: 2 }] })).status, 400);
   assert.strictEqual((await admin.put('/app/api/stock/price-factors', { defaultFactor: 500 })).status, 400);
-  // Een andere organisatie ziet niets van deze instelling of deze leverancier en kan niet doorvoeren.
+  // Een andere organisatie ziet niets van deze instelling of deze leverancier en kan niets wijzigen.
   const foreign = await vreemd.get('/app/api/stock/price-factors');
   assert.strictEqual(foreign.status, 200);
   assert.strictEqual(foreign.body.config.defaultFactor, null);
   assert.deepStrictEqual(foreign.body.suppliers, []);
   assert.strictEqual((await vreemd.put('/app/api/stock/price-factors', { suppliers: [{ supplierId: supplier.id, factor: 2 }] })).status, 400);
-  assert.strictEqual((await admin.post('/app/api/stock/price-factors/apply', {})).status, 400);
-  // Een ontbrekende of niet-numerieke prijs bewijst niets en wordt overgeslagen, nooit doorgevoerd.
-  assert.deepStrictEqual((await admin.post('/app/api/stock/price-factors/apply', { items: [{ id: 'x' }, { id: 'y', newPrice: 'abc' }, { id: 'z', newPrice: null }] })).body, { updated: 0, skipped: 3 });
 });
 
-test('prijsfactor: prijs bij opslaan, voorbeeld en doorvoeren met alle niveaus', async () => {
+/**
+ * De automatische prijswijzigingen in het auditlog van een omgeving.
+ * @param {object} db De database.
+ * @param {string} tenantId Id van de omgeving.
+ * @returns {object[]} De details (artikel, oud, nieuw, bron), oudste eerst.
+ */
+function priceAudit(db, tenantId) {
+  return db.prepare("SELECT detail FROM audit WHERE tenant_id = ? AND action = 'verkoopprijs_automatisch' ORDER BY created_at, id").all(tenantId)
+    .map((row) => (typeof row.detail === 'string' ? JSON.parse(row.detail) : row.detail));
+}
+
+test('prijsfactor: de prijs volgt de instelling met alle niveaus, zonder goedkeuring', async () => {
   const { db, main, admin, vreemd } = await setup();
   const supplier = (await admin.post('/app/api/suppliers', { name: 'Groothandel' })).body;
-  assert.strictEqual((await admin.put('/app/api/stock/price-factors', {
-    defaultFactor: 1.8, rounding: { mode: 'x.95', direction: 'dichtstbij' }, categories: [{ categorySlug: PARENT.slug, factor: 2 }], suppliers: [{ supplierId: supplier.id, factor: 2.5 }],
-  })).status, 200);
+  const config = { defaultFactor: 1.8, rounding: { mode: 'x.95', direction: 'dichtstbij' }, categories: [{ categorySlug: PARENT.slug, factor: 2 }], suppliers: [{ supplierId: supplier.id, factor: 2.5 }] };
+  assert.strictEqual((await admin.put('/app/api/stock/price-factors', config)).status, 200);
   /**
    * Maakt een artikel.
    * @param {string} code De code.
@@ -168,176 +177,72 @@ test('prijsfactor: prijs bij opslaan, voorbeeld en doorvoeren met alle niveaus',
   // Standaardfactor 1,8 × 10 = 18 → 17,95; een vast artikel blijft op zijn prijs.
   const byDefault = await make('STD', { priceMode: 'factor' });
   assert.strictEqual(byDefault.salePrice, 17.95);
-  assert.strictEqual(byDefault.priceMode, 'factor');
   assert.strictEqual(byDefault.margin, 44.3);
   const fixed = await make('VAST', {});
-  assert.strictEqual(fixed.salePrice, 99);
-  assert.strictEqual(fixed.priceMode, 'vast');
-  // Eigen factor van het artikel; zonder inkoopprijs blijft de ingevulde prijs staan.
+  assert.deepStrictEqual([fixed.salePrice, fixed.priceMode], [99, 'vast']);
   assert.strictEqual((await make('EIGEN', { priceMode: 'factor', priceFactor: 3 })).salePrice, 29.95);
-  const noCost = await make('GEENKOST', { priceMode: 'factor', costPrice: '' });
-  assert.strictEqual(noCost.salePrice, 99);
-  // Ongeldige invoer.
+  assert.strictEqual((await make('GEENKOST', { priceMode: 'factor', costPrice: '' })).salePrice, 99, 'zonder inkoopprijs blijft de ingevulde prijs staan');
   assert.strictEqual((await admin.post('/app/api/stock/items', { code: 'FOUT', name: 'x', priceMode: 'raar' })).status, 400);
   assert.strictEqual((await admin.post('/app/api/stock/items', { code: 'FOUT', name: 'x', priceMode: 'factor', priceFactor: 0 })).status, 400);
-  // Categorie en leverancier via de webshopkoppeling en de voorkeursleverancier.
+  // Categorie en voorkeursleverancier: de prijs volgt zodra de instelling opnieuw wordt opgeslagen.
   const viaCategory = await make('CAT', { priceMode: 'factor', salePrice: 1 });
   db.prepare('INSERT INTO shop_products (tenant_id, id, name, image, categories) VALUES (?, ?, ?, ?, ?)').run(main, 'p1', 'CAT', '', JSON.stringify([CHILD.name]));
   db.prepare('UPDATE stock_items SET shop_product_id = ? WHERE tenant_id = ? AND id = ?').run('p1', main, viaCategory.id);
   const viaSupplier = await make('LEV', { priceMode: 'factor', salePrice: 1 });
   assert.strictEqual((await admin.put(`/app/api/stock/items/${viaSupplier.id}/suppliers`, { suppliers: [{ supplierId: supplier.id, preferred: true }] })).status, 200);
-
-  const preview = (await admin.get('/app/api/stock/price-factors')).body;
+  const resaved = await admin.put('/app/api/stock/price-factors', config);
+  assert.strictEqual(resaved.body.repriced, 2, JSON.stringify(resaved.body));
   /**
-   * Zoekt een regel van het voorbeeld.
+   * Zoekt een regel van het overzicht.
    * @param {string} code De artikelcode.
    * @returns {object} De regel.
    */
-  const rowOf = (code) => preview.preview.find((row) => row.code === code);
-  assert.deepStrictEqual(preview.preview.map((row) => row.code).sort(), ['CAT', 'EIGEN', 'GEENKOST', 'LEV', 'STD']);
-  assert.strictEqual(rowOf('STD').changed, false);
-  assert.deepStrictEqual([rowOf('CAT').factor, rowOf('CAT').source, rowOf('CAT').newPrice, rowOf('CAT').changed], [2, 'categorie', 19.95, true]);
-  assert.deepStrictEqual([rowOf('LEV').factor, rowOf('LEV').source, rowOf('LEV').newPrice], [2.5, 'leverancier', 24.95]);
-  assert.deepStrictEqual([rowOf('EIGEN').source, rowOf('GEENKOST').problem, rowOf('GEENKOST').newPrice, rowOf('GEENKOST').changed], ['artikel', 'Geen inkoopprijs', null, false]);
-  assert.strictEqual(rowOf('CAT').marginNew, 49.9);
-  assert.strictEqual(preview.changedCount, 2);
-  assert.deepStrictEqual(preview.preview.slice(0, 2).map((row) => row.changed), [true, true], 'afwijkende artikelen staan bovenaan');
-
-  // Doorvoeren: kies er twee; een verouderde prijs (instelling intussen anders) wordt overgeslagen, niet toegepast.
-  const apply = await admin.post('/app/api/stock/price-factors/apply', { items: [{ id: viaCategory.id, newPrice: 19.95 }, { id: viaSupplier.id, newPrice: 11.11 }, { id: fixed.id, newPrice: 1 }, { id: 'bestaat-niet', newPrice: 1 }] });
-  assert.deepStrictEqual(apply.body, { updated: 1, skipped: 3 });
-  const noPrice = await admin.post('/app/api/stock/price-factors/apply', { items: [{ id: viaSupplier.id }, { id: viaSupplier.id, newPrice: 'abc' }] });
-  assert.deepStrictEqual(noPrice.body, { updated: 0, skipped: 2 });
-  assert.strictEqual((await admin.get(`/app/api/stock/items/${viaCategory.id}`)).body.salePrice, 19.95);
-  assert.strictEqual((await admin.get(`/app/api/stock/items/${viaSupplier.id}`)).body.salePrice, 17.95, 'verouderde prijs uit het voorbeeld is niet toegepast');
+  const rowOf = (code) => resaved.body.preview.find((row) => row.code === code);
+  assert.deepStrictEqual(resaved.body.preview.map((row) => row.code).sort(), ['CAT', 'EIGEN', 'GEENKOST', 'LEV', 'STD']);
+  assert.deepStrictEqual([rowOf('CAT').factor, rowOf('CAT').source, rowOf('CAT').oldPrice], [2, 'categorie', 19.95]);
+  assert.deepStrictEqual([rowOf('LEV').factor, rowOf('LEV').source, rowOf('LEV').oldPrice], [2.5, 'leverancier', 24.95]);
+  assert.deepStrictEqual([rowOf('EIGEN').source, rowOf('GEENKOST').problem], ['artikel', 'Geen inkoopprijs']);
+  assert.strictEqual(resaved.body.preview[0].code, 'GEENKOST', 'artikelen met een opmerking staan bovenaan');
   assert.strictEqual((await admin.get(`/app/api/stock/items/${fixed.id}`)).body.salePrice, 99, 'een vast artikel verandert nooit');
-  assert.strictEqual((await admin.get('/app/api/stock/price-factors')).body.changedCount, 1);
+  // Auditlog: oud, nieuw en bron per automatische wijziging.
+  assert.deepStrictEqual(priceAudit(db, main).filter((entry) => entry.bron === 'factorinstelling').map((entry) => [entry.artikel, entry.oud, entry.nieuw]).sort(), [['CAT', 17.95, 19.95], ['LEV', 17.95, 24.95]]);
 
-  // Een andere inkoopprijs: de prijs blijft staan tot de herberekening (afwijkend), maar een wijziging van factor of inkoopprijs in het formulier rekent meteen.
-  db.prepare('UPDATE stock_items SET cost_price = 20 WHERE tenant_id = ? AND id = ?').run(main, byDefault.id);
-  assert.strictEqual((await admin.get(`/app/api/stock/items/${byDefault.id}`)).body.salePrice, 17.95);
-  /**
-   * Zoekt een regel in het antwoord van het voorbeeld.
-   * @param {object} response Antwoord van GET price-factors.
-   * @param {string} code Artikelcode.
-   * @returns {object} De regel.
-   */
-  const rowAfter = (response, code) => response.body.preview.find((row) => row.code === code);
-  const after = rowAfter(await admin.get('/app/api/stock/price-factors'), 'STD');
-  assert.deepStrictEqual([after.changed, after.newPrice], [true, 35.95]);
-  // Een andere inkoopprijs in het formulier verandert de verkoopprijs niet vanzelf: er komt een voorstel; een andere eigen factor rekent wel meteen.
-  const renamed = await admin.put(`/app/api/stock/items/${byDefault.id}`, { name: 'Andere naam' });
-  assert.strictEqual(renamed.body.salePrice, 17.95);
+  // Een nieuwe inkoopprijs in het formulier zet de verkoopprijs direct goed.
   const repriced = await admin.put(`/app/api/stock/items/${byDefault.id}`, { costPrice: 20.5 });
-  assert.strictEqual(repriced.body.salePrice, 17.95);
-  assert.deepStrictEqual(rowAfter(await admin.get('/app/api/stock/price-factors'), 'STD').newPrice, 36.95);
-  const refactored = await admin.put(`/app/api/stock/items/${byDefault.id}`, { priceFactor: 2 });
-  assert.strictEqual(refactored.body.salePrice, 40.95);
+  assert.strictEqual(repriced.body.salePrice, 36.95);
+  assert.ok(priceAudit(db, main).some((entry) => entry.artikel === 'STD' && entry.oud === 17.95 && entry.nieuw === 36.95 && entry.bron === 'inkoopprijs'));
+  // Een andere naam verandert niets; een eigen factor rekent meteen.
+  assert.strictEqual((await admin.put(`/app/api/stock/items/${byDefault.id}`, { name: 'Andere naam' })).body.salePrice, 36.95);
+  assert.strictEqual((await admin.put(`/app/api/stock/items/${byDefault.id}`, { priceFactor: 2 })).body.salePrice, 40.95);
+  // Een inkoopprijs via de prijshistorie en een ontvangst werken ook door.
+  assert.strictEqual((await admin.post(`/app/api/stock/items/${byDefault.id}/cost-prices`, { price: 10 })).status, 201, 'inkoopprijs toevoegen');
+  assert.strictEqual((await admin.get(`/app/api/stock/items/${byDefault.id}`)).body.salePrice, 19.95);
+  const receipt = await admin.post(`/app/api/stock/items/${byDefault.id}/movements`, { kind: 'ontvangst', qty: 3, unitCost: 12 });
+  assert.strictEqual(receipt.status, 201, JSON.stringify(receipt.body));
+  assert.strictEqual((await admin.get(`/app/api/stock/items/${byDefault.id}`)).body.salePrice, 23.95);
   // Terug naar een vaste prijs: de prijs blijft zoals hij was en doet niet meer mee.
   const backToFixed = await admin.put(`/app/api/stock/items/${byDefault.id}`, { priceMode: 'vast', salePrice: 40 });
   assert.deepStrictEqual([backToFixed.body.priceMode, backToFixed.body.salePrice], ['vast', 40]);
   assert.ok(!(await admin.get('/app/api/stock/price-factors')).body.preview.some((row) => row.code === 'STD'));
-  // Een andere organisatie ziet de artikelen niet.
   assert.deepStrictEqual((await vreemd.get('/app/api/stock/price-factors')).body.preview, []);
-  assert.deepStrictEqual((await vreemd.post('/app/api/stock/price-factors/apply', { items: [{ id: viaSupplier.id, newPrice: 24.95 }] })).body, { updated: 0, skipped: 1 });
 });
 
-test('prijsfactor: doorvoeren zet de webshop opnieuw klaar en overslaan van gearchiveerde artikelen', async () => {
+test('prijsfactor: de webshop wordt opnieuw klaargezet en gearchiveerde artikelen doen niet mee', async () => {
   const { db, main, admin } = await setup();
   await admin.put('/app/api/stock/price-factors', { defaultFactor: 2, rounding: { mode: 'cent', direction: 'dichtstbij' } });
   const shop = (await admin.post('/app/api/stock/items', { code: 'SHOP', name: 'Shop', costPrice: 5, salePrice: 1, priceMode: 'factor', priceFactor: 3 })).body;
   const old = (await admin.post('/app/api/stock/items', { code: 'OUD', name: 'Oud', costPrice: 5, salePrice: 1, priceMode: 'factor' })).body;
   db.prepare('UPDATE stock_items SET shop_product_id = ?, shop_dirty = 0 WHERE tenant_id = ? AND id = ?').run('w1', main, shop.id);
   db.prepare('UPDATE stock_items SET archived = 1 WHERE tenant_id = ? AND id = ?').run(main, old.id);
-  const preview = (await admin.get('/app/api/stock/price-factors')).body.preview;
-  assert.deepStrictEqual(preview.map((row) => row.code), ['SHOP'], 'gearchiveerd telt niet mee');
+  assert.deepStrictEqual((await admin.get('/app/api/stock/price-factors')).body.preview.map((row) => row.code), ['SHOP'], 'gearchiveerd telt niet mee');
   assert.strictEqual(shop.salePrice, 15);
+  // Een nieuwe inkoopprijs buiten het formulier (hier rechtstreeks) wordt door de onderhoudsronde goedgezet; een wijziging van de instelling doet hetzelfde.
   db.prepare('UPDATE stock_items SET cost_price = 6 WHERE tenant_id = ? AND id = ?').run(main, shop.id);
-  const apply = await admin.post('/app/api/stock/price-factors/apply', { items: [{ id: shop.id, newPrice: 18 }, { id: old.id, newPrice: 10 }] });
-  assert.deepStrictEqual(apply.body, { updated: 1, skipped: 1 });
+  const out = await admin.put('/app/api/stock/price-factors', { defaultFactor: 2, rounding: { mode: 'cent', direction: 'dichtstbij' } });
+  assert.strictEqual(out.body.repriced, 1);
   const row = db.prepare('SELECT sale_price, shop_dirty FROM stock_items WHERE tenant_id = ? AND id = ?').get(main, shop.id);
   assert.deepStrictEqual([Number(row.sale_price), Number(row.shop_dirty)], [18, 1]);
   assert.strictEqual(Number(db.prepare('SELECT sale_price FROM stock_items WHERE tenant_id = ? AND id = ?').get(main, old.id).sale_price), 10);
-});
-
-test('prijsvoorstel: nieuwe inkoopprijs geeft een voorstel dat je goedkeurt of afwijst', async () => {
-  const { db, main, admin, staff, vreemd } = await setup();
-  await admin.put('/app/api/stock/price-factors', { defaultFactor: 2, rounding: { mode: 'cent', direction: 'dichtstbij' } });
-  const first = (await admin.post('/app/api/stock/items', { code: 'A', name: 'A', costPrice: 5, priceMode: 'factor' })).body;
-  const second = (await admin.post('/app/api/stock/items', { code: 'B', name: 'B', costPrice: 5, priceMode: 'factor' })).body;
-  const fixed = (await admin.post('/app/api/stock/items', { code: 'V', name: 'V', costPrice: 5, salePrice: 50 })).body;
-  assert.deepStrictEqual([first.salePrice, second.salePrice], [10, 10]);
-  // Een nieuwe inkoopprijs: de verkoopprijs blijft staan en er komen twee voorstellen; een vast artikel doet niet mee.
-  await admin.put(`/app/api/stock/items/${first.id}`, { costPrice: 6 });
-  await admin.put(`/app/api/stock/items/${second.id}`, { costPrice: 7 });
-  await admin.put(`/app/api/stock/items/${fixed.id}`, { costPrice: 9 });
-  let view = (await admin.get('/app/api/stock/price-factors')).body;
-  assert.deepStrictEqual([view.changedCount, view.rejectedCount, view.preview.length], [2, 0, 2]);
-  assert.strictEqual((await admin.get(`/app/api/stock/items/${first.id}`)).body.salePrice, 10);
-  // Rechten: een medewerker mag lezen, niet afwijzen of heropenen; een andere organisatie kan niets afwijzen.
-  assert.strictEqual((await staff.post('/app/api/stock/price-factors/reject', { items: [{ id: first.id, newPrice: 12 }] })).status, 403);
-  assert.strictEqual((await staff.post('/app/api/stock/price-factors/reopen', { ids: [first.id] })).status, 403);
-  assert.deepStrictEqual((await vreemd.post('/app/api/stock/price-factors/reject', { items: [{ id: first.id, newPrice: 12 }] })).body, { rejected: 0, skipped: 1 });
-  // Een andere organisatie kan een afwijzing niet heropenen (de rij blijft staan).
-  await admin.post('/app/api/stock/price-factors/reject', { items: [{ id: first.id, newPrice: 12 }] });
-  assert.strictEqual((await vreemd.post('/app/api/stock/price-factors/reopen', { ids: [first.id] })).status, 200);
-  assert.strictEqual(Number(db.prepare('SELECT COUNT(*) AS n FROM price_proposal_rejections WHERE tenant_id = ?').get(main).n), 1);
-  await admin.post('/app/api/stock/price-factors/reopen', { ids: [first.id] });
-  assert.strictEqual((await admin.post('/app/api/stock/price-factors/reject', {})).status, 400);
-  assert.strictEqual((await admin.post('/app/api/stock/price-factors/reopen', {})).status, 400);
-  // Afwijzen: alleen als het voorstel klopt; een verouderde prijs en een vast artikel worden overgeslagen.
-  const rejected = await admin.post('/app/api/stock/price-factors/reject', { items: [{ id: first.id, newPrice: 12 }, { id: second.id, newPrice: 99 }, { id: fixed.id, newPrice: 18 }] });
-  assert.deepStrictEqual(rejected.body, { rejected: 1, skipped: 2 });
-  view = (await admin.get('/app/api/stock/price-factors')).body;
-  assert.deepStrictEqual([view.changedCount, view.rejectedCount], [1, 1]);
-  assert.strictEqual(view.preview[0].code, 'B', 'open voorstellen staan bovenaan');
-  assert.strictEqual(view.preview.find((row) => row.code === 'A').rejected, true);
-  // Twee keer afwijzen geeft één rij.
-  await admin.post('/app/api/stock/price-factors/reject', { items: [{ id: first.id, newPrice: 12 }] });
-  assert.strictEqual(Number(db.prepare('SELECT COUNT(*) AS n FROM price_proposal_rejections WHERE tenant_id = ?').get(main).n), 1);
-  // Een nieuwe inkoopprijs maakt het voorstel weer open.
-  await admin.put(`/app/api/stock/items/${first.id}`, { costPrice: 8 });
-  view = (await admin.get('/app/api/stock/price-factors')).body;
-  assert.deepStrictEqual([view.changedCount, view.rejectedCount, view.preview.find((row) => row.code === 'A').newPrice], [2, 0, 16]);
-  // Heropenen en goedkeuren: na doorvoeren is de afwijzing weg en staat de prijs op het voorstel.
-  await admin.post('/app/api/stock/price-factors/reject', { items: [{ id: first.id, newPrice: 16 }] });
-  assert.strictEqual((await admin.post('/app/api/stock/price-factors/reopen', { ids: [first.id] })).body.reopened, 1);
-  assert.strictEqual((await admin.get('/app/api/stock/price-factors')).body.rejectedCount, 0);
-  await admin.post('/app/api/stock/price-factors/reject', { items: [{ id: first.id, newPrice: 16 }] });
-  // Een afgewezen voorstel kan niet meer worden goedgekeurd (ook niet vanuit een verouderd tabblad); eerst heropenen.
-  assert.deepStrictEqual((await admin.post('/app/api/stock/price-factors/apply', { items: [{ id: first.id, newPrice: 16 }] })).body, { updated: 0, skipped: 1 });
-  await admin.post('/app/api/stock/price-factors/reopen', { ids: [first.id] });
-  assert.deepStrictEqual((await admin.post('/app/api/stock/price-factors/apply', { items: [{ id: first.id, newPrice: 16 }, { id: second.id, newPrice: 14 }] })).body, { updated: 2, skipped: 0 });
-  assert.strictEqual((await admin.get(`/app/api/stock/items/${first.id}`)).body.salePrice, 16);
-  assert.strictEqual(Number(db.prepare('SELECT COUNT(*) AS n FROM price_proposal_rejections WHERE tenant_id = ?').get(main).n), 0);
-  // Een artikel zonder boekingen verwijderen wist ook een onthouden afwijzing (geen blokkade door de koppeling).
-  await admin.put(`/app/api/stock/items/${second.id}`, { costPrice: 9 });
-  await admin.post('/app/api/stock/price-factors/reject', { items: [{ id: second.id, newPrice: 18 }] });
-  assert.strictEqual((await admin.del(`/app/api/stock/items/${second.id}`)).status, 200);
-});
-
-test('prijsvoorstel: open voorstellen voor artikelscherm en lijst', async () => {
-  const { admin, staff, klant, vreemd } = await setup();
-  assert.strictEqual((await klant.get('/app/api/stock/price-proposals')).status, 403);
-  await admin.put('/app/api/stock/price-factors', { defaultFactor: 2, rounding: { mode: 'cent', direction: 'dichtstbij' } });
-  const factorItem = (await admin.post('/app/api/stock/items', { code: 'P1', name: 'P1', costPrice: 5, priceMode: 'factor' })).body;
-  const fixedItem = (await admin.post('/app/api/stock/items', { code: 'P2', name: 'P2', costPrice: 5, salePrice: 50 })).body;
-  // Zonder nieuwe inkoopprijs geen voorstel.
-  assert.deepStrictEqual((await admin.get('/app/api/stock/price-proposals')).body.items, []);
-  await admin.put(`/app/api/stock/items/${factorItem.id}`, { costPrice: 6 });
-  await admin.put(`/app/api/stock/items/${fixedItem.id}`, { costPrice: 9 });
-  const open = (await admin.get('/app/api/stock/price-proposals')).body.items;
-  assert.deepStrictEqual(open.map((entry) => [entry.id, entry.oldPrice, entry.newPrice]), [[factorItem.id, 10, 12]]);
-  // Een medewerker mag lezen (niet goedkeuren), een andere organisatie ziet niets.
-  assert.strictEqual((await staff.get('/app/api/stock/price-proposals')).body.items.length, 1);
-  assert.strictEqual((await staff.post('/app/api/stock/price-factors/apply', { items: [{ id: factorItem.id, newPrice: 12 }] })).status, 403);
-  assert.deepStrictEqual((await vreemd.get('/app/api/stock/price-proposals')).body.items, []);
-  // Afgewezen valt weg; goedkeuren ook. De verkoopprijs verandert nooit vanzelf.
-  assert.strictEqual((await admin.get(`/app/api/stock/items/${factorItem.id}`)).body.salePrice, 10);
-  await admin.post('/app/api/stock/price-factors/reject', { items: [{ id: factorItem.id, newPrice: 12 }] });
-  assert.deepStrictEqual((await admin.get('/app/api/stock/price-proposals')).body.items, []);
-  await admin.post('/app/api/stock/price-factors/reopen', { ids: [factorItem.id] });
-  await admin.post('/app/api/stock/price-factors/apply', { items: [{ id: factorItem.id, newPrice: 12 }] });
-  assert.deepStrictEqual((await admin.get('/app/api/stock/price-proposals')).body.items, []);
-  assert.strictEqual((await admin.get(`/app/api/stock/items/${factorItem.id}`)).body.salePrice, 12);
+  // Opnieuw opslaan zonder verschil wijzigt niets.
+  assert.strictEqual((await admin.put('/app/api/stock/price-factors', { defaultFactor: 2, rounding: { mode: 'cent', direction: 'dichtstbij' } })).body.repriced, 0);
 });

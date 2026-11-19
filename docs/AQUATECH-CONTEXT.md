@@ -12,7 +12,7 @@ Productspecifieke kennis. De algemene werkwijze staat in `docs/WERKWIJZE.md`; he
 
 ## Bedrijfsregels
 - Prijsvolgorde: prijsfactor artikel > voorkeursleverancier > diepste categorie > standaard, daarna afronding. Zakelijke categoriekorting komt erbovenop; groothandel = hoogste van staffel, klant en categorie (niet opgeteld); particulieren nooit categoriekorting.
-- Een nieuwe inkoopprijs geeft een prijsvoorstel dat met één klik in het artikelscherm wordt goedgekeurd.
+- De verkoopprijs volgt de factor automatisch: een nieuwe inkoopprijs of een gewijzigde factor zet hem direct goed, zonder goedkeuring (Daniël 2026-11-19); elke wijziging staat met oud, nieuw en bron in het auditlog.
 - Back-ups zijn instelbaar en zichtbaar in de app, met optioneel een kopie op Google Drive.
 
 ## Omgeving

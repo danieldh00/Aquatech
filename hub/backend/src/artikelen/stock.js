@@ -401,6 +401,23 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   let dirtyHook = onDirty;
   // Prijsfactor: berekent de verkoopprijs van een artikel in de modus factor (price-factor.js meldt zich aan via setPricer()).
   let pricer = null;
+  // Auditlog voor automatische prijswijzigingen (de server meldt zich aan via setPriceLogger()).
+  let priceLogger = null;
+  /**
+   * Legt een automatische prijswijziging vast in het auditlog (alleen als de prijs echt anders wordt).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ id: string, code: string }} item Het artikel.
+   * @param {*} oldPrice De prijs tot nu toe.
+   * @param {number} newPrice De nieuwe prijs.
+   * @param {string} source Waardoor de prijs wijzigde (inkoopprijs, ontvangst, factor enzovoort).
+   * @param {object|null} user Wie de aanleiding gaf (leeg = systeem).
+   * @returns {void}
+   */
+  function logPriceChange(tenantId, item, oldPrice, newPrice, source, user) {
+    const before = oldPrice == null ? null : Number(oldPrice);
+    if (!priceLogger || (before !== null && Math.abs(before - newPrice) < 0.005)) return;
+    priceLogger({ tenantId, userId: user && user.id ? user.id : null, action: 'verkoopprijs_automatisch', detail: { artikel: item.code, oud: before, nieuw: newPrice, bron: source } });
+  }
   /**
    * Webshop: meldt een wijziging van prijs of stand (shop-sync.js meldt zich aan via onDirty()).
    * @param {string} tenantId Id van de omgeving.
@@ -772,12 +789,16 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         packSize: Number(existing.order_pack_size) || 1, orderMinQty: Number(existing.order_min_qty) || 1, priceTiers: Wholesale.tiersOf(existing.price_tiers), unitContent: existing.unit_content ?? null,
         priceMode: existing.price_mode === 'factor' ? 'factor' : 'vast', priceFactor: existing.price_factor ?? null, ...fields,
       };
-      // Modus factor: verandert de modus of de eigen factor (een bewuste keuze bij dit artikel), dan volgt de verkoopprijs meteen. Een nieuwe
-      // inkoopprijs wijzigt de verkoopprijs nooit vanzelf: die wordt een prijsvoorstel dat een beheerder goedkeurt (Prijsfactor).
-      const factorChanged = merged.priceMode === 'factor' && (existing.price_mode !== 'factor' || (merged.priceFactor ?? null) !== (existing.price_factor ?? null));
+      // Modus factor: verandert de modus, de eigen factor of de inkoopprijs, dan volgt de verkoopprijs meteen (geen goedkeuring) en
+      // komt de wijziging met oud, nieuw en bron in het auditlog.
+      const costChanged = (merged.costPrice == null) !== (existing.cost_price == null) || Math.abs(Number(merged.costPrice ?? 0) - Number(existing.cost_price ?? 0)) > 0.00005;
+      const factorChanged = merged.priceMode === 'factor' && (existing.price_mode !== 'factor' || (merged.priceFactor ?? null) !== (existing.price_factor ?? null) || costChanged);
       if (factorChanged && pricer && !Number(existing.has_variants)) {
         const factorPrice = pricer(tenantId, { id: existing.id, costPrice: merged.costPrice, priceFactor: merged.priceFactor });
-        if (factorPrice !== null) merged.salePrice = factorPrice;
+        if (factorPrice !== null) {
+          merged.salePrice = factorPrice;
+          logPriceChange(tenantId, existing, existing.sale_price, factorPrice, costChanged ? 'inkoopprijs' : 'artikelinstelling', user);
+        }
       }
       const mergedTerms = Wholesale.sanitizeTerms(merged);
       if (mergedTerms.error) return { error: mergedTerms.error, field: mergedTerms.field, status: 400 };
@@ -886,7 +907,6 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     costs.removeItem(tenantId, row.id);
     prepare('DELETE FROM item_suppliers WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
     prepare('DELETE FROM item_packagings WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
-    prepare('DELETE FROM price_proposal_rejections WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
     prepare('DELETE FROM purchase_proposal_dismissals WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
     prepare('DELETE FROM item_text_drafts WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
     prepare('DELETE FROM stock_items WHERE tenant_id = ? AND id = ?').run(tenantId, row.id);
@@ -1295,6 +1315,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       const movementId = book(tenantId, existing.id, delta, { kind, note: kind === 'telling' ? note || `Geteld: ${round3(qty)}` : note, user, unitCost: checkedCost.value });
       if (hasCost && (existing.cost_price == null || Math.abs(Number(existing.cost_price) - checkedCost.value) > 0.00005)) {
         costs.addPrice(tenantId, existing, { price: checkedCost.value, note: `Bij ontvangst${note ? `: ${note}` : ''}`, user });
+        repriceItem(tenantId, existing.id, 'ontvangst', user);
       }
       return { movementId, delta, item: get(tenantId, existing.id) };
     });
@@ -1709,6 +1730,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       if (Number(existing.has_variants)) return { error: 'Een hoofdartikel heeft zelf geen voorraad: geef de inkoopprijs per variant op.', status: 409 };
       const out = costs.addPrice(tenantId, existing, { price: input.price, validFrom: input.validFrom, note: input.note, user });
       if (out.error) return { ...out, status: 400 };
+      repriceItem(tenantId, existing.id, 'inkoopprijs', user);
       return { item: get(tenantId, existing.id) };
     });
   }
@@ -1978,6 +2000,69 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   }
 
   /**
+   * Meldt de auditfunctie aan voor automatische prijswijzigingen.
+   * @param {Function} handler Aanroep met { tenantId, userId, action, detail }.
+   * @returns {void}
+   */
+  function setPriceLogger(handler) {
+    priceLogger = handler;
+  }
+
+  /**
+   * Rekent de verkoopprijs van één artikel in de modus factor opnieuw uit en zet hem meteen door (binnen de transactie van de aanroeper).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} itemId Id van het artikel.
+   * @param {string} source Bron voor het auditlog.
+   * @param {object|null} user Wie de aanleiding gaf.
+   * @returns {boolean} true als de prijs is gewijzigd.
+   */
+  function repriceItem(tenantId, itemId, source, user = null) {
+    const row = findItem(tenantId, itemId);
+    if (!pricer || !row || row.archived || Number(row.has_variants) || row.price_mode !== 'factor') return false;
+    const price = pricer(tenantId, { id: row.id, costPrice: row.cost_price, priceFactor: row.price_factor ?? null });
+    if (price === null || (row.sale_price != null && Math.abs(Number(row.sale_price) - price) < 0.005)) return false;
+    prepare(`UPDATE stock_items SET sale_price = ?, updated_at = ?, shop_dirty = CASE WHEN shop_sync = 1 AND shop_product_id IS NOT NULL THEN 1 ELSE shop_dirty END
+      WHERE tenant_id = ? AND id = ?`).run(price, currentTimestamp(), tenantId, row.id);
+    logPriceChange(tenantId, row, row.sale_price, price, source, user);
+    return true;
+  }
+
+  /**
+   * Een ontvangst met een andere inkoopprijs dan de actuele: de nieuwe prijs komt in de historie en de verkoopprijs volgt (modus factor).
+   * Binnen de transactie van de aanroeper.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} itemId Id van het artikel.
+   * @param {number} unitCost De inkoopprijs op de ontvangst.
+   * @param {{ user?: object|null, note?: string }} [options] Wie en een toelichting.
+   * @returns {void}
+   */
+  function receiptCost(tenantId, itemId, unitCost, { user = null, note = '' } = {}) {
+    const existing = findItem(tenantId, itemId);
+    if (!existing || Number(existing.has_variants) || !Number.isFinite(unitCost) || unitCost < 0) return;
+    if (existing.cost_price != null && Math.abs(Number(existing.cost_price) - unitCost) <= 0.00005) return;
+    if (costs.addPrice(tenantId, existing, { price: unitCost, note, user }).error) return;
+    repriceItem(tenantId, itemId, 'ontvangst', user);
+    dirty(tenantId);
+  }
+
+  /**
+   * Rekent alle artikelen in de modus factor opnieuw uit (na een wijziging van factor, afronding, leverancier of categorie) en zet de prijzen door.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} source Bron voor het auditlog.
+   * @param {object|null} [user] Wie de aanleiding gaf.
+   * @returns {number} Aantal artikelen waarvan de prijs wijzigde.
+   */
+  function repriceAll(tenantId, source, user = null) {
+    const ids = prepare("SELECT id FROM stock_items WHERE tenant_id = ? AND archived = 0 AND has_variants = 0 AND price_mode = 'factor'").all(tenantId).map((row) => row.id);
+    let changed = 0;
+    for (let start = 0; start < ids.length; start += 200) {
+      transaction(db, () => { for (const id of ids.slice(start, start + 200)) if (repriceItem(tenantId, id, source, user)) changed += 1; });
+    }
+    if (changed) dirty(tenantId);
+    return changed;
+  }
+
+  /**
    * Zet nieuwe verkoopprijzen door (herberekening met de prijsfactor), in één transactie. Gekoppelde webshopproducten gaan opnieuw mee.
    * Hoofdartikelen (met varianten) hebben geen eigen prijs en worden overgeslagen.
    * @param {string} tenantId Id van de omgeving.
@@ -2097,7 +2182,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     units, addUnit, removeUnit, setVariants, articleChoices, mergeSuggestions, mergeIntoVariants, unmergePreview, unmergeVariants,
     list, get, create, update, remove, move, importCatalog, importShop, mirrorShop, movements, reservations: reservationsOf,
     syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode,
-    reorderProposal, reserveOrder, releaseOrder, issueOrder, issueOrderPart, shortageFor, onDirty: setDirtyHook, setPricer, setSalePrices,
+    reorderProposal, reserveOrder, releaseOrder, issueOrder, issueOrderPart, shortageFor, onDirty: setDirtyHook, setPricer, setPriceLogger, setSalePrices, repriceItem, repriceAll, receiptCost,
     addCostPrice, setLayerCost, stockValue: costs.stockValue,
   };
 }

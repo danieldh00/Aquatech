@@ -1,9 +1,9 @@
 // Openstaande taken voor het dashboard: wat er voor de ingelogde gebruiker nog te doen ligt (bestellingen
-// verwerken, bestelvoorstellen goedkeuren, prijsvoorstellen beoordelen, artikelen zonder leverancier).
+// verwerken, bestelvoorstellen goedkeuren, artikelen zonder leverancier).
 // Elke taak hoort bij een recht; wie het recht niet heeft, krijgt de taak niet te zien.
 const Roles = require('../../../frontend/shared/roles.js');
 
-/** Hoe lang het aantal prijsvoorstellen en bestelvoorstellen per omgeving onthouden wordt (de berekening loopt over alle artikelen en het dashboard is de startpagina). */
+/** Hoe lang het aantal bestelvoorstellen per omgeving onthouden wordt (de berekening loopt over alle artikelen en het dashboard is de startpagina). */
 const CACHE_TTL_MS = 10 * 1000;
 const cache = new Map();
 
@@ -25,10 +25,10 @@ function remembered(key, compute) {
 /**
  * Bouwt de lijst met openstaande taken voor een gebruiker en omgeving.
  * @param {{ user: object, tenantId: string, canHostTasks?: boolean }} viewer De gebruiker (met rechten), de omgeving en of de gebruiker de servertaken mag zien (canUpdate).
- * @param {{ orders: object, purchaseOrders: object, priceFactors: object, proposalsEnabled: Function, shopEnabled: Function, stockEnabled: Function }} sources De opslag per soort taak (hostTasks = de servertaken, mag ontbreken); shopEnabled en stockEnabled zeggen of de webshop en de module voorraad aan staan.
+ * @param {{ orders: object, purchaseOrders: object, proposalsEnabled: Function, shopEnabled: Function, stockEnabled: Function }} sources De opslag per soort taak (hostTasks = de servertaken, mag ontbreken); shopEnabled en stockEnabled zeggen of de webshop en de module voorraad aan staan.
  * @returns {{ key: string, title: string, count: number, href: string, items: { label: string, meta: string, href: string }[] }[]} Alleen taken met minstens één openstaand punt.
  */
-function buildTasks({ user, tenantId, canHostTasks = false }, { hostTasks, orders, purchaseOrders, priceFactors, proposalsEnabled, shopEnabled, stockEnabled }) {
+function buildTasks({ user, tenantId, canHostTasks = false }, { hostTasks, orders, purchaseOrders, proposalsEnabled, shopEnabled, stockEnabled }) {
   const tasks = [];
   if (Roles.can(user, 'beheer') && shopEnabled(tenantId)) {
     const open = orders.listUnprocessed(tenantId, 5);
@@ -46,7 +46,6 @@ function buildTasks({ user, tenantId, canHostTasks = false }, { hostTasks, order
       });
       tasks.push({ key: 'zonder-leverancier', title: 'Artikelen onder het minimum zonder voorkeursleverancier', count: proposals.withoutSupplier, href: 'artikelen/#reorder', items: [] });
     }
-    tasks.push({ key: 'prijsvoorstellen', title: 'Prijsvoorstellen beoordelen', count: remembered(`prijzen:${tenantId}`, () => priceFactors.openProposals(tenantId).length), href: 'artikelen/#pricefactor', items: [] });
   }
   if (canHostTasks && hostTasks) {
     const hostView = hostTasks.view();
