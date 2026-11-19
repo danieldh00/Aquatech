@@ -6,10 +6,11 @@
 #   bash servertaken.sh logs [uren]      alle [traag]- en [stilstand]-regels van de app (standaard 24 uur)
 #   bash servertaken.sh migraties        controleert de databaseversie; loopt hij achter, dan de app herstarten (migreren)
 #   bash servertaken.sh update           nu updaten naar de nieuwste versie in GHCR (met back-up en terugval)
+#   bash servertaken.sh schijf           toont wat de schijf vult en ruimt na bevestiging op (oude app-images, build-cache, journal)
 #   bash servertaken.sh help             deze uitleg
 #
-# Opties: --yes (of YES=1) = geen bevestigingsvraag (voor automatisering). Alleen `migraties` en `update` herstarten
-# de app en vragen daarom eerst om bevestiging; `status` en `logs` wijzigen niets.
+# Opties: --yes (of YES=1) = geen bevestigingsvraag (voor automatisering). `migraties` en `update` herstarten de app,
+# `schijf` verwijdert oude images; ze vragen daarom eerst om bevestiging; `status` en `logs` wijzigen niets.
 #
 # Zonder download, rechtstreeks van GitHub:
 #   curl -fsSL https://raw.githubusercontent.com/danieldh00/Aquatech/master/deploy/apps01/pve/servertaken.sh -o /tmp/servertaken.sh
@@ -287,6 +288,54 @@ remote_update_run() {
   echo "Klaar: versie $version draait."
 }
 
+# ---------- schijf ----------
+# Alleen lezen: waar de schijf aan opgaat. Uitgangscode 10 = er is iets op te ruimen; 0 = niets te doen.
+remote_disk_check() {
+  section "Schijf"
+  df -h / "$APP_DIR" 2>/dev/null | awk 'NR==1 || !seen[$0]++'
+  section "Docker (images, containers, volumes, build-cache)"
+  docker system df 2>/dev/null || true
+  section "Aquatech-images (oude versies zijn op te ruimen)"
+  docker image ls --format '  {{.Repository}}:{{.Tag}}  {{.Size}}' "$IMAGE" 2>/dev/null || true
+  section "Grootste mappen in $APP_DIR"
+  du -xsh "$APP_DIR"/* "$APP_DIR"/.[!.]* 2>/dev/null | sort -rh | head -n 8 || true
+  section "Overig"
+  info "journal: $(journalctl --disk-usage 2>/dev/null | grep -oE '[0-9.]+[KMG]' | head -n1 || echo onbekend)"
+  info "apt-cache: $(du -sh /var/cache/apt 2>/dev/null | cut -f1 || echo onbekend)"
+  info "/var/lib/docker: $(du -xsh /var/lib/docker 2>/dev/null | cut -f1 || echo onbekend)"
+  local reclaimable
+  reclaimable="$(docker image ls -q --filter dangling=true 2>/dev/null | wc -l)"
+  local running_tag old_count=0 tag
+  running_tag="$(env_get AQUATECH_TAG)"
+  for tag in $(docker image ls --format '{{.Tag}}' "$IMAGE" 2>/dev/null | grep -E "$VERSION_RE" || true); do
+    [[ "$tag" == "$running_tag" ]] || old_count=$((old_count + 1))
+  done
+  echo
+  echo "Op te ruimen: $old_count versie(s) van het app-image (behalve de draaiende en de nieuwste), $reclaimable ongebruikte image(s), build-cache, oude journal."
+  (( old_count > 1 || reclaimable > 0 )) && return 10
+  return 0
+}
+# Ruimt veilig op: oude app-images (de draaiende versie en de twee nieuwste blijven), ongebruikte images, build-cache,
+# journal tot 200 MB en de apt-cache. Raakt geen volumes, geen back-ups en geen database.
+remote_disk_run() {
+  local before after running_tag keep tag
+  before="$(df --output=avail -B1M / | tail -n1 | tr -d ' ')"
+  running_tag="$(env_get AQUATECH_TAG)"
+  keep="$(docker image ls --format '{{.Tag}}' "$IMAGE" 2>/dev/null | grep -E "$VERSION_RE" | sort -rV | head -n 2 || true)"
+  for tag in $(docker image ls --format '{{.Tag}}' "$IMAGE" 2>/dev/null | grep -E "$VERSION_RE" || true); do
+    [[ "$tag" == "$running_tag" ]] && continue
+    grep -qx "$tag" <<<"$keep" && continue
+    docker rmi "$IMAGE:$tag" >/dev/null 2>&1 && echo "  verwijderd: $IMAGE:$tag" || echo "  blijft staan (in gebruik): $IMAGE:$tag"
+  done
+  docker image prune -f >/dev/null || true
+  docker builder prune -f >/dev/null 2>&1 || true
+  journalctl --vacuum-size=200M >/dev/null 2>&1 || true
+  apt-get clean >/dev/null 2>&1 || true
+  after="$(df --output=avail -B1M / | tail -n1 | tr -d ' ')"
+  echo "Vrije ruimte: ${before} MB -> ${after} MB (winst $((after - before)) MB)."
+  df -h / | tail -n1
+}
+
 remote_main() {
   exec </dev/null
   cd "$APP_DIR" 2>/dev/null || { echo "FOUT: $APP_DIR bestaat niet op de server (zet APP_DIR)." >&2; exit 1; }
@@ -299,6 +348,8 @@ remote_main() {
     migraties-run) remote_migrate_run ;;
     update-check) remote_update_check ;;
     update-run) remote_update_run ;;
+    schijf-check) remote_disk_check ;;
+    schijf-run) remote_disk_run ;;
     *) echo "Onbekende opdracht: $action" >&2; exit 2 ;;
   esac
 }
@@ -313,7 +364,7 @@ fi
 # =====================================================================================================================
 NAME="${APPS01_NAME:-apps01}"
 die() { echo "FOUT: $*" >&2; exit 1; }
-usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 ARGS=()
 for argument in "$@"; do
@@ -325,7 +376,7 @@ for argument in "$@"; do
 done
 ACTION="${ARGS[0]:-status}"
 case "$ACTION" in
-  status | logs | migraties | update) ;;
+  status | logs | migraties | update | schijf) ;;
   help) usage ;;
   *) usage ;;
 esac
@@ -415,5 +466,6 @@ case "$ACTION" in
   status) remote status ;;
   logs) remote logs "${ARGS[@]:1}" ;;
   migraties) two_step migraties "De app wordt na een back-up herstart en is daarbij ca. 1 minuut niet beschikbaar; bij het starten draaien de migraties." ;;
+  schijf) two_step schijf "Oude app-images, build-cache en oude journal worden verwijderd (de draaiende en de twee nieuwste versies blijven; volumes, back-ups en database blijven onaangeroerd). De app blijft gewoon draaien." ;;
   update) two_step update "De app wordt na een back-up vervangen door de nieuwste versie (ca. 1-3 minuten onderhoudsmodus). Lukt het niet, dan zet update.sh de vorige versie terug." ;;
 esac

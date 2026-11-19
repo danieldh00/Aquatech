@@ -218,4 +218,10 @@ rm -f .failed-version
 status_put status.json "{\"current\":\"$NEW_VER\",\"available\":\"$NEW_VER\",\"checkedAt\":\"$(now)\",\"auto\":$([[ $AUTO == 1 ]] && echo true || echo false)}"
 run_put geslaagd klaar "Versie $NEW_VER draait."
 docker image prune -f >/dev/null
+# Oude versies opruimen: alleen de nieuwe en de vorige (voor de terugval) blijven; elke uitrol laat anders een image van
+# enkele honderden MB achter. Een image dat nog in gebruik is wordt door docker geweigerd en blijft dus staan.
+for old_tag in $(docker image ls --format '{{.Tag}}' "$IMAGE" 2>/dev/null | grep -E "$VERSION_RE" || true); do
+  [[ "$old_tag" == "$NEW_VER" || "$old_tag" == "$CUR_VER" ]] && continue
+  docker rmi "$IMAGE:$old_tag" >/dev/null 2>&1 || true
+done
 log "Update naar $NEW_VER geslaagd"
