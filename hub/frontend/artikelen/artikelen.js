@@ -130,10 +130,12 @@
   const renderDeliveryPreview = async (item) => {
     const box = $('#d-delivery-preview');
     box.hidden = true;
-    if (!item || !item.id) return;
+    box.dataset.itemId = item && item.id ? String(item.id) : '';
+    if (!box.dataset.itemId) return;
     try {
       const preview = await api(`stock/items/${encodeURIComponent(item.id)}/delivery-preview`);
-      if (!box.isConnected || !item.id) return;
+      // Een trager antwoord van een eerder geopend artikel mag het overzicht van het huidige artikel niet overschrijven.
+      if (!box.isConnected || box.dataset.itemId !== String(item.id)) return;
       const rows = preview.methods.map((method) => `<tr><td>${esc(method.label)}</td><td>${esc(method.quantities)}</td><td>${esc(method.leadInStock)}</td><td>${esc(method.leadOutOfStock)}</td></tr>`).join('');
       box.innerHTML = `<table class="grid"><caption class="muted small">In de webshop (${esc(preview.rulesSource)}; levertijden zijn indicatief)</caption><thead><tr><th>Levermethode</th><th>Aantal</th><th>Op voorraad</th><th>Niet op voorraad</th></tr></thead><tbody>${rows}</tbody></table>`;
       box.hidden = !rows;
