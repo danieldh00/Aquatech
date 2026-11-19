@@ -501,6 +501,9 @@ function createStockCounts(db, { stock }) {
       // is dan al zichtbaar in de mutaties en een nieuwe wacht tot deze afsluiting klaar is.
       prepare(`SELECT i.id FROM stock_items i JOIN stock_count_lines l ON l.tenant_id = i.tenant_id AND l.item_id = i.id
         WHERE l.tenant_id = ? AND l.count_id = ? ORDER BY i.id FOR UPDATE OF i`).all(tenantId, row.id);
+      // Na het slot opnieuw lezen: een gelijktijdige afsluiting die net klaar is geeft zo een duidelijke 409 `closed`.
+      const current = findCount(tenantId, id);
+      if (!current || current.status !== 'tellen') return { error: 'Deze telling is al afgesloten of geannuleerd.', code: 'closed', status: 409 };
       const count = countOf(row);
       const computed = computeLines(tenantId, row, lineRows(tenantId, row.id), count.threshold);
       const untouched = computed.filter((line) => line.countedQty == null);
