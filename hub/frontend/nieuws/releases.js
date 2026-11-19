@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.24.6',
+      date: '2026-11-19',
+      title: 'Klanten zoeken houdt de server niet meer op',
+      items: [],
+    },
+    {
       version: '1.24.5',
       date: '2026-11-19',
       title: 'Automatische betalingsherinneringen en aanmaningen',
