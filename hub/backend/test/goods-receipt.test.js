@@ -65,8 +65,15 @@ test('lijst en detail: alleen bestelde orders, geen prijzen, regels op locatie m
   const detail = (await picker.get(`/app/api/orderpick/receipts/${order.id}`)).body.order;
   assert.deepStrictEqual(detail.lines.map((line) => [line.code, line.location, line.ordered, line.received, line.openQty]), [['PIJP', 'A-2', 20, 0, 20], ['BUS', 'B-10', 10, 0, 10]]);
   assert.deepStrictEqual(lineOf(detail, 'BUS').scanCodes, [EAN, 'BUS', 'TT-BUS']);
-  const text = JSON.stringify({ list, detail });
-  for (const secret of ['unitCost', 'amount', 'total', '"4"', '1.5']) assert.ok(!text.includes(secret), `${secret} hoort niet in het antwoord`);
+  // Controle op veldnamen, niet op losse tekst: een tijdstempel als "…31.5…Z" bevat toevallig "1.5" en maakte deze test af en toe rood.
+  /**
+   * Alle veldnamen in een antwoord, ook de geneste.
+   * @param {*} value Een antwoord of een deel ervan.
+   * @returns {string[]} De veldnamen.
+   */
+  const keysOf = (value) => (value && typeof value === 'object' ? Object.entries(value).flatMap(([key, inner]) => [key, ...keysOf(inner)]) : []);
+  const keys = keysOf({ list, detail });
+  for (const secret of ['unitCost', 'amount', 'total', 'price', 'cost', 'costPrice', 'salePrice']) assert.ok(!keys.includes(secret), `${secret} hoort niet in het antwoord`);
   const notReady = await picker.get(`/app/api/orderpick/receipts/${draft.id}`);
   assert.strictEqual(notReady.status, 409);
   assert.strictEqual(notReady.body.error, 'not_receivable');
