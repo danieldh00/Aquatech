@@ -21,6 +21,7 @@ const backups = require('./backup');
 const { createDriveBackup, sanitizeDriveBackup, DriveError, CALLBACK_PATH: DRIVE_CALLBACK_PATH } = require('./platform/drive-backup');
 const { createQuoteStore, registerQuoteRoutes, validShareBase, mailBody, Core: QuoteCore } = require('./verkoop/quotes');
 const { createCustomerStore, registerCustomerRoutes } = require('./verkoop/customers');
+const { createGlobalSearch, registerSearchRoutes } = require('./platform/global-search');
 const { createMailer, mailFailure } = require('./platform/mailer');
 const { createWanIp } = require('./platform/wan-ip');
 const { createAddressLookup, createAddressGuard, registerAddressRoute } = require('./platform/address-lookup');
@@ -2463,6 +2464,19 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // De uitnodiging gebruikt de wachtwoordlink van de webshop; shopAccounts wordt pas hieronder gemaakt.
     inviteReady: (customer) => shopAccounts.inviteProblem(customer),
     invite: (customer) => shopAccounts.invite(customer),
+  });
+
+  // Globaal zoeken (platform/global-search.js): klanten, offertes, werkorders, facturen en artikelen in één zoekveld.
+  const globalSearch = createGlobalSearch(database, {
+    // Klanten horen bij de live-tenant; in een testomgeving komen de testklanten daarvan erbij (zoals tenantsOf hierboven).
+    searchCustomers: (user, text, limit) => {
+      const home = homeOf(user.tenant_id);
+      return store.listCustomerPage(home === user.tenant_id ? [home] : [home, user.tenant_id], { search: text, limit }).items;
+    },
+  });
+  registerSearchRoutes(app, {
+    search: globalSearch.search, identify,
+    limiter: createRateLimiter({ windowMs: 60 * 1000, max: 120, keyFn: (req) => `zoeken:${req.user?.id || clientKey(req)}` }),
   });
 
   // De btw-controle bij VIES: gedeeld door de offertes (btw verleggen) en de webshop.
