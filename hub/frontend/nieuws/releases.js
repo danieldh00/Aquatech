@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.27.3',
+      date: '2026-11-19',
+      title: 'Meerdere leveranciers per artikel met backup',
+      items: [
+        { text: 'Een artikel kan meerdere leveranciers hebben met een eigen artikelnummer en inkoopprijs, in volgorde van prioriteit: voorkeur, backup 1, backup 2.', for: ['voorraad'] },
+        { text: 'Per leverancier kun je zetten of het artikel leverbaar is. Is de voorkeursleverancier niet leverbaar, dan bestelt het bestelvoorstel automatisch bij de eerste backup, met het prijsverschil erbij.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.27.2',
       date: '2026-11-19',
       title: 'Telstaat en telformulier als pdf',

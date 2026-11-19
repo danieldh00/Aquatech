@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.27.3
+
+- Migratie 88: `item_suppliers.rank` (prioriteit) en `stock_status` (`''` onbekend, `in_stock`, `out`); bestaande koppelingen behouden hun volgorde (voorkeur eerst).
+- `suppliers.preferredByItem` kiest de voorkeur of de eerste leverbare backup; `reorderProposal` geeft `backup` {preferredSupplierName, extraPerUnit, extraAmount} en `allSuppliersUnavailable`.
+- Inkooporderregels van een backupleverancier tonen `backup` (meerprijs); een ontvangst bij een backup wijzigt de inkoop- en verkoopprijs van het artikel niet (de FIFO-laag houdt de echte prijs).
+
 ## 1.27.2
 
 - Voorraadtelling: `GET /api/stock-counts/:id/telstaat.pdf` (optioneel `?alleen=verschillen`) en `telformulier.pdf` (optioneel `?locatie=`), recht `voorraad`, met de documentopmaak van de organisatie; knoppen in Artikelen > Telling.
