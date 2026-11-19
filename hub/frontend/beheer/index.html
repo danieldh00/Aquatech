@@ -462,6 +462,17 @@
           <div class="row"><button class="btn primary" type="submit">Opslaan</button></div>
           <div class="err" role="alert"></div>
         </form>
+        <form id="s-quote-followup" class="card-form settings">
+          <h3>Offerte-opvolging</h3>
+          <p class="muted small">Heeft een klant na het mailen van een offerte niet gereageerd, dan stuurt AquaTech na het gekozen aantal dagen automatisch een vriendelijke herinnering met de knop naar de digitale offerte. Er komt geen herinnering voor een offerte met antwoord, een verlopen offerte of een offerte die alleen via een link is gedeeld.</p>
+          <label class="chk"><input type="checkbox" name="enabled"> <span>Offerte-opvolging in deze omgeving</span></label>
+          <div class="form-grid">
+            <label>Herinnering na (dagen zonder reactie)<input name="afterDays" type="number" min="2" max="60" step="1" required></label>
+            <label>Aantal herinneringen per offerte<select name="maxReminders"><option value="1">Eén</option><option value="2">Twee (even lang na de eerste)</option></select></label>
+          </div>
+          <div class="row"><button class="btn primary" type="submit">Opslaan</button></div>
+          <div class="err" role="alert"></div>
+        </form>
         <form id="s-purchase-proposals" class="card-form settings">
           <h3>Automatische bestelvoorstellen</h3>
           <p class="muted small">Zakt een artikel onder de minimumvoorraad, dan zet AquaTech elk uur per voorkeursleverancier een concept-inkooporder klaar onder Inkooporders. Wat al onderweg is en wat op backorder staat telt mee. Er wordt nooit iets besteld zonder dat je het voorstel goedkeurt.</p>

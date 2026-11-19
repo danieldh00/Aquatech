@@ -1291,6 +1291,11 @@ const PG_MIGRATIONS = [
   );
   CREATE INDEX invoices_due ON invoices (tenant_id, status, due_date, id);
   `,
+  // 86: opvolging van offertes zonder reactie (zie db.js).
+  `
+  ALTER TABLE quotes ADD COLUMN followup_count INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE quotes ADD COLUMN followup_at ${TEXT_TYPE};
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };
