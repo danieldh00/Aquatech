@@ -374,7 +374,8 @@ test('createSystemUpdate: handmatig controleren zet een check-aanvraag klaar en 
   hostWrites(statusDir, { 'status.json': { current: RUNNING, available: RUNNING, checkedAt: '2026-11-19T09:00:00Z' } });
   assert.strictEqual(update.view().checking, false);
 
-  assert.deepStrictEqual(update.requestCheck({ userId: 'u1', byName: 'Baas' }), { checking: true });
+  assert.deepStrictEqual(update.requestCheck({ userId: 'u1', byName: 'Baas' }), { checking: true, started: true });
+  assert.deepStrictEqual(update.requestCheck({}), { checking: true, started: false }, 'een lopende controle wordt niet opnieuw aangevraagd');
   const written = JSON.parse(fs.readFileSync(path.join(requestDir, 'request.json'), 'utf8'));
   assert.strictEqual(written.check, true);
   assert.strictEqual(written.version, undefined);
@@ -392,4 +393,29 @@ test('createSystemUpdate: handmatig controleren zet een check-aanvraag klaar en 
   hostWrites(statusDir, { 'run.json': { state: 'bezig', step: 'back-up', version: RUNNING, startedAt: new Date(clock).toISOString() } });
   assert.strictEqual(update.requestCheck({}).error, 'busy');
   assert.strictEqual(createSystemUpdate({ statusDir: '', requestDir: '', currentVersion: RUNNING }).requestCheck({}).error, 'not_configured');
+});
+
+test('API: handmatig controleren: 401 zonder login, 403 zonder recht, 202, audit alleen bij een nieuwe controle en limiet', async () => {
+  const { server, base, as, store, main, statusDir, requestDir } = await setup();
+  try {
+    hostWrites(statusDir, { 'status.json': { current: RUNNING, available: RUNNING, checkedAt: '2026-01-01T00:00:00Z' } });
+    const bert = await as('bert');
+    const kees = await as('kees');
+    assert.strictEqual((await createClient(base).post('/app/api/admin/system-update/check', {})).status, 401);
+    assert.strictEqual((await kees.post('/app/api/admin/system-update/check', {})).status, 403);
+    assert.ok(!fs.existsSync(path.join(requestDir, 'request.json')));
+
+    const first = await bert.post('/app/api/admin/system-update/check', {});
+    assert.strictEqual(first.status, 202, JSON.stringify(first.body));
+    assert.strictEqual(first.body.checking, true);
+    assert.strictEqual(JSON.parse(fs.readFileSync(path.join(requestDir, 'request.json'), 'utf8')).check, true);
+    // Een tweede klik terwijl de controle loopt: geen nieuwe aanvraag en geen tweede auditregel.
+    assert.strictEqual((await bert.post('/app/api/admin/system-update/check', {})).status, 202);
+    assert.strictEqual(auditActions(store, main).filter((action) => action === 'update_controle').length, 1);
+
+    for (let i = 0; i < 4; i++) await bert.post('/app/api/admin/system-update/check', {});
+    assert.strictEqual((await bert.post('/app/api/admin/system-update/check', {})).status, 429, 'de 7e aanroep binnen 10 minuten');
+  } finally {
+    server.close();
+  }
 });

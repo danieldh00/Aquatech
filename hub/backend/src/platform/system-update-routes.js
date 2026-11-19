@@ -85,7 +85,7 @@ function registerSystemUpdateRoutes(app, { systemUpdate, store, audit, mainTenan
   app.post('/api/admin/system-update/check', checkLimiter, (req, res) => {
     const out = systemUpdate.requestCheck({ userId: req.user.id, byName: req.user.display_name });
     if (out.error) return res.status(out.status).json({ error: out.error, message: out.message });
-    audit(req, 'update_controle', {}, undefined, mainTenantId);
+    if (out.started) audit(req, 'update_controle', {}, undefined, mainTenantId);
     res.status(202).json(systemUpdate.view());
   });
 

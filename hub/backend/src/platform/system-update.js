@@ -270,17 +270,17 @@ function createSystemUpdate({ statusDir = '', requestDir = '', currentVersion, n
    * Vraagt de host om nu naar een nieuwe versie te zoeken (een aanvraag zonder versie, met `check: true`). De host
    * haalt dan :latest op en werkt status.json bij; er wordt niets geïnstalleerd.
    * @param {object} input userId en byName (wie).
-   * @returns {{ checking: true }|{ error: string, status: number, message: string }} Gelukt of een fout.
+   * @returns {{ checking: true, started: boolean }|{ error: string, status: number, message: string }} Gelukt of een fout.
    */
   function requestCheck({ userId, byName }) {
     if (!configured) return { error: 'not_configured', status: 501, message: 'Updaten vanuit de app is op deze server niet ingericht.' };
     const current = view();
     if (current.maintenance.active || current.status.state === 'bezig') return { error: 'busy', status: 409, message: 'Er loopt al een update.' };
     if (current.pending) return { error: 'pending', status: 409, message: 'Er staat al een update aangevraagd.' };
-    if (current.checking) return { checking: true };
+    if (current.checking) return { checking: true, started: false };
     lastCheckAt = Math.floor(now() / 1000) * 1000;
     writeJsonFile(requestDir, 'request.json', { id: crypto.randomUUID(), check: true, requestedAt: new Date(now()).toISOString(), by: String(userId || ''), byName: cleanText(byName, 80) });
-    return { checking: true };
+    return { checking: true, started: true };
   }
 
   /**
