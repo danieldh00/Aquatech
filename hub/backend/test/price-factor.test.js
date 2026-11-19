@@ -315,3 +315,28 @@ test('prijsvoorstel: nieuwe inkoopprijs geeft een voorstel dat je goedkeurt of a
   await admin.post('/app/api/stock/price-factors/reject', { items: [{ id: second.id, newPrice: 18 }] });
   assert.strictEqual((await admin.del(`/app/api/stock/items/${second.id}`)).status, 200);
 });
+
+test('prijsvoorstel: open voorstellen voor artikelscherm en lijst', async () => {
+  const { admin, staff, vreemd } = await setup();
+  await admin.put('/app/api/stock/price-factors', { defaultFactor: 2, rounding: { mode: 'cent', direction: 'dichtstbij' } });
+  const factorItem = (await admin.post('/app/api/stock/items', { code: 'P1', name: 'P1', costPrice: 5, priceMode: 'factor' })).body;
+  const fixedItem = (await admin.post('/app/api/stock/items', { code: 'P2', name: 'P2', costPrice: 5, salePrice: 50 })).body;
+  // Zonder nieuwe inkoopprijs geen voorstel.
+  assert.deepStrictEqual((await admin.get('/app/api/stock/price-proposals')).body.items, []);
+  await admin.put(`/app/api/stock/items/${factorItem.id}`, { costPrice: 6 });
+  await admin.put(`/app/api/stock/items/${fixedItem.id}`, { costPrice: 9 });
+  const open = (await admin.get('/app/api/stock/price-proposals')).body.items;
+  assert.deepStrictEqual(open.map((entry) => [entry.id, entry.oldPrice, entry.newPrice]), [[factorItem.id, 10, 12]]);
+  // Een medewerker mag lezen (niet goedkeuren), een andere organisatie ziet niets.
+  assert.strictEqual((await staff.get('/app/api/stock/price-proposals')).body.items.length, 1);
+  assert.strictEqual((await staff.post('/app/api/stock/price-factors/apply', { items: [{ id: factorItem.id, newPrice: 12 }] })).status, 403);
+  assert.deepStrictEqual((await vreemd.get('/app/api/stock/price-proposals')).body.items, []);
+  // Afgewezen valt weg; goedkeuren ook. De verkoopprijs verandert nooit vanzelf.
+  assert.strictEqual((await admin.get(`/app/api/stock/items/${factorItem.id}`)).body.salePrice, 10);
+  await admin.post('/app/api/stock/price-factors/reject', { items: [{ id: factorItem.id, newPrice: 12 }] });
+  assert.deepStrictEqual((await admin.get('/app/api/stock/price-proposals')).body.items, []);
+  await admin.post('/app/api/stock/price-factors/reopen', { ids: [factorItem.id] });
+  await admin.post('/app/api/stock/price-factors/apply', { items: [{ id: factorItem.id, newPrice: 12 }] });
+  assert.deepStrictEqual((await admin.get('/app/api/stock/price-proposals')).body.items, []);
+  assert.strictEqual((await admin.get(`/app/api/stock/items/${factorItem.id}`)).body.salePrice, 12);
+});

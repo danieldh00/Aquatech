@@ -295,6 +295,16 @@ function createPriceFactorStore(db, { stock, settingsOf, treeOf }) {
   }
 
   /**
+   * De open prijsvoorstellen (de prijs wijkt af en is niet afgewezen), voor de melding bij het artikel en de indicatie in de lijst.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {{ id: string, oldPrice: ?number, newPrice: number, costPrice: ?number }[]} Per artikel het huidige en het voorgestelde bedrag.
+   */
+  function openProposals(tenantId) {
+    return rowsOf(tenantId).filter((row) => row.changed && !row.rejected)
+      .map((row) => ({ id: row.id, oldPrice: row.oldPrice, newPrice: row.newPrice, costPrice: row.costPrice, marginNew: row.marginNew }));
+  }
+
+  /**
    * Zet de nieuwe prijzen door voor de gevraagde artikelen. De prijzen worden opnieuw berekend; een artikel waarvan de
    * uitkomst intussen anders is dan in het voorbeeld (instelling of inkoopprijs veranderde) of die is afgewezen, wordt overgeslagen:
    * een afwijzing maak je alleen ongedaan met reopen.
@@ -387,7 +397,7 @@ function createPriceFactorStore(db, { stock, settingsOf, treeOf }) {
     return compute({ ...row, cost_price: item.costPrice, price_factor: item.priceFactor }, config, categoryLookup(tenantId, config)).price;
   }
 
-  return { configOf, view, apply, reject, reopen, priceFor, sanitize: sanitizePriceFactors };
+  return { configOf, view, openProposals, apply, reject, reopen, priceFor, sanitize: sanitizePriceFactors };
 }
 
 /**
@@ -417,6 +427,12 @@ function registerPriceFactorRoutes(app, { priceFactors, suppliers, settingsOf, t
     const tenantId = tenantOf(req);
     res.set('Cache-Control', 'no-store');
     res.json(priceFactors.view(tenantId, { suppliers: supplierChoices(tenantId) }));
+  });
+
+  // Open prijsvoorstellen voor het artikelscherm en de lijst (alleen lezen, recht voorraad).
+  app.get('/api/stock/price-proposals', requireStock, (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json({ items: priceFactors.openProposals(tenantOf(req)) });
   });
 
   app.put('/api/stock/price-factors', requireAdmin, requireJson, (req, res) => {
