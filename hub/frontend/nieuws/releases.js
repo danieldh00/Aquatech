@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.22.8',
+      date: '2026-11-19',
+      title: 'Webshopsynchronisatie standaard één keer per nacht',
+      items: [
+        { text: 'De volledige vergelijking met de webshop draait nu standaard één keer per nacht in plaats van elke 10 minuten. In Beheer > Webshop kies je ook elk uur of elke 10 minuten.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.22.7',
       date: '2026-11-19',
       title: 'Google-verificatie voor de webshop',

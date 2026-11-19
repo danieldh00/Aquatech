@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.22.8
+
+`shopSource.syncSchedule` (`night` standaard | `hourly` | `tenmin`, geen migratie). `runAll` slaat een omgeving over tot `fullSyncDue` (webshop/shop-sync.js) aan de beurt is: dagwisseling 04:00 Nederlandse tijd (na de back-up), na een mislukte poging hoogstens elk uur opnieuw. Gewijzigde artikelen gaan nog steeds meteen via `schedule()`. Aanleiding: het logboek van 2026-11-19 toonde elke 10 minuten een "trage taak" van ~165 s met ruim 5300 queries en 2 s stilstand van de hoofdthread.
+
 ## 1.22.7
 
 - De webshoppagina's bevatten de `google-site-verification`-meta (Search Console), in de `<head>`.
