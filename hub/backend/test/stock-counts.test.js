@@ -182,7 +182,8 @@ test('ingave met het tijdstip van de teller: een late ingave telt voor het juist
   stored = world.db.prepare('SELECT counted_at FROM stock_count_lines WHERE id = ?').get(line.id).counted_at;
   assert.ok(stored < '2999', 'tijdstip in de toekomst wordt servertijd');
   // Een geldig tijdstip tussen bevriezen en nu wordt overgenomen.
-  const middle = new Date(Date.now() - 500).toISOString();
+  const frozenAt = world.db.prepare('SELECT frozen_at FROM stock_counts WHERE id = ?').get(count.id).frozen_at;
+  const middle = new Date(new Date(frozenAt).getTime() + 1).toISOString();
   await world.picker.post(`/app/api/orderpick/counts/${count.id}/lines/${line.id}/count`, { qty: 20, clientId: 'tel-moment-0003', countedAt: middle });
   assert.strictEqual(world.db.prepare('SELECT counted_at FROM stock_count_lines WHERE id = ?').get(line.id).counted_at, middle);
 });
