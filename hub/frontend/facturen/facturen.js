@@ -146,7 +146,7 @@
         <td><b>${esc(invoice.number || 'Concept')}</b>${kindPill(invoice)}</td>
         <td>${esc(day(invoice.date))}</td>
         <td class="wrap">${esc(invoice.customer || '–')}</td>
-        <td>${statusPill(invoice)}</td>
+        <td>${statusPill(invoice)}${invoice.reminder ? ` <span class="muted small" title="${esc(invoice.reminder.title)} verstuurd op ${esc(day(invoice.reminder.sentAt))}">${esc(invoice.reminder.title)}</span>` : ''}</td>
         <td>${esc(day(invoice.dueDate))}</td>
         <td class="num${invoice.subtotal < 0 ? ' neg' : ''}">${esc(eur(invoice.subtotal))}</td>
         <td class="num${invoice.total < 0 ? ' neg' : ''}"><b>${esc(eur(invoice.total))}</b></td>
@@ -823,6 +823,10 @@
     if (invoice.debtorNumber) links.push(`debiteur ${esc(invoice.debtorNumber)}`);
     if (invoice.paidAt) links.push(`betaald op ${esc(day(invoice.paidAt))}`);
     if (invoice.sentAt) links.push(`verstuurd naar ${esc(invoice.sentTo)} op ${esc(when(invoice.sentAt))}`);
+    for (const reminder of invoice.reminders || []) {
+      links.push(reminder.status === 'verstuurd' ? `${esc(reminder.title.toLowerCase())} verstuurd naar ${esc(reminder.sentTo)} op ${esc(when(reminder.sentAt))}`
+        : `${esc(reminder.title.toLowerCase())} niet verstuurd: ${esc(reminder.reason)}`);
+    }
     if (invoice.vismaInvoiceId) links.push(`in Visma als factuur ${esc(invoice.vismaNumber || '')} (${esc(when(invoice.vismaSyncedAt))})`);
     if (!invoice.workOrderId && invoice.status !== 'concept') links.push(invoice.stockBooked ? 'artikelen van de voorraad afgeboekt' : invoice.source === 'webshop' ? 'voorraad via de webshop' : 'geen voorraad geboekt');
     if (!invoice.workOrderId && invoice.source !== 'webshop' && invoice.status === 'concept') links.push('losse verkoop: bij definitief worden artikelen met een voorraadcode afgeboekt');

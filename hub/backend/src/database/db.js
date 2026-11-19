@@ -1530,6 +1530,24 @@ const MIGRATIONS = [
   CREATE UNIQUE INDEX invoice_payments_mollie ON invoice_payments (tenant_id, mollie_id);
   CREATE INDEX invoice_payments_invoice ON invoice_payments (tenant_id, invoice_id, created_at);
   `,
+  // 85: automatische betalingsherinneringen en aanmaningen (verkoop/payment-reminders.js): per factuur welke stap is verstuurd (of bewust
+  // overgeslagen) en per klant een schakelaar om ze uit te zetten (users.reminders_off, 1 = geen herinneringen voor deze klant).
+  `
+  ALTER TABLE users ADD COLUMN reminders_off INTEGER NOT NULL DEFAULT 0;
+  CREATE TABLE invoice_reminders (
+    id           TEXT PRIMARY KEY,
+    tenant_id    TEXT NOT NULL REFERENCES tenants(id),
+    invoice_id   TEXT NOT NULL REFERENCES invoices(id),
+    step_key     TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'verstuurd',
+    sent_at      TEXT NOT NULL,
+    sent_to      TEXT NOT NULL DEFAULT '',
+    reason       TEXT NOT NULL DEFAULT '',
+    days_overdue INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (tenant_id, invoice_id, step_key)
+  );
+  CREATE INDEX invoices_due ON invoices (tenant_id, status, due_date, id);
+  `,
 ];
 
 /**

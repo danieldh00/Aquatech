@@ -13,6 +13,17 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.24.5',
+      date: '2026-11-19',
+      title: 'Automatische betalingsherinneringen en aanmaningen',
+      items: [
+        { text: 'AquaTech mailt de klant nu automatisch een betalingsherinnering en aanmaningen als een factuur over de vervaldatum is. Je stelt het in onder Beheer > Modules > Facturen: betalingsherinneringen (aan/uit, na hoeveel dagen per stap). Standaard staat het uit.', for: ['facturen', 'beheer'] },
+        { text: 'Op de factuur zie je welke herinnering of aanmaning is verstuurd, en in de lijst staat de laatste stap bij de status.', for: ['facturen'] },
+        { text: 'Op de klantkaart zet je de automatische herinneringen voor één klant uit.', for: ['facturen', 'klanten'] },
+        { text: 'De teksten van de herinnering en aanmaningen pas je aan onder Mail-opmaak (groep Facturen).', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.24.4',
       date: '2026-11-19',
       title: 'Draaiboek voor de verhuizing naar een VPS',
