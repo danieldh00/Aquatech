@@ -509,7 +509,8 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
    * @param {string} to De ontvangers.
    */
   function markSent(id, to) {
-    prepare("UPDATE quotes SET sent_at = ?, sent_to = ?, status = CASE WHEN status = 'concept' THEN 'verzonden' ELSE status END WHERE id = ?").run(currentTimestamp(), String(to).slice(0, 400), id);
+    // Opnieuw mailen start de opvolging opnieuw (aantal en tijdstip van de herinneringen terug op nul).
+    prepare("UPDATE quotes SET sent_at = ?, sent_to = ?, followup_count = 0, followup_at = NULL, status = CASE WHEN status = 'concept' THEN 'verzonden' ELSE status END WHERE id = ?").run(currentTimestamp(), String(to).slice(0, 400), id);
   }
 
   /**
@@ -518,12 +519,13 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
    * @param {string} cutoff Tijdstip (ISO): alleen offertes waarvan de laatste mail op of voor dit moment ging.
    * @param {number} maxReminders Hoogstens zoveel herinneringen per offerte.
    * @param {number} limit Maximaal aantal offertes.
+   * @param {string} [oldest] Tijdstip (ISO): offertes die vóór dit moment zijn verstuurd krijgen geen herinnering meer (voorkomt een bulkmail naar oude offertes bij het aanzetten).
    * @returns {object[]} De volledige offerterijen, oudste eerst.
    */
-  function followUpDue(tenantId, cutoff, maxReminders, limit) {
+  function followUpDue(tenantId, cutoff, maxReminders, limit, oldest = '') {
     return prepare(`${FULL_SQL} WHERE q.tenant_id = ? AND q.deleted_at IS NULL AND q.status = 'verzonden' AND q.acceptance IS NULL
-      AND q.sent_at IS NOT NULL AND q.sent_to IS NOT NULL AND q.followup_count < ? AND COALESCE(q.followup_at, q.sent_at) <= ?
-      ORDER BY COALESCE(q.followup_at, q.sent_at) LIMIT ?`).all(tenantId, maxReminders, cutoff, limit);
+      AND q.sent_at IS NOT NULL AND q.sent_to IS NOT NULL AND q.followup_count < ? AND COALESCE(q.followup_at, q.sent_at) <= ? AND q.sent_at >= ?
+      ORDER BY COALESCE(q.followup_at, q.sent_at) LIMIT ?`).all(tenantId, maxReminders, cutoff, oldest, limit);
   }
 
   /**

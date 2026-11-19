@@ -479,7 +479,7 @@
     },
     {
       "file": "verkoop/quotes.js",
-      "sql": "UPDATE quotes SET sent_at = ?, sent_to = ?, status = CASE WHEN status = 'concept' THEN 'verzonden' ELSE status END WHERE id = ?"
+      "sql": "UPDATE quotes SET sent_at = ?, sent_to = ?, followup_count = 0, followup_at = NULL, status = CASE WHEN status = 'concept' THEN 'verzonden' ELSE status END WHERE id = ?"
     },
     {
       "file": "verkoop/quotes.js",

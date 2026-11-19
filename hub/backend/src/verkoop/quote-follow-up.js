@@ -91,8 +91,17 @@ function createQuoteFollowUpRunner(quotes, { settingsFor, mailerFor, audit = () 
     const style = mailStyleOf(settings);
     const today = Core.today(now);
     const cutoff = new Date(now.getTime() - config.afterDays * DAY_MS).toISOString();
-    for (const row of quotes.followUpDue(tenantId, cutoff, config.maxReminders, MAILS_PER_RUN)) {
-      const data = JSON.parse(row.data);
+    // Een offerte die langer geleden is verstuurd dan alle herinneringen samen krijgt niets meer (ook niet bij het aanzetten van de functie).
+    const oldest = new Date(now.getTime() - config.afterDays * (config.maxReminders + 1) * DAY_MS).toISOString();
+    for (const row of quotes.followUpDue(tenantId, cutoff, config.maxReminders, MAILS_PER_RUN, oldest)) {
+      let data = null;
+      try { data = JSON.parse(row.data); } catch { data = null; }
+      // Kapotte inhoud: voorgoed overslaan, zodat één rij de ronde niet blokkeert.
+      if (!data) {
+        quotes.claimFollowUp(row, now.toISOString(), config.maxReminders);
+        result.skipped++;
+        continue;
+      }
       const recipients = String(row.sent_to || '').split(/[,;\s]+/).filter((address) => validEmail(address));
       const link = quotes.shareLink(row);
       // Verlopen, geen bruikbaar adres of geen link: er komt nooit een herinnering; vastleggen zodat de offerte niet terugkomt.
