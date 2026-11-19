@@ -346,6 +346,23 @@
   }
 
   /**
+   * De kaart Privacy (AVG): inzage-export in Excel en wissen met bevestiging.
+   * @param {object} customer De klant.
+   * @returns {string} HTML van de kaart.
+   */
+  function privacyCard(customer) {
+    const erased = customer.username.startsWith('verwijderd-');
+    return `<section class="card" id="c-privacy"><h3>Privacy (AVG)</h3>
+      <p class="muted small">Inzage: een Excel met alle persoonsgegevens van deze klant. Wissen: de gegevens worden geanonimiseerd; definitieve facturen en de stukken waarop ze rusten blijven zeven jaar bewaard (bewaarplicht).</p>
+      <div class="err" id="c-privacy-err" role="alert"></div>
+      <div class="form-actions"><a class="btn" href="../api/customers/${encodeURIComponent(customer.id)}/privacy-export" download>Inzage downloaden (Excel)</a></div>
+      ${erased ? '<p class="muted small">Deze klant is gewist.</p>' : `<label class="field">Typ de naam van de klant om te wissen
+        <input type="text" id="c-erase-confirm" autocomplete="off" placeholder="${esc(customer.displayName)}"></label>
+      <div class="form-actions"><button type="button" class="btn danger" data-erase disabled>Persoonsgegevens wissen</button></div>`}
+    </section>`;
+  }
+
+  /**
    * Haalt de klantkaart op en tekent hem.
    * @param {string} id Id van de klant.
    * @returns {Promise<void>}
@@ -369,7 +386,7 @@
     $('#d-body').innerHTML = `
       <div class="klant-title"><h1>${esc(customer.displayName)}</h1>${pillsOf(customer)}<span class="spacer"></span>
         ${mayDossier ? `<a class="btn" href="../klantdossier/?klant=${encodeURIComponent(dossierKey)}">Klantdossier</a>` : ''}</div>
-      <div class="card-grid">${contactCard(customer, defaultPaymentDays)}${businessCard(customer, mayPrice)}${accessCard(customer, inviteProblem)}</div>
+      <div class="card-grid">${contactCard(customer, defaultPaymentDays)}${businessCard(customer, mayPrice)}${accessCard(customer, inviteProblem)}${mayPrice ? privacyCard(customer) : ''}</div>
       <div class="docs-grid">
         ${documentsCard('Offertes', quotes, (quote) => `<td><a href="../offertes/?id=${encodeURIComponent(quote.id)}">${esc(quote.number)}</a></td><td>${esc(quote.title)}</td><td>${esc(QUOTE_STATUS[quote.status] || quote.status)}</td><td class="num">${eur(quote.total)}</td>`,
           '<th>Nummer</th><th>Titel</th><th>Status</th><th class="num">Totaal</th>', 'Nog geen offertes voor deze klant.')}
@@ -455,6 +472,28 @@
     if (reject) {
       /** Wijst de aanvraag af; de klant blijft particulier. */
       reject.onclick = () => { patchCustomer({ customerGroup: '' }, '#c-business-err', 'Aanvraag afgewezen: de klant blijft particulier'); };
+    }
+    const erase = $('[data-erase]');
+    if (erase) {
+      const confirmField = $('#c-erase-confirm');
+      /** Het wisknop werkt pas als de naam klopt. */
+      confirmField.oninput = () => { erase.disabled = confirmField.value.trim() !== state.detail.customer.displayName; };
+      /**
+       * Wist de persoonsgegevens en tekent de kaart opnieuw.
+       * @returns {Promise<void>}
+       */
+      erase.onclick = async () => {
+        $('#c-privacy-err').textContent = '';
+        erase.disabled = true;
+        try {
+          await api(`customers/${encodeURIComponent(state.detail.customer.id)}/anonymize`, { method: 'POST', body: { confirm: confirmField.value.trim() } });
+          toast('Persoonsgegevens gewist');
+          await loadDetail(state.detail.customer.id);
+        } catch (error) {
+          $('#c-privacy-err').textContent = error.message;
+          erase.disabled = false;
+        }
+      };
     }
     const invite = $('[data-invite]');
     if (invite) {

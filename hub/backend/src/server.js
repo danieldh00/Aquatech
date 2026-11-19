@@ -21,6 +21,7 @@ const backups = require('./backup');
 const { createDriveBackup, sanitizeDriveBackup, DriveError, CALLBACK_PATH: DRIVE_CALLBACK_PATH } = require('./platform/drive-backup');
 const { createQuoteStore, registerQuoteRoutes, validShareBase, mailBody, Core: QuoteCore } = require('./verkoop/quotes');
 const { createCustomerStore, registerCustomerRoutes } = require('./verkoop/customers');
+const { createPersonData, registerPersonDataRoutes } = require('./verkoop/person-data');
 const { createMailer, mailFailure } = require('./platform/mailer');
 const { createWanIp } = require('./platform/wan-ip');
 const { createAddressLookup, createAddressGuard, registerAddressRoute } = require('./platform/address-lookup');
@@ -2453,6 +2454,15 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // De uitnodiging gebruikt de wachtwoordlink van de webshop; shopAccounts wordt pas hieronder gemaakt.
     inviteReady: (customer) => shopAccounts.inviteProblem(customer),
     invite: (customer) => shopAccounts.invite(customer),
+  });
+  registerPersonDataRoutes(app, {
+    store, personData: createPersonData(database, store), requireRight, requireJson, audit,
+    tenantsOf: (req) => {
+      const tenantId = req.tenantId || tenant.id;
+      const home = homeOf(tenantId);
+      return home === tenantId ? [tenantId] : [home, tenantId];
+    },
+    organizationName: (req) => String(settingsFor(req.tenantId || tenant.id).get('quoteProfile').companyName || 'AquaTech'),
   });
 
   // De btw-controle bij VIES: gedeeld door de offertes (btw verleggen) en de webshop.
