@@ -612,6 +612,11 @@
     $('[data-clear="accessCode"]').disabled = !code.set;
     renderSeason(view.seasonReminders.value);
     if (view.paymentReminders) renderPaymentReminders(view.paymentReminders.value);
+    const followUpForm = $('#s-quote-followup');
+    const followUp = view.quoteFollowUp?.value || {};
+    followUpForm.enabled.checked = Boolean(followUp.enabled);
+    followUpForm.afterDays.value = followUp.afterDays || 7;
+    followUpForm.maxReminders.value = String(followUp.maxReminders || 1);
     if (view.labelTemplates) renderLabelTemplates(view.labelTemplates.value);
     const outsourcingForm = $('#s-outsourcing');
     const outsourcing = view.outsourcing.value;
@@ -1227,6 +1232,15 @@
     paymentRemindersForm.onsubmit = (event) => {
       event.preventDefault();
       saveSettings(paymentRemindersForm, { paymentReminders: readPaymentReminders() }, 'Betalingsherinneringen opgeslagen');
+    };
+    const followUpForm = $('#s-quote-followup');
+    /**
+     * Slaat de offerte-opvolging op.
+     * @param {SubmitEvent} event het verzenden
+     */
+    followUpForm.onsubmit = (event) => {
+      event.preventDefault();
+      saveSettings(followUpForm, { quoteFollowUp: { enabled: followUpForm.enabled.checked, afterDays: Number(followUpForm.afterDays.value), maxReminders: Number(followUpForm.maxReminders.value) } }, 'Offerte-opvolging opgeslagen');
     };
     const labelsForm = $('#s-labels');
     /**

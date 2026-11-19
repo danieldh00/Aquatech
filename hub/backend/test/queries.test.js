@@ -277,6 +277,10 @@ test('queries: leveranciers en inkooporders kosten een vast aantal queries, onge
     probe.reset();
     assert.strictEqual((await client.get('/app/api/stock/reorder')).status, 200);
     assert.ok(probe.stats.queries <= 8, probe.stats.sql.join('\n'));
+    // Globaal zoeken: een vast aantal queries (klanten, offertes, werkorders, facturen, artikelen), nooit per resultaat.
+    probe.reset();
+    assert.strictEqual((await client.get('/app/api/search?q=artikel')).body.groups.length, 1);
+    assert.ok(probe.stats.queries <= 7, probe.stats.sql.join('\n'));
     // Prijsfactor: het voorbeeld van 12 artikelen in een vast aantal queries; doorvoeren ook niet per artikel opnieuw berekenen.
     assert.strictEqual((await client.put('/app/api/stock/price-factors', { defaultFactor: 2 })).status, 200);
     const ids = (await client.get('/app/api/stock')).body.items.map((item) => item.id);
