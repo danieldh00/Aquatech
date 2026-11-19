@@ -330,7 +330,7 @@ ${site.notice.enabled && site.notice.text ? `<div class="shop-notice kleur-${esc
     <div class="shop-actions">
       ${activeShop.staff ? `<a class="shop-action shop-admin" href="${root}app/" title="Naar het beheer">${ICONS.admin}<span>Beheer</span></a>\n      ` : ''}<a class="shop-action" href="${root}account/" title="Inloggen of mijn account" aria-label="Account">${ICONS.user}<span>Account</span></a>
       ${activeShop.ordering
-    ? `<a class="shop-action cart" href="${root}winkelwagen/" title="Naar je winkelwagen" aria-label="Winkelwagen">${ICONS.cart}<span>Winkelwagen</span><b>${activeShop.cartCount}</b></a>`
+    ? `<a class="shop-action cart" href="${root}winkelwagen/" title="Naar je winkelwagen" aria-label="Winkelwagen, ${activeShop.cartCount} artikelen">${ICONS.cart}<span>Winkelwagen</span><b>${activeShop.cartCount}</b></a>`
     : `<span class="shop-action cart" aria-disabled="true" title="De winkelwagen volgt binnenkort">${ICONS.cart}<span>Winkelwagen</span><b>0</b></span>`}
     </div>
   </div>
