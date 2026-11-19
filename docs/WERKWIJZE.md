@@ -1,6 +1,6 @@
 # Werkwijze (projectonafhankelijk)
 
-Algemene afspraken voor samenwerken met Claude in een project met een coördinator en threads. Bevat geen productkennis: die staat per project in een eigen contextbestand (voor AquaTech Hub: `docs/AQUATECH-CONTEXT.md`).
+Algemene afspraken voor samenwerken met Claude in een project met een coördinator en threads. Bevat geen productkennis: die staat per project in een eigen contextbestand.
 
 **Onderhoud:** wie de werkwijze verandert, werkt dit bestand bij in dezelfde PR. De kopie in de projectbestanden (`werkwijze/WERKWIJZE.md`) blijft gelijk aan deze versie.
 
