@@ -284,6 +284,30 @@ function webpBase64(width, height) {
   return Buffer.concat([header, chunk]).toString('base64');
 }
 
+/**
+ * Een kleine JPEG-structuur (SOF0) met de opgegeven afmetingen, genoeg voor de controle op inhoud.
+ * @param {number} width De breedte.
+ * @param {number} height De hoogte.
+ * @returns {string} De JPEG als base64.
+ */
+function jpegBase64(width, height) {
+  /**
+   * Eén JPEG-segment: marker, lengte en inhoud.
+   * @param {number} marker Segmenttype (na 0xFF).
+   * @param {Buffer} body Inhoud.
+   * @returns {Buffer} Het segment.
+   */
+  const segment = (marker, body) => {
+    const length = Buffer.alloc(2); length.writeUInt16BE(body.length + 2);
+    return Buffer.concat([Buffer.from([0xff, marker]), length, body]);
+  };
+  const sof = Buffer.from([8, height >> 8, height & 255, width >> 8, width & 255, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1]);
+  return Buffer.concat([
+    Buffer.from([0xff, 0xd8]), segment(0xdb, Buffer.alloc(65, 1)), segment(0xc0, sof),
+    segment(0xda, Buffer.from([1, 1, 0, 0, 0x3f, 0])), Buffer.from([0x12, 0x34, 0x56, 0xff, 0x00, 0x78]), Buffer.from([0xff, 0xd9]),
+  ]).toString('base64');
+}
+
 test('miniatuur: opslaan, tonen in de shop met terugval, porties en afkeuren van ongeldige', async () => {
   const { admin, klant, vreemd, anonymous, db, main, vault } = await setup();
   const item = await article(admin, 'IMG-T1');
@@ -312,6 +336,10 @@ test('miniatuur: opslaan, tonen in de shop met terugval, porties en afkeuren van
   assert.match(small.headers.get('cache-control'), /immutable/);
   assert.match((await anonymous.get(`/artikelfoto/${imageId}`)).type, /image\/png/, 'de gewone afbeelding blijft de grote');
   assert.deepStrictEqual((await admin.get('/app/api/stock/images-thumbs')).body, { pending: 0, ids: [], next: null });
+  // Safari maakt een JPEG-miniatuur: ook die wordt geaccepteerd en als JPEG geserveerd.
+  assert.strictEqual((await admin.put(`/app/api/stock/images/${imageId}/thumb`, { data: jpegBase64(480, 320) })).status, 200);
+  assert.match((await anonymous.get(`/artikelfoto/${imageId}/klein`)).type, /image\/jpeg/);
+  assert.strictEqual((await admin.put(`/app/api/stock/images/${imageId}/thumb`, { data: jpegBase64(900, 600) })).status, 400);
   assert.strictEqual((await anonymous.get('/artikelfoto/geen-id/klein')).status, 404);
   // Nieuwe upload met miniatuur meteen erbij; een ongeldige miniatuur laat de upload wel slagen.
   const second = await article(admin, 'IMG-T2');

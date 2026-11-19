@@ -39,9 +39,10 @@
   }
 
   /**
-   * Maakt van een afbeelding een miniatuur (WebP, hoogstens 480 pixels, witte ondergrond) voor de kaartjes in de webshop.
+   * Maakt van een afbeelding een miniatuur (hoogstens 480 pixels, witte ondergrond) voor de kaartjes in de webshop:
+   * WebP, en JPEG in browsers die geen WebP kunnen maken (Safari).
    * @param {ImageBitmap} bitmap de afbeelding
-   * @returns {Promise<string>} de miniatuur als base64, of '' als de browser geen WebP kan maken
+   * @returns {Promise<string>} de miniatuur als base64, of '' als hij niet gemaakt kon worden
    */
   async function makeThumb(bitmap) {
     const scale = Math.min(1, THUMB_SIDE / Math.max(bitmap.width, bitmap.height));
@@ -52,8 +53,9 @@
     context.fillStyle = '#fff';
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', 0.8));
-    return blob && blob.type === 'image/webp' ? readBase64(blob) : '';
+    let blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', 0.8));
+    if (!blob || blob.type !== 'image/webp') blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.8));
+    return blob && /^image\/(webp|jpeg)$/.test(blob.type) ? readBase64(blob) : '';
   }
 
   /**
@@ -213,7 +215,7 @@
           const response = await fetch(src(id), { cache: 'no-store' });
           if (!response.ok) throw new Error('niet te lezen');
           const thumb = await makeThumb(await createImageBitmap(await response.blob()));
-          if (!thumb) throw new Error('geen WebP');
+          if (!thumb) throw new Error('geen miniatuur');
           await api(`stock/images/${encodeURIComponent(id)}/thumb`, { method: 'PUT', body: { data: thumb } });
           totals.done += 1;
         } catch (error) {
