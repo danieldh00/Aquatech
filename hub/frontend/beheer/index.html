@@ -273,12 +273,25 @@
           <p class="muted small">Elke nieuwe back-up wordt automatisch (versleuteld, zoals hij op de server staat) naar een map in je eigen Google Drive gekopieerd, zodat er altijd een kopie buiten de server staat. De app ziet alleen de map die hij zelf aanmaakt. Zonder de hoofdsleutel van deze server is een back-up op Drive onleesbaar: bewaar die sleutel dus ook apart.</p>
           <div id="d-warn" class="notice warn" role="status" hidden></div>
           <div id="d-state" class="muted small"></div>
+          <details class="ai-guide drive-steps">
+            <summary>Zo stel je dit in (eenmalig, ongeveer 15 minuten)</summary>
+            <ol>
+              <li>Ga naar <em>console.cloud.google.com</em>, kies een project of maak een nieuw project aan (bijvoorbeeld "AquaTech back-ups").</li>
+              <li>Ga naar <em>API's en services &gt; Bibliotheek</em>, zoek <em>Google Drive API</em> en klik op <em>Inschakelen</em>.</li>
+              <li>Stel het OAuth-scherm in (onder <em>Google Auth Platform</em>): app-naam, supportadres en ontwikkelaarsadres invullen; doelgroep <em>Extern</em>; bij <em>Gegevenstoegang</em> de scope <code>.../auth/drive.file</code> toevoegen.</li>
+              <li>Zet de publicatiestatus op <strong>In productie</strong> (onder <em>Doelgroep</em>). In de testmodus verloopt de koppeling na 7 dagen en moet je elke week opnieuw verbinden.</li>
+              <li>Maak onder <em>Clients</em> een client aan van het type <strong>Webtoepassing</strong>. Zet bij <em>Geautoriseerde redirect-URI's</em> exact het redirect-adres uit het veld hieronder (met https en het pad naar <code>/callback</code>).</li>
+              <li>Kopieer de <strong>Client-ID</strong> en het <strong>clientgeheim</strong> en plak ze hieronder. Sla op met <em>Opslaan</em>.</li>
+              <li>Klik op <em>Verbinden met Google Drive</em> en log in met het Google-account waarin de back-ups moeten komen. Google toont een waarschuwing dat de app niet is geverifieerd: kies <em>Geavanceerd</em> en ga door. Geef toegang tot de gevraagde Drive-rechten.</li>
+              <li>Vink <em>Nieuwe back-ups automatisch kopiëren</em> aan, sla op en klik op <em>Nu uploaden</em> voor de eerste kopie.</li>
+            </ol>
+          </details>
           <div class="form-grid">
             <label class="full">Client-ID van de Google-app <input name="clientId" autocomplete="off" spellcheck="false"></label>
             <label class="full">Clientgeheim <span id="d-secret-set" class="muted small"></span><input name="clientSecret" type="password" autocomplete="new-password" placeholder="Leeg laten = ongewijzigd"></label>
             <label class="full">Redirect-adres (voeg dit toe bij de Google-app) <input name="redirectUri" autocomplete="off" spellcheck="false"></label>
             <label>Mapnaam op Drive <input name="folderName" maxlength="80"></label>
-            <label>Aantal back-ups op Drive bewaren <input name="keepCount" type="number" min="1" max="365" step="1"></label>
+            <label>Aantal back-ups bewaren <input name="keepCount" type="number" min="1" max="365" step="1"></label>
           </div>
           <label class="chk"><input type="checkbox" name="enabled"> <span>Nieuwe back-ups automatisch naar Google Drive kopiëren</span></label>
           <div class="form-actions">
@@ -293,15 +306,6 @@
           <div id="d-remote" class="muted small"></div>
           <h4>Logboek</h4>
           <div id="d-events" class="muted small"></div>
-          <details class="ai-guide">
-            <summary>Handleiding: Google-app aanmaken (eenmalig)</summary>
-            <ol>
-              <li>Ga in de Google Cloud Console naar een project (of maak er een) en zet de <em>Google Drive API</em> aan.</li>
-              <li>Maak onder <em>OAuth-toestemmingsscherm</em> een app aan en zet de status op <strong>In productie</strong>. In de testmodus verloopt de koppeling na 7 dagen.</li>
-              <li>Maak onder <em>Inloggegevens</em> een <em>OAuth-client-ID</em> van het type <em>Webtoepassing</em> met het redirect-adres hierboven.</li>
-              <li>Vul Client-ID en clientgeheim hierboven in, sla op en klik op <em>Verbinden</em>. Google toont een waarschuwing voor niet-geverifieerde apps: kies <em>Geavanceerd</em> en ga door (alleen toegang tot door de app gemaakte bestanden).</li>
-            </ol>
-          </details>
           <div class="err" role="alert"></div>
         </form>
         <form id="s-restore" class="card-form settings" novalidate>
