@@ -241,6 +241,10 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
     FROM purchase_order_lines l WHERE l.tenant_id = ? AND l.order_id = ? ORDER BY l.position, l.id`).all(supplierId || '', tenantId, orderId);
   };
 
+  // Keuze voorkeur boven backup: "de voorkeur" is de eerste actieve leverancier op prioriteit, ongeacht haar voorraadstatus.
+  // De voorraadstatus bepaalt alleen bij wie het bestelvoorstel bestelt (suppliers.preferredByItem); de verkoopprijs, de prijsfactor
+  // en de inkoopprijs van het artikel horen altijd bij de voorkeur. Een order bij een andere gekoppelde leverancier is daarom altijd
+  // een backup-order: de meerprijs wordt getoond en de artikelprijzen blijven ongewijzigd.
   /**
    * Bij welke artikelen de gegeven leverancier als backup levert: het artikel heeft de leverancier als koppeling, maar de
    * voorkeur (de eerste actieve leverancier op prioriteit, ongeacht de voorraadstatus: de verkoopprijs en de prijsfactor horen bij de voorkeur) een ander is.

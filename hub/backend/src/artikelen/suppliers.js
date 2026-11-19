@@ -365,6 +365,8 @@ function createSupplierStore(db) {
       .map((row) => ({ itemId: row.item_id, supplierSku: row.supplier_sku }));
   }
 
+  // Het bestelvoorstel gebruikt de backup alleen als de voorkeur niet leverbaar is; de voorkeur zelf (en daarmee de verkoopprijs)
+  // verandert daar nooit door. Zie ook backupItemIds in purchase-orders.js.
   /**
    * De leverancier waarbij het bestelvoorstel per artikel bestelt: de voorkeur, of de eerste backup die niet op
    * "niet leverbaar" staat als de voorkeur dat wel is. Zijn alle leveranciers niet leverbaar, dan blijft het de voorkeur
