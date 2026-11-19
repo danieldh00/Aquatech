@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.26.8',
+      date: '2026-11-19',
+      title: 'Voorraadtelling in Artikelen',
+      items: [
+        { text: 'Nieuw tabblad Telling bij Artikelen: een jaarlijkse of tussentijdse voorraadtelling starten, de voortgang per locatie volgen, regels met een groot verschil laten hertellen, afsluiten en alles als Excel downloaden.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.26.7',
       date: '2026-11-19',
       title: 'Voorraadtelling (jaartelling) voorbereid',

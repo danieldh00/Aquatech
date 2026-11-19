@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.26.8
+
+Tabblad Telling in `frontend/artikelen/counts.js` (lijst, starten, voortgang per locatie, regels met filter en paginering, hertellen boven de drempel, annuleren, afsluiten met wachtwoord, Excel met samenvatting, regels en ingaven) op de bestaande routes `/api/stock-counts`.
+
 ## 1.26.7
 
 - Migratie 87: `stock_counts` (nummer `VT<jaar>-NN`, soort jaar of tussentijds, status tellen, afgesloten of geannuleerd; één lopende telling per organisatie, één afgesloten jaartelling per kalenderjaar), `stock_count_lines` (bevroren tellijst met verwachte aantallen, prijs per eenheid en bron: FIFO-gemiddelde, inkoopprijs of onbekend) en `stock_count_entries` (logboek van elke ingave, idempotent op `client_id`).
