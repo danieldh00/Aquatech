@@ -310,7 +310,10 @@
     if (!root.matchMedia) return;
     if (!root.matchMedia('(max-width: 700px)').matches) {
       // Weer een breed scherm: de eigen wikkels weghalen, zodat de tabel er weer uitziet zoals voorheen.
-      for (const wrapper of document.querySelectorAll('.tablewrap.auto-wrap')) wrapper.replaceWith(...wrapper.childNodes);
+      for (const wrapper of document.querySelectorAll('.tablewrap.auto-wrap')) {
+        if (wrapper.contains(document.activeElement)) continue;
+        wrapper.replaceWith(...wrapper.childNodes);
+      }
       return;
     }
     const tables = document.querySelectorAll('table:not(.kv):not(.totals):not(.a-facts):not(.p-lines):not(.p-totals):not(.product-specs)');
