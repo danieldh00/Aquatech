@@ -299,5 +299,38 @@
     return `Er ging iets mis (status ${code}).`;
   }
 
-  root.AquatechCommon = { getJson, ownerOf, excel, origin, onReturn, leaving, offline, statusMessage };
+  // ---------- Brede tabellen op een smal scherm ----------
+  /**
+   * Zet elke tabel die op een smal scherm breder is dan zijn omgeving in een scrollbare .tablewrap, zodat de pagina niet
+   * zijwaarts schuift en de vaste eerste kolom (shared/brand.css) werkt. Tabellen die al in een .tablewrap staan, tabellen
+   * van afdrukdocumenten en korte sleutel-waardetabellen blijven zoals ze zijn.
+   * @returns {void}
+   */
+  function wrapWideTables() {
+    if (!root.matchMedia || !root.matchMedia('(max-width: 700px)').matches) return;
+    const tables = document.querySelectorAll('table:not(.kv):not(.totals):not(.a-facts):not(.p-lines):not(.p-totals):not(.product-specs)');
+    for (const table of tables) {
+      const parent = table.parentElement;
+      if (!parent || parent.classList.contains('tablewrap') || table.closest('.tablewrap, .p-info, [data-no-wrap]')) continue;
+      if (table.offsetWidth <= parent.clientWidth + 1) continue;
+      const wrapper = document.createElement('div');
+      wrapper.className = 'tablewrap auto-wrap';
+      parent.insertBefore(wrapper, table);
+      wrapper.appendChild(table);
+    }
+  }
+  if (typeof document !== 'undefined' && root.MutationObserver) {
+    let wrapTimer = null;
+    /** Plant één controle kort na de laatste wijziging van de pagina. */
+    const scheduleWrap = () => { clearTimeout(wrapTimer); wrapTimer = setTimeout(wrapWideTables, 80); };
+    /** Start de waarneming van de pagina en doet de eerste controle. */
+    const start = () => {
+      new MutationObserver(scheduleWrap).observe(document.body, { childList: true, subtree: true });
+      root.addEventListener('resize', scheduleWrap);
+      scheduleWrap();
+    };
+    if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
+  }
+
+  root.AquatechCommon = { getJson, ownerOf, excel, origin, onReturn, leaving, offline, statusMessage, wrapWideTables };
 })(window);

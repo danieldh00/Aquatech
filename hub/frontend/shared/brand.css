@@ -69,3 +69,23 @@
 }
 @media (max-width: 640px) { .maintenance-bar { font-size: 12px; border-radius: 12px; } }
 @media print { .maintenance-bar { display: none; } }
+
+/* Tabellen op een smal scherm: de kolom die zegt om welk item het gaat (meestal de eerste; bij een selectievakje ervoor de
+   tweede) blijft links staan terwijl je de rest opzij schuift. Geldt voor elke tabel in een .tablewrap; tabellen die buiten
+   een .tablewrap te breed worden, krijgt er een via AquatechCommon.wrapWideTables (shared/common.js). Op desktop verandert niets. */
+.tablewrap { overflow-x: auto; max-width: 100%; }
+.tablewrap.auto-wrap { border: 0; background: none; border-radius: 0; }
+@media (max-width: 700px) {
+  .tablewrap > table { border-collapse: separate; border-spacing: 0; }
+  .tablewrap > table:not(:has(> tbody > tr > td:first-child > input[type=checkbox])) > :is(thead, tbody, tfoot) > tr > :is(th, td):first-child:not([colspan]),
+  .tablewrap > table:has(> tbody > tr > td:first-child > input[type=checkbox]) > :is(thead, tbody, tfoot) > tr > :is(th, td):nth-child(2):not([colspan]) {
+    position: sticky; left: 0; z-index: 1;
+    background-color: var(--panel, #fff);
+    box-shadow: 6px 0 6px -6px rgba(15, 23, 42, 0.28);
+    max-width: min(46vw, 190px); min-width: var(--stick-min, 0px);
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .tablewrap > table > thead > tr > :is(th, td):is(:first-child, :nth-child(2)) { background-color: #fafbfc; z-index: 2; }
+  .tablewrap > table :is(td.wrap, td.c-desc) { --stick-min: 120px; }
+  .tablewrap > table tr[data-id]:hover > :is(td):is(:first-child, :nth-child(2)) { background-color: var(--primary-soft, #eef6f8); }
+}
