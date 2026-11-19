@@ -10,7 +10,7 @@
 # Uitvoer: /root/aquatech-diagnose-<tijd>.txt (op de Proxmox-host). Stuur dat bestand terug.
 #
 # Het script wijzigt niets: geen herstart, geen schrijfacties in de database, geen geheimen in de uitvoer
-# (omgevingsvariabelen en secrets worden niet gelezen). apps01 laat root niet inloggen via SSH (bewust), dus het
+# (omgevingsvariabelen en secrets worden niet gelezen; tekst tussen enkele aanhalingstekens in queries wordt als '?' getoond). apps01 laat root niet inloggen via SSH (bewust), dus het
 # script verbindt als daniel@apps01 en voert het alleen-lezen deel uit met `sudo -n` (zoals servertaken.sh).
 #
 # Instellingen (optioneel): APPS01_SSH (standaard daniel@apps01), APPS01_CTID of APPS01_VMID (LXC via pct exec),
@@ -33,7 +33,7 @@ APP_DIR="${APP_DIR:-/opt/apps/aquatech}"
 SAMPLE_SECONDS="${SAMPLE_SECONDS:-150}"
 LOG_SINCE="${LOG_SINCE:-48h}"
 sect() { printf "\n\n===== %s =====\n" "$*"; }
-sql() { docker exec -u postgres aquatech-postgres psql -X -A -F" | " -d aquatech -c "$1" 2>&1 | head -${2:-60}; }
+sql() { docker exec -u postgres aquatech-postgres psql -X -A -F" | " -d aquatech -c "$1" 2>&1 | sed -E "s/\x27[^\x27]*\x27/\x27?\x27/g" | head -${2:-60}; }
 
 sect "Tijd, uptime, belasting"
 date; uptime; nproc
@@ -69,7 +69,7 @@ sql "SELECT pid, state, wait_event_type, wait_event, now() - query_start AS duur
 sect "PostgreSQL: locks die wachten"
 sql "SELECT a.pid, a.wait_event, now() - a.query_start AS wacht, left(regexp_replace(a.query, '"'"'\s+'"'"', '"'"' '"'"', '"'"'g'"'"'), 120) AS query FROM pg_stat_activity a WHERE a.wait_event_type = '"'"'Lock'"'"'"
 sect "PostgreSQL: trage queries uit het log (log_min_duration_statement = 1 s), laatste $LOG_SINCE"
-docker logs --since "$LOG_SINCE" aquatech-postgres 2>&1 | grep -E "duration: [0-9]{4,}\.[0-9]+ ms|deadlock|could not|FATAL|too many connections|checkpoint (starting|complete).*(sync|write)=[0-9]{2,}" | tail -n 80
+docker logs --since "$LOG_SINCE" aquatech-postgres 2>&1 | grep -E "duration: [0-9]{4,}\.[0-9]+ ms|deadlock|could not|FATAL|too many connections|checkpoint (starting|complete).*(sync|write)=[0-9]{2,}" | sed -E "s/\x27[^\x27]*\x27/\x27?\x27/g" | tail -n 80
 sect "PostgreSQL: grootste tabellen (afbeeldingen en foto s in de database maken een back-up zwaar)"
 sql "SELECT relname AS tabel, pg_size_pretty(pg_total_relation_size(c.oid)) AS grootte, reltuples::bigint AS rijen FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = '"'"'aquatech'"'"' AND c.relkind = '"'"'r'"'"' ORDER BY pg_total_relation_size(c.oid) DESC LIMIT 15"
 sql "SELECT pg_size_pretty(pg_database_size('"'"'aquatech'"'"')) AS databasegrootte, round(100.0 * sum(blks_hit) / nullif(sum(blks_hit) + sum(blks_read), 0), 2) AS cache_hit_pct FROM pg_stat_database WHERE datname = '"'"'aquatech'"'"'"
@@ -99,7 +99,8 @@ if [[ "$MODE" == "pct" ]]; then
 else
   ssh -o BatchMode=yes -o ConnectTimeout=10 "$SSH_TARGET" "$SUDO env $ENVS bash -s" <<<"$REMOTE_SCRIPT" >"$OUT" 2>&1
 fi
-if grep -qE "sudo: a password is required|Permission denied|Could not resolve|Connection refused|Connection timed out" "$OUT"; then
-  echo "WAARSCHUWING: de verbinding of sudo lukte niet; kijk in $OUT en stuur de melding mee." >&2
+rc=$?
+if [[ $rc -ne 0 ]] || head -n 5 "$OUT" | grep -qE "sudo: a password is required|Permission denied"; then
+  echo "WAARSCHUWING: de verbinding of sudo lukte niet (exitcode $rc); kijk in $OUT en stuur de melding mee." >&2
 fi
 echo "Klaar: $OUT ($(wc -l <"$OUT") regels). Stuur dit bestand terug."
