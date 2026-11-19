@@ -73,6 +73,7 @@
       }
     } catch (error) {
       errorBox.textContent = error.message;
+      dirty = false;
     }
     saving = false;
     await load();
