@@ -235,7 +235,7 @@
        * Voorkomt dat een klik op het vinkje de offerte opent.
        * @param {MouseEvent} event de klik
        */
-      box.onclick = (event) => event.stopPropagation();
+      box.onclick = (event) => { event.stopPropagation(); };
       /** Zet de offerte in of uit de selectie. */
       box.onchange = () => {
         const id = box.closest('tr').dataset.id;
@@ -250,7 +250,7 @@
        * Voorkomt dat een klik op het vinkje de kolom sorteert.
        * @param {MouseEvent} event de klik
        */
-      all.onclick = (event) => event.stopPropagation();
+      all.onclick = (event) => { event.stopPropagation(); };
       /** Selecteert alle zichtbare offertes of heft de selectie op. */
       all.onchange = () => {
         for (const quote of items) { if (all.checked) state.selected.add(quote.id); else state.selected.delete(quote.id); }
