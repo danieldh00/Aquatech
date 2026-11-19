@@ -65,6 +65,11 @@ const plural = (count, one, many) => (Number(count) === 1 ? one : many);
 const CATALOG = [
   {
     key: 'openstaand', title: 'Openstaand bedrag', description: 'Totaal van alle definitieve, nog niet betaalde facturen.', module: 'facturen', right: 'facturen', href: 'facturen/', enabled: true,
+    /**
+     * Telt het openstaande bedrag (incl. btw) van definitieve facturen.
+     * @param {{ db: object, tenantId: string, today: string, range: { from: string, to: string }, periodLabel: string }} context Database, omgeving, vandaag en de gekozen periode.
+     * @returns {{ value: number, unit: string, detail: string }} De waarde, de eenheid (euro of aantal) en de toelichting.
+     */
     compute: ({ db, tenantId }) => {
       const open = db.prepare("SELECT COALESCE(SUM(total), 0) AS amount, COUNT(*) AS count FROM invoices WHERE tenant_id = ? AND status = 'definitief'").get(tenantId);
       return { value: QuoteCore.round2(Number(open.amount)), unit: 'euro', detail: `${Number(open.count)} open ${plural(open.count, 'factuur', 'facturen')} (incl. btw)` };
@@ -72,6 +77,11 @@ const CATALOG = [
   },
   {
     key: 'vervallen', title: 'Vervallen facturen', description: 'Aantal definitieve facturen dat over de vervaldatum is.', module: 'facturen', right: 'facturen', href: 'facturen/', enabled: true,
+    /**
+     * Telt de definitieve facturen die over de vervaldatum zijn.
+     * @param {{ db: object, tenantId: string, today: string, range: { from: string, to: string }, periodLabel: string }} context Database, omgeving, vandaag en de gekozen periode.
+     * @returns {{ value: number, unit: string, detail: string }} De waarde, de eenheid (euro of aantal) en de toelichting.
+     */
     compute: ({ db, tenantId, today }) => {
       const overdue = db.prepare("SELECT COALESCE(SUM(total), 0) AS amount, COUNT(*) AS count FROM invoices WHERE tenant_id = ? AND status = 'definitief' AND kind = 'factuur' AND due_date < ?").get(tenantId, today);
       return { value: Number(overdue.count), unit: 'aantal', detail: `${euros(overdue.amount)} voorbij de vervaldatum` };
@@ -79,6 +89,11 @@ const CATALOG = [
   },
   {
     key: 'omzet', title: 'Gefactureerd', description: 'Omzet excl. btw van definitieve en betaalde facturen (credits afgetrokken) in de gekozen periode.', module: 'facturen', right: 'facturen', href: 'facturen/', periodic: true, enabled: true,
+    /**
+     * Sommeert de omzet excl. btw van definitieve en betaalde facturen in de periode.
+     * @param {{ db: object, tenantId: string, today: string, range: { from: string, to: string }, periodLabel: string }} context Database, omgeving, vandaag en de gekozen periode.
+     * @returns {{ value: number, unit: string, detail: string }} De waarde, de eenheid (euro of aantal) en de toelichting.
+     */
     compute: ({ db, tenantId, range, periodLabel }) => {
       const sum = db.prepare("SELECT COALESCE(SUM(subtotal), 0) AS amount, COUNT(*) AS count FROM invoices WHERE tenant_id = ? AND status IN ('definitief', 'betaald') AND invoice_date >= ? AND invoice_date <= ?").get(tenantId, range.from, range.to);
       return { value: QuoteCore.round2(Number(sum.amount)), unit: 'euro', detail: `excl. btw, ${Number(sum.count)} ${plural(sum.count, 'document', 'documenten')} (${periodLabel.toLowerCase()})` };
@@ -86,6 +101,11 @@ const CATALOG = [
   },
   {
     key: 'offertes', title: 'Open offertes', description: 'Verzonden offertes die nog op antwoord wachten.', module: 'offertes', right: 'offertes', href: 'offertes/', enabled: true,
+    /**
+     * Telt de verzonden offertes die op antwoord wachten.
+     * @param {{ db: object, tenantId: string, today: string, range: { from: string, to: string }, periodLabel: string }} context Database, omgeving, vandaag en de gekozen periode.
+     * @returns {{ value: number, unit: string, detail: string }} De waarde, de eenheid (euro of aantal) en de toelichting.
+     */
     compute: ({ db, tenantId }) => {
       const quotes = db.prepare("SELECT COUNT(*) AS count, COALESCE(SUM(total_excl), 0) AS amount FROM quotes WHERE tenant_id = ? AND status = 'verzonden' AND deleted_at IS NULL").get(tenantId);
       return { value: Number(quotes.count), unit: 'aantal', detail: `${euros(quotes.amount)} excl. btw wacht op antwoord` };
@@ -93,6 +113,11 @@ const CATALOG = [
   },
   {
     key: 'offertes_akkoord', title: 'Geaccepteerde offertes', description: 'Offertes waarop de klant in de gekozen periode akkoord gaf.', module: 'offertes', right: 'offertes', href: 'offertes/', periodic: true,
+    /**
+     * Telt de offertes met akkoord van de klant in de periode.
+     * @param {{ db: object, tenantId: string, today: string, range: { from: string, to: string }, periodLabel: string }} context Database, omgeving, vandaag en de gekozen periode.
+     * @returns {{ value: number, unit: string, detail: string }} De waarde, de eenheid (euro of aantal) en de toelichting.
+     */
     compute: ({ db, tenantId, range, periodLabel }) => {
       const quotes = db.prepare("SELECT COUNT(*) AS count, COALESCE(SUM(total_excl), 0) AS amount FROM quotes WHERE tenant_id = ? AND status = 'akkoord' AND deleted_at IS NULL AND responded_at >= ? AND responded_at < ?").get(tenantId, range.from, QuoteCore.addDays(range.to, 1));
       return { value: Number(quotes.count), unit: 'aantal', detail: `${euros(quotes.amount)} excl. btw (${periodLabel.toLowerCase()})` };
@@ -100,6 +125,11 @@ const CATALOG = [
   },
   {
     key: 'werkorders_open', title: 'Open werkorders', description: 'Werkorders die nog niet gereed of geannuleerd zijn.', module: 'werkorders', right: 'werkorders', href: 'werkorders/',
+    /**
+     * Telt de werkorders die nog open, gepland of bezig zijn.
+     * @param {{ db: object, tenantId: string, today: string, range: { from: string, to: string }, periodLabel: string }} context Database, omgeving, vandaag en de gekozen periode.
+     * @returns {{ value: number, unit: string, detail: string }} De waarde, de eenheid (euro of aantal) en de toelichting.
+     */
     compute: ({ db, tenantId }) => {
       const open = db.prepare("SELECT COUNT(*) AS count, SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) AS unplanned FROM work_orders WHERE tenant_id = ? AND deleted_at IS NULL AND status IN ('open', 'gepland', 'bezig')").get(tenantId);
       return { value: Number(open.count), unit: 'aantal', detail: `${Number(open.unplanned || 0)} nog niet ingepland` };
@@ -107,6 +137,11 @@ const CATALOG = [
   },
   {
     key: 'webshop_nieuw', title: 'Te verzenden bestellingen', description: 'Webshopbestellingen met status Nieuw.', module: 'webshop-bestellingen', right: 'beheer', href: 'webshop-bestellingen/',
+    /**
+     * Telt de webshopbestellingen met status Nieuw.
+     * @param {{ db: object, tenantId: string, today: string, range: { from: string, to: string }, periodLabel: string }} context Database, omgeving, vandaag en de gekozen periode.
+     * @returns {{ value: number, unit: string, detail: string }} De waarde, de eenheid (euro of aantal) en de toelichting.
+     */
     compute: ({ db, tenantId }) => {
       const orders = db.prepare("SELECT COUNT(*) AS count, COALESCE(SUM(total), 0) AS amount FROM web_orders WHERE tenant_id = ? AND status = 'nieuw'").get(tenantId);
       return { value: Number(orders.count), unit: 'aantal', detail: `${euros(orders.amount)} incl. btw` };
@@ -114,6 +149,11 @@ const CATALOG = [
   },
   {
     key: 'webshop_omzet', title: 'Webshop-omzet', description: 'Totaal van de webshopbestellingen (zonder geannuleerde) in de gekozen periode.', module: 'webshop-bestellingen', right: 'beheer', href: 'webshop-bestellingen/', periodic: true,
+    /**
+     * Sommeert de webshopbestellingen (zonder geannuleerde) in de periode.
+     * @param {{ db: object, tenantId: string, today: string, range: { from: string, to: string }, periodLabel: string }} context Database, omgeving, vandaag en de gekozen periode.
+     * @returns {{ value: number, unit: string, detail: string }} De waarde, de eenheid (euro of aantal) en de toelichting.
+     */
     compute: ({ db, tenantId, range, periodLabel }) => {
       const orders = db.prepare("SELECT COUNT(*) AS count, COALESCE(SUM(total), 0) AS amount FROM web_orders WHERE tenant_id = ? AND status <> 'geannuleerd' AND created_at >= ? AND created_at < ?").get(tenantId, range.from, QuoteCore.addDays(range.to, 1));
       return { value: QuoteCore.round2(Number(orders.amount)), unit: 'euro', detail: `incl. btw, ${Number(orders.count)} ${plural(orders.count, 'bestelling', 'bestellingen')} (${periodLabel.toLowerCase()})` };
@@ -121,6 +161,11 @@ const CATALOG = [
   },
   {
     key: 'voorraad_minimum', title: 'Onder minimumvoorraad', description: 'Artikelen met een minimumvoorraad waarvan de voorraad daaronder zit.', module: 'voorraad', right: 'voorraad', href: 'artikelen/',
+    /**
+     * Telt de artikelen waarvan de voorraad onder het minimum zit.
+     * @param {{ db: object, tenantId: string, today: string, range: { from: string, to: string }, periodLabel: string }} context Database, omgeving, vandaag en de gekozen periode.
+     * @returns {{ value: number, unit: string, detail: string }} De waarde, de eenheid (euro of aantal) en de toelichting.
+     */
     compute: ({ db, tenantId }) => {
       const items = db.prepare('SELECT COUNT(*) AS count FROM stock_items WHERE tenant_id = ? AND archived = 0 AND has_variants = 0 AND stock_managed = 1 AND min_qty > 0 AND on_hand < min_qty').get(tenantId);
       return { value: Number(items.count), unit: 'aantal', detail: plural(items.count, 'artikel moet', 'artikelen moeten') + ' worden bijbesteld' };
@@ -128,6 +173,11 @@ const CATALOG = [
   },
   {
     key: 'inkooporders_open', title: 'Inkooporders onderweg', description: 'Bestelde en deels ontvangen inkooporders.', module: 'voorraad', right: 'voorraad', href: 'artikelen/#orders',
+    /**
+     * Telt de bestelde en deels ontvangen inkooporders.
+     * @param {{ db: object, tenantId: string, today: string, range: { from: string, to: string }, periodLabel: string }} context Database, omgeving, vandaag en de gekozen periode.
+     * @returns {{ value: number, unit: string, detail: string }} De waarde, de eenheid (euro of aantal) en de toelichting.
+     */
     compute: ({ db, tenantId }) => {
       const orders = db.prepare("SELECT COUNT(*) AS count FROM purchase_orders WHERE tenant_id = ? AND status IN ('besteld', 'deels_ontvangen')").get(tenantId);
       return { value: Number(orders.count), unit: 'aantal', detail: plural(orders.count, 'inkooporder wacht', 'inkooporders wachten') + ' op ontvangst' };
@@ -135,6 +185,11 @@ const CATALOG = [
   },
   {
     key: 'bezetting', title: 'Bezetting deze week', description: 'Ingeplande werkorders deze week en het aantal uitvoerders (voor later, standaard uit).', module: 'planning', right: 'planning', href: 'planning/',
+    /**
+     * Telt de ingeplande werkorders van deze week en de uitvoerders.
+     * @param {{ db: object, tenantId: string, today: string, range: { from: string, to: string }, periodLabel: string }} context Database, omgeving, vandaag en de gekozen periode.
+     * @returns {{ value: number, unit: string, detail: string }} De waarde, de eenheid (euro of aantal) en de toelichting.
+     */
     compute: ({ db, tenantId, today }) => {
       const week = weekOf(today);
       const planned = db.prepare("SELECT COUNT(*) AS count, COUNT(DISTINCT assignee_id) AS staff FROM work_orders WHERE tenant_id = ? AND deleted_at IS NULL AND status IN ('gepland', 'bezig', 'gereed') AND planned_date >= ? AND planned_date <= ?").get(tenantId, week.from, week.to);
