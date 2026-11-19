@@ -4,8 +4,8 @@ const crypto = require('node:crypto');
 
 const LOGIN_HOST = 'login.microsoftonline.com';
 const GRAPH_HOST = 'graph.microsoft.com';
-/** Een gewone bijlage mag via Graph hoogstens ongeveer 3 MB groot zijn (grotere vragen een uploadsessie). */
-const MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024;
+/** Een sendMail-aanvraag mag bij Graph hoogstens 4 MB zijn (grotere bijlagen vragen een uploadsessie); we houden ruimte voor JSON-overhead. */
+const MAX_MESSAGE_BYTES = 3_500_000;
 const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DOMAIN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
 
@@ -137,12 +137,14 @@ function createGraphSender({ tenantId, clientId, clientSecret, from }, { fetchIm
   async function send({ to, bcc, replyTo, subject, text, html, attachments = [] }) {
     const files = attachments.map((attachment) => {
       const content = Buffer.isBuffer(attachment.content) ? attachment.content : Buffer.from(attachment.content || '');
-      if (content.length > MAX_ATTACHMENT_BYTES) throw graphError('EGRAPH_SIZE', `Bijlage te groot (${content.length} bytes)`);
       return {
         '@odata.type': '#microsoft.graph.fileAttachment', name: attachment.filename, contentType: attachment.contentType || 'application/octet-stream',
         contentBytes: content.toString('base64'), ...(attachment.cid ? { isInline: true, contentId: attachment.cid } : {}),
       };
     });
+    // De hele aanvraag telt: bijlagen zijn als base64 een derde groter, plus de tekst van de mail.
+    const totalBytes = files.reduce((sum, file) => sum + file.contentBytes.length, 0) + Buffer.byteLength(html || text || '');
+    if (totalBytes > MAX_MESSAGE_BYTES) throw graphError('EGRAPH_SIZE', `Bericht te groot (${totalBytes} bytes)`);
     /**
      * Een ontvanger in het formaat van Graph.
      * @param {string} address Het e-mailadres.
@@ -166,6 +168,7 @@ function createGraphSender({ tenantId, clientId, clientSecret, from }, { fetchIm
     if (status === 401) { tokenCache.clear(); throw graphError('EGRAPH_AUTH', 'Graph weigerde het token (401)', reply); }
     if (status === 403) throw graphError('EGRAPH_DENIED', 'Graph weigert toegang (403)', reply);
     if (status === 404 || (status === 400 && /MailboxNotEnabled|InvalidUser|ResourceNotFound/i.test(reply))) throw graphError('EGRAPH_MAILBOX', `Graph kent de mailbox niet (${status})`, reply);
+    if (status === 413) throw graphError('EGRAPH_SIZE', 'Graph weigert de grootte (413)', reply);
     if (status === 429) throw graphError('EGRAPH_THROTTLED', 'Graph beperkt het versturen (429)', reply);
     throw graphError('EGRAPH_ERROR', `Graph gaf een fout (${status})`, reply);
   }
@@ -173,4 +176,4 @@ function createGraphSender({ tenantId, clientId, clientSecret, from }, { fetchIm
   return { token, send, verify };
 }
 
-module.exports = { createGraphSender, parseSender, validTenantId, validClientId, MAX_ATTACHMENT_BYTES };
+module.exports = { createGraphSender, parseSender, validTenantId, validClientId, MAX_MESSAGE_BYTES };

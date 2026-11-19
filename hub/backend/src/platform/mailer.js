@@ -240,7 +240,7 @@ function mailFailure(error) {
   if (code === 'EGRAPH_DENIED') return withReply('Microsoft weigert de app toegang tot de mailbox. Controleer of de machtiging Mail.Send (toepassing) is verleend met beheerderstoestemming en of een Application Access Policy deze mailbox toestaat.');
   if (code === 'EGRAPH_MAILBOX') return withReply('de afzender-mailbox is niet gevonden of heeft geen Exchange Online-mailbox. Gebruik het volledige e-mailadres van een bestaande mailbox als afzender.');
   if (code === 'EGRAPH_THROTTLED') return withReply('Microsoft beperkt het versturen even (te veel berichten). Probeer het later opnieuw.');
-  if (code === 'EGRAPH_SIZE') return 'Versturen mislukt: een bijlage is te groot voor verzenden via Microsoft Graph (hoogstens 3 MB per bijlage).';
+  if (code === 'EGRAPH_SIZE') return 'Versturen mislukt: het bericht met bijlagen is te groot voor verzenden via Microsoft Graph (hoogstens ongeveer 2,5 MB aan bijlagen in totaal).';
   if (code === 'EGRAPH_ERROR') return withReply('Microsoft Graph gaf een fout.');
   const connectionProblem = ['ETIMEDOUT', 'ECONNECTION', 'ESOCKET', 'EDNS'].includes(code);
   if (code === 'EAUTH') return withReply('de mailserver weigert de inloggegevens. Controleer gebruikersnaam en wachtwoord (bij Microsoft 365 of Gmail vaak een app-wachtwoord) in Beheer → Integraties → E-mail.');

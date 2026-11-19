@@ -99,6 +99,12 @@ test('Graph: foutmeldingen per soort, nooit het clientgeheim', async () => {
   });
   const big = createGraphSender({ tenantId: TENANT, clientId: CLIENT, clientSecret: 'cs-uniek-8', from: 'a@b.nl' }, { fetchImpl: fakeMicrosoft().fetchImpl });
   await assert.rejects(big.send({ to: ['k@x.nl'], subject: 's', text: 't', attachments: [{ filename: 'g.bin', content: Buffer.alloc(4 * 1024 * 1024) }] }), (error) => /te groot/.test(mailFailure(error)));
+  // Twee bijlagen die elk apart klein genoeg lijken, maar samen (als base64) boven de grens van Graph komen.
+  const two = createGraphSender({ tenantId: TENANT, clientId: CLIENT, clientSecret: 'cs-uniek-9', from: 'a@b.nl' }, { fetchImpl: fakeMicrosoft().fetchImpl });
+  await assert.rejects(two.send({ to: ['k@x.nl'], subject: 's', text: 't', attachments: [{ filename: 'a.bin', content: Buffer.alloc(2 * 1024 * 1024) }, { filename: 'b.bin', content: Buffer.alloc(2 * 1024 * 1024) }] }), (error) => /het bericht met bijlagen is te groot/.test(mailFailure(error)));
+  assert.match(await failure({ send: 413 }, 'cs-uniek-10'), /te groot/);
+  const one = createGraphSender({ tenantId: TENANT, clientId: CLIENT, clientSecret: 'cs-uniek-11', from: 'a@b.nl' }, { fetchImpl: fakeMicrosoft().fetchImpl });
+  await one.send({ to: ['k@x.nl'], subject: 's', text: 't', attachments: [{ filename: 'a.bin', content: Buffer.alloc(2 * 1024 * 1024) }] });
 });
 
 test('API: Graph-instellingen met versleuteld geheim, configured, verify en testmail', async () => {
