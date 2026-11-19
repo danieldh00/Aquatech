@@ -13,6 +13,22 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.25.3',
+      date: '2026-11-19',
+      title: 'Servertaken alleen tonen als er iets openstaat',
+      items: [
+        { text: 'Het blok Servertaken onder Updates verschijnt alleen nog als er een taak openstaat; afgeronde taken staan ingeklapt onderaan. Vinkje en titel staan nu links uitgelijnd.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.25.2',
+      date: '2026-11-19',
+      title: 'Offertes volgen zichzelf op',
+      items: [
+        { text: 'Offerte-opvolging: heeft een klant niet gereageerd op een gemailde offerte, dan stuurt AquaTech na het ingestelde aantal dagen vanzelf een vriendelijke herinnering met de knop naar de offerte. Instellen onder Beheer > Instellingen > Offerte-opvolging (standaard uit).', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.25.1',
       date: '2026-11-19',
       title: 'Bulkacties in de offertelijst',
