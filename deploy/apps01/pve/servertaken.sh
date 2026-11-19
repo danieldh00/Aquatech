@@ -289,6 +289,18 @@ remote_update_run() {
 }
 
 # ---------- schijf ----------
+# Versies van het app-image die blijven staan: de draaiende en de twee nieuwste. Gedeeld door check en run.
+disk_keep_tags() {
+  { env_get AQUATECH_TAG; docker image ls --format '{{.Tag}}' "$IMAGE" 2>/dev/null | grep -E "$VERSION_RE" | sort -rV | head -n 2; } | grep -E "$VERSION_RE" | sort -u || true
+}
+# Versies van het app-image die niet in de bewaarlijst staan (dus op te ruimen).
+disk_old_tags() {
+  local keep tag
+  keep="$(disk_keep_tags)"
+  for tag in $(docker image ls --format '{{.Tag}}' "$IMAGE" 2>/dev/null | grep -E "$VERSION_RE" || true); do
+    grep -qx "$tag" <<<"$keep" || echo "$tag"
+  done
+}
 # Alleen lezen: waar de schijf aan opgaat. Uitgangscode 10 = er is iets op te ruimen; 0 = niets te doen.
 remote_disk_check() {
   section "Schijf"
@@ -303,28 +315,20 @@ remote_disk_check() {
   info "journal: $(journalctl --disk-usage 2>/dev/null | grep -oE '[0-9.]+[KMG]' | head -n1 || echo onbekend)"
   info "apt-cache: $(du -sh /var/cache/apt 2>/dev/null | cut -f1 || echo onbekend)"
   info "/var/lib/docker: $(du -xsh /var/lib/docker 2>/dev/null | cut -f1 || echo onbekend)"
-  local reclaimable
+  local reclaimable old_count
   reclaimable="$(docker image ls -q --filter dangling=true 2>/dev/null | wc -l)"
-  local running_tag old_count=0 tag
-  running_tag="$(env_get AQUATECH_TAG)"
-  for tag in $(docker image ls --format '{{.Tag}}' "$IMAGE" 2>/dev/null | grep -E "$VERSION_RE" || true); do
-    [[ "$tag" == "$running_tag" ]] || old_count=$((old_count + 1))
-  done
+  old_count="$(disk_old_tags | wc -l)"
   echo
-  echo "Op te ruimen: $old_count versie(s) van het app-image (behalve de draaiende en de nieuwste), $reclaimable ongebruikte image(s), build-cache, oude journal."
-  (( old_count > 1 || reclaimable > 0 )) && return 10
+  echo "Op te ruimen: $old_count oude versie(s) van het app-image (de draaiende en de twee nieuwste blijven), $reclaimable ongebruikte image(s), build-cache, oude journal."
+  (( old_count > 0 || reclaimable > 0 )) && return 10
   return 0
 }
 # Ruimt veilig op: oude app-images (de draaiende versie en de twee nieuwste blijven), ongebruikte images, build-cache,
 # journal tot 200 MB en de apt-cache. Raakt geen volumes, geen back-ups en geen database.
 remote_disk_run() {
-  local before after running_tag keep tag
+  local before after tag
   before="$(df --output=avail -B1M / | tail -n1 | tr -d ' ')"
-  running_tag="$(env_get AQUATECH_TAG)"
-  keep="$(docker image ls --format '{{.Tag}}' "$IMAGE" 2>/dev/null | grep -E "$VERSION_RE" | sort -rV | head -n 2 || true)"
-  for tag in $(docker image ls --format '{{.Tag}}' "$IMAGE" 2>/dev/null | grep -E "$VERSION_RE" || true); do
-    [[ "$tag" == "$running_tag" ]] && continue
-    grep -qx "$tag" <<<"$keep" && continue
+  for tag in $(disk_old_tags); do
     docker rmi "$IMAGE:$tag" >/dev/null 2>&1 && echo "  verwijderd: $IMAGE:$tag" || echo "  blijft staan (in gebruik): $IMAGE:$tag"
   done
   docker image prune -f >/dev/null || true
