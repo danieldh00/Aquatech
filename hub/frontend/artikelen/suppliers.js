@@ -1,9 +1,10 @@
 // Leveranciers (module Artikelen): het tabblad Leveranciers (lijst, aanmaken, wijzigen, archiveren)
 // en per artikel het blok Leveranciers (welke leverancier levert dit artikel, met artikelnummer van de
-// leverancier, eigen inkoopprijs, bestelhoeveelheid en de voorkeur). Praat met /api/suppliers en
+// leverancier, eigen inkoopprijs, bestelhoeveelheid, voorraadstatus en de volgorde: voorkeur, backup 1, backup 2). Praat met /api/suppliers en
 // /api/stock/items/:id/suppliers (recht 'voorraad').
 (function () {
   const context = { api: null, toast: null, esc: null, nl: null, eur: null };
+  const STOCK_STATUSES = [['', 'Onbekend'], ['in_stock', 'Leverbaar'], ['out', 'Niet leverbaar']];
   const state = { suppliers: [], choices: [], editing: null, item: null, lines: [], loaded: false };
 
   /**
@@ -132,19 +133,29 @@
     renderLines();
   }
 
+  /**
+   * De naam van een plek in de prioriteit.
+   * @param {number} index Plek in de lijst (0 = voorkeur).
+   * @returns {string} Voorkeur, Backup 1, Backup 2, ...
+   */
+  const rankLabel = (index) => (index === 0 ? 'Voorkeur' : `Backup ${index}`);
+
   /** Tekent de leveranciersregels van het artikel en de keuzelijst om er een bij te zetten. */
   function renderLines() {
     const { esc } = context;
     const item = state.item;
     const archivedItem = Boolean(item && item.archived);
-    $('#d-sup-table').innerHTML = state.lines.length ? `<thead><tr><th>Leverancier</th><th>Artikelnummer leverancier</th><th class="num">Inkoopprijs (€)</th><th class="num">Bestelhoeveelheid (${esc(item.unit)})</th><th class="num">Levertijd (dagen)</th><th>Voorkeur</th><th></th></tr></thead>
+    $('#d-sup-table').innerHTML = state.lines.length ? `<thead><tr><th>Prioriteit</th><th>Leverancier</th><th>Artikelnummer leverancier</th><th class="num">Inkoopprijs (€)</th><th class="num">Bestelhoeveelheid (${esc(item.unit)})</th><th class="num">Levertijd (dagen)</th><th>Voorraad bij leverancier</th><th></th></tr></thead>
       <tbody>${state.lines.map((line, index) => `<tr data-line="${index}">
+        <td class="nowrap"><b>${esc(rankLabel(index))}</b>
+          <button class="btn small" type="button" data-move="-1" data-index="${index}" ${index === 0 ? 'disabled' : ''} aria-label="Hogere prioriteit">▲</button>
+          <button class="btn small" type="button" data-move="1" data-index="${index}" ${index === state.lines.length - 1 ? 'disabled' : ''} aria-label="Lagere prioriteit">▼</button></td>
         <td class="wrap">${esc(line.supplierName)}${line.supplierArchived ? ' <span class="pill">Gearchiveerd</span>' : ''}</td>
         <td><input data-field="supplierSku" value="${esc(line.supplierSku)}" maxlength="80" aria-label="Artikelnummer van de leverancier"></td>
         <td class="num"><input data-field="costPrice" type="number" min="0" step="0.0001" inputmode="decimal" value="${line.costPrice == null ? '' : line.costPrice}" placeholder="van het artikel" aria-label="Inkoopprijs"></td>
         <td class="num"><input data-field="orderQty" type="number" min="0" step="any" inputmode="decimal" value="${line.orderQty}" aria-label="Bestelhoeveelheid"></td>
         <td class="num"><input data-field="leadDays" type="number" min="0" max="365" step="1" inputmode="numeric" value="${line.leadDays == null ? '' : line.leadDays}" placeholder="onbekend" aria-label="Levertijd van de leverancier in dagen"></td>
-        <td><input type="radio" name="sup-preferred" data-field="preferred" ${line.preferred ? 'checked' : ''} aria-label="Voorkeursleverancier"></td>
+        <td><select data-field="stockStatus" aria-label="Voorraadstatus bij de leverancier">${STOCK_STATUSES.map(([value, label]) => `<option value="${value}" ${line.stockStatus === value ? 'selected' : ''}>${label}</option>`).join('')}</select></td>
         <td class="num"><button class="btn small danger" type="button" data-drop="${index}">Weghalen</button></td></tr>`).join('')}</tbody>`
       : '<tbody><tr><td class="muted">Nog geen leverancier bij dit artikel.</td></tr></tbody>';
     const used = new Set(state.lines.map((line) => line.supplierId));
@@ -161,7 +172,7 @@
       line.costPrice = row.querySelector('[data-field=costPrice]').value;
       line.orderQty = row.querySelector('[data-field=orderQty]').value;
       line.leadDays = row.querySelector('[data-field=leadDays]').value;
-      line.preferred = row.querySelector('[data-field=preferred]').checked;
+      line.stockStatus = row.querySelector('[data-field=stockStatus]').value;
     });
   }
 
@@ -175,7 +186,7 @@
     errorBox.textContent = '';
     readLines();
     try {
-      const body = { suppliers: state.lines.map((line) => ({ supplierId: line.supplierId, supplierSku: line.supplierSku, costPrice: line.costPrice, orderQty: line.orderQty, leadDays: line.leadDays, preferred: line.preferred })) };
+      const body = { suppliers: state.lines.map((line, index) => ({ supplierId: line.supplierId, supplierSku: line.supplierSku, costPrice: line.costPrice, orderQty: line.orderQty, leadDays: line.leadDays, stockStatus: line.stockStatus, preferred: index === 0 })) };
       const result = await context.api(`stock/items/${encodeURIComponent(state.item.id)}/suppliers`, { method: 'PUT', body });
       state.lines = result.items;
       renderLines();
@@ -217,11 +228,19 @@
      * @param {MouseEvent} event de klik
      */
     $('#d-sup-table').onclick = (event) => {
+      const moveButton = event.target.closest('[data-move]');
+      if (moveButton) {
+        readLines();
+        const from = Number(moveButton.dataset.index);
+        const to = from + Number(moveButton.dataset.move);
+        if (to >= 0 && to < state.lines.length) state.lines.splice(to, 0, state.lines.splice(from, 1)[0]);
+        renderLines();
+        return;
+      }
       const button = event.target.closest('[data-drop]');
       if (!button) return;
       readLines();
       state.lines.splice(Number(button.dataset.drop), 1);
-      if (state.lines.length && !state.lines.some((line) => line.preferred)) state.lines[0].preferred = true;
       renderLines();
     };
     /** Zet de gekozen leverancier als nieuwe regel bij het artikel (pas bewaard met Bewaren). */
@@ -230,7 +249,7 @@
       const supplier = state.choices.find((candidate) => candidate.id === id);
       if (!supplier) return;
       readLines();
-      state.lines.push({ supplierId: supplier.id, supplierName: supplier.name, supplierArchived: supplier.archived, supplierSku: '', costPrice: '', orderQty: 1, leadDays: '', preferred: !state.lines.length });
+      state.lines.push({ supplierId: supplier.id, supplierName: supplier.name, supplierArchived: supplier.archived, supplierSku: '', costPrice: '', orderQty: 1, leadDays: '', stockStatus: '' });
       renderLines();
     };
   }

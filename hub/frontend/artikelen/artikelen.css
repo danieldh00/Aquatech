@@ -193,3 +193,6 @@ body.has-nav .tab[data-purchasing] { display: none; }
 .bulk-bar input[type="number"] { width: 5em; }
 .grid .c-select { width: 32px; text-align: center; }
 .grid tr.picked td { background: color-mix(in srgb, var(--at-teal) 10%, var(--at-surface)); }
+
+/* Prioriteitkolom van de leveranciers per artikel: knoppen naast het label, niet eronder. */
+#d-sup-table td.nowrap { white-space: nowrap; }

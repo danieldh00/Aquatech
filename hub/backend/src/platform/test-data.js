@@ -891,8 +891,9 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
       const wholesaler = suppliers.create(tenantId, { name: 'Tuintechniek Groothandel', contactName: 'Inkoop', email: 'inkoop@tuintechniek.example', phone: '0341 000 111', address: 'Industrieweg 1, 8071 AA Nunspeet' }).supplier;
       const importer = suppliers.create(tenantId, { name: 'Irrigatie Import BV', contactName: 'Verkoopbinnendienst', email: 'orders@irrigatie-import.example' }).supplier;
       items.forEach((item, itemIndex) => {
-        const lines = [{ supplierId: itemIndex % 2 ? importer.id : wholesaler.id, supplierSku: `LEV-${item.code}`, orderQty: itemIndex % 5 === 0 ? 10 : 1, preferred: true }];
-        if (itemIndex % 3 === 0) lines.push({ supplierId: itemIndex % 2 ? wholesaler.id : importer.id, supplierSku: `ALT-${item.code}` });
+        // Elk zesde artikel heeft een voorkeur die niet leverbaar is: het bestelvoorstel kiest dan de backup (de tweede leverancier).
+        const lines = [{ supplierId: itemIndex % 2 ? importer.id : wholesaler.id, supplierSku: `LEV-${item.code}`, orderQty: itemIndex % 5 === 0 ? 10 : 1, preferred: true, stockStatus: itemIndex % 6 === 0 ? 'out' : 'in_stock' }];
+        if (itemIndex % 3 === 0) lines.push({ supplierId: itemIndex % 2 ? wholesaler.id : importer.id, supplierSku: `ALT-${item.code}`, stockStatus: 'in_stock' });
         suppliers.setForItem(tenantId, item.id, lines);
       });
       counts.suppliers = suppliers.list(tenantId).length;
