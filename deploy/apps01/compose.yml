@@ -18,7 +18,7 @@ services:
       - DATA_DIR=/data
       - TZ=${TZ:-Europe/Amsterdam}
       - AQUATECH_MASTER_KEY_FILE=/run/secrets/master-key
-      # Database (PostgreSQL: eigen container via compose.localdb.yml, of Supabase), zie DOCS.md > Database: Supabase.
+      # Database (PostgreSQL, bijvoorbeeld Supabase of een eigen container), zie DOCS.md > Database: Supabase.
       # Zonder deze regel valt de app terug op SQLite in data/aquatech.db.
       - DATABASE_URL_FILE=/run/secrets/database-url
       # Updaten vanuit de app (Beheer > Systeem > Updates), zie update.sh: de status alleen-lezen,
