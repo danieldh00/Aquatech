@@ -5,7 +5,7 @@
   "description": "Aquatech-webserver: dashboard, modules, accounts en API",
   "main": "src/server.js",
   "scripts": {
-    "start": "node --disable-warning=ExperimentalWarning src/server.js",
+    "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "test": "node --import ./test/helpers/fast-scrypt.js --test",
     "codestyle": "node tools/codestyle.js",

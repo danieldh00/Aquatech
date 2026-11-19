@@ -79,10 +79,10 @@ function ownFrames(stack) {
 function describeError(error) {
   if (!error || typeof error !== 'object') return { name: 'Fout', message: redact(error), stack: [] };
   const description = { name: redact(error.name || 'Error', 80), message: redact(error.message || '(geen melding)') };
-  // Databasefouten: PostgreSQL (code, detail, constraint, table) en node:sqlite (errcode, errstr).
-  const code = error.code ?? error.errcode;
+  // Databasefouten: PostgreSQL (code, detail, constraint, table).
+  const { code } = error;
   if (code !== undefined && code !== null && code !== '') description.code = redact(code, 80);
-  for (const field of ['detail', 'constraint', 'table', 'errstr']) {
+  for (const field of ['detail', 'constraint', 'table']) {
     if (typeof error[field] === 'string' && error[field]) description[field] = redact(error[field], 500);
   }
   const frames = ownFrames(error.stack);

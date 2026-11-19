@@ -195,20 +195,20 @@ test('query-stats: telt queries van de synchrone brug bij het lopende verzoek (P
 test('back-up in een eigen proces: dezelfde uitkomst als in het proces zelf', async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aquatech-child-'));
   const dir = path.join(dataDir, 'backups');
-  const env = { ...process.env, DATA_DIR: dataDir };
-  delete env.DATABASE_URL;
+  // Het eigen proces opent dezelfde PostgreSQL-database, in een eigen schema voor deze test.
+  const schema = `aqt_test_child_${process.pid}_${Date.now()}`;
+  const env = { ...process.env, DATA_DIR: dataDir, DATABASE_URL: process.env.TEST_DATABASE_URL, DATABASE_SCHEMA: schema };
   delete env.DATABASE_URL_FILE;
-  delete env.TEST_DATABASE_URL;
   try {
     const vault = createVault(loadOrCreateMasterKey(dataDir).key);
-    const db = openDatabase(dataDir);
+    const db = openDatabase(env);
     createStore(db).ensureTenant();
     db.close();
     const backup = await createBackupInChild({ dir, env });
     assert.match(backup.name, /^aquatech-\d{8}-\d{6}\.db\.enc$/);
     assert.ok(backup.size > 0);
     assert.deepStrictEqual(listBackups(dir).map((item) => item.name), [backup.name]);
-    const restored = path.join(dataDir, 'terug.db');
+    const restored = path.join(dataDir, 'terug.ndjson.gz');
     await decryptFile(path.join(dir, backup.name), restored, keyOf(vault));
     assert.ok(fs.statSync(restored).size > 0);
     // Zonder hoofdsleutel mislukt het proces met een leesbare melding en blijft er niets achter.
@@ -217,6 +217,7 @@ test('back-up in een eigen proces: dezelfde uitkomst als in het proces zelf', as
     fs.rmSync(emptyDir, { recursive: true, force: true });
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });
+    require('../src/database/pgdb').dropSchemas(process.env.TEST_DATABASE_URL, schema);
   }
 });
 

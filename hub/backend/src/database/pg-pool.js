@@ -11,7 +11,7 @@ const { scopeKey } = require('./tenant-scope');
 const { refuseTransaction } = require('./async-db');
 const { recordQuery } = require('./query-stats');
 
-// BIGINT (ook COUNT(*)) en NUMERIC als gewoon getal, zoals in SQLite en in de werkthread.
+// BIGINT (ook COUNT(*)) en NUMERIC als gewoon getal, zoals in de werkthread.
 types.setTypeParser(20, (text) => Number(text));
 types.setTypeParser(1700, (text) => Number(text));
 
@@ -86,7 +86,7 @@ async function prepareClient(client, schema, scope) {
 }
 
 /**
- * Maakt db.async voor een database in PostgreSQL: get/all/run(sql, ...params) via de pool. De SQL is in SQLite-stijl
+ * Maakt db.async voor een database in PostgreSQL: get/all/run(sql, ...params) via de pool. De SQL heeft ?-parameters
  * (?-parameters) en gaat door dezelfde omzetting als db.prepare (db.pgText).
  * @param {{ url: string, config: object, db: object, toPgValue: Function, DatabaseError: Function }} options
  *   De URL en instellingen, de synchrone database (schema, tenantRls) en de hulpfuncties van pgdb.js.

@@ -17,8 +17,8 @@ const { openDb, listTables, tableColumns } = require('../src/database/db');
 const BACKEND_ROOT = path.resolve(__dirname, '..');
 const SOURCE_DIR = path.join(BACKEND_ROOT, 'src');
 const BASELINE_FILE = path.join(__dirname, 'tenant-filter-baseline.json');
-/** Bestanden die het schema zelf beheren (migraties, kopiëren, overstappen): daar hoort geen tenantfilter. */
-const SKIP_FILES = new Set(['database/db.js', 'database/pgschema.js', 'database/pgdb.js', 'database/pgdb-worker.js', 'database/db-copy.js', 'migrate-to-postgres.js', 'backup.js']);
+/** Bestanden die het schema zelf beheren (migraties, rijen uitvoeren en inlezen): daar hoort geen tenantfilter. */
+const SKIP_FILES = new Set(['database/db.js', 'database/pgschema.js', 'database/pgdb.js', 'database/pgdb-worker.js', 'database/table-rows.js', 'backup.js']);
 
 /**
  * De tabellen met een kolom tenant_id, gelezen uit een verse database met alle migraties.

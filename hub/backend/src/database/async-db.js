@@ -1,7 +1,7 @@
 // Asynchrone kant van de database (db.async): dezelfde SQL met ?-parameters als db.prepare, maar met een Promise als
 // antwoord. Met PostgreSQL loopt die over een pool van verbindingen (pg-pool.js), zodat een trage query de hoofdthread
-// niet stilzet en andere verzoeken intussen door kunnen. Met SQLite (en met PG_POOL_SIZE=0) is het dezelfde synchrone
-// query, verpakt in een Promise: de code werkt dan op beide databases hetzelfde.
+// niet stilzet en andere verzoeken intussen door kunnen. Met PG_POOL_SIZE=0 is het dezelfde synchrone
+// query, verpakt in een Promise.
 //
 // Alleen losse queries (lezen, of één wijziging die meteen vastligt). Transacties blijven synchroon via
 // db.prepare/transaction (db.js): een transactie in de pool die rijen vasthoudt terwijl de hoofdthread synchroon op
@@ -21,7 +21,7 @@ function refuseTransaction(sql) {
 }
 
 /**
- * Maakt de asynchrone kant van een synchrone database (SQLite, of PostgreSQL zonder pool). De statements worden pas
+ * Maakt de asynchrone kant van een synchrone database (PostgreSQL zonder pool). De statements worden pas
  * bij de aanroep voorbereid, met de oorspronkelijke prepare (zo telt de querytest ze één keer, via db.async).
  * @param {{ prepare: Function }} db De synchrone database.
  * @returns {{ get: Function, all: Function, run: Function, pooled: boolean }} get/all/run(sql, ...params) met een Promise.

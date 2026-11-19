@@ -1,7 +1,7 @@
 // Leesfuncties voor de AI-koppeling (mcp-tools.js): de status van een document op nummer en de openstaande facturen.
 // Alles alleen-lezen, per omgeving (tenant_id) en zonder grote kolommen in overzichten. Welke soort iemand mag opvragen,
 // bepaalt mcp-tools.js met de rechten van de rol.
-const { jsonField, isPg } = require('../database/db');
+const { jsonField } = require('../database/db');
 
 /** Hoeveel facturen per getoonde debiteur meekomen (de totalen telt de database altijd volledig). */
 const INVOICES_PER_DEBTOR = 10;
@@ -105,7 +105,7 @@ function createMcpLookups(db, { today = () => new Date().toISOString().slice(0, 
     }
     if (kind === 'bestelling') {
       const row = prepare(`SELECT id, number, status, customer_name, total, created_at, ${jsonField(db, 'data', 'payment')} AS payment,
-          ${isPg(db) ? "((data)::jsonb -> 'pay' ->> 'status')" : "json_extract(data, '$.pay.status')"} AS pay_status
+          ((data)::jsonb -> 'pay' ->> 'status') AS pay_status
         FROM web_orders WHERE tenant_id = ? AND number IN (${marks(candidates)})`).get(tenantId, ...candidates);
       if (!row) return null;
       return { id: row.id, nummer: row.number, status: row.status, klant: row.customer_name, totaalInclBtw: amountOf(row.total), besteldOp: row.created_at,
@@ -150,7 +150,7 @@ function createMcpLookups(db, { today = () => new Date().toISOString().slice(0, 
     const shown = groups.slice(0, limit);
     const invoicesByGroup = new Map(shown.map((group) => [group.key, []]));
     if (shown.length) {
-      // Per debiteur de tien oudste facturen, in één query (ROW_NUMBER werkt in SQLite en PostgreSQL).
+      // Per debiteur de tien oudste facturen, in één query (ROW_NUMBER).
       const keys = shown.map((group) => group.key);
       const rows = prepare(`SELECT group_key, number, status, kind, customer_name, invoice_date, due_date, total FROM (
           SELECT ${GROUP_KEY} AS group_key, number, status, kind, customer_name, invoice_date, due_date, total,

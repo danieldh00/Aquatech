@@ -5,10 +5,8 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { DatabaseSync } = require('node:sqlite');
 const { createApp } = require('../src/server');
-const { openDb, MIGRATIONS } = require('../src/database/db');
-const PG = Boolean(process.env.TEST_DATABASE_URL); // testsuite tegen PostgreSQL
+const { openDb } = require('../src/database/db');
 
 const { createStore } = require('../src/platform/store');
 const { createSettings } = require('../src/platform/settings');
@@ -48,58 +46,6 @@ async function platformDb() {
   await store.createAccount(store.ensureTenant().id, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: 'Tuin-Plan-2026!' }, { platformAdmin: true });
   return db;
 }
-
-test('migratie: bestaande beheerders worden hoofdbeheerder, gebruikers niet', { skip: PG && 'SQLite-migraties' }, () => {
-  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'aq-')), 'aquatech.db');
-  const old = new DatabaseSync(file);
-  old.exec(MIGRATIONS[0]);
-  old.exec(MIGRATIONS[1]);
-  old.exec(MIGRATIONS[2]);
-  old.exec('PRAGMA user_version = 3');
-  const now = new Date().toISOString();
-  old.prepare("INSERT INTO tenants (id, slug, name, created_at) VALUES ('t1', 'default', 'Aquatech', ?)").run(now);
-  old.prepare("INSERT INTO users (id, tenant_id, username, display_name, role, kind, created_at) VALUES ('u1', 't1', 'daniel', 'Daniël', 'beheerder', 'account', ?)").run(now);
-  old.prepare("INSERT INTO users (id, tenant_id, username, display_name, role, kind, created_at) VALUES ('u2', 't1', 'jan', 'Jan', 'gebruiker', 'account', ?)").run(now);
-  old.close();
-
-  const db = openDb(file);
-  const store = createStore(db);
-  assert.strictEqual(store.getUser('u1').platform_admin, 1);
-  assert.strictEqual(store.getUser('u2').platform_admin, 0);
-  assert.strictEqual(store.getTenant('t1').environment, 'live');
-  db.close();
-});
-
-test('migratie rollen: gebruiker wordt installateur, gast wordt klant; verwijzingen blijven heel', { skip: PG && 'SQLite-migraties' }, () => {
-  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'aq-')), 'aquatech.db');
-  const old = new DatabaseSync(file);
-  old.exec('PRAGMA foreign_keys = ON');
-  for (let version = 0; version < 5; version++) old.exec(MIGRATIONS[version]);
-  old.exec('PRAGMA user_version = 5');
-  const now = new Date().toISOString();
-  old.prepare("INSERT INTO tenants (id, slug, name, created_at) VALUES ('t1', 'default', 'Aquatech', ?)").run(now);
-  const user = old.prepare('INSERT INTO users (id, tenant_id, username, display_name, role, kind, created_at, platform_admin) VALUES (?, \'t1\', ?, ?, ?, ?, ?, ?)');
-  user.run('u1', 'daniel', 'Daniël', 'beheerder', 'account', now, 1);
-  user.run('u2', 'jan', 'Jan', 'gebruiker', 'account', now, 0);
-  user.run('u3', 'gast-1234', 'Gast 1234', 'gebruiker', 'gast', now, 0);
-  old.prepare("INSERT INTO plans (id, tenant_id, owner_id, title, data, created_at, updated_at) VALUES ('p1', 't1', 'u2', 'Tuin', '{}', ?, ?)").run(now, now);
-  old.prepare("INSERT INTO sessions (id_hash, tenant_id, user_id, via, fingerprint, created_at, last_seen_at, expires_at) VALUES ('h', 't1', 'u2', 'user', 'f', ?, ?, ?)").run(now, now, now);
-  old.prepare("INSERT INTO quotes (id, tenant_id, owner_id, number, data, created_at, updated_at) VALUES ('q1', 't1', 'u2', 'OF-1', '{}', ?, ?)").run(now, now);
-  old.close();
-
-  const db = openDb(file);
-  const store = createStore(db);
-  assert.deepStrictEqual(['u1', 'u2', 'u3'].map((id) => store.getUser(id).role), ['beheerder', 'installateur', 'klant']);
-  assert.strictEqual(store.getUser('u1').platform_admin, 1);
-  assert.strictEqual(db.prepare('PRAGMA foreign_keys').get().foreign_keys, 1, 'foreign keys weer aan');
-  assert.deepStrictEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
-  assert.strictEqual(db.prepare("SELECT owner_id FROM plans WHERE id = 'p1'").get().owner_id, 'u2');
-  assert.strictEqual(db.prepare("SELECT customer_id FROM quotes WHERE id = 'q1'").get().customer_id, null);
-  // Sinds migratie 16 (rollen per organisatie) is de rol een vrije sleutel;
-  // verwijzingen worden weer bewaakt.
-  assert.throws(() => db.prepare("INSERT INTO plans (id, tenant_id, owner_id, title, data, created_at, updated_at) VALUES ('p2', 't1', 'niemand', 'x', '{}', ?, ?)").run(now, now));
-  db.close();
-});
 
 test('eerste beheerder via het instelscherm is hoofdbeheerder', async () => {
   const { server, base } = await start(openDb(), { setupCode: 'ABCD-EFGH-JKLM' });
@@ -458,8 +404,7 @@ test('gebruikersnamen zijn uniek per tenant; de organisatiecode kiest de tenant'
 
 test('migratie: de globale index op gebruikersnaam vervalt, uniek per tenant blijft', () => {
   const db = openDb();
-  const idx = (PG ? db.prepare("SELECT indexname AS name FROM pg_indexes WHERE schemaname = current_schema() AND tablename = 'users'")
-    : db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'users'")).all().map((row) => row.name);
+  const idx = db.prepare("SELECT indexname AS name FROM pg_indexes WHERE schemaname = current_schema() AND tablename = 'users'").all().map((row) => row.name);
   assert.ok(!idx.includes('users_username'));
   assert.ok(idx.includes('users_login_name'), 'gewone (niet-unieke) index om op naam te zoeken');
   const store = createStore(db);
