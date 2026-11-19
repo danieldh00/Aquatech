@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.25.5
+
+`server.js` opgesplitst (doorlichtingspunt 12, eerste stap): alle routes onder `/api/platform` (tenants, testomgevingen, multitenancy, testdata, gebruikers per organisatie) staan nu in `platform/platform-routes.js` (`registerPlatformRoutes`). Geen wijziging in gedrag; `server.js` is ruim 220 regels korter.
+
+## 1.25.4
+
+Artikelenlijst (`frontend/artikelen/bulk.js`): selectiekolom met *alles selecteren* voor de zichtbare rijen en een balk met *Archiveren* (één bevestiging, per artikel de bestaande `PUT /api/stock/items/:id` met `archived`; een artikel op een open bestelling of werkorder blijft staan en wordt gemeld) en *Etiketten printen* (hoofdartikelen en gearchiveerde artikelen worden overgeslagen; `ItemLabels.print`, hoogstens 500 etiketten per keer). Geen nieuwe API of migratie; rechten (`voorraad`) en tenantfilter blijven die van de bestaande routes.
+
 ## 1.25.3
 
 Beheer > Systeem > Updates: het blok Servertaken (kaart met uitleg en commando) is verborgen zonder open taken, afgeronde taken staan in een inklapbare lijst `Afgeronde servertaken`. Vinkje en titel gebruiken een eigen rijklasse (`.ht-check`) in plaats van `.field.chk`, dat buiten een `.form-grid` gecentreerd stond. Geen backendwijziging.

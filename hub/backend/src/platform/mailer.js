@@ -11,13 +11,13 @@ const MAIL_TEXT = { host: 200, user: 200, from: 200, replyTo: 200 };
 // mode: 'smtp' = inloggen met gebruikersnaam en wachtwoord; 'connector' =
 // Exchange Online-connector op IP-basis (poort 25, geen inlog, TLS verplicht); 'graph' = Microsoft Graph (HTTPS, app-registratie
 // in Entra; het clientgeheim staat apart en versleuteld in mailGraphSecret).
-const MAIL_DEFAULTS = { mode: 'smtp', host: '', port: 587, secure: false, user: '', from: '', replyTo: '', graphTenantId: '', graphClientId: '' };
+const MAIL_DEFAULTS = { mode: 'smtp', host: '', port: 587, secure: false, user: '', from: '', replyTo: '', graphTenantId: '', graphClientId: '', graphSecretExpires: '' };
 
 /**
  * Schoont de gegevens van de mailserver op (zonder wachtwoord; dat is een eigen
  * geheim). Afzender en antwoordadres zonder regeleinden (geen kop-injectie).
  * @param {object} raw De ruwe invoer.
- * @returns {{ mode: string, host: string, port: number, secure: boolean, user: string, from: string, replyTo: string, graphTenantId: string, graphClientId: string }} De opgeschoonde instellingen.
+ * @returns {{ mode: string, host: string, port: number, secure: boolean, user: string, from: string, replyTo: string, graphTenantId: string, graphClientId: string, graphSecretExpires: string }} De opgeschoonde instellingen.
  */
 function sanitizeMail(raw) {
   const input = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
@@ -32,6 +32,9 @@ function sanitizeMail(raw) {
   const graphClientId = typeof input.graphClientId === 'string' ? input.graphClientId.trim() : '';
   out.graphTenantId = validTenantId(graphTenantId) ? graphTenantId : '';
   out.graphClientId = validClientId(graphClientId) ? graphClientId : '';
+  // Vervaldatum van het clientgeheim (JJJJ-MM-DD), voor de melding een maand vooraf.
+  const expires = typeof input.graphSecretExpires === 'string' ? input.graphSecretExpires.trim().slice(0, 10) : '';
+  out.graphSecretExpires = /^\d{4}-\d{2}-\d{2}$/.test(expires) && !Number.isNaN(Date.parse(expires)) ? expires : '';
   // Geen kop-injectie via afzender of antwoordadres.
   for (const field of ['from', 'replyTo']) out[field] = out[field].replace(/[\r\n]/g, '');
   return out;

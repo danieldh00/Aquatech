@@ -44,6 +44,9 @@ test('sanitizeMail: soort graph met geldige id\'s, ongeldige waarden worden leeg
   assert.strictEqual(sanitizeMail({ mode: 'graph', graphTenantId: 'x/../y', graphClientId: 'nee' }).graphTenantId, '');
   assert.strictEqual(sanitizeMail({ mode: 'graph', graphTenantId: 'bedrijf.onmicrosoft.com' }).graphTenantId, 'bedrijf.onmicrosoft.com');
   assert.strictEqual(sanitizeMail({ mode: 'graph', graphClientId: 'nee' }).graphClientId, '');
+  assert.strictEqual(sanitizeMail({ mode: 'graph', graphSecretExpires: '2027-05-31' }).graphSecretExpires, '2027-05-31');
+  assert.strictEqual(sanitizeMail({ mode: 'graph', graphSecretExpires: '31-05-2027' }).graphSecretExpires, '');
+  assert.strictEqual(sanitizeMail({ mode: 'graph', graphSecretExpires: '2027-13-45' }).graphSecretExpires, '');
 });
 
 test('parseSender: naam en adres', () => {

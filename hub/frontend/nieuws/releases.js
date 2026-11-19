@@ -13,6 +13,20 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.25.5',
+      date: '2026-11-19',
+      title: 'Hoofdbeheer-routes in eigen bestand',
+      items: [],
+    },
+    {
+      version: '1.25.4',
+      date: '2026-11-19',
+      title: 'Bulkacties in de artikelenlijst',
+      items: [
+        { text: 'In de artikelenlijst kun je meerdere artikelen aanvinken en in één keer archiveren of er etiketten voor printen (aantal per artikel en sjabloon te kiezen).', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.25.3',
       date: '2026-11-19',
       title: 'Servertaken alleen tonen als er iets openstaat',
