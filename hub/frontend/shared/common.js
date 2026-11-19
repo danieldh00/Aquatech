@@ -315,10 +315,11 @@
     }
     const tables = document.querySelectorAll('table:not(.kv):not(.totals):not(.a-facts):not(.p-lines):not(.p-totals):not(.product-specs)');
     for (const table of tables) {
-      // Een tabel in een verborgen deel (0 px breed) of met de focus erin laten we met rust; de volgende ronde kijkt opnieuw.
-      if (table.getClientRects().length === 0 || table.contains(document.activeElement)) continue;
+      // Eerst de goedkope controles (geen layout): al verpakte tabellen, afdrukdocumenten en een tabel met de focus erin.
       const parent = table.parentElement;
-      if (!parent || parent.classList.contains('tablewrap') || table.closest('.tablewrap, .p-info, [data-no-wrap]')) continue;
+      if (!parent || table.closest('.tablewrap, .p-info, [data-no-wrap]') || table.contains(document.activeElement)) continue;
+      // Een tabel in een verborgen deel (geen layout) wordt gemeten zodra het deel zichtbaar wordt (hidden wordt waargenomen).
+      if (table.getClientRects().length === 0) continue;
       if (table.offsetWidth <= parent.clientWidth + 1) continue;
       const wrapper = document.createElement('div');
       wrapper.className = 'tablewrap auto-wrap';
@@ -335,6 +336,7 @@
       new MutationObserver(scheduleWrap).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
       root.addEventListener('resize', scheduleWrap);
       document.addEventListener('change', scheduleWrap);
+      document.addEventListener('focusout', scheduleWrap);
       scheduleWrap();
     };
     if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
