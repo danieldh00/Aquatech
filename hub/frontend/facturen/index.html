@@ -57,8 +57,15 @@
           <label>Tot en met<input id="f-to" type="date"></label>
           <input id="f-search" type="search" placeholder="Zoek op nummer, klant of werkorder">
           <span class="spacer"></span>
+          <button class="btn" id="b-export">Exporteer naar Excel</button>
           <button class="btn" id="b-orders" hidden>Webshopbestellingen ophalen</button>
           <button class="btn primary" id="b-new">+ Losse factuur</button>
+        </div>
+        <div id="l-bulk" class="bulk-bar" hidden>
+          <b id="l-bulk-count"></b>
+          <button id="l-bulk-mail" class="btn small primary" type="button">Versturen per e-mail</button>
+          <button id="l-bulk-clear" class="btn small ghost" type="button">Selectie wissen</button>
+          <span class="muted small">Exporteren naar Excel gebruikt dan alleen de selectie.</span>
         </div>
         <p id="l-orders" class="muted small" hidden></p>
         <div class="tablewrap"><table class="grid" id="l-table"></table></div>

@@ -39,7 +39,7 @@
    */
   const num = (value) => (String(value).trim() === '' ? 0 : Number(String(value).replace(',', '.')) || 0);
 
-  const state = { items: [], tab: 'list', invoice: null, settings: null, profile: {}, articles: {}, dirty: false, config: {}, debtors: [], debtor: null, visma: null, vismaOptions: null, vismaLog: { items: [], next: null, onlyErrors: false } };
+  const state = { selected: new Set(), items: [], tab: 'list', invoice: null, settings: null, profile: {}, articles: {}, dirty: false, config: {}, debtors: [], debtor: null, visma: null, vismaOptions: null, vismaLog: { items: [], next: null, onlyErrors: false } };
   /**
    * Formatteert een tijdstip kort met tijd.
    * @param {string} iso tijdstip in ISO-formaat
@@ -138,11 +138,15 @@
     const table = $('#l-table');
     if (!state.items.length) {
       table.innerHTML = '<tbody><tr><td class="empty">Nog geen facturen. Open een werkorder en kies in het menu <b>Factuur maken</b>, of maak een <b>losse factuur</b>.</td></tr></tbody>';
+      state.selected.clear();
+      renderBulkBar();
       return;
     }
     const items = visible();
-    table.innerHTML = `<thead><tr><th>Nummer</th><th>Datum</th><th>Klant</th><th>Status</th><th>Vervalt</th><th class="num">Excl. btw</th><th class="num">Totaal</th><th>Verstuurd</th><th>Boekhouding</th></tr></thead>
-      <tbody>${items.map((invoice) => `<tr data-id="${esc(invoice.id)}">
+    const allChecked = items.length > 0 && items.every((invoice) => state.selected.has(invoice.id));
+    table.innerHTML = `<thead><tr><th class="c-select"><input type="checkbox" data-select-all aria-label="Alle zichtbare facturen selecteren"${allChecked ? ' checked' : ''}></th><th>Nummer</th><th>Datum</th><th>Klant</th><th>Status</th><th>Vervalt</th><th class="num">Excl. btw</th><th class="num">Totaal</th><th>Verstuurd</th><th>Boekhouding</th></tr></thead>
+      <tbody>${items.map((invoice) => `<tr data-id="${esc(invoice.id)}"${state.selected.has(invoice.id) ? ' class="picked"' : ''}>
+        <td class="c-select"><input type="checkbox" data-select aria-label="Factuur ${esc(invoice.number || 'concept')} selecteren"${state.selected.has(invoice.id) ? ' checked' : ''}></td>
         <td><b>${esc(invoice.number || 'Concept')}</b>${kindPill(invoice)}</td>
         <td>${esc(day(invoice.date))}</td>
         <td class="wrap">${esc(invoice.customer || '–')}</td>
@@ -152,7 +156,7 @@
         <td class="num${invoice.total < 0 ? ' neg' : ''}"><b>${esc(eur(invoice.total))}</b></td>
         <td>${sentCell(invoice)}</td>
         <td>${bookCell(invoice)}</td>
-      </tr>`).join('') || '<tr><td colspan="9" class="empty">Niets gevonden.</td></tr>'}</tbody>`;
+      </tr>`).join('') || '<tr><td colspan="10" class="empty">Niets gevonden.</td></tr>'}</tbody>`;
     table.querySelectorAll('tr[data-id]').forEach((row) => {
       /**
        * Opent de factuur.
@@ -160,6 +164,136 @@
        */
       row.onclick = () => openInvoice(row.dataset.id, true);
     });
+    table.querySelectorAll('input[data-select]').forEach((box) => {
+      /**
+       * Voorkomt dat een klik op het vinkje de factuur opent.
+       * @param {MouseEvent} event de klik
+       */
+      box.onclick = (event) => { event.stopPropagation(); };
+      /** Zet de factuur in of uit de selectie. */
+      box.onchange = () => {
+        const id = box.closest('tr').dataset.id;
+        if (box.checked) state.selected.add(id); else state.selected.delete(id);
+        box.closest('tr').classList.toggle('picked', box.checked);
+        renderBulkBar();
+      };
+    });
+    const selectAllBox = table.querySelector('input[data-select-all]');
+    if (selectAllBox) {
+      /**
+       * Voorkomt dat een klik op het vinkje iets anders doet.
+       * @param {MouseEvent} event de klik
+       */
+      selectAllBox.onclick = (event) => { event.stopPropagation(); };
+      /** Selecteert alle zichtbare facturen of heft de selectie op. */
+      selectAllBox.onchange = () => {
+        for (const invoice of items) { if (selectAllBox.checked) state.selected.add(invoice.id); else state.selected.delete(invoice.id); }
+        renderList();
+      };
+    }
+    renderBulkBar();
+  }
+
+  // ---------- Bulkacties ----------
+  /**
+   * Geeft de geselecteerde facturen die nu in het overzicht zichtbaar zijn: wat je ziet is wat je verstuurt of exporteert.
+   * @returns {object[]} de geselecteerde zichtbare facturen
+   */
+  const selectedInvoices = () => visible().filter((invoice) => state.selected.has(invoice.id));
+
+  /**
+   * Of een factuur in de bulkronde per e-mail verstuurd wordt: definitief, nog niet betaald en nog niet eerder verstuurd (opnieuw sturen kan per factuur).
+   * @param {object} invoice de factuur
+   * @returns {boolean} true als versturen zin heeft
+   */
+  const mailable = (invoice) => invoice.status === 'definitief' && !invoice.sentAt;
+
+  /** Toont of verbergt de balk met bulkacties en werkt de tellers bij. */
+  function renderBulkBar() {
+    const shownIds = new Set(visible().map((invoice) => invoice.id));
+    for (const id of [...state.selected]) if (!shownIds.has(id)) state.selected.delete(id);
+    const chosen = selectedInvoices();
+    $('#l-bulk').hidden = !chosen.length;
+    $('#l-bulk-count').textContent = `${chosen.length} geselecteerd`;
+    const sendable = chosen.filter(mailable);
+    $('#l-bulk-mail').disabled = !sendable.length;
+    $('#l-bulk-mail').textContent = `Versturen per e-mail (${sendable.length})`;
+  }
+
+  /**
+   * Verstuurt de geselecteerde openstaande facturen met het voorstel voor de e-mail (adres, onderwerp en tekst uit de instellingen); één bevestiging vooraf.
+   * @returns {Promise<void>}
+   */
+  async function mailSelected() {
+    if (state.bulkBusy) return;
+    const sendable = selectedInvoices().filter(mailable);
+    if (!sendable.length) return;
+    const already = selectedInvoices().filter((invoice) => invoice.status === 'definitief' && invoice.sentAt).length;
+    if (!confirm(`${sendable.length} ${sendable.length === 1 ? 'factuur' : 'facturen'} nu per e-mail versturen aan de klant, met de PDF als bijlage? Facturen zonder e-mailadres worden overgeslagen.${already ? ` ${already} al eerder verstuurde ${already === 1 ? 'factuur wordt' : 'facturen worden'} niet opnieuw gestuurd.` : ''}`)) return;
+    state.bulkBusy = true;
+    $('#l-bulk-mail').disabled = true;
+    $('#l-bulk-clear').disabled = true;
+    document.querySelectorAll('#l-table input[type="checkbox"]').forEach((box) => { box.disabled = true; });
+    let done = 0;
+    const skipped = [];
+    try {
+      for (const invoice of sendable) {
+        if (!state.selected.has(invoice.id)) continue;
+        const label = invoice.number || 'concept';
+        try {
+          const draft = await api(`invoices/${encodeURIComponent(invoice.id)}/mail`);
+          if (!draft.configured) { skipped.push(`${label}: geen mailserver ingesteld, de rest is niet verwerkt`); break; }
+          if (!draft.to) { skipped.push(`${label}: geen e-mailadres`); continue; }
+          const sent = await api(`invoices/${encodeURIComponent(invoice.id)}/send`, { method: 'POST', body: { to: draft.to, subject: draft.subject, message: draft.message } });
+          // Het overzicht klopt zo ook als het herladen straks mislukt: een verstuurde factuur is niet nog eens te mailen.
+          invoice.sentAt = (sent && sent.sentAt) || new Date().toISOString();
+          done += 1;
+          state.selected.delete(invoice.id);
+        } catch (error) {
+          skipped.push(`${label}: ${error.message}`);
+        }
+      }
+    } finally {
+      state.bulkBusy = false;
+      $('#l-bulk-clear').disabled = false;
+    }
+    try { await load(); } catch (error) { skipped.push(`overzicht verversen mislukt: ${error.message}`); renderList(); }
+    toast(`${done} ${done === 1 ? 'factuur' : 'facturen'} verstuurd${skipped.length ? `; overgeslagen: ${skipped.join('; ')}` : ''}`, skipped.length > 0);
+  }
+
+  /**
+   * Exporteert de geselecteerde facturen (of, zonder selectie, alle zichtbare) als Excel-bestand.
+   * @returns {Promise<void>}
+   */
+  async function exportSelected() {
+    if (!window.ExcelJS && !(window.AquatechCommon && await window.AquatechCommon.excel())) { toast('Excel-export niet beschikbaar.', true); return; }
+    const chosen = selectedInvoices();
+    const items = chosen.length ? chosen : visible();
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'AquaTech Service';
+    workbook.created = new Date();
+    const sheet = workbook.addWorksheet('Facturen', { views: [{ state: 'frozen', ySplit: 1 }] });
+    const money = { numFmt: '€ #,##0.00' };
+    sheet.columns = [
+      { header: 'Nummer', key: 'number', width: 16 }, { header: 'Datum', key: 'date', width: 12 }, { header: 'Klant', key: 'customer', width: 30 },
+      { header: 'Status', key: 'status', width: 12 }, { header: 'Vervalt', key: 'dueDate', width: 12 },
+      { header: 'Excl. btw', key: 'subtotal', width: 14, style: money }, { header: 'Totaal', key: 'total', width: 14, style: money },
+      { header: 'Verstuurd', key: 'sentAt', width: 12 },
+    ];
+    for (const invoice of items) {
+      sheet.addRow({
+        number: invoice.number || 'Concept', date: invoice.date, customer: invoice.customer || '', status: InvoiceCore.STATUSES[invoice.status] || invoice.status,
+        dueDate: invoice.dueDate || '', subtotal: invoice.subtotal, total: invoice.total, sentAt: invoice.sentAt ? day(invoice.sentAt) : '',
+      });
+    }
+    sheet.getRow(1).font = { bold: true };
+    sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: sheet.columns.length } };
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([await workbook.xlsx.writeBuffer()], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    link.download = `facturen_${InvoiceCore.today()}.xlsx`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+    toast(`${items.length} facturen geëxporteerd`);
   }
 
   /**
@@ -1348,6 +1482,10 @@
     };
     $('#x-form').onsubmit = exportExcel;
     $('#b-orders').onclick = fetchOrders;
+    $('#b-export').onclick = exportSelected;
+    $('#l-bulk-mail').onclick = mailSelected;
+    /** Heft de selectie op. */
+    $('#l-bulk-clear').onclick = () => { state.selected.clear(); renderList(); };
     setupSettings();
     setupDebtors();
     setupVisma();
