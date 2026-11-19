@@ -140,9 +140,12 @@ function createAppLog({ db, mainTenantId, flushMs = 2000, batchSize = 50, perMin
       const scope = tenantId ? 'tenant' : 'platform';
       const key = `${owner}|${cleanSource}|${cleanLevel}|${errorCode}|${text}`;
       const duration = Math.max(0, Math.round(Number(durationMs) || 0));
+      let json = data ? JSON.stringify(cleanData(data)) : '{}';
+      if (json.length > MAX_DATA) json = JSON.stringify({ afgekapt: true });
       const same = buffer.find((row) => row.key === key);
       if (same) {
         same.repeat += 1;
+        if (duration > same.durationMs) same.data = json;
         same.durationMs = Math.max(same.durationMs, duration);
         same.lastMs = now();
         return;
@@ -153,14 +156,13 @@ function createAppLog({ db, mainTenantId, flushMs = 2000, batchSize = 50, perMin
         if (at - written.lastMs <= MERGE_GAP_MS && at - written.firstMs <= MERGE_SPAN_MS) {
           written.repeat += 1;
           written.lastMs = at;
+          if (duration > written.durationMs) written.data = json;
           written.durationMs = Math.max(written.durationMs, duration);
           updates.set(written.id, written);
           return;
         }
         recent.delete(key);
       }
-      let json = data ? JSON.stringify(cleanData(data)) : '{}';
-      if (json.length > MAX_DATA) json = JSON.stringify({ afgekapt: true });
       buffer.push({
         key, id: crypto.randomUUID(), owner, scope, at: new Date(now()).toISOString(), level: cleanLevel, source: cleanSource,
         requestId: String(requestId || '').slice(0, 32), errorCode: String(errorCode || '').slice(0, 32), message: text,
@@ -193,12 +195,12 @@ function createAppLog({ db, mainTenantId, flushMs = 2000, batchSize = 50, perMin
      */
     const insertRow = (row) => db.prepare(insertSql).run(row.id, row.owner, row.scope, new Date(row.lastMs).toISOString(), row.level, row.source, row.requestId, row.errorCode, row.message, row.data, row.durationMs, row.repeat, row.repeat > 1 ? row.at : null);
     /**
-     * Werkt een eerder weggeschreven regel bij met de herhalingen daarna (teller, laatste tijdstip, langste duur); eerste voorkomen blijft in `first_at`.
+     * Werkt een eerder weggeschreven regel bij met de herhalingen daarna (teller, laatste tijdstip, langste duur met de details van die keer); eerste voorkomen blijft in `first_at`.
      * @param {object} entry De samengevoegde regel uit `recent`.
      * @returns {void}
      */
-    const updateRow = (entry) => db.prepare('UPDATE app_logs SET repeat_count = ?, created_at = ?, first_at = ?, duration_ms = ? WHERE id = ? AND tenant_id = ?')
-      .run(entry.repeat, new Date(entry.lastMs).toISOString(), new Date(entry.firstMs).toISOString(), entry.durationMs, entry.id, entry.owner);
+    const updateRow = (entry) => db.prepare('UPDATE app_logs SET repeat_count = ?, created_at = ?, first_at = ?, duration_ms = ?, data = ? WHERE id = ? AND tenant_id = ?')
+      .run(entry.repeat, new Date(entry.lastMs).toISOString(), new Date(entry.firstMs).toISOString(), entry.durationMs, entry.data, entry.id, entry.owner);
     /**
      * Onthoudt een weggeschreven regel, zodat een herhaling hem later bijwerkt.
      * @param {object} row De regel uit de buffer.
@@ -208,7 +210,7 @@ function createAppLog({ db, mainTenantId, flushMs = 2000, batchSize = 50, perMin
       if (!MERGE_SOURCES.has(row.source)) return;
       if (recent.size >= MAX_RECENT) for (const [oldKey, entry] of recent) if (now() - entry.lastMs > MERGE_GAP_MS) recent.delete(oldKey);
       if (recent.size >= MAX_RECENT) recent.delete(recent.keys().next().value);
-      recent.set(row.key, { id: row.id, owner: row.owner, repeat: row.repeat, firstMs: row.firstMs, lastMs: row.lastMs, durationMs: row.durationMs });
+      recent.set(row.key, { id: row.id, owner: row.owner, repeat: row.repeat, firstMs: row.firstMs, lastMs: row.lastMs, durationMs: row.durationMs, data: row.data });
     };
     try {
       return asSystem(() => {

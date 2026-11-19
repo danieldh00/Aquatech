@@ -154,7 +154,7 @@ test('herhalingen na het wegschrijven werken dezelfde regel bij: teller, laatste
   assert.strictEqual(rows().length, 2);
   for (let i = 0; i < 35; i += 1) {
     clock.time += 5 * 60 * 1000;
-    appLog.warn('taak', 'Trage taak: webshopsynchronisatie', { durationMs: 900 + i * 100 });
+    appLog.warn('taak', 'Trage taak: webshopsynchronisatie', { durationMs: 900 + i * 100, data: { vraag: i } });
     rows();
   }
   const row = db.prepare("SELECT repeat_count, created_at, first_at, duration_ms FROM app_logs WHERE source = 'taak'").all();
@@ -163,6 +163,7 @@ test('herhalingen na het wegschrijven werken dezelfde regel bij: teller, laatste
   assert.strictEqual(row[0].first_at, '2026-11-19T10:00:00.000Z');
   assert.strictEqual(row[0].created_at, new Date(clock.time).toISOString());
   assert.strictEqual(Number(row[0].duration_ms), 4300);
+  assert.deepStrictEqual(JSON.parse(db.prepare("SELECT data FROM app_logs WHERE source = 'taak'").get().data), { vraag: 34 }, 'details van de langste keer');
   assert.strictEqual(db.prepare("SELECT COUNT(*) AS aantal FROM app_logs WHERE source = 'stilstand'").get().aantal, 1);
   const item = appLog.list(MAIN, { includePlatform: true }).items.find((entry) => entry.source === 'taak');
   assert.strictEqual(item.repeat, 36);
