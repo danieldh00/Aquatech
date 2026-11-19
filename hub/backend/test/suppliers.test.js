@@ -245,6 +245,17 @@ test('leveranciers: prioriteit, voorraadstatus en een backup in het bestelvoorst
     const placed2 = (await kees.post(`/app/api/purchase-orders/${preferredOrder.id}/place`)).body;
     await kees.post(`/app/api/purchase-orders/${preferredOrder.id}/receive`, { lines: [{ lineId: placed2.lines[0].id, qty: 5 }] });
     assert.strictEqual((await kees.get(`/app/api/stock/items/${item.id}`)).body.costPrice, 2.2);
+    // Een handmatige order bij een leverancier die niet bij het artikel staat is geen backup: de prijs volgt zoals altijd.
+    const stranger = (await kees.post('/app/api/suppliers', { name: 'Losse Handel' })).body;
+    const manual = (await kees.post('/app/api/purchase-orders', { supplierId: stranger.id, lines: [{ itemId: item.id, qty: 1, unitCost: 3 }] })).body;
+    assert.strictEqual(manual.lines[0].backup, undefined);
+    const placed3 = (await kees.post(`/app/api/purchase-orders/${manual.id}/place`)).body;
+    await kees.post(`/app/api/purchase-orders/${manual.id}/receive`, { lines: [{ lineId: placed3.lines[0].id, qty: 1 }] });
+    assert.strictEqual((await kees.get(`/app/api/stock/items/${item.id}`)).body.costPrice, 3);
+    // Is de voorkeur gearchiveerd, dan is de volgende actieve leverancier de effectieve voorkeur en geldt Fitwerk niet meer als backup.
+    await kees.del(`/app/api/suppliers/${teruplast.id}`);
+    const later = (await kees.post('/app/api/purchase-orders', { supplierId: backup.id, lines: [{ itemId: item.id, qty: 1 }] })).body;
+    assert.strictEqual(later.lines[0].backup, undefined);
   } finally {
     server.close();
   }

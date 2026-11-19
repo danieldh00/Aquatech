@@ -226,29 +226,47 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
    * De rijen van een order, elk met de voorkeursleverancier van het artikel (een query; alleen voor het meerprijsverschil bij een backup in fullOrder; de index item_suppliers_pair dekt tenant + artikel).
    * @param {string} tenantId Id van de omgeving.
    * @param {string} orderId Id van de order.
+   * @param {string} [supplierId] De leverancier van de order (voor order_linked).
    * @returns {object[]} De regelrijen met pref_supplier_id, pref_supplier_name, pref_cost en item_cost.
    */
-  const linesWithPreferred = (tenantId, orderId) => prepare(`SELECT ${LINE_COLS.split(', ').map((column) => `l.${column}`).join(', ')},
-      (SELECT p.supplier_id FROM item_suppliers p WHERE p.tenant_id = l.tenant_id AND p.item_id = l.item_id AND p.preferred = 1 LIMIT 1) AS pref_supplier_id,
-      (SELECT ps.name FROM item_suppliers p JOIN suppliers ps ON ps.tenant_id = p.tenant_id AND ps.id = p.supplier_id WHERE p.tenant_id = l.tenant_id AND p.item_id = l.item_id AND p.preferred = 1 LIMIT 1) AS pref_supplier_name,
-      (SELECT p.cost_price FROM item_suppliers p WHERE p.tenant_id = l.tenant_id AND p.item_id = l.item_id AND p.preferred = 1 LIMIT 1) AS pref_cost,
+  const linesWithPreferred = (tenantId, orderId, supplierId) => {
+    const preferredLink = `FROM item_suppliers p JOIN suppliers ps ON ps.tenant_id = p.tenant_id AND ps.id = p.supplier_id
+        WHERE p.tenant_id = l.tenant_id AND p.item_id = l.item_id AND ps.archived = 0 ORDER BY p.rank, p.created_at, p.id LIMIT 1`;
+    return prepare(`SELECT ${LINE_COLS.split(', ').map((column) => `l.${column}`).join(', ')},
+      (SELECT p.supplier_id ${preferredLink}) AS pref_supplier_id,
+      (SELECT ps.name ${preferredLink}) AS pref_supplier_name,
+      (SELECT p.cost_price ${preferredLink}) AS pref_cost,
+      (SELECT 1 FROM item_suppliers own WHERE own.tenant_id = l.tenant_id AND own.item_id = l.item_id AND own.supplier_id = ?) AS order_linked,
       (SELECT i.cost_price FROM stock_items i WHERE i.tenant_id = l.tenant_id AND i.id = l.item_id) AS item_cost
-    FROM purchase_order_lines l WHERE l.tenant_id = ? AND l.order_id = ? ORDER BY l.position, l.id`).all(tenantId, orderId);
+    FROM purchase_order_lines l WHERE l.tenant_id = ? AND l.order_id = ? ORDER BY l.position, l.id`).all(supplierId || '', tenantId, orderId);
+  };
 
   /**
-   * Welke artikelen een voorkeursleverancier hebben die niet de gegeven leverancier is (die levert dan als backup).
+   * Bij welke artikelen de gegeven leverancier als backup levert: het artikel heeft de leverancier als koppeling, maar de
+   * effectieve voorkeur (de eerste actieve leverancier op prioriteit, zoals in suppliers.preferredByItem) is een ander.
+   * Een leverancier zonder koppeling (handmatige order) is geen backup: daar gedraagt de order zich zoals altijd.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} supplierId De leverancier van de order.
    * @param {string[]} itemIds De artikelen om te controleren.
-   * @returns {Map<string, object>} Artikel-id naar { supplierName, costPrice } van de voorkeur; alleen de artikelen waarvoor de leverancier een backup is.
+   * @returns {Map<string, object>} Artikel-id naar { supplierName, costPrice } van de voorkeur; alleen artikelen waarvoor de leverancier een backup is.
    */
   function backupItemIds(tenantId, supplierId, itemIds) {
     const out = new Map();
     const ids = [...new Set(itemIds)];
     if (!ids.length) return out;
-    const rows = prepare(`SELECT l.item_id, l.supplier_id, l.cost_price, s.name AS supplier_name FROM item_suppliers l JOIN suppliers s ON s.tenant_id = l.tenant_id AND s.id = l.supplier_id
-      WHERE l.tenant_id = ? AND l.preferred = 1 AND l.item_id IN (${placeholders(ids.length)})`).all(tenantId, ...ids);
-    for (const row of rows) if (row.supplier_id !== supplierId) out.set(row.item_id, { supplierName: row.supplier_name, costPrice: row.cost_price == null ? null : Number(row.cost_price) });
+    const rows = prepare(`SELECT l.item_id, l.supplier_id, l.cost_price, s.name AS supplier_name, s.archived FROM item_suppliers l JOIN suppliers s ON s.tenant_id = l.tenant_id AND s.id = l.supplier_id
+      WHERE l.tenant_id = ? AND l.item_id IN (${placeholders(ids.length)}) ORDER BY l.item_id, l.rank, l.created_at, l.id`).all(tenantId, ...ids);
+    const byItem = new Map();
+    for (const row of rows) {
+      if (!byItem.has(row.item_id)) byItem.set(row.item_id, []);
+      byItem.get(row.item_id).push(row);
+    }
+    for (const [itemId, links] of byItem) {
+      const preferred = links.find((link) => !Number(link.archived));
+      if (preferred && preferred.supplier_id !== supplierId && links.some((link) => link.supplier_id === supplierId)) {
+        out.set(itemId, { supplierName: preferred.supplier_name, costPrice: preferred.cost_price == null ? null : Number(preferred.cost_price) });
+      }
+    }
     return out;
   }
 
@@ -259,12 +277,12 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
    * @returns {object} De order.
    */
   const fullOrder = (row, tenantId) => {
-    const rows = linesWithPreferred(tenantId, row.id);
+    const rows = linesWithPreferred(tenantId, row.id, row.supplier_id);
     const lines = rows.map(lineOf);
     // Levert de leverancier van deze order een artikel als backup, dan staat bij de regel het meerprijsverschil met de voorkeur.
     rows.forEach((lineRow, index) => {
       const line = lines[index];
-      if (!lineRow.pref_supplier_id || lineRow.pref_supplier_id === row.supplier_id) return;
+      if (!lineRow.pref_supplier_id || !lineRow.order_linked || lineRow.pref_supplier_id === row.supplier_id) return;
       const preferredCost = lineRow.pref_cost != null ? Number(lineRow.pref_cost) : lineRow.item_cost == null ? null : Number(lineRow.item_cost);
       const extraPerUnit = line.unitCost == null || preferredCost == null ? null : Math.round((line.unitCost - preferredCost) * 10000) / 10000;
       line.backup = { preferredSupplierName: lineRow.pref_supplier_name, extraPerUnit, extraAmount: extraPerUnit == null ? null : round2(extraPerUnit * line.qty) };
