@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.24.6
+
+Doorlichtingspunt 13 (synchrone databasebrug afbouwen), eerste stap: `store.listCustomerPageAsync` voert de totaal- en paginaquery van het klantenoverzicht tegelijk uit via `db.async` (pool bij PostgreSQL). `GET /api/customers`, `GET /api/quote-customers` en `GET /api/workorder-customers` gebruiken die; de hoofdthread staat tijdens de zoekopdracht (LIKE over zes kolommen) niet meer stil. De synchrone `listCustomerPage` blijft voor de AI-koppeling (MCP). Beide delen één querybouwer (`customerPageQueries`).
+
 ## 1.24.5
 
 - Nieuw: `verkoop/payment-reminders.js` (instelling `paymentReminders`, `liveOnly`; store, uurlijkse runner `app.locals.paymentRemindersAll`). Stappen herinnering (7 dgn), aanmaning (21), laatste aanmaning (35, standaard uit); alleen de laatst passende stap, nooit dubbel (unieke rij per factuur+stap), niet bij betaald, gecrediteerd, klant uit, ouder dan `stopAfterDays` (90). Factuur-PDF als bijlage; Engelse facturen krijgen Engelse tekst (`DocText`).
