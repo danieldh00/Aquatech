@@ -256,3 +256,20 @@ test('back-up in een eigen proces: een hangend proces wordt gestopt en alleen zi
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('middleware: ignoreRequest laat een bewust trage mislukte login buiten het log, andere trage verzoeken niet', () => {
+  const { log, lines, advance } = fakeLog({
+    ignoreRequest: (req, res) => req.method === 'POST' && /\/api\/auth\/login$/.test(req.originalUrl) && res.statusCode === 401,
+  });
+  const failedLogin = fakeExchange({ method: 'POST', originalUrl: '/app/api/auth/login' });
+  failedLogin.res.statusCode = 401;
+  log.middleware(failedLogin.req, failedLogin.res, () => { advance(1400); });
+  failedLogin.res.emit('finish');
+  assert.strictEqual(log.entries().length, 0);
+  assert.strictEqual(lines.length, 0);
+
+  const slowOther = fakeExchange({ method: 'GET', originalUrl: '/app/api/quotes' });
+  log.middleware(slowOther.req, slowOther.res, () => { advance(1400); });
+  slowOther.res.emit('finish');
+  assert.strictEqual(log.entries().length, 1);
+});
