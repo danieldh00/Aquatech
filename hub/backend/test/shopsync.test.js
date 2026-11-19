@@ -8,7 +8,7 @@ const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { createStockStore } = require('../src/artikelen/stock');
 const { createShopStore } = require('../src/webshop/shop');
-const { createShopSync } = require('../src/webshop/shop-sync');
+const { createShopSync, fullSyncDue } = require('../src/webshop/shop-sync');
 const { sanitizeShop } = require('../src/webshop/woocommerce');
 
 /**
@@ -221,4 +221,20 @@ test('webshop zonder voorraadbeheer: overgenomen artikelen volgen de webshopstat
   assert.strictEqual(catalog().find((entry) => entry.code === 'GEEN-AANTAL').inStock, true);
   stock.book(tid, inShop.id, -4, { kind: 'afboeking', source: 'handmatig', user });
   assert.strictEqual(catalog().find((entry) => entry.code === 'GEEN-AANTAL').inStock, false, 'met voorraadbeheer telt de stand');
+});
+
+test('fullSyncDue: standaard één keer per nacht, na 04:00 Nederlandse tijd', () => {
+  const syncedAt = '2026-11-19T03:10:00.000Z'; // 04:10 Nederlandse tijd
+  assert.equal(sanitizeShop({ url: 'https://shop.example' }).syncSchedule, 'night');
+  assert.equal(fullSyncDue('night', null, new Date('2026-11-19T12:00:00Z')), true);
+  assert.equal(fullSyncDue('night', { syncedAt }, new Date('2026-11-19T12:00:00Z')), false);
+  assert.equal(fullSyncDue('night', { syncedAt }, new Date('2026-11-20T02:00:00Z')), false); // 03:00 lokaal
+  assert.equal(fullSyncDue('night', { syncedAt }, new Date('2026-11-20T03:30:00Z')), true); // 04:30 lokaal
+  assert.equal(fullSyncDue('hourly', { syncedAt }, new Date('2026-11-19T03:40:00Z')), false);
+  assert.equal(fullSyncDue('hourly', { syncedAt }, new Date('2026-11-19T04:20:00Z')), true);
+  assert.equal(fullSyncDue('tenmin', { syncedAt }, new Date('2026-11-19T03:20:00Z')), true);
+  // Mislukte poging: een uur wachten.
+  const failed = { syncedAt, lastAttemptAt: '2026-11-20T03:30:00.000Z' };
+  assert.equal(fullSyncDue('night', failed, new Date('2026-11-20T03:50:00Z')), false);
+  assert.equal(fullSyncDue('night', failed, new Date('2026-11-20T04:40:00Z')), true);
 });
