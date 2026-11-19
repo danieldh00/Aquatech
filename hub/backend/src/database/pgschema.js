@@ -1,14 +1,14 @@
-/** Teksttype van PostgreSQL met binaire sortering, zodat vergelijken en sorteren gelijk is aan SQLite. */
+/** Teksttype van PostgreSQL met binaire sortering, zodat vergelijken en sorteren overal hetzelfde werkt. */
 const TEXT_TYPE = 'TEXT COLLATE "C"';
 /**
- * Foreign key die pas bij COMMIT gecontroleerd kan worden (DEFERRABLE), zoals defer_foreign_keys in SQLite.
+ * Foreign key die pas bij COMMIT gecontroleerd kan worden (DEFERRABLE).
  * @param {string} ref Doeltabel met kolom, bijv. 'tenants(id)'.
  * @param {string} [extra] Extra regel, bijv. ' ON DELETE CASCADE'.
  * @returns {string} De REFERENCES-clausule.
  */
 const references = (ref, extra = '') => `REFERENCES ${ref}${extra} DEFERRABLE INITIALLY IMMEDIATE`;
 
-// Versie waarop het basisschema hieronder overeenkomt met SQLite.
+// Versie waarop het basisschema hieronder overeenkomt (de migraties erna staan in PG_MIGRATIONS).
 const PG_BASE_VERSION = 12;
 
 const PG_BASE = `
@@ -210,7 +210,7 @@ CREATE TABLE shop_sync (
 );
 `;
 
-// Migraties na het basisschema: PG_MIGRATIONS[0] hoort bij SQLite-migratie
+// Migraties na het basisschema: PG_MIGRATIONS[0] is migratie
 // PG_BASE_VERSION + 1, enzovoort. Alleen toevoegen, nooit aanpassen.
 const PG_MIGRATIONS = [
   // 13: planning en klantlink van werkorders.

@@ -1,16 +1,18 @@
 // Versleutelde back-ups van de database.
 //
-// Een back-up is een consistente kopie als SQLite-bestand (VACUUM INTO, of
-// bij PostgreSQL een kopie van alle rijen via db-copy.js; werkt terwijl de app
-// draait), versleuteld met AES-256-GCM met een eigen, van de hoofdsleutel
-// afgeleide sleutel. Formaat: "AQBK" + versie (1 byte) + IV (12) +
-// versleutelde database + authenticatietag (16). Zonder de hoofdsleutel is een
-// back-up dus waardeloos; kopieën buiten de server zijn veilig te bewaren.
+// Een back-up bevat alle rijen van alle tabellen uit één consistente leestransactie (werkt terwijl de app draait),
+// als gzip-gecomprimeerde regels JSON (zie database/table-rows.js), versleuteld met AES-256-GCM met een eigen, van de
+// hoofdsleutel afgeleide sleutel. Formaat: "AQBK" + versie (1 byte, nu 2) + IV (12) + versleutelde inhoud +
+// authenticatietag (16). Zonder de hoofdsleutel is een back-up dus waardeloos; kopieën buiten de server zijn veilig te
+// bewaren. (Versie 1 was een SQLite-bestand; dat formaat wordt niet meer gelezen.)
 //
-// Maken (ook terwijl de app draait; SQLite of PostgreSQL volgens DATABASE_URL):
+// Terugzetten van losse records gaat in de app (Beheer > Systeem > Terugzetten uit back-up, platform/backup-restore.js);
+// de hele database terugzetten gaat met de PostgreSQL-dump (deploy/apps01/pve/db-local.sh restore).
+//
+// Maken (ook terwijl de app draait; volgens DATABASE_URL):
 //   node src/backup.js create [map]        (standaard BACKUP_DIR of DATA_DIR/backups)
-// Terugzetten (met de app gestopt):
-//   node src/backup.js decrypt <back-up.db.enc> <aquatech.db>
+// Controleren/uitpakken naar leesbare regels (JSON, gzip):
+//   node src/backup.js decrypt <back-up.db.enc> <doel.ndjson.gz>
 // De hoofdsleutel komt net als in de app uit AQUATECH_MASTER_KEY_FILE,
 // AQUATECH_MASTER_KEY of DATA_DIR/master-key.
 const fs = require('fs');
@@ -18,12 +20,13 @@ const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
 const { spawn } = require('child_process');
+const zlib = require('zlib');
+const { Readable } = require('stream');
 const { pipeline } = require('stream/promises');
-const { isPg, openSqlite } = require('./database/db');
-const { copyDatabase } = require('./database/db-copy');
+const { exportLines } = require('./database/table-rows');
 
 const MAGIC = Buffer.from('AQBK');
-const VERSION = 1;
+const VERSION = 2;
 const HEADER = MAGIC.length + 1 + 12;
 const TAG = 16;
 const NAME = /^aquatech-\d{8}-\d{6}\.db\.enc$/;
@@ -68,10 +71,10 @@ async function encryptFile(source, target, key) {
 }
 
 /**
- * Ontsleutelt een back-up naar een SQLite-bestand. De tag wordt pas aan het eind
+ * Ontsleutelt een back-up naar een bestand met de gecomprimeerde regels. De tag wordt pas aan het eind
  * gecontroleerd; daarom eerst naar <doel>.part en pas daarna hernoemen.
  * @param {string} source Pad van de back-up (.db.enc).
- * @param {string} target Pad van het nieuwe databasebestand.
+ * @param {string} target Pad van het nieuwe bestand (.ndjson.gz).
  * @param {Buffer} key De back-upsleutel.
  * @returns {Promise<void>}
  * @throws {Error} Bij een verkeerde sleutel, een beschadigde of onbekende back-up.
@@ -88,7 +91,9 @@ async function decryptFile(source, target, key) {
   } finally {
     fs.closeSync(fileHandle);
   }
-  if (!header.subarray(0, 4).equals(MAGIC) || header[4] !== VERSION) throw new Error('Geen Aquatech-back-up of onbekende versie.');
+  if (!header.subarray(0, 4).equals(MAGIC)) throw new Error('Geen Aquatech-back-up.');
+  if (header[4] === 1) throw new Error('Deze back-up heeft het oude SQLite-formaat, dat niet meer wordt ondersteund. Zet hem terug met een PostgreSQL-dump of maak een nieuwe back-up.');
+  if (header[4] !== VERSION) throw new Error('Onbekende versie van de back-up.');
   const decipher = crypto.createDecipheriv('aes-256-gcm', key, header.subarray(5));
   decipher.setAAD(MAGIC);
   decipher.setAuthTag(tag);
@@ -115,14 +120,8 @@ async function createBackup({ db, dir, vault, runId = '' }) {
   const tempFile = path.join(dir, `.tmp-${tag}${crypto.randomUUID()}.db`);
   const part = path.join(dir, `${name}.${runId ? `${runId}.` : ''}part`);
   try {
-    if (isPg(db)) {
-      // PostgreSQL: alle rijen naar een nieuw SQLite-bestand (zelfde schema),
-      // zodat een back-up altijd hetzelfde formaat heeft en terug te zetten is.
-      const copy = openSqlite(tempFile);
-      try { copyDatabase(db, copy); } finally { copy.close(); }
-    } else {
-      db.exec(`VACUUM INTO '${tempFile.replace(/'/g, "''")}'`);
-    }
+    // Alle rijen als regels JSON, gecomprimeerd naar een tijdelijk bestand, en dat daarna versleuteld.
+    await pipeline(Readable.from(exportLines(db)), zlib.createGzip(), fs.createWriteStream(tempFile, { mode: 0o600 }));
     await encryptFile(tempFile, part, keyOf(vault));
     fs.renameSync(part, path.join(dir, name));
   } finally {
@@ -248,7 +247,7 @@ module.exports = { createBackup, createBackupInChild, listBackups, pruneBackups,
 if (require.main === module) {
   const [command, source, target] = process.argv.slice(2);
   if (!(command === 'decrypt' && source && target) && command !== 'create') {
-    console.error('Gebruik: node src/backup.js create [map]\n       node src/backup.js decrypt <back-up.db.enc> <doelbestand.db>');
+    console.error('Gebruik: node src/backup.js create [map]\n       node src/backup.js decrypt <back-up.db.enc> <doel.ndjson.gz>');
     process.exit(2);
   }
   const { createVault, loadOrCreateMasterKey } = require('./beveiliging/vault');
@@ -262,7 +261,7 @@ if (require.main === module) {
   if (command === 'create') {
     const { openDatabase } = require('./database/db');
     const dir = source || process.env.BACKUP_DIR || path.join(dataDir, 'backups');
-    createBackup({ db: openDatabase(dataDir), dir, vault, runId: /^[0-9a-f-]{36}$/.test(process.env.AQUATECH_BACKUP_RUN || '') ? process.env.AQUATECH_BACKUP_RUN : '' })
+    createBackup({ db: openDatabase(), dir, vault, runId: /^[0-9a-f-]{36}$/.test(process.env.AQUATECH_BACKUP_RUN || '') ? process.env.AQUATECH_BACKUP_RUN : '' })
       .then((backup) => { console.log(`Back-up gemaakt: ${path.join(dir, backup.name)} (${backup.size} bytes)`); process.exit(0); })
       .catch((err) => { console.error(`Back-up mislukt: ${err.message}`); process.exit(1); });
   } else if (fs.existsSync(target)) {
@@ -270,7 +269,7 @@ if (require.main === module) {
     process.exit(1);
   } else {
     decryptFile(source, target, keyOf(vault))
-      .then(() => console.log(`Teruggezet naar ${target}. Zet dit bestand als aquatech.db in de datamap (app gestopt), of kopieer het met migrate-to-postgres.js naar PostgreSQL.`))
+      .then(() => console.log(`Uitgepakt naar ${target} (gzip, één JSON-regel per tabelkop of rij).`))
       .catch((err) => { console.error(err.message); process.exit(1); });
   }
 }

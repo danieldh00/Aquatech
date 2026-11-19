@@ -7,8 +7,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { createApp } = require('../src/server');
-const { openDb, openSqlite } = require('../src/database/db');
-const PG = Boolean(process.env.TEST_DATABASE_URL); // testsuite tegen PostgreSQL
+const { openDb } = require('../src/database/db');
 
 const { createStore, passwordProblem, hashPassword, scryptParams, verifyPassword, needsRehash } = require('../src/platform/store');
 const { createSettings } = require('../src/platform/settings');
@@ -71,17 +70,6 @@ test('onversleutelde geheimen van een oudere versie worden bij de start versleut
   const raw = db.prepare("SELECT value FROM settings WHERE key = 'accessCode'").get().value;
   assert.doesNotMatch(raw, /oude-code/);
   assert.ok(vault.isSealed(JSON.parse(raw).enc));
-});
-
-test('databasebestand alleen leesbaar voor de eigenaar', { skip: PG && 'alleen SQLite' }, () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aquatech-perm-'));
-  try {
-    const file = path.join(dir, 'aquatech.db');
-    openDb(file).close();
-    assert.strictEqual(fs.statSync(file).mode & 0o777, 0o600);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
 });
 
 test('wachtwoordbeleid en sterkere hash met automatische upgrade', async () => {
@@ -249,11 +237,11 @@ test('versleutelde back-up: onleesbaar zonder sleutel, terug te zetten met sleut
     assert.ok(!fs.readFileSync(path.join(dir, backup.name)).includes('Familie Jansen'), 'versleuteld');
     assert.deepStrictEqual(fs.readdirSync(dir), [backup.name], 'geen tijdelijke bestanden over');
 
-    const out = path.join(dir, 'terug.db');
+    const out = path.join(dir, 'terug.ndjson.gz');
     await decryptFile(path.join(dir, backup.name), out, keyOf(vault));
-    const restored = openSqlite(out);
-    assert.strictEqual(restored.prepare('SELECT customer FROM plans').get().customer, 'Familie Jansen');
-    restored.close();
+    const lines = require('zlib').gunzipSync(fs.readFileSync(out)).toString('utf8').split('\n').filter(Boolean);
+    assert.strictEqual(JSON.parse(lines[0]).format, 'aquatech-backup');
+    assert.ok(lines.some((line) => line.includes('Familie Jansen')), 'de rijen staan in de export');
 
     await assert.rejects(decryptFile(path.join(dir, backup.name), path.join(dir, 'fout.db'), keyOf(createVault(crypto.randomBytes(32)))));
     assert.ok(!fs.existsSync(path.join(dir, 'fout.db')) && !fs.existsSync(path.join(dir, 'fout.db.part')));

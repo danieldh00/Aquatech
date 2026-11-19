@@ -7,7 +7,7 @@ Productie draait op de VM `apps01` (Debian 13, Docker) in `/opt/apps/aquatech`:
 | `compose.yml` | kopie van `deploy/apps01/compose.yml` |
 | `update.sh` | kopie van `deploy/apps01/update.sh` |
 | `.env` | `AQUATECH_TAG`, `TZ`, `TUNNEL_TOKEN`, `COMPOSE_PROFILES=tunnel` (niet in git) |
-| `data/` | `/data` van de container (sessiesleutel, back-ups; `aquatech.db` alleen nog als SQLite-terugval) |
+| `data/` | `/data` van de container (sessiesleutel, hoofdsleutel, back-ups) |
 | `secrets/master-key` | hoofdsleutel (uid 1000, mode 400; kopie in wachtwoordkluis) |
 | `secrets/database-url` | terugvaloptie: verbindings-URL van Supabase met wachtwoord (uid 1000, mode 400); productie gebruikt `database-url-local` |
 | `compose.localdb.yml` | alleen met eigen PostgreSQL: de database-container naast de app (`.env`: `COMPOSE_FILE=compose.yml:compose.localdb.yml`) |
@@ -15,7 +15,6 @@ Productie draait op de VM `apps01` (Debian 13, Docker) in `/opt/apps/aquatech`:
 | `secrets/database-url-local` | alleen met eigen PostgreSQL: verbindings-URL van de app naar de eigen database (uid 1000, mode 400) |
 | `secrets/postgres-password` | alleen met eigen PostgreSQL: wachtwoord van de databasebeheerder (root, mode 400; de app gebruikt dit niet) |
 | `pg-backup.sh`, `backups/postgres/` | alleen met eigen PostgreSQL: dagelijkse versleutelde back-ups (zie hieronder) |
-| `pre-update/` | alleen bij SQLite: databasekopie per update (laatste 5) |
 | `update/status/` | root, in de container alleen-lezen: `status.json`, `run.json`, `releases.json`, `maintenance.json` (zie `update.sh`) |
 | `update/request/` | uid 1000, mode 700: hier zet de app `request.json` (Nu updaten) en `policy.json` (automatisch aan/uit) |
 
@@ -25,8 +24,8 @@ Productie draait op de VM `apps01` (Debian 13, Docker) in `/opt/apps/aquatech`:
 2. `.github/workflows/release.yml`: tests → image bouwen → smoketest →
    push naar `ghcr.io/danieldh00/aquatech:<versie>` en `:latest`.
 3. Op de VM draait `aquatech-update.timer` elke 15 minuten `update.sh`:
-   nieuwere versie op `:latest` → back-up (PostgreSQL: `backup.js create` naar
-   `data/backups`; SQLite: kopie in `pre-update/`) → container vervangen →
+   nieuwere versie op `:latest` → back-up (`backup.js create` naar
+   `data/backups`) → container vervangen →
    wachten op healthy, anders automatisch terug naar de vorige versie.
 
    Staat *Automatisch bijwerken* in Beheer uit, dan kijkt de timer alleen (en meldt de versie aan de app).
@@ -176,25 +175,12 @@ om te controleren; er is niets aan het adres van Supabase of de host gebonden.
 Productie draaide van 2026-10-20 tot de overstap naar de eigen PostgreSQL-container op Supabase (schema `aquatech`, Session
 pooler); dit blijft een terugvaloptie (zie *Eigen PostgreSQL* hierboven). `compose.yml` heeft `DATABASE_URL_FILE`.
 
-Overstap (al gedaan; voor een nieuwe server): vanaf de Proxmox-host, of zonder
-`ssh` in de console van de VM. Vraagt host van de Session pooler en het
-wachtwoord (verborgen) en draait terug naar SQLite als iets misgaat:
+De app heeft geen andere database: zonder `DATABASE_URL_FILE` (of `DATABASE_URL`) start hij niet. Back-ups: dagelijks en vóór elke update
+versleuteld in `data/backups` (alle rijen, gecomprimeerd; losse records zet je terug in de app), plus de `pg_dump`-back-ups van de
+eigen database (hele database terugzetten met `db-local.sh restore`). Back-ups in het oude SQLite-formaat (van vóór deze wijziging)
+leest de app niet meer.
 
-```sh
-ssh -t root@apps01 'curl -fsSL https://raw.githubusercontent.com/danieldh00/Aquatech/master/deploy/apps01/switch-to-supabase.sh -o /tmp/aquatech-supabase.sh && bash /tmp/aquatech-supabase.sh'
-```
-
-Handmatig: zie `hub/DOCS.md` > *Database: Supabase
-(PostgreSQL)*. Een mislukte update zet alleen de vorige image terug; de
-database blijft in Supabase. Back-ups: dagelijks en vóór elke update
-versleuteld in `data/backups`, plus de back-ups van Supabase zelf.
-
-**Terug naar SQLite** (noodgeval): de regel `DATABASE_URL_FILE` in
-`compose.yml` uitzetten en `docker compose up -d aquatech`. Zet eerst de
-nieuwste back-up terug als `data/aquatech.db` (zie DOCS.md > *Back-ups
-terugzetten*), anders mis je alles van na de overstap.
-
-**Wachtwoord van Supabase gewijzigd**: nieuwe URL in `secrets/database-url`
+**Wachtwoord van de database gewijzigd**: nieuwe URL in `secrets/database-url`
 (uid 1000, mode 400) en `docker compose up -d --force-recreate aquatech`.
 
 ## Publiek bereikbaar

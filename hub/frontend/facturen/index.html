@@ -207,6 +207,7 @@
           <h3>Versturen per e-mail</h3>
           <p id="s-mailwarn" class="notice warn" hidden>Er is nog geen mailserver ingesteld (Beheer → Integraties → E-mail). Tot die er is, kun je facturen alleen als PDF downloaden.</p>
           <label class="chk"><input type="checkbox" name="autoSend"> Een factuur meteen naar de klant mailen zodra hij definitief is (met de PDF als bijlage)</label>
+          <label class="chk"><input type="checkbox" name="draftOnDone"> Zet een conceptfactuur klaar zodra een werkorder op Gereed gaat (uren en materiaal; je controleert hem zelf)</label>
           <label>Onderwerp<input name="mailSubject" maxlength="200"></label>
           <label>Tekst <span class="muted small">({klant}, {soort}, {nummer}, {datum}, {vervaldatum}, {bedrag}, {betaling} en {bedrijf} worden ingevuld)</span>
             <textarea name="mailText" rows="7" maxlength="4000"></textarea></label>

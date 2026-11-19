@@ -63,7 +63,7 @@ async function world() {
  * @returns {Promise<*>} Wat de functie teruggeeft.
  */
 async function withBackup(scene, callback) {
-  const opened = await restore.openBackup({ dir: scene.dir, name: scene.backupName, vault: scene.vault });
+  const opened = await restore.openBackup({ dir: scene.dir, name: scene.backupName, vault: scene.vault, current: scene.db });
   try { return await callback({ backup: opened.db, current: scene.db, context: { tenantId: scene.tenantId, customerRoleKeys: ['klant'] } }); } finally { opened.close(); }
 }
 

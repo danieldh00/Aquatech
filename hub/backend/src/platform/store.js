@@ -1710,7 +1710,7 @@ function createStore(db) {
     if (userId) { where.push('h.user_id = ?'); args.push(String(userId)); }
     if (action) { where.push('h.action = ?'); args.push(String(action)); }
     if (search) {
-      // lower(): LIKE is in SQLite hoofdletterongevoelig, in PostgreSQL niet.
+      // lower(): LIKE is in PostgreSQL hoofdlettergevoelig.
       const cols = ['h.title', 'h.customer', 'h.address', 'u.display_name', 'u.username'];
       where.push(`(${cols.map((column) => `lower(${column}) LIKE lower(?) ESCAPE '\\'`).join(' OR ')})`);
       const like = `%${String(search).replace(/[\\%_]/g, (character) => `\\${character}`)}%`;

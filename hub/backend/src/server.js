@@ -10,7 +10,7 @@ const { createCaptcha, cspWith: captchaCspWith } = require('./beveiliging/captch
 const { loadOrCreateSecret } = require('./beveiliging/session-secret');
 const { createPlanAnalyzer, AnalyzeError, PROMPT_VERSION } = require('./beregening/plan-analyzer');
 const { createRecognitionStore, sanitizeSamples, sanitizeFinalPlan, imageHash } = require('./beregening/recognitions');
-const { openDb, openDatabase, isPg } = require('./database/db');
+const { openDb, openDatabase } = require('./database/db');
 const { createSlowLog, timedFetch, normalizePath } = require('./platform/slow-log');
 const { createStore, withRequestCache, preferencesOf, fingerprintOf } = require('./platform/store');
 const { withScope, limitTo, bindStream, asSystem } = require('./database/tenant-scope');
@@ -20,6 +20,7 @@ const backups = require('./backup');
 const { createDriveBackup, sanitizeDriveBackup, DriveError, CALLBACK_PATH: DRIVE_CALLBACK_PATH } = require('./platform/drive-backup');
 const { createQuoteStore, registerQuoteRoutes, mailBody, Core: QuoteCore } = require('./verkoop/quotes');
 const { createCustomerStore, registerCustomerRoutes } = require('./verkoop/customers');
+const { createPersonData, registerPersonDataRoutes } = require('./verkoop/person-data');
 const { registerPlatformRoutes } = require('./platform/platform-routes');
 const { createGlobalSearch, registerSearchRoutes } = require('./platform/global-search');
 const { createMailer, mailFailure } = require('./platform/mailer');
@@ -2471,6 +2472,15 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     inviteReady: (customer) => shopAccounts.inviteProblem(customer),
     invite: (customer) => shopAccounts.invite(customer),
   });
+  registerPersonDataRoutes(app, {
+    store, personData: createPersonData(database, store), requireRight, requireJson, audit,
+    tenantsOf: (req) => {
+      const tenantId = req.tenantId || tenant.id;
+      const home = homeOf(tenantId);
+      return home === tenantId ? [tenantId] : [home, tenantId];
+    },
+    organizationName: (req) => String(settingsFor(req.tenantId || tenant.id).get('quoteProfile').companyName || 'AquaTech'),
+  });
 
   // Globaal zoeken (platform/global-search.js): klanten, offertes, werkorders, facturen en artikelen in één zoekveld.
   const globalSearch = createGlobalSearch(database, {
@@ -2544,6 +2554,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     },
     // Voorraad: reserveren na elke wijziging, afboeken bij Gereed (zie stock.js).
     onChange: (tid, id, user) => stockStore.onWorkOrderChange(tid, id, user),
+    // Bij Gereed een conceptfactuur klaarzetten (instelling Facturen > Instellingen); invoiceRoutes bestaat pas na het registreren van de facturen.
+    onDone: (req, id) => invoiceRoutes.draftOnDone(req, id),
     // Medewerkers horen bij de live-tenant; in een testomgeving komen de
     // testaccounts daarvan erbij (net als bij de klantaccounts hierboven).
     staffTenantsOf: (req) => {
@@ -2810,11 +2822,12 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     importLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, keyFn: (req) => req.tenantId || tenant.id }) });
 
   // ---------- Facturen en export naar de boekhouding (zie invoices.js) ----------
-  registerInvoiceRoutes(app, {
+  const invoiceRoutes = registerInvoiceRoutes(app, {
     invoices: invoiceStore, requireRight, requireJson, audit, addressGuard,
     settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
     loggedOf: (tid, woId) => workLogStore.list(tid, woId),
     articlesOf: (tid) => stockStore.saleInfo(tid),
+    invoicesEnabled: (tid) => ModuleTools.isOn(moduleFlagsOf(tid), 'facturen'),
     catalog: () => loadArticles(),
     sender: invoiceSender, shopOrders, paymentReminders: paymentReminderStore,
     mailConfigured: (req) => mailerFor(settingsFor(req.tenantId || tenant.id)).configured(),
@@ -3526,8 +3539,8 @@ if (require.main === module) {
   const master = loadOrCreateMasterKey(dataDir);
   console.log(`Hoofdsleutel voor versleuteling: ${master.source}`);
   const port = Number(process.env.PORT) || 3300;
-  const db = openDatabase(dataDir);
-  console.log(isPg(db) ? `Database: PostgreSQL (schema ${db.schema})` : 'Database: SQLite (aquatech.db in de datamap)');
+  const db = openDatabase();
+  console.log(`Database: PostgreSQL (schema ${db.schema})`);
   const backupDir = process.env.BACKUP_DIR || path.join(dataDir, 'backups');
   const app = createApp({ secret, db, env: process.env, vault: createVault(master.key), backupDir, backupInChild: true });
   const { settings, slowLog } = app.locals;

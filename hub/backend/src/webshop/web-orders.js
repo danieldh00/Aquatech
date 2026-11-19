@@ -10,7 +10,7 @@
 // betaald is; een onbetaalde online bestelling houdt de voorraad vast tot hij
 // betaald, geannuleerd of verlopen is.
 const crypto = require('crypto');
-const { transaction, isPg } = require('../database/db');
+const { transaction } = require('../database/db');
 const { validEmail } = require('../platform/mailer');
 const { withCause } = require('../platform/error-report');
 const Shipping = require('./shipping');
@@ -392,14 +392,13 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
   /**
    * Vergrendelt de voorraadartikelen van een winkelwagen tot het einde van de
    * transactie, zodat twee gelijktijdige bestellingen niet dezelfde voorraad
-   * kunnen claimen (PostgreSQL). SQLite serialiseert al via BEGIN IMMEDIATE.
+   * kunnen claimen.
    * Moet binnen een transactie lopen; vaste volgorde voorkomt deadlocks.
    * @param {string} tenantId Id van de omgeving.
    * @param {{ code: string }[]} wanted De winkelwagen.
    * @returns {void}
    */
   function lockItems(tenantId, wanted) {
-    if (!isPg(db)) return;
     // Dezelfde codes als priceCart: de volledige wagencode én de artikelcode (een oude artikelcode kan zelf een @ bevatten).
     const codes = [...new Set(wanted.flatMap((line) => {
       const code = String(line.code || '').trim().toUpperCase();
@@ -411,27 +410,26 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
 
   /**
    * Vergrendelt de voorraadrijen van een geplaatste bestelling op id (in vaste volgorde), zodat een gewijzigde
-   * artikelcode het slot niet omzeilt. Alleen onder PostgreSQL; moet binnen een transactie lopen.
+   * artikelcode het slot niet omzeilt. Moet binnen een transactie lopen.
    * @param {string} tenantId Id van de omgeving.
    * @param {{ itemId: string }[]} lines De regels van de bestelling.
    * @returns {void}
    */
   function lockItemIds(tenantId, lines) {
-    if (!isPg(db)) return;
     const ids = [...new Set(lines.map((line) => String(line.itemId || '')).filter(Boolean))].sort().slice(0, MAX_LINES);
     if (!ids.length) return;
     prepare(`SELECT id FROM stock_items WHERE tenant_id = ? AND id IN (${ids.map(() => '?').join(', ')}) ORDER BY id FOR UPDATE`).all(tenantId, ...ids);
   }
 
   /**
-   * Leest de bestelling voor een wijziging; onder PostgreSQL met een rijslot tot het einde van de transactie.
+   * Leest de bestelling voor een wijziging; met een rijslot tot het einde van de transactie.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van de bestelling.
    * @param {string} columns De kolommen om te lezen.
    * @returns {object|undefined} De rij.
    */
   function readForUpdate(tenantId, id, columns) {
-    return prepare(`SELECT ${columns} FROM web_orders WHERE tenant_id = ? AND id = ?${isPg(db) ? ' FOR UPDATE' : ''}`).get(tenantId, String(id));
+    return prepare(`SELECT ${columns} FROM web_orders WHERE tenant_id = ? AND id = ? FOR UPDATE`).get(tenantId, String(id));
   }
 
   /**
@@ -524,7 +522,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
       const timestamp = currentTimestamp();
       const id = crypto.randomUUID();
       const reservedUntil = reservedUntilOf(timestamp, online, hold);
-      if (isPg(db)) prepare('SELECT pg_advisory_xact_lock(hashtext(?)) AS locked').get(`web-orders:${tenantId}:${timestamp.slice(0, 4)}`);
+      prepare('SELECT pg_advisory_xact_lock(hashtext(?)) AS locked').get(`web-orders:${tenantId}:${timestamp.slice(0, 4)}`);
       const number = nextNumber(tenantId, timestamp.slice(0, 4));
       // De verzendkosten zijn een eigen regel in de btw-opbouw (alleen als ze niet gratis zijn).
       const calculated = orderTotals(cart, option, { group, country, vatNumber: fields.vatNumber, approvedVatNumber: user.vatNumber || '' });
@@ -594,7 +592,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
   function createFromQuote(tenantId, spec) {
     const timestamp = currentTimestamp();
     const id = crypto.randomUUID();
-    if (isPg(db)) prepare('SELECT pg_advisory_xact_lock(hashtext(?)) AS locked').get(`web-orders:${tenantId}:${timestamp.slice(0, 4)}`);
+    prepare('SELECT pg_advisory_xact_lock(hashtext(?)) AS locked').get(`web-orders:${tenantId}:${timestamp.slice(0, 4)}`);
     const number = nextNumber(tenantId, timestamp.slice(0, 4));
     const lines = resolveQuoteLines(tenantId, spec.lines);
     const reserved = stockLinesOf(lines.filter((line) => line.itemId));
@@ -706,7 +704,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
     const start = Math.max(0, Math.floor(Number(offset)) || 0);
     const clause = where.join(' AND ');
     const total = Number(prepare(`SELECT COUNT(*) AS n FROM web_orders WHERE ${clause}`).get(...args).n);
-    const payStatus = isPg(db) ? "((data)::jsonb -> 'pay' ->> 'status')" : "json_extract(data, '$.pay.status')";
+    const payStatus = "((data)::jsonb -> 'pay' ->> 'status')";
     const rows = prepare(`SELECT ${COLUMNS}${withLines ? ', data' : `, ${payStatus} AS pay_status`} FROM web_orders WHERE ${clause} ORDER BY created_at DESC, number DESC LIMIT ? OFFSET ?`).all(...args, size, start);
     const counts = Object.fromEntries(Object.keys(STATUSES).map((key) => [key, 0]));
     for (const row of prepare('SELECT status, COUNT(*) AS n FROM web_orders WHERE tenant_id = ? GROUP BY status').all(tenantId)) counts[row.status] = Number(row.n);
@@ -729,8 +727,8 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
    */
   function listToPick(tenantId, limit = PAGE_LIMIT) {
     // Online bestellingen alleen als ze betaald zijn: in SQL, zodat onbetaalde de lijst niet vullen of de limiet opeten.
-    const payment = isPg(db) ? "((data)::jsonb ->> 'payment')" : "json_extract(data, '$.payment')";
-    const payStatus = isPg(db) ? "((data)::jsonb -> 'pay' ->> 'status')" : "json_extract(data, '$.pay.status')";
+    const payment = "((data)::jsonb ->> 'payment')";
+    const payStatus = "((data)::jsonb -> 'pay' ->> 'status')";
     const rows = prepare(`SELECT ${COLUMNS}, data FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND (COALESCE(${payment}, 'op rekening') <> 'online' OR ${payStatus} = 'betaald') ORDER BY created_at ASC, number ASC LIMIT ?`).all(tenantId, Math.min(limit, EXPORT_LIMIT) + 1);
     const size = Math.min(limit, EXPORT_LIMIT);
     const shaped = rows.slice(0, size).map(shapeFull);
@@ -752,8 +750,8 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
    * @returns {{ total: number, items: { id: string, number: string, customerName: string, total: number, createdAt: string, payment: string }[] }} Het totale aantal en de oudste bestellingen.
    */
   function listUnprocessed(tenantId, limit = 5) {
-    const payment = isPg(db) ? "((data)::jsonb ->> 'payment')" : "json_extract(data, '$.payment')";
-    const payStatus = isPg(db) ? "((data)::jsonb -> 'pay' ->> 'status')" : "json_extract(data, '$.pay.status')";
+    const payment = "((data)::jsonb ->> 'payment')";
+    const payStatus = "((data)::jsonb -> 'pay' ->> 'status')";
     const unprocessed = `status = 'nieuw' AND (COALESCE(${payment}, 'op rekening') <> 'online' OR ${payStatus} = 'betaald')`;
     const size = Math.min(20, Math.max(1, Math.floor(Number(limit)) || 5));
     const total = Number(prepare(`SELECT COUNT(*) AS n FROM web_orders WHERE tenant_id = ? AND ${unprocessed}`).get(tenantId).n);
@@ -789,7 +787,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
     if (!wanted.length) return;
     const timestamp = currentTimestamp();
     transaction(db, () => {
-      const rows = prepare(`SELECT id, data FROM web_orders WHERE tenant_id = ? AND id IN (${wanted.map(() => '?').join(', ')})${isPg(db) ? ' FOR UPDATE' : ''}`).all(tenantId, ...wanted);
+      const rows = prepare(`SELECT id, data FROM web_orders WHERE tenant_id = ? AND id IN (${wanted.map(() => '?').join(', ')}) FOR UPDATE`).all(tenantId, ...wanted);
       for (const row of rows) {
         const data = JSON.parse(row.data);
         data.packingSlip = { printedAt: timestamp, count: (Number(data.packingSlip && data.packingSlip.count) || 0) + 1 };
@@ -1007,8 +1005,8 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
    * @returns {{ items: object[], truncated: boolean }} De bestellingen met leverstatus (online bestellingen alleen als ze betaald zijn) en of er meer waren dan de limiet.
    */
   function listBackorders(tenantId) {
-    const payment = isPg(db) ? "((data)::jsonb ->> 'payment')" : "json_extract(data, '$.payment')";
-    const payStatus = isPg(db) ? "((data)::jsonb -> 'pay' ->> 'status')" : "json_extract(data, '$.pay.status')";
+    const payment = "((data)::jsonb ->> 'payment')";
+    const payStatus = "((data)::jsonb -> 'pay' ->> 'status')";
     const rows = prepare(`SELECT ${COLUMNS}, data FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND (COALESCE(${payment}, 'op rekening') <> 'online' OR ${payStatus} = 'betaald') ORDER BY created_at ASC, number ASC LIMIT ?`).all(tenantId, EXPORT_LIMIT + 1);
     const shaped = rows.slice(0, EXPORT_LIMIT).map(shapeFull);
     const plans = fulfilment.plan(tenantId, shaped);

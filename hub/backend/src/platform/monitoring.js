@@ -9,7 +9,7 @@
 // - Een controle die gooit of langer duurt dan 20 s wordt een waarschuwing "Controle zelf mislukt: ...".
 // - Een meldingsfout komt in notify_error en het log, nooit als nieuw incident, en gooit nooit.
 // - Meldingen en berichten gaan door redact (error-report.js): geen geheimen.
-// - Alles werkt op SQLite en PostgreSQL (db.prepare met ?-parameters). De ronde over alle omgevingen loopt bewust
+// - Alles werkt via db.prepare met ?-parameters. De ronde over alle omgevingen loopt bewust
 //   over organisaties heen (asSystem); elke query filtert zelf op tenant_id.
 const crypto = require('crypto');
 const { redact } = require('./error-report');

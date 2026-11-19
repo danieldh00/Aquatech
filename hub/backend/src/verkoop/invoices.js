@@ -415,6 +415,7 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
  * Registreert de API-routes voor facturen (recht facturen).
  * @param {object} app De Express-app.
  * @param {object} ctx invoices, requireRight, requireJson, audit, settingsOf(req), loggedOf(tid, woId), articlesOf(tid), catalog(), sender (invoice-mail.js), shopOrders (shop-orders.js), mailConfigured(req), shopOf(req) en syncLimiter.
+ * @returns {{ draftOnDone: Function }} draftOnDone(req, workOrderId): zet bij Gereed een conceptfactuur klaar (voor de werkorderroutes).
  */
 function registerInvoiceRoutes(app, ctx) {
   const { invoices, requireRight, requireJson, audit, settingsOf, sender, shopOrders } = ctx;
@@ -534,6 +535,47 @@ function registerInvoiceRoutes(app, ctx) {
     res.json({ ...invoice, reminders: ctx.paymentReminders ? ctx.paymentReminders.forInvoice(tenantOf(req), invoice.id) : [] });
   });
 
+  /**
+   * Maakt een conceptfactuur uit een werkorder (uren, materiaal en offerteregels), zonder te controleren of er al een is.
+   * @param {object} req Het verzoek (organisatie, gebruiker en instellingen).
+   * @param {object} workOrder De werkorder (invoices.workOrder).
+   * @param {{ skipEmpty?: boolean }} [options] skipEmpty: maak niets aan als er geen regels zijn.
+   * @returns {{ created: object|null, built: object }} De conceptfactuur (null bij skipEmpty zonder regels) en de opbouw (met waarschuwingen).
+   */
+  const createDraftFromWorkOrder = (req, workOrder, { skipEmpty = false } = {}) => {
+    const tenantId = tenantOf(req);
+    const settings = invoicingOf(req);
+    const quote = workOrder.quoteId ? invoices.quote(tenantId, workOrder.quoteId) : null;
+    const built = Core.fromWorkOrder(workOrder, {
+      quote, logged: ctx.loggedOf(tenantId, workOrder.id), articles: ctx.articlesOf(tenantId), catalog: ctx.catalog(),
+      hourlyRate: settingsOf(req).get('quoteProfile').hourlyRate, settings,
+    });
+    if (skipEmpty && !(built.data.lines || []).length) return { created: null, built };
+    const created = invoices.create(tenantId, req.user, built.data, settings, { workOrderId: workOrder.id, quoteId: quote ? quote.id : null, customerId: (quote && quote.customerId) || workOrder.customerId || null });
+    return { created, built };
+  };
+
+  /**
+   * Zet bij Gereed een conceptfactuur klaar (instelling `draftOnDone`, standaard aan): alleen als de werkorder nog geen
+   * factuur heeft en er regels zijn. Een concept, nooit definitief of verstuurd. Een fout hier houdt het opslaan van de werkorder niet tegen.
+   * Bewust zonder recht `facturen`: de uitvoerder die Gereed meldt heeft dat meestal niet, en het resultaat is alleen een concept dat de
+   * facturist controleert. Niets bij een uitgezette module Facturen. Controle en aanmaken lopen zonder `await` in één synchrone
+   * aanroep (één proces), dus twee gelijktijdige verzoeken maken niet allebei een concept.
+   * @param {object} req Het verzoek van de medewerker die de werkorder op Gereed zette.
+   * @param {string} workOrderId Id van de werkorder.
+   * @returns {object|null} De conceptfactuur, of null als er niets is aangemaakt.
+   */
+  const draftOnDone = (req, workOrderId) => {
+    const tenantId = tenantOf(req);
+    if (!invoicingOf(req).draftOnDone || (ctx.invoicesEnabled && !ctx.invoicesEnabled(tenantId))) return null;
+    const workOrder = invoices.workOrder(tenantId, String(workOrderId));
+    if (!workOrder || invoices.list(tenantId, { workOrderId: workOrder.id }).some((candidate) => candidate.kind === 'factuur')) return null;
+    const { created } = createDraftFromWorkOrder(req, workOrder, { skipEmpty: true });
+    if (!created) return null;
+    audit(req, 'factuur_concept_bij_gereed', { invoiceId: created.id, workOrderId: workOrder.id });
+    return created;
+  };
+
   // Nieuw: { workOrderId } (uit de werkorder; force = ook als er al een is) of { data }.
   app.post('/api/invoices', requireJson, requireInvoices, requireVerifiedAddress(ctx.addressGuard, (req) => (req.body?.workOrderId ? '' : req.body?.data?.customer?.address)), (req, res) => {
     const body = req.body || {};
@@ -546,12 +588,7 @@ function registerInvoiceRoutes(app, ctx) {
       if (existing.length && !body.force) {
         return res.status(409).json({ error: 'exists', message: `Voor deze werkorder bestaat al factuur ${existing[0].number || '(concept)'}.`, invoiceId: existing[0].id });
       }
-      const quote = workOrder.quoteId ? invoices.quote(tenantId, workOrder.quoteId) : null;
-      const built = Core.fromWorkOrder(workOrder, {
-        quote, logged: ctx.loggedOf(tenantId, workOrder.id), articles: ctx.articlesOf(tenantId), catalog: ctx.catalog(),
-        hourlyRate: settingsOf(req).get('quoteProfile').hourlyRate, settings,
-      });
-      const created = invoices.create(tenantId, req.user, built.data, settings, { workOrderId: workOrder.id, quoteId: quote ? quote.id : null, customerId: (quote && quote.customerId) || workOrder.customerId || null });
+      const { created, built } = createDraftFromWorkOrder(req, workOrder);
       audit(req, 'factuur_aangemaakt', { invoiceId: created.id, workOrderId: workOrder.id });
       return res.status(201).json({ ...created, warnings: built.warnings });
     }
@@ -642,6 +679,8 @@ function registerInvoiceRoutes(app, ctx) {
     audit(req, 'factuur_verwijderd', { invoiceId: req.params.id });
     res.json(out);
   });
+
+  return { draftOnDone };
 }
 
 module.exports = { createInvoiceStore, registerInvoiceRoutes, sanitizeInvoicing: Core.sanitizeSettings };
