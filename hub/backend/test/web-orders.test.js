@@ -187,7 +187,7 @@ test('verzonden boekt af en annuleren geeft de reservering vrij', async () => {
 });
 
 test('openstaande taken (dashboard): bestellingen nieuw, oudste eerst, per omgeving en volgens de rechten', async () => {
-  const { base, admin, vreemd, shopper } = await setup();
+  const { base, admin, vreemd, shopper, db } = await setup();
   const customer = await shopper();
   /**
    * De taak Webshopbestellingen verwerken uit /api/tasks.
@@ -212,6 +212,19 @@ test('openstaande taken (dashboard): bestellingen nieuw, oudste eerst, per omgev
   assert.strictEqual((await admin.post(`/app/api/admin/web-orders/${oldest.id}/status`, { status: 'verzonden' })).status, 200);
   assert.strictEqual((await admin.post(`/app/api/admin/web-orders/${youngest.id}/status`, { status: 'geannuleerd' })).status, 200);
   assert.strictEqual((await ordersTask(admin)).count, 5, 'verzonden en geannuleerde bestellingen zijn verwerkt');
+  // Een online bestelling telt pas mee als hij betaald is.
+  const online = orders[1];
+  const setPay = (status) => {
+    const row = db.prepare('SELECT data FROM web_orders WHERE id = ?').get(online.id);
+    const data = JSON.parse(row.data);
+    data.payment = 'online';
+    data.pay = { status };
+    db.prepare('UPDATE web_orders SET data = ? WHERE id = ?').run(JSON.stringify(data), online.id);
+  };
+  setPay('open');
+  assert.strictEqual((await ordersTask(admin)).count, 4, 'een onbetaalde online bestelling is nog geen order');
+  setPay('betaald');
+  assert.strictEqual((await ordersTask(admin)).count, 5, 'betaald telt weer mee');
   assert.strictEqual(await ordersTask(vreemd), undefined, 'andere organisatie ziet niets');
   const asCustomer = await customer.get('/app/api/tasks');
   assert.strictEqual(asCustomer.status, 200);

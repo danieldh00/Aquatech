@@ -4,7 +4,7 @@
 const Roles = require('../../../frontend/shared/roles.js');
 
 /** Hoe lang het aantal prijsvoorstellen en bestelvoorstellen per omgeving onthouden wordt (de berekening loopt over alle artikelen en het dashboard is de startpagina). */
-const CACHE_TTL_MS = 30 * 1000;
+const CACHE_TTL_MS = 10 * 1000;
 const cache = new Map();
 
 /**
