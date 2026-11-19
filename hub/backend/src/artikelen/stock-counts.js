@@ -617,6 +617,7 @@ function registerStockCountRoutes(app, { counts, getUser, requireRight, requireJ
   const send = (res, out, status = 200) => (out.error ? res.status(out.status || 400).json({ error: out.code || 'invalid', message: out.error, ...(out.details || {}) }) : res.status(status).json(out));
   const countLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 600, keyFn: (req) => `telling-ingave:${req.tenantId}:${req.user && req.user.id}` });
   const changeLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 60, keyFn: (req) => `telling-wijzigen:${req.tenantId}:${req.user && req.user.id}` });
+  const readLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 600, keyFn: (req) => `telling-lezen:${req.tenantId}:${req.user && req.user.id}` });
   const closeLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 5, keyFn: (req) => `telling-afsluiten:${req.tenantId}:${req.user && req.user.id}` });
   /**
    * Zet de kop die caching van tellingen voorkomt.
@@ -629,7 +630,7 @@ function registerStockCountRoutes(app, { counts, getUser, requireRight, requireJ
 
   app.use('/api/stock-counts', express.json({ limit: '16kb' }), noStore);
 
-  app.get('/api/stock-counts', requireStock, (req, res) => {
+  app.get('/api/stock-counts', requireStock, readLimiter, (req, res) => {
     res.json({ counts: counts.list(req.tenantId) });
   });
 
@@ -640,13 +641,13 @@ function registerStockCountRoutes(app, { counts, getUser, requireRight, requireJ
     res.status(201).json({ count: counts.get(req.tenantId, out.count.id) });
   });
 
-  app.get('/api/stock-counts/:id', requireStock, (req, res) => {
+  app.get('/api/stock-counts/:id', requireStock, readLimiter, (req, res) => {
     const count = counts.get(req.tenantId, req.params.id);
     if (!count) return res.status(404).json({ error: 'not_found', message: 'Telling niet gevonden.' });
     res.json({ count });
   });
 
-  app.get('/api/stock-counts/:id/lines', requireStock, (req, res) => {
+  app.get('/api/stock-counts/:id/lines', requireStock, readLimiter, (req, res) => {
     const out = counts.lines(req.tenantId, req.params.id, {
       location: typeof req.query.location === 'string' ? req.query.location.slice(0, 60) : undefined,
       filter: String(req.query.filter || 'alle'), limit: req.query.limit, offset: req.query.offset,
@@ -655,7 +656,7 @@ function registerStockCountRoutes(app, { counts, getUser, requireRight, requireJ
     res.json(out);
   });
 
-  app.get('/api/stock-counts/:id/report', requireStock, (req, res) => {
+  app.get('/api/stock-counts/:id/report', requireStock, readLimiter, (req, res) => {
     const out = counts.report(req.tenantId, req.params.id);
     if (!out) return res.status(404).json({ error: 'not_found', message: 'Telling niet gevonden.' });
     audit(req, 'voorraadtelling_verslag', { number: out.count.number });
@@ -697,11 +698,11 @@ function registerStockCountRoutes(app, { counts, getUser, requireRight, requireJ
   });
 
   // Tellers (recht orderpick): blind, zonder verwachte aantallen of prijzen.
-  app.get('/api/orderpick/counts/open', (req, res) => {
+  app.get('/api/orderpick/counts/open', readLimiter, (req, res) => {
     res.json({ count: counts.openCount(req.tenantId) });
   });
 
-  app.get('/api/orderpick/counts/:id/lines', (req, res) => {
+  app.get('/api/orderpick/counts/:id/lines', readLimiter, (req, res) => {
     send(res, counts.blindLines(req.tenantId, req.params.id, req.query.location));
   });
 
