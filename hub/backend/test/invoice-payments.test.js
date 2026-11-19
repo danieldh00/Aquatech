@@ -164,9 +164,15 @@ test('valt de verwerking halverwege weg, dan herstelt de volgende melding de fac
   let failOnce = true;
   let paidCalls = 0;
   const invoices = {
-    /** De factuur. @returns {object} Een kopie. */
+    /**
+     * De factuur.
+     * @returns {object} Een kopie.
+     */
     get: () => ({ ...invoice }),
-    /** Zet de factuur op betaald; faalt de eerste keer. @returns {{ invoice: object }} De factuur. */
+    /**
+     * Zet de factuur op betaald; faalt de eerste keer.
+     * @returns {{ invoice: object }} De factuur.
+     */
     setPaid: () => {
       if (failOnce) { failOnce = false; throw new Error('databasefout'); }
       paidCalls += 1; invoice.status = 'betaald';
