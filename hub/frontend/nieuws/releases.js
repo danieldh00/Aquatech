@@ -13,6 +13,31 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.23.7',
+      date: '2026-11-19',
+      title: 'Lange back-uplijsten klappen in',
+      items: [
+        { text: 'De lijst met back-ups en de lijsten bij Back-ups naar Google Drive (bestanden en logboek) tonen nu de nieuwste vijf regels, met de knop "Toon alle" voor de rest.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.23.6',
+      date: '2026-11-19',
+      title: 'Facturen online betalen in het klantportaal',
+      items: [
+        { text: 'In het klantportaal staat nu het blok Facturen met uw definitieve en betaalde facturen, met een PDF per factuur.' },
+        { text: 'Staat online betalen aan, dan betaalt u een openstaande factuur met de knop "Nu betalen" via iDEAL of een andere methode van Mollie. Na de betaling staat de factuur meteen op betaald, ook bij de debiteuren van het bedrijf.' },
+      ],
+    },
+    {
+      version: '1.23.5',
+      date: '2026-11-19',
+      title: 'Meldingenbelletje met teller in de kopbalk',
+      items: [
+        { text: '[voorraad] In de kopbalk staat nu een belletje met het aantal openstaande taken (bestellingen verwerken, bestelvoorstellen, prijsvoorstellen). Een klik toont de lijst en brengt je direct naar het juiste scherm; bij één openstaand punt ga je meteen naar dat punt.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.23.4',
       date: '2026-11-19',
       title: 'Snellere en stabielere testsuite',

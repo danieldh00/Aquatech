@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.23.7
+
+Beheer > Systeem: `beheer/collapse-list.js` (`BeheerCollapse.render`) klapt lange lijsten in tot de eerste vijf regels met een knop *Toon alle (n)* / *Toon minder*. Gebruikt voor de back-uplijst, de Drive-bestanden en het Drive-logboek. Alleen frontend, geen migratie.
+
+## 1.23.6
+
+- Nieuw: `verkoop/invoice-payments.js` (tabel `invoice_payments`, migratie 84): per poging één Mollie-betaling. Hergebruikt de Mollie-sleutel en het webadres van de webshop (`configOf`), dus alleen in de hoofdtenant. De uitkomst komt altijd uit een opvraging bij Mollie (metadata `invoiceId` en bedrag moeten kloppen); de overgang naar betaald gebeurt één keer (voorwaardelijke update) en roept `invoices.setPaid` en de auditregel `factuur_betaald_online` aan.
+- Nieuw: portaalroutes `GET /api/portal/invoices/:id/pdf`, `POST …/pay` en `POST …/check` (recht `portaal`, alleen eigen facturen, geen concepten of creditfacturen), `api/portal` geeft `invoices`; openbare webhook `POST /api/public/invoice-payment/:id/webhook` (limiet per bezoeker). `invoices.list` kreeg de filters `customerId`, `kinds` en `statuses`. Testdata vult `invoice_payments`.
+
+## 1.23.5
+
+- Nieuw: belletje in `dashboard/account.js` (`setupBell`, op elke pagina met kopbalk) op basis van `GET /api/tasks`; ververst bij openen en elke 3 minuten. Het dashboardblok deelt hetzelfde verzoek via `getJson`. Alleen met recht `beheer` of `voorraad`.
+
 ## 1.23.4
 
 - `tableColumns` gebruikt op PostgreSQL `pg_catalog` i.p.v. `information_schema` (±150 ms → ±1 ms per tabel); tenant verwijderen, leegmaken en terugzetten uit back-up wordt daardoor niet trager bij meer tabellen.
