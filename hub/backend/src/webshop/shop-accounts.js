@@ -16,12 +16,16 @@ const LOGIN_MAX_FAILURES = 10;
 /**
  * Maakt de accountfuncties van de webshop.
  * @param {{ store: object, auth: object, tenant: object, audit: Function, clearEnvironment: Function, impersonation: object, loginGuard: object, twoFactor?: object }} deps Opslag, sessies, de hoofdtenant waar de shop bij hoort, de blokkering van het hoofdinlogscherm (per account en bezoeker) en de tweestapsverificatie (zo'n account logt niet via de winkel in).
- * @returns {{ viewer: Function, login: Function, register: Function, logout: Function, businessProfile: Function, requestBusiness: Function, mailReady: Function, sendVerification: Function, forgotPassword: Function, resetPassword: Function, verifyEmail: Function }} De functies.
+ * @returns {{ viewer: Function, login: Function, register: Function, logout: Function, businessProfile: Function, requestBusiness: Function, mailReady: Function, sendVerification: Function, verificationLimited: Function, forgotPassword: Function, resetPassword: Function, verifyEmail: Function }} De functies.
  */
 function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, loginGuard, twoFactor = null, tokens = null, mailerFor = null, settingsFor = null, mailBody = null }) {
   const loginLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20, keyFn: (req) => `login:${clientKey(req)}` });
   const registerLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 5, keyFn: (req) => `register:${clientKey(req)}` });
   const recoveryLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10, keyFn: (req) => `herstel:${clientKey(req)}` });
+  // Per ontvangend adres, los van het IP-adres: één adres kan zo niet vanaf veel adressen met herstelmails worden overspoeld.
+  const recoveryAddressLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 5, keyFn: (req) => `herstel-adres:${req.recoveryAddress}` });
+  // Opnieuw een bevestigingsmail vragen: per account en per bezoeker.
+  const verificationLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 5, keyFn: (req) => `bevestig:${req.verificationUserId}:${clientKey(req)}` });
 
   /**
    * Past een limiet toe zonder JSON-antwoord: zegt of het verzoek te veel is.
@@ -177,6 +181,17 @@ function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impe
   }
 
   /**
+   * Beperkt het opnieuw aanvragen van een bevestigingsmail (per account en bezoeker).
+   * @param {object} req Het verzoek.
+   * @param {{ id: string }} user Het ingelogde account.
+   * @returns {boolean} true als het verzoek geweigerd moet worden.
+   */
+  function verificationLimited(req, user) {
+    req.verificationUserId = user.id;
+    return limited(verificationLimiter, req, { setHeader: () => {} });
+  }
+
+  /**
    * Wachtwoord vergeten: stuurt een herstellink als er een account met dit adres is. Het antwoord is altijd hetzelfde, zodat niet te zien is of een adres bestaat.
    * @param {object} req Het verzoek (req.shopBaseUrl = webadres van de shop).
    * @param {object} res Het antwoord (alleen de Retry-After-kop bij een limiet).
@@ -188,6 +203,9 @@ function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impe
     const address = String(email ?? '').trim().toLowerCase().slice(0, 200);
     if (!validEmail(address)) return { error: 'Vul een geldig e-mailadres in.', status: 400 };
     if (!mailReady() || !req.shopBaseUrl) return { error: 'Wachtwoord herstellen per mail is nu niet mogelijk. Neem contact met ons op.', status: 503 };
+    // Te veel aanvragen voor dit adres: stil dezelfde uitkomst, zodat niet te zien is dat (of waarom) er geen mail komt.
+    req.recoveryAddress = address;
+    if (limited(recoveryAddressLimiter, req, { setHeader: () => {} })) return { ok: true };
     const ids = store.accountIdsByEmail(tenant.id, address);
     // Alleen bij precies één account: bij een gedeeld adres weet niemand welk account bedoeld is.
     if (ids.length === 1) {
@@ -312,7 +330,7 @@ function createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impe
     return sendLink({ id: customer.id, displayName: customer.displayName, email: customer.email }, 'wachtwoord', `${inviteBase()}wachtwoord-herstellen/`, { invitation: true });
   }
 
-  return { inviteProblem, invite, viewer, mustChangePassword, login, register, logout, businessProfile, requestBusiness, mailReady, sendVerification, forgotPassword, resetPassword, verifyEmail };
+  return { inviteProblem, invite, viewer, mustChangePassword, login, register, logout, businessProfile, requestBusiness, mailReady, sendVerification, verificationLimited, forgotPassword, resetPassword, verifyEmail };
 }
 
 module.exports = { createShopAccounts };

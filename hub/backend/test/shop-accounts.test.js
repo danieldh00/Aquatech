@@ -254,6 +254,40 @@ test('wachtwoord vergeten, herstellen en e-mailadres bevestigen (A-02)', async (
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM account_tokens WHERE token_hash = ?').get(resetToken).n, 0);
 });
 
+test('herstelmail en bevestigingsmail: per adres en per account begrensd, zonder te verraden of een adres bestaat', async () => {
+  const db = openDb();
+  const store = createStore(db);
+  const main = store.ensureTenant().id;
+  await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
+  const sent = [];
+  /**
+   * Nep-mailserver die de berichten bewaart.
+   * @returns {{ configured: Function, send: Function }} De mailfuncties.
+   */
+  const mailerFor = () => ({ configured: () => true, send: async (message) => { sent.push(message); } });
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db, mailerFor, loginDelayMs: 0 }));
+  servers.push(server);
+  const admin = await createLogin(base, { password: PW })('baas');
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true, shopPayment: { online: false, publicUrl: `${base}/` } })).status, 200);
+  const visitor = createClient(base);
+  assert.strictEqual((await postForm(base, visitor, '/registreren/', { displayName: 'Els', email: 'els@voorbeeld.nl', password: PW, password2: PW, website: '' })).status, 303);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  sent.length = 0;
+  // Zes aanvragen voor hetzelfde adres: altijd hetzelfde antwoord, nooit meer dan drie mails.
+  for (let round = 0; round < 6; round += 1) {
+    const out = await postForm(base, createClient(base), '/wachtwoord-vergeten/', { email: 'els@voorbeeld.nl' });
+    assert.strictEqual(out.status, 200);
+    assert.match(out.text, /Als er een account met dit e-mailadres is/);
+  }
+  assert.ok(sent.length <= 3, `te veel herstelmails: ${sent.length}`);
+  // Opnieuw bevestigen aanvragen: ook na de limiet gewoon een redirect, nooit een fout.
+  for (let round = 0; round < 7; round += 1) {
+    const out = await postForm(base, visitor, '/account/bevestigen/', {});
+    assert.strictEqual(out.status, 303);
+  }
+  assert.ok(sent.length <= 6, `te veel mails in totaal: ${sent.length}`);
+});
+
 test('knop naar het beheer in de shopkop: alleen voor medewerkers en beheerders, niet voor klanten of bezoekers', async () => {
   const { base, db, store, main, admin } = await setup();
   await store.createAccount(main, { username: 'jan.klant', displayName: 'Jan', role: 'klant', password: PW });

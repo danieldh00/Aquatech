@@ -431,7 +431,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
       const viewer = accounts.viewer(req);
       if (!viewer) return res.redirect(303, '../../inloggen/');
       try {
-        const sent = !viewer.emailVerified && await accounts.sendVerification(viewer, publicBaseUrl(req));
+        const sent = !viewer.emailVerified && !accounts.verificationLimited(req, viewer) && await accounts.sendVerification(viewer, publicBaseUrl(req));
         res.redirect(303, `../?bevestiging=${sent ? 'ja' : 'nee'}`);
       } catch (error) { next(error); }
     });
