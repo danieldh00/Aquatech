@@ -311,11 +311,13 @@
     const table = $('#s-table');
     if (!state.items.length) {
       table.innerHTML = '<tbody><tr><td class="empty">Nog geen voorraadartikelen. Kies <b>Uit catalogus</b> om artikelen uit de stuklijst op voorraad te nemen, of <b>+ Artikel</b> voor een eigen artikel.</td></tr></tbody>';
+      window.StockBulk.bind(table, []);
       return;
     }
     const rows = stockRows();
-    table.innerHTML = `<thead><tr><th>Artikel</th><th>Locatie</th><th class="num">Op voorraad</th><th class="num">Gereserveerd</th><th class="num">Beschikbaar</th><th class="num">Minimum</th><th class="num">Verkoopprijs</th><th class="num">Marge</th><th>Webshop</th><th class="num">Waarde</th></tr></thead>
-      <tbody>${rows.map(({ item, variant, open, count }) => `<tr data-id="${esc(item.id)}" class="${item.low ? 'low' : ''}${item.archived ? ' arch' : ''}${variant ? ' variant' : ''}${item.hasVariants ? ' parent' : ''}">
+    table.innerHTML = `<thead><tr>${window.StockBulk.headerCell(rows)}<th>Artikel</th><th>Locatie</th><th class="num">Op voorraad</th><th class="num">Gereserveerd</th><th class="num">Beschikbaar</th><th class="num">Minimum</th><th class="num">Verkoopprijs</th><th class="num">Marge</th><th>Webshop</th><th class="num">Waarde</th></tr></thead>
+      <tbody>${rows.map(({ item, variant, open, count }) => `<tr data-id="${esc(item.id)}" class="${item.low ? 'low' : ''}${item.archived ? ' arch' : ''}${variant ? ' variant' : ''}${item.hasVariants ? ' parent' : ''}${window.StockBulk.selected.has(item.id) ? ' picked' : ''}">
+        ${window.StockBulk.cell(item)}
         <td class="wrap">${item.hasVariants ? `<button class="toggle" data-toggle="${esc(item.id)}" aria-expanded="${open ? 'true' : 'false'}" title="${open ? 'Varianten verbergen' : 'Varianten tonen'}">${open ? '▾' : '▸'}</button>` : ''}<b class="code">${esc(item.code)}</b>${item.hasVariants ? ` <span class="pill">${count} variant${count === 1 ? '' : 'en'}</span>` : ''}${item.archived ? ' <span class="pill">Gearchiveerd</span>' : ''}<span class="sub">${esc(variant && valuesText(item) ? valuesText(item) : item.name)}</span></td>
         <td>${esc(item.location)}</td>
         <td class="num${item.onHand < 0 ? ' neg' : ''}">${esc(nl(item.onHand))} ${esc(item.unit)}</td>
@@ -326,7 +328,7 @@
         <td class="num${item.margin != null && item.margin < 0 ? ' neg' : ''}">${item.hasVariants || item.margin == null ? '' : `${esc(nl(item.margin))}%`}</td>
         <td>${shopPill(item)}</td>
         <td class="num">${esc(eur(item.value))}</td>
-      </tr>`).join('') || '<tr><td colspan="10" class="empty">Niets gevonden.</td></tr>'}</tbody>`;
+      </tr>`).join('') || '<tr><td colspan="11" class="empty">Niets gevonden.</td></tr>'}</tbody>`;
     table.querySelectorAll('tr[data-id]').forEach((row) => {
       /**
        * Opent het artikel, of klapt bij het pijltje de varianten uit of in.
@@ -341,6 +343,7 @@
         return undefined;
       };
     });
+    window.StockBulk.bind(table, rows);
   }
 
   /** Tekent de tabel met reserveringen van open werkorders. */
@@ -1610,6 +1613,7 @@
     $('#b-shop').onclick = () => importShop();
     /** Opent het venster om de afbeeldingen van de webshop over te nemen. */
     $('#b-images').onclick = () => { openImagesImport(); };
+    window.StockBulk.init({ api, toast, reload: load, rerender: renderStock, items: () => state.items });
     /**
      * Exporteert de voorraad.
      * @returns {Promise<void>}
