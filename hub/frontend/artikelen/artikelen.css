@@ -187,7 +187,6 @@ body.has-nav .tab[data-purchasing] { display: none; }
 .item-group > p:first-of-type { margin-top: 0; }
 @media (max-width: 560px) { .item-group .form-grid > .span-2 { grid-column: 1 / -1; } .move-card .row.move-row label, .move-card .row.move-row .btn { flex: 1 1 100%; } }
 
-@media (max-width: 640px) {
 /* Bulkacties in de voorraadlijst. */
 .bulk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--at-teal) 10%, var(--at-surface)); }
 .bulk-bar[hidden] { display: none; }
