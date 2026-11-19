@@ -65,6 +65,7 @@ const { createReturnMailer } = require('./webshop/web-returns-mail');
 const { createShopOrders } = require('./webshop/shop-orders');
 const { createDebtorStore, registerDebtorRoutes } = require('./verkoop/debtors');
 const { createInvoiceSender } = require('./verkoop/invoice-mail');
+const { createPaymentReminderStore, createPaymentReminderRunner } = require('./verkoop/payment-reminders');
 const { createInvoicePayments } = require('./verkoop/invoice-payments');
 const { registerInvoicePayLinkRoutes } = require('./verkoop/invoice-pay-routes');
 const { createInvoiceStore, registerInvoiceRoutes } = require('./verkoop/invoices');
@@ -2398,6 +2399,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // De betaallink in de mail (invoice-payments.js); de betaalfuncties worden verderop gemaakt, de aanroep komt pas later.
     payLinkOf: (tenantId, invoice) => invoicePayments.linkFor(tenantId, invoice),
   });
+  const paymentReminderStore = createPaymentReminderStore(database);
   const shopOrders = createShopOrders({
     db: database, invoices: invoiceStore, debtors: debtorStore, stock: stockStore, sender: invoiceSender,
     settingsFor: (id) => settingsFor(id), fetchImpl: shopFetch,
@@ -2794,7 +2796,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     loggedOf: (tid, woId) => workLogStore.list(tid, woId),
     articlesOf: (tid) => stockStore.saleInfo(tid),
     catalog: () => loadArticles(),
-    sender: invoiceSender, shopOrders,
+    sender: invoiceSender, shopOrders, paymentReminders: paymentReminderStore,
     mailConfigured: (req) => mailerFor(settingsFor(req.tenantId || tenant.id)).configured(),
     shopOf: (req) => settingsFor(req.tenantId || tenant.id).get('shopSource'),
     syncLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, keyFn: (req) => req.tenantId || tenant.id }),
@@ -3183,7 +3185,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     inScope, inScopeOnly, multitenancyOn, itemImageStore, shopContentStore, database, quoteStore, quoteOrders,
     workOrderStore, shopStore, photoStore, workLogStore, outsourcingStore, newsStore, aiUsage, recognitions,
     stockStore, supplierStore, packagingStore, purchaseOrderStore, serviceRequestStore, invoiceStore, sprinklerStore,
-    seasonReminderStore, impersonation, withMustChange, auditUserChange, deleteUser,
+    seasonReminderStore, paymentReminderStore, impersonation, withMustChange, auditUserChange, deleteUser,
   });
 
   impersonation.register(app, { identify, requireJson, clearEnvironment, wrap });
@@ -3393,6 +3395,22 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       .map((environment) => environment.id);
     return seasonReminders.runAll(activeIds, today);
   };
+  // Betalingsherinneringen en aanmaningen voor vervallen facturen (payment-reminders.js), alleen in omgevingen met de module Facturen aan.
+  const paymentReminders = createPaymentReminderRunner(paymentReminderStore, {
+    invoices: invoiceStore, sender: invoiceSender, settingsFor: (id) => settingsFor(id), mailerFor, mailBody, userTenantsOf: (id) => [id],
+    enabled: (id) => ModuleTools.isOn(moduleFlagsOf(id), 'facturen'),
+  });
+  /**
+   * Betalingsherinneringen in alle actieve omgevingen versturen (elk uur vanuit main).
+   * @param {string} [today] De dag als JJJJ-MM-DD (tests).
+   * @returns {Promise<object>} Aantallen per omgeving.
+   */
+  app.locals.paymentRemindersAll = async (today) => {
+    const activeIds = inScopeOnly(store.listTenants()).filter((live) => !live.disabled)
+      .flatMap((live) => [live, ...live.environments.filter((environment) => !environment.disabled)])
+      .map((environment) => environment.id);
+    return paymentReminders.runAll(activeIds, today);
+  };
   // Inkooporders, ook voor de uurlijkse bestelvoorstellen hieronder (tests kunnen autoPropose hier vervangen).
   app.locals.purchaseOrders = purchaseOrderStore;
   /**
@@ -3517,6 +3535,9 @@ if (require.main === module) {
       .catch((error) => console.error('Oude funneltellingen wissen mislukt:', error.message));
     slowLog.trackTask('oude zoektermen', async () => app.locals.searchMissesPurge())
       .catch((error) => console.error('Oude zoektermen wissen mislukt:', error.message));
+    slowLog.trackTask('betalingsherinneringen facturen', () => app.locals.paymentRemindersAll())
+      .then((sent) => { if (Object.keys(sent).length) console.log(`Betalingsherinneringen facturen: ${JSON.stringify(sent)}`); })
+      .catch((error) => console.error('Betalingsherinneringen facturen mislukt:', error.message));
     slowLog.trackTask('seizoensherinneringen', () => app.locals.seasonRemindersAll())
       .then((sent) => { if (Object.keys(sent).length) console.log(`Seizoensherinneringen: ${JSON.stringify(sent)}`); })
       .catch((error) => console.error('Seizoensherinneringen mislukt:', error.message));

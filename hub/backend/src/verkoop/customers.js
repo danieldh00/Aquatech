@@ -270,6 +270,7 @@ function registerCustomerRoutes(app, ctx) {
     }
     if (body.paymentDays !== undefined) input.paymentDays = body.paymentDays;
     if (body.documentLanguage !== undefined) input.documentLanguage = body.documentLanguage;
+    if (body.remindersOff !== undefined) input.remindersOff = body.remindersOff === true;
     // Prijsgevoelige instellingen (zakelijke prijzen excl. btw, groothandel) zijn voor beheerders.
     const pricing = ['customerGroup', 'wholesale', 'wholesaleDiscount'].filter((field) => body[field] !== undefined);
     if (pricing.length && !mayPrice(req)) return res.status(403).json({ error: 'forbidden', message: 'Alleen een beheerder wijzigt de klantgroep en de groothandelsinstellingen.' });
@@ -282,6 +283,7 @@ function registerCustomerRoutes(app, ctx) {
       ...(input.wholesale !== undefined ? { groothandel: Boolean(input.wholesale) } : {}),
       ...(input.paymentDays !== undefined ? { betaaltermijn: input.paymentDays } : {}),
       ...(input.documentLanguage !== undefined ? { documenttaal: input.documentLanguage } : {}),
+      ...(input.remindersOff !== undefined ? { betalingsherinneringen_uit: input.remindersOff } : {}),
       ...(input.wholesaleDiscount !== undefined ? { groothandelskorting: input.wholesaleDiscount } : {}) }, undefined, customer.tenantId);
     res.json({ customer: store.getCustomer([customer.tenantId], customer.id) });
   });

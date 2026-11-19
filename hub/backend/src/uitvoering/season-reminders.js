@@ -285,4 +285,4 @@ function portalReminders(config, today = new Date()) {
   return activeItems(config, today, PORTAL_DAYS).map(({ item, date }) => ({ key: item.key, title: item.title, text: item.text, date }));
 }
 
-module.exports = { sanitizeSeasonReminders, createSeasonReminderStore, createSeasonReminderRunner, portalReminders, activeItems, DEFAULTS };
+module.exports = { sanitizeSeasonReminders, createSeasonReminderStore, createSeasonReminderRunner, portalReminders, activeItems, permanentFailure, DEFAULTS };

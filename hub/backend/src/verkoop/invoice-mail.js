@@ -16,7 +16,7 @@ const DocText = require(path.join(FRONTEND_DIR, 'shared', 'doc-text.js'));
 /**
  * Maakt de verzender voor facturen per e-mail.
  * @param {object} ctx invoices, settingsFor(tenantId), mailerFor(settings), colorsOf(tenantId), mailBody(profile, paragraphs) en payLinkOf(tenantId, invoice) (persoonlijke betaallink, leeg als online betalen niet kan).
- * @returns {{ send: Function, autoSend: Function, draft: Function, pdfOf: Function }} De verzendfuncties.
+ * @returns {{ send: Function, autoSend: Function, draft: Function, pdfOf: Function, values: Function }} De verzendfuncties.
  */
 function createInvoiceSender({ invoices, settingsFor, mailerFor, colorsOf = () => ({}), mailBody, payLinkOf = () => '' }) {
   /**
@@ -68,11 +68,23 @@ function createInvoiceSender({ invoices, settingsFor, mailerFor, colorsOf = () =
       vervaldatum: day(details.dueDate, lang),
       bedrag: eur(totals.total, lang),
       bedrijf: profile.companyName || '',
+      iban: profile.iban || '',
       soort: translate(credit ? 'invoice.credit' : 'invoice.title'),
       soort_klein: translate(credit ? 'invoice.credit' : 'invoice.title').toLowerCase(),
       // De betaallink staat standaard onder {betaling}; een eigen tekst kan {betaallink} zelf plaatsen.
       betaling: payLink ? `${payment}\n\n${DocText.text(lang, 'mail.payOnline', { link: payLink })}` : payment,
     };
+  }
+
+  /**
+   * De invulwaarden van een factuur voor een mail (ook voor de betalingsherinneringen).
+   * @param {string} tenantId Id van de tenant.
+   * @param {object} invoice De factuur (met data).
+   * @returns {object} Veldnaam → tekst.
+   */
+  function values(tenantId, invoice) {
+    const settings = settingsFor(tenantId);
+    return valuesOf(tenantId, invoice, settings.get('quoteProfile'), invoicingOf(settings));
   }
 
   /**
@@ -154,7 +166,7 @@ function createInvoiceSender({ invoices, settingsFor, mailerFor, colorsOf = () =
     }
   }
 
-  return { send, autoSend, draft, pdfOf };
+  return { send, autoSend, draft, pdfOf, values };
 }
 
 module.exports = { createInvoiceSender };
