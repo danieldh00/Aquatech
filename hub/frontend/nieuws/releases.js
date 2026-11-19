@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.26.1',
+      date: '2026-11-19',
+      title: 'Conceptfactuur klaar zodra een werkorder Gereed is',
+      items: [
+        { text: 'Zet je een werkorder op Gereed, dan staat er meteen een conceptfactuur klaar met de offerteregels, uren en materiaal. Je controleert hem en maakt hem zelf definitief. Uit te zetten bij Facturen > Instellingen.', for: ['facturen'] },
+      ],
+    },
+    {
       version: '1.26.0',
       date: '2026-11-19',
       title: 'AVG-inzage en wissen per persoon',
