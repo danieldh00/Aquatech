@@ -307,7 +307,12 @@
    * @returns {void}
    */
   function wrapWideTables() {
-    if (!root.matchMedia || !root.matchMedia('(max-width: 700px)').matches) return;
+    if (!root.matchMedia) return;
+    if (!root.matchMedia('(max-width: 700px)').matches) {
+      // Weer een breed scherm: de eigen wikkels weghalen, zodat de tabel er weer uitziet zoals voorheen.
+      for (const wrapper of document.querySelectorAll('.tablewrap.auto-wrap')) wrapper.replaceWith(...wrapper.childNodes);
+      return;
+    }
     const tables = document.querySelectorAll('table:not(.kv):not(.totals):not(.a-facts):not(.p-lines):not(.p-totals):not(.product-specs)');
     for (const table of tables) {
       // Alleen opnieuw meten als de tabel van inhoud is veranderd (aantal rijen), zodat een wijziging elders geen layout kost.
