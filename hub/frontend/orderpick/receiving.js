@@ -14,7 +14,7 @@
    */
   const $ = (selector) => document.querySelector(selector);
 
-  const SECTIONS = ['#op-list', '#op-order', '#op-done', '#rc-list', '#rc-order', '#rc-done'];
+  const SECTIONS = ['#op-list', '#op-order', '#op-done', '#rc-list', '#rc-order', '#rc-done', '#ct-list', '#ct-location'];
   const state = { orders: [], order: null, states: {}, currentIndex: null, scanFeedback: null, busy: false };
 
   // ---------- Schermen ----------
