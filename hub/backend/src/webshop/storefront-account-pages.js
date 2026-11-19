@@ -120,7 +120,7 @@ function verificationSection(viewer, { available = false, sent = '', verified = 
   if (!viewer.email) return '';
   if (viewer.emailVerified) return `<p class="note">${verified ? 'Bedankt, ' : ''}je e-mailadres is bevestigd.</p>`;
   if (!available) return '';
-  const status = sent === 'ja' ? '<p class="note" role="status">We hebben een nieuwe bevestigingsmail gestuurd.</p>' : sent === 'nee' ? '<p class="form-error" role="alert">Er is net al een mail verstuurd. Probeer het later opnieuw.</p>' : '';
+  const status = sent === 'ja' ? '<p class="note" role="status">We hebben een nieuwe bevestigingsmail gestuurd.</p>' : sent === 'nee' ? '<p class="form-error" role="alert">Er is net al een mail verstuurd. Probeer het later opnieuw.</p>' : sent === 'limiet' ? '<p class="form-error" role="alert">Je hebt te vaak een bevestigingsmail gevraagd. Probeer het over een uur opnieuw.</p>' : '';
   return `<div class="business-status">${status}<form method="post" action="${ROOT}account/bevestigen/"><p>Je e-mailadres is nog niet bevestigd. Klik op de link in de mail die we stuurden. <button class="button secondary" type="submit">Mail opnieuw sturen</button></p></form></div>`;
 }
 

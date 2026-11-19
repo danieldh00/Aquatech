@@ -424,14 +424,15 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
       if (!viewer) return res.redirect(302, '../inloggen/');
       res.setHeader('Cache-Control', 'no-store');
       sendWithGroups(req, res, 200, (groups) => accountPage(viewer, groups, { ordering: orderingOn(), profile: accounts.businessProfile(viewer), requested: req.query.aangevraagd === '1',
-        verification: { available: accounts.mailReady(), sent: ['ja', 'nee'].includes(req.query.bevestiging) ? req.query.bevestiging : '' } }));
+        verification: { available: accounts.mailReady(), sent: ['ja', 'nee', 'limiet'].includes(req.query.bevestiging) ? req.query.bevestiging : '' } }));
     });
     router.post('/account/bevestigen', async (req, res, next) => {
       if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
       const viewer = accounts.viewer(req);
       if (!viewer) return res.redirect(303, '../../inloggen/');
       try {
-        const sent = !viewer.emailVerified && !accounts.verificationLimited(req, viewer) && await accounts.sendVerification(viewer, publicBaseUrl(req));
+        if (!viewer.emailVerified && accounts.verificationLimited(req, viewer)) return res.redirect(303, '../?bevestiging=limiet');
+        const sent = !viewer.emailVerified && await accounts.sendVerification(viewer, publicBaseUrl(req));
         res.redirect(303, `../?bevestiging=${sent ? 'ja' : 'nee'}`);
       } catch (error) { next(error); }
     });
