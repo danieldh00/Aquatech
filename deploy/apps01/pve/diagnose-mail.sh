@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Alleen-lezen diagnose van uitgaande mail: draai dit VANAF DE PROXMOX-HOST, als root.
-# Test of de ingestelde mailserver bereikbaar is op poort 25, 465 en 587, vanaf de Proxmox-host, vanaf apps01 en vanuit
+# Test of de ingestelde mailserver bereikbaar is op poort 25, 465 en 587, vanaf de Proxmox-host (en Gmail ter vergelijking), vanaf apps01 en vanuit
 # de app-container, met een controle op DNS, IPv6 en een firewall. Zo zie je of de internetprovider (bijv. KPN, die uitgaand
 # poort 25 op consumentenlijnen blokkeert) of de eigen firewall de oorzaak is.
 #
@@ -43,7 +43,7 @@ if [ -n "$HOST" ]; then
   sect "Poorten op $HOST vanaf apps01"
   for p in 25 465 587; do probe "$HOST" "$p"; done
   sect "Poorten op $HOST vanuit de app-container (verbinding per IPv4/IPv6-adres, zoals de app dat doet)"
-  docker exec -i aquatech node -e "
+  docker exec aquatech node -e "
 const net=require(\"net\"),dns=require(\"dns\").promises;const host=process.argv[1];
 (async()=>{const list=await dns.lookup(host,{all:true,verbatim:true}).catch(e=>{console.log(\"  DNS-fout:\",e.code);return[]});
 console.log(\"  adressen:\",list.map(a=>a.address).join(\", \")||\"(geen)\");
@@ -66,8 +66,13 @@ curl -s -m 8 https://api.ipify.org; echo
 {
 echo "Mail-diagnose $(date '+%F %T'); apps01 via $SSH_TARGET"
 echo; echo "##### Proxmox-host zelf (zelfde internetlijn; als hier 25 dicht is ligt het aan de provider of de router)"
-if [[ -n "${MAIL_HOST:-}" ]]; then HOSTS="$MAIL_HOST"; else HOSTS=""; fi
-for p in 25 465 587; do probe smtp.gmail.com $p; done
+# De ingestelde host: MAIL_HOST, anders uit de database van apps01.
+HOST="${MAIL_HOST:-}"
+if [[ -z "$HOST" ]]; then
+  HOST=$(ssh -o BatchMode=yes -o ConnectTimeout=10 "$SSH_TARGET" "$SUDO docker exec -u postgres aquatech-postgres psql -X -A -t -d aquatech -c \"SELECT value FROM aquatech.settings WHERE key = 'mailServer' LIMIT 1\"" </dev/null 2>/dev/null | grep -oE '"host":"[^"]+"' | head -1 | cut -d'"' -f4)
+fi
+echo "Ingestelde host: ${HOST:-(niet gevonden)}"
+for h in ${HOST:+"$HOST"} smtp.gmail.com; do for p in 25 465 587; do probe "$h" "$p"; done; done
 echo; echo "##### Proxmox-firewall"; pve-firewall status 2>&1 | head -3; grep -hE "^(enable|policy_out)" /etc/pve/firewall/cluster.fw 2>/dev/null
 echo; echo "##### apps01 en de app-container"
 ssh -o BatchMode=yes -o ConnectTimeout=10 "$SSH_TARGET" "$SUDO env APP_DIR='${APP_DIR:-/opt/apps/aquatech}' MAIL_HOST='${MAIL_HOST:-}' bash -s" <<<"$REMOTE_SCRIPT" 2>&1
