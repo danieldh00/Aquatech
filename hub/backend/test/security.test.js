@@ -406,6 +406,10 @@ test('mailserver en webshop alleen op een openbaar adres (geen toegang tot het e
   const lookup = (addresses) => async () => addresses.map((address) => ({ address }));
   await assert.rejects(publicAddress('intern.example', { lookup: lookup(['93.184.215.14', '192.168.2.251']) }), { code: 'private_host' });
   assert.strictEqual(await publicAddress('smtp.example', { lookup: lookup(['93.184.215.14']) }), '93.184.215.14');
+  // IPv4 gaat voor bij een gemengde lijst; alleen IPv6 geeft het eerste IPv6-adres; een privé-adres blijft altijd geweigerd.
+  assert.strictEqual(await publicAddress('dual.example', { lookup: lookup(['2606:4700::1111', '93.184.215.14']) }), '93.184.215.14');
+  assert.strictEqual(await publicAddress('v6.example', { lookup: lookup(['2606:4700::1111', '2606:4700::1112']) }), '2606:4700::1111');
+  await assert.rejects(publicAddress('mixed.example', { lookup: lookup(['2606:4700::1111', '10.0.0.1']) }), { code: 'private_host' });
 
   const { createMailer } = require('../src/platform/mailer');
   const settings = { get: (key) => (key === 'mailServer' ? { host: 'mail.intern', port: 25, from: 'a@b.nl' } : '') };
