@@ -25,6 +25,7 @@ async function setup() {
   await store.createAccount(main, { username: 'monteur', displayName: 'Monteur', role: 'installateur', password: PW }, { mustChangePassword: false });
   const owner = store.listUsers(main).find((user) => user.username === 'baas');
   const customer = store.createCustomer(main, { displayName: 'Piet Jansen', email: 'piet@example.nl', phone: '0612345678', address: 'Dorpsstraat 1, 1234 AB Dorp' }).user;
+  store.markEmailVerified(main, customer.id, 'piet@example.nl');
   const now = '2026-11-01T10:00:00.000Z';
   /**
    * Voegt een offerte van de klant toe.
@@ -126,6 +127,28 @@ test('wissen vraagt de naam, anonimiseert en bewaart wat de bewaarplicht bescher
   assert.strictEqual(Number(db.prepare('SELECT COUNT(*) AS n FROM stock_alerts').get().n), 0);
   assert.strictEqual((await admin.post(`/app/api/customers/${customer.id}/anonymize`, { confirm: 'Verwijderde persoon' })).status, 409);
   assert.ok(db.prepare("SELECT id FROM audit WHERE action = 'klant_geanonimiseerd'").get());
+});
+
+test('een gastbestelling op een onbevestigd e-mailadres wordt niet gekoppeld of gewist', async () => {
+  const { admin, db, customer } = await setup();
+  const now = '2026-11-01T10:00:00.000Z';
+  db.prepare('UPDATE users SET email_verified_at = NULL WHERE id = ?').run(customer.id);
+  db.prepare(`INSERT INTO web_orders (id, tenant_id, number, user_id, status, customer_name, email, total, data, created_at, updated_at)
+    VALUES ('o-gast', (SELECT tenant_id FROM users WHERE id = ?), 'B-2', NULL, 'afgerond', 'Andere Gast', 'piet@example.nl', 5, '{}', ?, ?)`).run(customer.id, now, now);
+  assert.ok(!xlsxText((await admin.get(`/app/api/customers/${customer.id}/privacy-export`)).raw).includes('B-2'));
+  assert.strictEqual((await admin.post(`/app/api/customers/${customer.id}/anonymize`, { confirm: 'Piet Jansen' })).status, 200);
+  assert.strictEqual(db.prepare("SELECT customer_name FROM web_orders WHERE id = 'o-gast'").get().customer_name, 'Andere Gast');
+});
+
+test('een open werkorder uit een melding van de klant houdt het wissen tegen', async () => {
+  const { admin, db, customer } = await setup();
+  const now = '2026-11-01T10:00:00.000Z';
+  const owner = db.prepare("SELECT id, tenant_id FROM users WHERE username = 'baas'").get();
+  db.prepare(`INSERT INTO work_orders (id, tenant_id, owner_id, number, status, data, created_at, updated_at) VALUES ('w-1', ?, ?, 'W-1', 'open', '{}', ?, ?)`).run(owner.tenant_id, owner.id, now, now);
+  db.prepare(`INSERT INTO service_requests (id, tenant_id, number, customer_id, subject, work_order_id, created_at, updated_at) VALUES ('s-1', ?, 'M-1', ?, 'Storing', 'w-1', ?, ?)`).run(owner.tenant_id, customer.id, now, now);
+  const refused = await admin.post(`/app/api/customers/${customer.id}/anonymize`, { confirm: 'Piet Jansen' });
+  assert.strictEqual(refused.status, 409);
+  assert.strictEqual(refused.body.blockers.workOrders, 1);
 });
 
 test('wissen wordt geweigerd zolang er een onafgehandelde bestelling of werkorder is', async () => {

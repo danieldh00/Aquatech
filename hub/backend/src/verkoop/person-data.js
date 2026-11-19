@@ -19,6 +19,16 @@ const RETAINED_INVOICE_STATUSES = ['definitief', 'betaald'];
 const OPEN_WORK_ORDER_STATUSES = ['open', 'gepland', 'bezig'];
 
 /**
+ * Het e-mailadres waarop gastbestellingen en voorraadmeldingen aan de klant gekoppeld mogen worden: alleen een bevestigd adres,
+ * want een gast kan met andermans adres bestellen.
+ * @param {object} customer De klant.
+ * @returns {string} Het adres in kleine letters, of '' als het niet bevestigd is.
+ */
+function verifiedEmailOf(customer) {
+  return customer.emailVerified ? String(customer.email || '').toLowerCase() : '';
+}
+
+/**
  * Parseert JSON zonder te falen.
  * @param {*} text De tekst.
  * @returns {object} Het object, of een leeg object.
@@ -127,7 +137,7 @@ function createPersonData(db, store) {
    */
   function collectIn(tenantId, customer) {
     const userId = customer.id;
-    const email = String(customer.email || '').toLowerCase();
+    const email = verifiedEmailOf(customer);
     const limit = ` LIMIT ${EXPORT_LIMIT}`;
     const quotes = prepare(`SELECT number, status, title, customer, total_incl, created_at, sent_to, deleted_at, data FROM quotes
       WHERE tenant_id = ? AND customer_id = ? ORDER BY created_at DESC${limit}`).all(tenantId, userId)
@@ -214,8 +224,9 @@ function createPersonData(db, store) {
         { topic: 'Organisatie', text: organization },
         { topic: 'Opgesteld op', text: new Date().toISOString().slice(0, 10) },
         { topic: 'Inhoud', text: 'Alle persoonsgegevens die onze administratie van deze persoon bevat: account, offertes, werkorders, facturen, bestellingen, retouren, meldingen, plannen, debiteurgegevens, voorraadmeldingen en inlogactiviteit.' },
-        { topic: 'Niet in dit bestand', text: 'Foto\'s bij werkorders en meldingen, en wachtwoorden en beveiligingsgegevens (die staan versleuteld of als hash en zijn niet leesbaar). Vraag de beheerder om foto\'s apart aan te leveren.' },
+        { topic: 'Niet in dit bestand', text: 'Foto\'s bij werkorders en meldingen (die worden bij wissen wel verwijderd), en wachtwoorden en beveiligingsgegevens (die staan versleuteld of als hash en zijn niet leesbaar). Vraag de beheerder om foto\'s apart aan te leveren.' },
         { topic: 'Bewaarplicht', text: 'Definitieve facturen en de stukken waarop ze rusten bewaren we zeven jaar (fiscale bewaarplicht); die kunnen niet gewist worden.' },
+        { topic: 'Gastbestellingen', text: 'Bestellingen zonder account zijn alleen aan deze persoon gekoppeld als het e-mailadres van de klant bevestigd is.' },
         { topic: 'Beperking', text: `Elk tabblad toont hoogstens ${EXPORT_LIMIT} regels (nieuwste eerst).` },
       ] },
       { name: 'Account', columns: [text('Naam', 'name'), text('Gebruikersnaam', 'username'), text('E-mail', 'email', 28), text('Telefoon', 'phone'), text('Adres', 'address', 40), text('Bedrijf', 'company'), text('KvK', 'kvk'),
@@ -245,14 +256,16 @@ function createPersonData(db, store) {
    * @returns {{ orders: number, workOrders: number }} Aantallen openstaande stukken.
    */
   function blockersOf(tenantIds, customer) {
-    const email = String(customer.email || '').toLowerCase();
+    const email = verifiedEmailOf(customer);
     let orders = 0;
     let workOrders = 0;
     for (const tenantId of tenantIds) {
       orders += Number(prepare(`SELECT COUNT(*) AS n FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND (user_id = ?${email ? ' OR (user_id IS NULL AND lower(email) = ?)' : ''})`)
         .get(tenantId, customer.id, ...(email ? [email] : [])).n);
-      workOrders += Number(prepare(`SELECT COUNT(*) AS n FROM work_orders w WHERE w.tenant_id = ? AND w.deleted_at IS NULL AND w.status IN (${marks(OPEN_WORK_ORDER_STATUSES.length)}) AND (w.customer_id = ?
-        OR w.quote_id IN (SELECT q.id FROM quotes q WHERE q.tenant_id = w.tenant_id AND q.customer_id = ?))`).get(tenantId, ...OPEN_WORK_ORDER_STATUSES, customer.id, customer.id).n);
+      workOrders += Number(prepare(`SELECT COUNT(*) AS n FROM work_orders w WHERE w.tenant_id = ? AND (w.customer_id = ?
+        OR w.quote_id IN (SELECT q.id FROM quotes q WHERE q.tenant_id = w.tenant_id AND q.customer_id = ?)
+        OR EXISTS (SELECT 1 FROM service_requests sr WHERE sr.tenant_id = w.tenant_id AND sr.work_order_id = w.id AND sr.customer_id = ?)) AND w.deleted_at IS NULL AND w.status IN (${marks(OPEN_WORK_ORDER_STATUSES.length)})`)
+        .get(tenantId, customer.id, customer.id, customer.id, ...OPEN_WORK_ORDER_STATUSES).n);
     }
     return { orders, workOrders };
   }
@@ -273,7 +286,7 @@ function createPersonData(db, store) {
    */
   function anonymizeIn(tenantId, customer) {
     const userId = customer.id;
-    const email = String(customer.email || '').toLowerCase();
+    const email = verifiedEmailOf(customer);
     const keep = retainedOf(tenantId, userId);
     const counts = { quotes: 0, workOrders: 0, invoices: 0, orders: 0, returns: 0, requests: 0, plans: 0, debtors: 0, alerts: 0, kept: { invoices: keep.invoiceIds.length, quotes: 0, workOrders: 0, orders: 0, debtors: 0 } };
 
@@ -285,13 +298,14 @@ function createPersonData(db, store) {
       counts.quotes += 1;
     }
     const workOrders = prepare(`SELECT w.id, w.data FROM work_orders w WHERE w.tenant_id = ? AND (w.customer_id = ?
-      OR w.quote_id IN (SELECT q.id FROM quotes q WHERE q.tenant_id = w.tenant_id AND q.customer_id = ?))`).all(tenantId, userId, userId);
-    const fromRequests = prepare(`SELECT w.id, w.data FROM work_orders w WHERE w.tenant_id = ? AND EXISTS (SELECT 1 FROM service_requests sr WHERE sr.tenant_id = w.tenant_id AND sr.work_order_id = w.id AND sr.customer_id = ?)`).all(tenantId, userId);
+        OR w.quote_id IN (SELECT q.id FROM quotes q WHERE q.tenant_id = w.tenant_id AND q.customer_id = ?)
+        OR EXISTS (SELECT 1 FROM service_requests sr WHERE sr.tenant_id = w.tenant_id AND sr.work_order_id = w.id AND sr.customer_id = ?))`).all(tenantId, userId, userId, userId);
     const seenWorkOrders = new Set();
-    for (const row of [...workOrders, ...fromRequests]) {
+    for (const row of workOrders) {
       if (seenWorkOrders.has(row.id)) continue;
       seenWorkOrders.add(row.id);
       if (keep.workOrderIds.has(row.id)) { counts.kept.workOrders += 1; continue; }
+      prepare('DELETE FROM work_order_photos WHERE tenant_id = ? AND work_order_id = ?').run(tenantId, row.id);
       prepare(`UPDATE work_orders SET customer = ?, address = '', customer_id = NULL, sent_to = NULL, share_hash = NULL, share_token = NULL, share_url = NULL, appointment = NULL, data = ?
         WHERE tenant_id = ? AND id = ?`).run(ANONYMOUS_NAME, scrubbed(row.data, scrubDocumentData), tenantId, row.id);
       counts.workOrders += 1;
