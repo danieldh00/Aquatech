@@ -85,7 +85,8 @@
     max-width: min(46vw, 190px); min-width: var(--stick-min, 0px);
     overflow: hidden; text-overflow: ellipsis;
   }
-  .tablewrap > table > thead > tr > :is(th, td):is(:first-child, :nth-child(2)) { background-color: var(--at-preview-bg); z-index: 2; }
+  .tablewrap > table:not(:has(> tbody > tr > td:first-child > input[type=checkbox])) > thead > tr > :is(th, td):first-child:not([colspan]),
+  .tablewrap > table:has(> tbody > tr > td:first-child > input[type=checkbox]) > thead > tr > :is(th, td):nth-child(2):not([colspan]) { background-color: var(--at-preview-bg); z-index: 2; }
   .tablewrap > table :is(td.wrap, td.c-desc) { --stick-min: 120px; }
   .tablewrap > table tr[data-id]:hover > :is(td):is(:first-child, :nth-child(2)) { background-color: var(--at-green-soft); }
 }
