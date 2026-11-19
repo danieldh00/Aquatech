@@ -54,7 +54,7 @@ const syncDayOf = (moment) => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Euro
 /**
  * Bepaalt of een volledige synchronisatie nu aan de beurt is.
  * @param {string} schedule 'night' (één keer per nacht, standaard), 'hourly' of 'tenmin'.
- * @param {{ syncedAt?: string|null, lastAttemptAt?: string|null }|null} status De laatste (geslaagde) synchronisatie en poging.
+ * @param {{ syncedAt?: string|null, lastAttemptAt?: string|null, lastError?: string|null }|null} status De laatste (geslaagde) synchronisatie en poging.
  * @param {Date} [now] Het huidige moment.
  * @returns {boolean} true als er nu gesynchroniseerd moet worden.
  */
@@ -62,7 +62,7 @@ function fullSyncDue(schedule, status, now = new Date()) {
   const synced = status && status.syncedAt ? new Date(status.syncedAt) : null;
   const attempt = status && status.lastAttemptAt ? new Date(status.lastAttemptAt) : null;
   // Na een mislukte poging hoogstens elk uur opnieuw (niet elke 10 minuten tegen een onbereikbare webshop).
-  if (attempt && (!synced || attempt > synced) && now - attempt < 3600 * 1000) return false;
+  if (status && status.lastError && attempt && now - attempt < 3600 * 1000) return false;
   if (!synced) return true;
   if (schedule === 'tenmin') return now - synced >= 9 * 60 * 1000;
   if (schedule === 'hourly') return now - synced >= 55 * 60 * 1000;

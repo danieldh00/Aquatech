@@ -234,7 +234,10 @@ test('fullSyncDue: standaard één keer per nacht, na 04:00 Nederlandse tijd', (
   assert.equal(fullSyncDue('hourly', { syncedAt }, new Date('2026-11-19T04:20:00Z')), true);
   assert.equal(fullSyncDue('tenmin', { syncedAt }, new Date('2026-11-19T03:20:00Z')), true);
   // Mislukte poging: een uur wachten.
-  const failed = { syncedAt, lastAttemptAt: '2026-11-20T03:30:00.000Z' };
+  const failed = { syncedAt, lastAttemptAt: '2026-11-20T03:30:00.000Z', lastError: 'De webshop is niet bereikbaar.' };
   assert.equal(fullSyncDue('night', failed, new Date('2026-11-20T03:50:00Z')), false);
   assert.equal(fullSyncDue('night', failed, new Date('2026-11-20T04:40:00Z')), true);
+  // Geslaagde ronde (lastError leeg, poging iets later dan het ophalen): geen extra wachttijd.
+  const ok = { syncedAt: '2026-11-19T12:00:00.000Z', lastAttemptAt: '2026-11-19T12:00:05.000Z', lastError: null };
+  assert.equal(fullSyncDue('tenmin', ok, new Date('2026-11-19T12:10:00Z')), true);
 });
