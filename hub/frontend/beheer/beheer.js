@@ -586,7 +586,7 @@
     codeState.textContent = code.set ? 'Ingesteld: inloggen kan ook met de code (als beheerder).' : 'Niet ingesteld: inloggen alleen met een eigen account.';
     $('#s-backup').backupKeepDays.value = view.backupKeepDays.value;
     const securityForm = $('#s-security');
-    for (const key of ['sessionIdleDays', 'sessionMaxDays', 'ipRetentionDays', 'auditRetentionDays']) securityForm[key].value = view[key].value;
+    for (const key of ['sessionIdleDays', 'sessionMaxDays', 'ipRetentionDays', 'auditRetentionDays', 'logRetentionDays', 'logErrorRetentionDays']) securityForm[key].value = view[key].value;
     const accessForm = $('#s-access');
     accessForm.guestAccess.checked = view.guestAccess.value;
     accessForm.guestAccess.disabled = code.set;
@@ -1315,7 +1315,7 @@
     securityForm.onsubmit = (event) => {
       event.preventDefault();
       const patch = {};
-      for (const key of ['sessionIdleDays', 'sessionMaxDays', 'ipRetentionDays', 'auditRetentionDays']) patch[key] = Number(securityForm[key].value);
+      for (const key of ['sessionIdleDays', 'sessionMaxDays', 'ipRetentionDays', 'auditRetentionDays', 'logRetentionDays', 'logErrorRetentionDays']) patch[key] = Number(securityForm[key].value);
       saveSettings(securityForm, patch, 'Instellingen opgeslagen');
     };
     const seasonForm = $('#s-season');
@@ -1634,6 +1634,7 @@
     if (section.pane === 'documentopmaak') window.BeheerDocumentopmaak.load();
     if (section.pane === 'mailopmaak') window.BeheerMailopmaak.load();
     if (section.pane === 'updates') window.BeheerUpdates.load(); else window.BeheerUpdates.stop();
+    if (section.pane === 'logboek') window.BeheerLogboek.load();
     if (section.pane === 'bewaking') window.BeheerBewaking.load(); else window.BeheerBewaking.stop();
     if (section.pane === 'audit') loadAudit();
     activePane = section.pane;

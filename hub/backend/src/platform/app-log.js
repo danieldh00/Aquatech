@@ -55,6 +55,15 @@ function cleanData(value, depth = 3, maxText = 300) {
 }
 
 /**
+ * Leest het JSON-veld `data` van een regel (een kapotte waarde wordt een leeg object).
+ * @param {string} text De JSON-tekst.
+ * @returns {object} De gegevens.
+ */
+function parseData(text) {
+  try { return JSON.parse(text) || {}; } catch { return {}; }
+}
+
+/**
  * Maakt het logboek.
  * @param {object} options Opties.
  * @param {object} options.db De database (db.prepare).
@@ -200,6 +209,55 @@ function createAppLog({ db, mainTenantId, flushMs = 2000, batchSize = 50, perMin
   }
 
   /**
+   * Zoekt regels van één omgeving, nieuwste eerst, met een cursor voor de volgende pagina.
+   * @param {string} tenantId De omgeving (altijd verplicht; elke query filtert erop).
+   * @param {{ levels?: string[], source?: string, search?: string, from?: string, to?: string, before?: string, includePlatform?: boolean, limit?: number }} [filter]
+   *   levels: toegestane niveaus (leeg = alle); search: tekst in de melding of precies een request-id/foutcode; from/to: ISO-tijdstippen;
+   *   before: cursor `<tijdstip>|<id>` van de laatste regel van de vorige pagina; includePlatform: ook platformregels.
+   * @returns {{ items: object[], next: string|null }} De regels en de cursor (null = geen volgende pagina).
+   */
+  function list(tenantId, { levels = [], source = '', search = '', from = '', to = '', before = '', includePlatform = false, limit = 50 } = {}) {
+    const pageSize = Math.min(Math.max(Math.floor(Number(limit)) || 50, 1), 500);
+    const where = [];
+    const args = [tenantId];
+    if (!includePlatform) where.push("scope = 'tenant'");
+    const wanted = levels.filter((level) => LEVELS.includes(level));
+    if (wanted.length) { where.push(`level IN (${wanted.map(() => '?').join(', ')})`); args.push(...wanted); }
+    if (source) { where.push('source = ?'); args.push(String(source).slice(0, 40)); }
+    if (from) { where.push('created_at >= ?'); args.push(from); }
+    if (to) { where.push('created_at <= ?'); args.push(to); }
+    const text = String(search || '').trim().slice(0, 100);
+    if (text) {
+      where.push("(request_id = ? OR error_code = ? OR lower(message) LIKE lower(?) ESCAPE '\\')");
+      args.push(text, text, `%${text.replace(/[\\%_]/g, (character) => `\\${character}`)}%`);
+    }
+    const [cursorAt, cursorId] = String(before || '').split('|');
+    if (cursorAt && cursorId) {
+      where.push('(created_at < ? OR (created_at = ? AND id < ?))');
+      args.push(cursorAt, cursorAt, cursorId);
+    }
+    const rows = db.prepare(`SELECT id, scope, created_at, level, source, request_id, error_code, message, data, duration_ms, repeat_count
+      FROM app_logs WHERE tenant_id = ?${where.map((part) => ` AND ${part}`).join('')} ORDER BY created_at DESC, id DESC LIMIT ?`).all(...args, pageSize);
+    const items = rows.map((row) => ({
+      id: row.id, scope: row.scope, at: row.created_at, level: row.level, source: row.source, requestId: row.request_id,
+      errorCode: row.error_code, message: row.message, data: parseData(row.data), durationMs: Number(row.duration_ms) || 0, repeat: Number(row.repeat_count) || 1,
+    }));
+    const last = rows[rows.length - 1];
+    return { items, next: rows.length === pageSize && last ? `${last.created_at}|${last.id}` : null };
+  }
+
+  /**
+   * De bronnen die in de omgeving voorkomen (voor de keuzelijst).
+   * @param {string} tenantId De omgeving.
+   * @param {boolean} includePlatform Ook platformregels meetellen.
+   * @returns {string[]} De bronnen, alfabetisch.
+   */
+  function sources(tenantId, includePlatform) {
+    const rows = db.prepare(`SELECT DISTINCT source FROM app_logs WHERE tenant_id = ?${includePlatform ? '' : " AND scope = 'tenant'"} ORDER BY source`).all(tenantId);
+    return rows.map((row) => row.source);
+  }
+
+  /**
    * Legt een regel met niveau info vast.
    * @param {string} source Bron.
    * @param {string} message Melding.
@@ -234,7 +292,7 @@ function createAppLog({ db, mainTenantId, flushMs = 2000, batchSize = 50, perMin
    */
   const pending = () => buffer.length;
 
-  return { middleware, log, flush, prune, info, warn, error, stop, pending };
+  return { middleware, log, flush, prune, list, sources, info, warn, error, stop, pending };
 }
 
 module.exports = { createAppLog, cleanText, cleanData };

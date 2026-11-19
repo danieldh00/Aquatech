@@ -98,6 +98,7 @@ const { createSystemUpdate } = require('./platform/system-update');
 const { registerBackupRestoreRoutes } = require('./platform/backup-restore-routes');
 const { createMonitor } = require('./platform/monitoring');
 const { registerMonitoringRoutes } = require('./platform/monitoring-routes');
+const { registerAppLogRoutes } = require('./platform/app-log-routes');
 const { createMonitoringChecks } = require('./platform/monitoring-checks');
 const { registerSystemUpdateRoutes, maintenanceGuard } = require('./platform/system-update-routes');
 const { createIdempotency, ifBaseOf } = require('./beveiliging/idempotency');
@@ -1834,6 +1835,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     },
   });
   app.locals.monitor = monitor;
+  registerAppLogRoutes(app, { appLog, canPlatform: canUpdate, environmentIds: () => allEnvironmentIds() });
   registerMonitoringRoutes(app, { monitor, settingsFor: (id) => settingsFor(id), audit, requireJson, canPlatform: canUpdate, mainTenantId: tenant.id, mailerFor });
 
   // ---------- Beheer: back-ups ----------

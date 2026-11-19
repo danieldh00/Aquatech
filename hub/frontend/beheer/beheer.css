@@ -311,6 +311,10 @@ dl.kv dd { margin: 0; }
 .mon-tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 0 6px; border-radius: 999px; border: 1px solid var(--at-teal); color: var(--at-navy); vertical-align: middle; }
 .mon-badge { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; color: var(--at-surface); background: var(--at-warn); }
 .mon-badge.bad { background: var(--at-danger); }
+.mon-badge.info { background: var(--at-teal); }
+.log-filters { margin-bottom: 8px; }
+.log-data { margin: 4px 0 0; max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+#log-table .nowrap { white-space: nowrap; }
 .mon-platform h4 { margin: 4px 0 10px; font-size: 14px; }
 .mon-platform code { font-size: 12px; }
 
