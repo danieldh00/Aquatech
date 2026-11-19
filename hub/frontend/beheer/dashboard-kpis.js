@@ -1,4 +1,4 @@
-// Beheer > Modules > Dashboard: cijfers. Toont alle vaste KPI's uit `api/admin/kpi-catalog` met een vinkje en
+// Beheer > Modules > Dashboard: KPI's. Toont alle vaste KPI's uit `api/admin/kpi-catalog` met een vinkje en
 // omhoog/omlaag-knoppen; elke wijziging wordt meteen bewaard in de instelling `dashboardKpis` (geen aparte opslagknop).
 (function () {
   const form = document.getElementById('s-kpis');

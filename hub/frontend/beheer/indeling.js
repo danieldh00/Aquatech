@@ -33,7 +33,7 @@
       { id: 'season', label: 'Seizoensherinneringen', pane: 'settings', form: 's-season', words: 'mail herinnering winterklaar onderhoud klantportaal' },
       { id: 'paymentreminders', label: 'Facturen: betalingsherinneringen', pane: 'settings', form: 's-payment-reminders', words: 'factuur herinnering aanmaning betaling vervallen te laat openstaand debiteuren mail automatisch' },
       { id: 'labels', label: 'Artikelen: etiketten', pane: 'settings', form: 's-labels', words: 'etiket sticker streepjescode barcode ean code 128 zebra labelprinter afdrukken' },
-      { id: 'kengetallen', label: 'Dashboard: cijfers', pane: 'settings', form: 's-kpis', words: 'kpi kengetallen kengetal dashboard tegels omzet openstaand offertes bezetting voorraad werkorders webshop periode volgorde' },
+      { id: 'kengetallen', label: 'Dashboard: KPI\'s', pane: 'settings', form: 's-kpis', words: 'kpi kengetallen kengetal dashboard tegels omzet openstaand offertes bezetting voorraad werkorders webshop periode volgorde' },
       { id: 'bestelvoorstellen', label: 'Artikelen: bestelvoorstellen', pane: 'settings', form: 's-purchase-proposals', words: 'bestelvoorstel inkoop inkooporder minimumvoorraad automatisch concept leverancier bijbestellen' },
     ] },
     { title: 'Koppelingen', sections: [

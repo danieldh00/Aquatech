@@ -26,7 +26,7 @@
    */
   function render(container, kpis) {
     container.innerHTML = `
-      <h2>Cijfers</h2>
+      <h2>KPI's</h2>
       <div class="kpi-grid">${kpis.map((kpi) => `
         <a class="kpi" data-kpi="${esc(kpi.key)}" href="${esc(kpi.href)}">
           <span class="kpi-title">${esc(kpi.title)}</span>
