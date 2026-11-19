@@ -171,3 +171,11 @@ body.has-nav .tab[data-purchasing] { display: none; }
 .proposal-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .pill.proposal { display: block; width: fit-content; margin: 2px 0 0 auto; background: var(--at-teal); color: #fff; }
 @media (max-width: 640px) { .proposal-box { flex-direction: column; align-items: stretch; } .proposal-actions .btn { flex: 1; } }
+
+/* Bulkacties in de voorraadlijst. */
+.bulk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--at-border, #d5dbe6); border-radius: 8px; background: var(--at-surface-alt, #f3f6fb); }
+.bulk-bar[hidden] { display: none; }
+.bulk-bar label.inline { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; }
+.bulk-bar input[type="number"] { width: 5em; }
+.grid .c-select { width: 32px; text-align: center; }
+.grid tr.picked td { background: var(--at-surface-alt, #f3f6fb); }
