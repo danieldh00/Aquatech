@@ -67,6 +67,7 @@ const { createDebtorStore, registerDebtorRoutes } = require('./verkoop/debtors')
 const { createInvoiceSender } = require('./verkoop/invoice-mail');
 const { createPaymentReminderStore, createPaymentReminderRunner } = require('./verkoop/payment-reminders');
 const { createInvoicePayments } = require('./verkoop/invoice-payments');
+const { registerInvoicePayLinkRoutes } = require('./verkoop/invoice-pay-routes');
 const { createInvoiceStore, registerInvoiceRoutes } = require('./verkoop/invoices');
 const { createVisma, registerVismaRoutes } = require('./verkoop/visma');
 const { createVismaLog } = require('./verkoop/visma-log');
@@ -349,10 +350,10 @@ function staticHeaders(version) {
 
 /**
  * Bouwt de Express-app met alle routes en opslag.
- * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, mailerFor, shopFetch, vismaFetch, mollieFetch, addressFetch, viesFetch, captchaFetch (reCAPTCHA), googleFetch (Google Drive), shippingLabelProviders (koppelingen voor verzendlabels per vervoerder) en wanIp (tests vervangen hiermee de buitenwereld).
+ * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, graphFetch (Microsoft Graph), mailerFor, shopFetch, vismaFetch, mollieFetch, addressFetch, viesFetch, captchaFetch (reCAPTCHA), googleFetch (Google Drive), shippingLabelProviders (koppelingen voor verzendlabels per vervoerder) en wanIp (tests vervangen hiermee de buitenwereld).
  * @returns {object} De app; app.locals bevat settings, onderhoud en synchronisatie.
  */
-function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, createOrderReader = createDefaultOrderReader, createItemTextWriter = createDefaultItemTextWriter, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, captchaFetch, googleFetch, shippingLabelProviders = {}, wanIp = createWanIp(), loginDelayMs = 1000, backupInChild = false }) {
+function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, createOrderReader = createDefaultOrderReader, createItemTextWriter = createDefaultItemTextWriter, vault = createVault(), setupCode, backupDir = null, graphFetch, mailerFor = (settings) => createMailer(settings, graphFetch ? { fetchImpl: graphFetch } : {}), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, captchaFetch, googleFetch, shippingLabelProviders = {}, wanIp = createWanIp(), loginDelayMs = 1000, backupInChild = false }) {
   const version = readVersion();
   const database = db || openDb();
   const store = createStore(database);
@@ -2394,6 +2395,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const invoiceSender = createInvoiceSender({
     invoices: invoiceStore, settingsFor: (id) => settingsFor(id), mailerFor, mailBody,
     colorsOf: documentColorsOf,
+    // De betaallink in de mail (invoice-payments.js); de betaalfuncties worden verderop gemaakt, de aanroep komt pas later.
+    payLinkOf: (tenantId, invoice) => invoicePayments.linkFor(tenantId, invoice),
   });
   const paymentReminderStore = createPaymentReminderStore(database);
   const shopOrders = createShopOrders({
@@ -2841,7 +2844,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Verstuurde seizoensherinneringen (season-reminders.js; de verzendronde staat onderaan).
   const seasonReminderStore = createSeasonReminderStore(database, { roles: store.roles });
   // Facturen online betalen door de klant (Mollie, zie invoice-payments.js); de webhook is openbaar en vraagt de uitkomst zelf bij Mollie op.
-  const invoicePayments = createInvoicePayments({ db: database, invoices: invoiceStore, mollie: createMollie(mollieFetch ? { fetchImpl: mollieFetch } : {}), settingsFor: (id) => settingsFor(id) });
+  const invoicePayments = createInvoicePayments({ db: database, invoices: invoiceStore, mollie: createMollie(mollieFetch ? { fetchImpl: mollieFetch } : {}), settingsFor: (id) => settingsFor(id), linkKey: vault.derive('factuur-betaallink') });
+  registerInvoicePayLinkRoutes(app, { invoicePayments, tenantId: tenant.id, limiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: (req) => `factuur-betaallink:${clientKey(req)}` }) });
   invoicePayments.onPaid((tenantId, invoice) => store.audit({ tenantId, userId: null, action: 'factuur_betaald_online', detail: { number: invoice.number, total: invoice.total } }));
   const invoiceWebhookLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 120, keyFn: (req) => `mollie-factuur:${clientKey(req)}` });
   app.post('/api/public/invoice-payment/:invoiceId/webhook', invoiceWebhookLimiter, express.urlencoded({ extended: false, limit: '2kb' }), async (req, res) => {

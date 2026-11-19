@@ -28,7 +28,7 @@ APP_DIR="${APP_DIR:-/opt/apps/aquatech}"
 sect() { printf "\n\n===== %s =====\n" "$*"; }
 probe() { local start=$SECONDS; if timeout 6 bash -c '"'"'exec 3<>/dev/tcp/"$1"/"$2"'"'"' _ "$1" "$2" 2>/dev/null; then echo "  $1:$2  OPEN ($((SECONDS - start)) s)"; else echo "  $1:$2  GEEN VERBINDING (na $((SECONDS - start)) s: time-out = geblokkeerd/gefilterd, snel = geweigerd)"; fi; }
 sect "Ingestelde mailserver (alleen host, poort, beveiliging en inlogsoort; nooit het wachtwoord)"
-CFG=$(docker exec -u postgres aquatech-postgres psql -X -A -t -d aquatech -c "SELECT t.slug || chr(9) || s.value FROM aquatech.settings s JOIN aquatech.tenants t ON t.id = s.tenant_id WHERE s.key = '"'"'mailServer'"'"'" 2>&1)
+CFG=$(docker exec -u postgres aquatech-postgres psql -X -A -t -d aquatech -c "SELECT t.slug || chr(9) || s.value FROM aquatech.settings s JOIN aquatech.tenants t ON t.id = s.tenant_id WHERE s.key = '"'"'mailServer'"'"' AND t.environment = '"'"'live'"'"' ORDER BY t.slug" 2>&1)
 echo "$CFG" | sed -E "s/\"(user|from|replyTo)\":\"[^\"]*\"/\"\\1\":\"…\"/g"
 HOST="${MAIL_HOST:-}"
 [ -z "$HOST" ] && HOST=$(echo "$CFG" | grep -oE "\"host\":\"[^\"]+\"" | head -1 | cut -d\" -f4)
@@ -70,7 +70,7 @@ echo; echo "##### Proxmox-host zelf (zelfde internetlijn; als hier 25 dicht is l
 # De ingestelde host: MAIL_HOST, anders uit de database van apps01.
 HOST="${MAIL_HOST:-}"
 if [[ -z "$HOST" ]]; then
-  HOST=$(ssh -o BatchMode=yes -o ConnectTimeout=10 "$SSH_TARGET" "$SUDO docker exec -u postgres aquatech-postgres psql -X -A -t -d aquatech -c \"SELECT value FROM aquatech.settings WHERE key = 'mailServer' LIMIT 1\"" </dev/null 2>/dev/null | grep -oE '"host":"[^"]+"' | head -1 | cut -d'"' -f4)
+  HOST=$(ssh -o BatchMode=yes -o ConnectTimeout=10 "$SSH_TARGET" "$SUDO docker exec -u postgres aquatech-postgres psql -X -A -t -d aquatech -c \"SELECT s.value FROM aquatech.settings s JOIN aquatech.tenants t ON t.id = s.tenant_id WHERE s.key = 'mailServer' AND t.environment = 'live' ORDER BY t.slug LIMIT 1\"" </dev/null 2>/dev/null | grep -oE '"host":"[^"]+"' | head -1 | cut -d'"' -f4)
 fi
 # De host komt uit een instelling die een beheerder kan wijzigen: alleen een gewone hostnaam of IP toestaan.
 if [[ -n "$HOST" && ! "$HOST" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]{0,198}[A-Za-z0-9])?$ ]]; then echo "WAARSCHUWING: de ingestelde host ziet er niet uit als een hostnaam en wordt niet getest." >&2; HOST=""; fi

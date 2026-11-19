@@ -258,3 +258,67 @@ test('opnieuw klikken op Nu betalen na een halverwege weggevallen verwerking maa
   assert.strictEqual(invoice.status, 'betaald');
   assert.strictEqual(fake.payments.size, 1, 'geen tweede betaling bij Mollie');
 });
+
+/**
+ * Haalt de betaallink uit het mailvoorstel van een factuur.
+ * @param {object} world Het resultaat van setup.
+ * @param {string} invoiceId Het factuur-id.
+ * @returns {Promise<{ link: string, message: string }>} De link als pad op de testserver (leeg zonder link) en de mailtekst.
+ */
+async function mailLinkOf(world, invoiceId) {
+  const draft = (await world.admin.get(`/app/api/invoices/${invoiceId}/mail`)).body;
+  const match = /https:\/\/winkel\.example(\/app\/api\/public\/invoice-pay\/[^\s]+)/.exec(draft.message);
+  return { link: match ? match[1] : '', message: draft.message };
+}
+
+test('de factuurmail bevat een betaallink; klikken gaat naar Mollie, terugkeer toont de uitkomst', async () => {
+  const world = await setup({ mollie: true });
+  const { invoiceId } = await finalInvoiceFor(world, 0);
+  const { link, message } = await mailLinkOf(world, invoiceId);
+  assert.ok(link, message);
+  assert.match(message, /direct online betalen/);
+  const anonymous = createClient(world.base, { followRedirects: false });
+  const clicked = await anonymous.get(link);
+  assert.strictEqual(clicked.status, 302);
+  assert.match(clicked.location, /^https:\/\/www\.mollie\.com\/checkout\//);
+  const [paymentId] = [...world.mollie.payments.keys()];
+  assert.strictEqual(world.mollie.payments.get(paymentId).redirectUrl, `https://winkel.example${link}?teruggekeerd=1`);
+  assert.strictEqual((await anonymous.get(link)).location, clicked.location, 'nogmaals klikken geeft dezelfde betaalpagina');
+  assert.strictEqual(world.mollie.payments.size, 1);
+  // Terug zonder betaling, daarna betaald.
+  assert.match((await anonymous.get(`${link}?teruggekeerd=1`)).text, /nog niet bevestigd/);
+  world.mollie.set(paymentId, 'paid');
+  assert.match((await anonymous.get(`${link}?teruggekeerd=1`)).text, /Bedankt, uw betaling is ontvangen/);
+  assert.strictEqual((await world.admin.get(`/app/api/invoices/${invoiceId}`)).body.status, 'betaald');
+  assert.match((await anonymous.get(link)).text, /al betaald/);
+  assert.strictEqual((await mailLinkOf(world, invoiceId)).link, '', 'een betaalde factuur krijgt geen link meer');
+});
+
+test('een betaallink met een onjuiste handtekening of van een andere factuur werkt niet', async () => {
+  const world = await setup({ mollie: true });
+  const one = await finalInvoiceFor(world, 0);
+  const two = await finalInvoiceFor(world, 1);
+  const { link } = await mailLinkOf(world, one.invoiceId);
+  const anonymous = createClient(world.base, { followRedirects: false });
+  const parts = link.split('/');
+  const signature = parts.pop();
+  assert.strictEqual((await anonymous.get(`${parts.join('/')}/${'A'.repeat(32)}`)).status, 404);
+  assert.strictEqual((await anonymous.get(`${parts.join('/')}/kort`)).status, 404);
+  const other = parts.slice(0, -1).concat(two.invoiceId, signature).join('/');
+  assert.strictEqual((await anonymous.get(other)).status, 404, 'handtekening van een andere factuur');
+  assert.strictEqual(world.mollie.payments.size, 0, 'er is niets bij Mollie aangemaakt');
+});
+
+test('zonder online betalen staat er geen betaallink in de mail', async () => {
+  const world = await setup({ mollie: true });
+  const { invoiceId } = await finalInvoiceFor(world, 0);
+  await world.admin.put('/app/api/admin/settings', { shopPayment: { online: false, publicUrl: 'https://winkel.example/' } });
+  assert.strictEqual((await mailLinkOf(world, invoiceId)).link, '');
+});
+
+test('de meldingspagina van de betaallink escapet titel en tekst', () => {
+  const { messagePage } = require('../src/verkoop/invoice-pay-routes');
+  const html = messagePage('Factuur <b>1</b>', '<script>alert(1)</script> & "x"');
+  assert.ok(!html.includes('<script>') && !html.includes('<b>'));
+  assert.ok(html.includes('&lt;script&gt;') && html.includes('&amp;'));
+});

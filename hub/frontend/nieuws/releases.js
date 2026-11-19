@@ -13,6 +13,28 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.24.0',
+      date: '2026-11-19',
+      title: 'Kleiner image en opgeschoonde documentatie',
+      items: [],
+    },
+    {
+      version: '1.23.9',
+      date: '2026-11-19',
+      title: 'Servertaken als afvinklijst',
+      items: [
+        { text: 'Commando\'s die op de server uitgevoerd moeten worden staan nu in Beheer > Systeem > Updates als afvinklijst, met één vast commando en een kopieerknop. Het dashboard toont wat nog openstaat.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.23.8',
+      date: '2026-11-19',
+      title: 'Duidelijkere mailfouten bij de testmail',
+      items: [
+        { text: 'Als de testmail of een andere mail niet lukt, noemt de melding nu de mailserver en poort en zegt ze wat er mis is: geen antwoord (vaak een geblokkeerde poort), geweigerde verbinding of onbekende servernaam.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.23.7',
       date: '2026-11-19',
       title: 'Lange back-uplijsten klappen in',
