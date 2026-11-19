@@ -212,7 +212,7 @@ function sanitizeCheckout(raw, { method = 'dpd', country = 'NL', billingCountry 
  * Maakt de opslag voor bestellingen van de eigen webshop.
  * @param {object} db De database.
  * @param {{ stock: object, categoryDiscountsOf?: Function, deliveryRulesOf?: Function }} deps De voorraadopslag (reserveren en afboeken), categoryDiscountsOf(tenantId) = per artikelcode de categoriekorting (%) voor zakelijke klanten (zonder: geen) en deliveryRulesOf(tenantId) = per artikelcode de levermethoderegels van de categorie (zonder: geen).
- * @returns {{ priceCart: Function, shippingQuote: Function, orderTotals: Function, place: Function, get: Function, getForUser: Function, listForUser: Function, list: Function, setStatus: Function, setTracking: Function, updateData: Function, changePay: Function, unpaidOnline: Function, reminderAllowed: Function, listToPick: Function, getMany: Function, pickable: Function, markPackingSlipsPrinted: Function, onShipped: Function, onCancelled: Function, onTracking: Function }} De functies.
+ * @returns {{ priceCart: Function, shippingQuote: Function, orderTotals: Function, place: Function, get: Function, getForUser: Function, listForUser: Function, list: Function, setStatus: Function, setTracking: Function, updateData: Function, changePay: Function, unpaidOnline: Function, reminderAllowed: Function, listToPick: Function, listUnprocessed: Function, getMany: Function, pickable: Function, markPackingSlipsPrinted: Function, onShipped: Function, onCancelled: Function, onTracking: Function }} De functies.
  */
 function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(), deliveryRulesOf = () => new Map() }) {
   const shippedHooks = [];
@@ -743,6 +743,25 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
     const items = candidates.filter((order) => plans.get(order.id).canShip).map((order) => ({ ...order, fulfilment: plans.get(order.id) }));
     const waitingForStock = candidates.filter((order) => !plans.get(order.id).canShip).map((order) => ({ id: order.id, number: order.number }));
     return { items, waitingForSlip, waitingForStock, truncated: rows.length > size };
+  }
+
+  /**
+   * De binnengekomen bestellingen die nog niet verwerkt (verzonden) zijn, voor het dashboard: status Nieuw, bij online betalen alleen de betaalde (een onbetaalde bestelling is nog geen order), oudste eerst. Zonder regels en zonder voorraadcontrole, dus goedkoop.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {number} [limit] Hoogstens zoveel bestellingen in de lijst (standaard 5, ten hoogste 20).
+   * @returns {{ total: number, items: { id: string, number: string, customerName: string, total: number, createdAt: string, payment: string }[] }} Het totale aantal en de oudste bestellingen.
+   */
+  function listUnprocessed(tenantId, limit = 5) {
+    const payment = isPg(db) ? "((data)::jsonb ->> 'payment')" : "json_extract(data, '$.payment')";
+    const payStatus = isPg(db) ? "((data)::jsonb -> 'pay' ->> 'status')" : "json_extract(data, '$.pay.status')";
+    const unprocessed = `status = 'nieuw' AND (COALESCE(${payment}, 'op rekening') <> 'online' OR ${payStatus} = 'betaald')`;
+    const size = Math.min(20, Math.max(1, Math.floor(Number(limit)) || 5));
+    const total = Number(prepare(`SELECT COUNT(*) AS n FROM web_orders WHERE tenant_id = ? AND ${unprocessed}`).get(tenantId).n);
+    const rows = prepare(`SELECT id, number, customer_name, total, created_at, COALESCE(${payment}, 'op rekening') AS payment FROM web_orders WHERE tenant_id = ? AND ${unprocessed} ORDER BY created_at ASC, number ASC LIMIT ?`).all(tenantId, size);
+    return {
+      total,
+      items: rows.map((row) => ({ id: row.id, number: row.number, customerName: row.customer_name, total: Number(row.total), createdAt: row.created_at, payment: row.payment })),
+    };
   }
 
   /**
@@ -1291,7 +1310,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
     return { released };
   }
 
-  return { deliveryRulesOf, priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, countGuestSince, guestAccessOf, attachToUser, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, reminderAllowed, releaseExpired, listToPick, getMany, pickable, markPackingSlipsPrinted, setDropshippingSlip, onShipped, onCancelled, onTracking, withFulfilment, getDetailed, ship, recordShipmentLabel, setAllowPartial, listBackorders, markBackorderReady, onPartialShipped };
+  return { deliveryRulesOf, priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, countGuestSince, guestAccessOf, attachToUser, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, reminderAllowed, releaseExpired, listToPick, listUnprocessed, getMany, pickable, markPackingSlipsPrinted, setDropshippingSlip, onShipped, onCancelled, onTracking, withFulfilment, getDetailed, ship, recordShipmentLabel, setAllowPartial, listBackorders, markBackorderReady, onPartialShipped };
 }
 
 /**
