@@ -3,7 +3,7 @@
 // krijgt daarbij `order_id` (migratie 66); daarmee staat ze als Omgezet in de lijst en kan ze maar één keer worden omgezet.
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
-const { transaction, isPg } = require('../database/db');
+const { transaction } = require('../database/db');
 const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
 const Core = require(path.join(FRONTEND_DIR, 'offertes', 'quote-core.js'));
 
@@ -119,7 +119,7 @@ function createQuoteOrders(db, { orders }) {
    */
   function convert(user, id, customerOf) {
     return transaction(db, () => {
-      const quoteRow = db.prepare(`SELECT id, number, status, customer_id, data, order_id, deleted_at FROM quotes WHERE tenant_id = ? AND id = ?${isPg(db) ? ' FOR UPDATE' : ''}`).get(user.tenant_id, String(id));
+      const quoteRow = db.prepare(`SELECT id, number, status, customer_id, data, order_id, deleted_at FROM quotes WHERE tenant_id = ? AND id = ? FOR UPDATE`).get(user.tenant_id, String(id));
       if (!quoteRow || quoteRow.deleted_at) return { error: 'not_found', status: 404, message: 'Offerte niet gevonden.' };
       if (quoteRow.order_id) return { error: 'already_converted', status: 409, message: 'Deze offerte is al omgezet naar een bestelling.' };
       if (quoteRow.status !== 'akkoord') return { error: 'not_accepted', status: 409, message: 'Alleen een geaccordeerde offerte kan worden omgezet naar een bestelling.' };

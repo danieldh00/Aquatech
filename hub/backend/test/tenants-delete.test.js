@@ -7,7 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { createApp } = require('../src/server');
-const { openDb, isPg, listTables, tableColumns } = require('../src/database/db');
+const { openDb, listTables, tableColumns } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { createClient, listen } = require('./helpers/http-client');
 
@@ -83,11 +83,6 @@ test('hoofdbeheerder verwijdert een tenant met testomgevingen en al zijn gegeven
       assert.strictEqual(count, 0, `${table} is leeg na verwijderen`);
     }
     assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM tenants WHERE id IN (?, ?)').get(tenant.id, env.id).n, 0);
-    // PostgreSQL controleert foreign keys altijd (een fout had de COMMIT laten mislukken).
-    if (!isPg(db)) {
-      assert.deepStrictEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
-      assert.strictEqual(db.prepare('PRAGMA foreign_keys').get().foreign_keys, 1);
-    }
 
     // Gebruikers en sessies zijn weg; de hoofdtenant is ongemoeid.
     assert.deepStrictEqual((await piet.get('/app/api/plans')).body.items, []);

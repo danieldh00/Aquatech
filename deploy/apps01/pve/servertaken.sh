@@ -95,7 +95,7 @@ remote_status() {
   local name state health restarts
   for name in aquatech aquatech-postgres aquatech-cloudflared; do
     if ! docker inspect "$name" >/dev/null 2>&1; then
-      if [[ "$name" == aquatech-postgres ]]; then warn "$name bestaat niet (database in Supabase of SQLite?)"; else fail "$name bestaat niet"; fi
+      if [[ "$name" == aquatech-postgres ]]; then warn "$name bestaat niet (database in Supabase?)"; else fail "$name bestaat niet"; fi
       continue
     fi
     state="$(docker inspect -f '{{.State.Status}}' "$name")"

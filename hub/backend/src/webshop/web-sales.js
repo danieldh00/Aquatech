@@ -179,7 +179,7 @@ const revenueOf = (line, qty = line.qty) => (line.lineExcl !== undefined && qty 
 
 /**
  * Maakt de opslag en de rapportage van de webshopverkopen.
- * @param {object} db De database (SQLite of PostgreSQL).
+ * @param {object} db De database (PostgreSQL).
  * @param {{ stock?: object }} [deps] Voorraad (stock.js) voor de voorraadwaarde.
  * @returns {object} sync en report.
  */

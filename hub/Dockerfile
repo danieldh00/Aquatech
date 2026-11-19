@@ -25,5 +25,5 @@ EXPOSE 3300
 ENV DATA_DIR=/data
 VOLUME /data
 
-# node:sqlite (de database) meldt in Node 22 nog een ExperimentalWarning.
-CMD ["node", "--disable-warning=ExperimentalWarning", "src/server.js"]
+# De database is PostgreSQL: zonder DATABASE_URL (of DATABASE_URL_FILE) start de app niet.
+CMD ["node", "src/server.js"]

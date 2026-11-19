@@ -1,7 +1,7 @@
 // Terugzetten uit een back-up, volledig of gedeeltelijk, zonder de app te stoppen.
 //
-// Een back-up (backup.js) is een versleutelde SQLite-kopie van de hele database. Hier wordt hij tijdelijk ontsleuteld en
-// alleen-lezen geopend; daaruit zijn losse records terug te zetten in de actieve omgeving:
+// Een back-up (backup.js) is een versleutelde export van alle rijen van de database. Hier wordt hij tijdelijk ontsleuteld en
+// ingelezen in een tijdelijk schema naast de echte database (dat daarna weer verdwijnt), dat alleen gelezen wordt; daaruit zijn losse records terug te zetten in de actieve omgeving:
 //  - een record dat nu ontbreekt (verwijderd) komt terug, met zijn onderliggende rijen (uren, verpakkingen, ...);
 //  - een record dat is gewijzigd krijgt, per gekozen veld, de waarde uit de back-up terug (ook een deel van het JSON-veld
 //    `data`, bijvoorbeeld alleen `lines` of `note` van een offerte);
@@ -11,7 +11,11 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { openSqlite, transaction, tableColumns, foreignKeys } = require('../database/db');
+const zlib = require('zlib');
+const readline = require('readline');
+const { transaction, tableColumns, foreignKeys } = require('../database/db');
+const { openScratch, dropScratch } = require('../database/pgdb');
+const { importLines } = require('../database/table-rows');
 const { decryptFile, keyOf, isBackupName } = require('../backup');
 
 /** Velden die nooit worden teruggezet, in elke tabel. */
@@ -129,25 +133,29 @@ function stable(value) {
 }
 
 /**
- * Ontsleutelt een back-up naar een tijdelijk bestand en opent die alleen om te lezen.
- * @param {{ dir: string, name: string, vault: object }} options De back-upmap, de bestandsnaam en de kluis.
- * @returns {Promise<{ db: object, close: Function }>} De geopende back-up; close() sluit en wist het tijdelijke bestand.
- * @throws {Error} Bij een ongeldige naam, een verkeerde sleutel of een beschadigd bestand.
+ * Ontsleutelt een back-up en leest hem in een tijdelijk schema naast de actieve database, om alleen te lezen.
+ * @param {{ dir: string, name: string, vault: object, current: object }} options De back-upmap, de bestandsnaam, de kluis en de actieve database (levert de verbinding).
+ * @returns {Promise<{ db: object, close: Function }>} De ingelezen back-up; close() wist het tijdelijke schema.
+ * @throws {Error} Bij een ongeldige naam, een verkeerde sleutel, een beschadigd of oud bestand.
  */
-async function openBackup({ dir, name, vault }) {
+async function openBackup({ dir, name, vault, current }) {
   if (!dir || !isBackupName(name) || !fs.existsSync(path.join(dir, name))) throw Object.assign(new Error('Back-up niet gevonden.'), { status: 404 });
-  const temp = path.join(dir, `.restore-${crypto.randomUUID()}.db`);
+  const temp = path.join(dir, `.restore-${crypto.randomUUID()}.ndjson.gz`);
+  let db = null;
   try {
     await decryptFile(path.join(dir, name), temp, keyOf(vault));
-    const db = openSqlite(temp);
+    db = openScratch(current);
+    const lines = readline.createInterface({ input: fs.createReadStream(temp).pipe(zlib.createGunzip()), crlfDelay: Infinity });
+    await importLines(db, lines);
     return {
       db,
-      /** Sluit de back-up en wist het tijdelijke bestand. */
+      /** Wist het tijdelijke schema en het tijdelijke bestand. */
       close() {
-        try { db.close(); } finally { fs.rmSync(temp, { force: true }); fs.rmSync(`${temp}-wal`, { force: true }); fs.rmSync(`${temp}-shm`, { force: true }); fs.rmSync(`${temp}-journal`, { force: true }); }
+        try { dropScratch(db); } finally { fs.rmSync(temp, { force: true }); }
       },
     };
   } catch (error) {
+    if (db) { try { dropScratch(db); } catch { /* het schema is al weg */ } }
     fs.rmSync(temp, { force: true });
     throw error;
   }

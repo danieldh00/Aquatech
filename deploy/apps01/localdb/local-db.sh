@@ -160,7 +160,7 @@ cmd_migrate() {
   command -v openssl >/dev/null || die "openssl niet gevonden."
   command -v systemctl >/dev/null || die "systemd niet gevonden."
   [[ -f compose.yml ]] || die "compose.yml niet gevonden in $APP_DIR."
-  grep -qE '^\s*- DATABASE_URL_FILE=' compose.yml || die "De app draait op SQLite; ga eerst naar Supabase (switch-to-supabase.sh)."
+  grep -qE '^\s*- DATABASE_URL_FILE=' compose.yml || die "De app heeft geen DATABASE_URL_FILE in compose.yml; PostgreSQL is de enige database."
   on_local_db && die "De app draait al op de eigen PostgreSQL (COMPOSE_FILE in .env)."
   [[ -s secrets/master-key ]] || die "secrets/master-key ontbreekt."
   [[ "$(app_health)" == "healthy" ]] || die "De app is niet healthy; los dat eerst op."

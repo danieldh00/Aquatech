@@ -16,12 +16,11 @@
 #
 # Uitrol: onderhoudsmodus aan → even wachten tot lopende verzoeken klaar zijn → back-up → container vervangen →
 # wachten op healthy én de nieuwe versie op /api/health → onderhoudsmodus uit. Lukt dat niet, dan terug naar de vorige
-# versie (SQLite: ook de databasekopie) en wordt die versie overgeslagen tot er een nieuwere is of iemand hem in de app
+# versie en wordt die versie overgeslagen tot er een nieuwere is of iemand hem in de app
 # opnieuw aanvraagt.
 #
-# Database in Supabase (DATABASE_URL_FILE in compose.yml): vooraf een versleutelde back-up in data/backups; bij
-# terugvallen wordt alleen de image teruggezet (migraties zijn alleen toevoegingen). Database in SQLite: een kopie in
-# pre-update/ die bij terugvallen terugkomt.
+# Database (PostgreSQL via DATABASE_URL_FILE in compose.yml): vooraf een versleutelde back-up in data/backups; bij
+# terugvallen wordt alleen de image teruggezet (migraties zijn alleen toevoegingen).
 #
 # GHCR krijgt alleen images die de tests en smoketest in release.yml doorstaan.
 set -euo pipefail
@@ -29,7 +28,6 @@ set -euo pipefail
 # APP_DIR, DRAIN_SECONDS en HEALTH_TRIES zijn alleen voor de test (backend/test/update-script.test.js) te wijzigen.
 APP_DIR="${APP_DIR:-/opt/apps/aquatech}"
 IMAGE="ghcr.io/danieldh00/aquatech"
-KEEP_DB_COPIES=5
 STATUS_DIR="$APP_DIR/update/status"
 REQUEST_DIR="$APP_DIR/update/request"
 DRAIN_SECONDS="${DRAIN_SECONDS:-10}"
@@ -175,23 +173,14 @@ run_put bezig onderhoud "Onderhoudsmodus aan."
 status_put maintenance.json "{\"since\":\"$(now)\",\"version\":\"$NEW_VER\"}"
 sleep "$DRAIN_SECONDS"
 
-PG=0
-grep -qE '^\s*- DATABASE_URL_FILE=' compose.yml && PG=1
 run_put bezig back-up "Back-up maken."
-if [[ "$PG" == 1 ]]; then
-  # Terwijl de app nog draait (consistente momentopname); oudere versies
-  # kennen 'create' nog niet, dan alleen een waarschuwing.
-  docker compose exec -T -u 1000 aquatech node src/backup.js create \
-    || log "Waarschuwing: geen back-up vóór de update (versie ${CUR_VER:-?} kent 'backup.js create' nog niet?)"
-fi
+# Terwijl de app nog draait (consistente momentopname); oudere versies
+# kennen 'create' nog niet, dan alleen een waarschuwing.
+docker compose exec -T -u 1000 aquatech node src/backup.js create \
+  || log "Waarschuwing: geen back-up vóór de update (versie ${CUR_VER:-?} kent 'backup.js create' nog niet?)"
 
 run_put bezig herstarten "Nieuwe versie starten."
-mkdir -p pre-update
 docker compose stop aquatech
-if [[ "$PG" == 0 && -f data/aquatech.db ]]; then
-  cp -a data/aquatech.db "pre-update/aquatech-${CUR_VER:-onbekend}-$(date +%Y%m%d%H%M).db"
-  ls -1t pre-update/*.db 2>/dev/null | tail -n +$((KEEP_DB_COPIES + 1)) | xargs -r rm -f
-fi
 
 env_set AQUATECH_TAG "$NEW_VER"
 docker compose up -d aquatech
@@ -202,12 +191,6 @@ if ! wait_healthy || ! health_version_is "$NEW_VER"; then
   run_put bezig terugzetten "De nieuwe versie start niet goed; terug naar $CUR_VER."
   docker compose logs --tail 40 aquatech || true
   docker compose stop aquatech
-  LAST="$(ls -1t pre-update/*.db 2>/dev/null | head -n1 || true)"
-  if [[ "$PG" == 0 && -n "$LAST" ]]; then
-    cp -a "$LAST" data/aquatech.db
-    rm -f data/aquatech.db-wal data/aquatech.db-shm
-    chown 1000:1000 data/aquatech.db
-  fi
   env_set AQUATECH_TAG "$CUR_VER"
   docker compose up -d aquatech
   echo "$NEW_VER" > .failed-version

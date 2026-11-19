@@ -6,7 +6,7 @@
 // web_returns (migratie 40); beheer via /api/admin/web-returns (Beheer >
 // Retouren). Alles per omgeving (tenantId).
 const crypto = require('crypto');
-const { transaction, isPg } = require('../database/db');
+const { transaction } = require('../database/db');
 const { withCause } = require('../platform/error-report');
 
 /** Status van een retour met de tekst voor de klant en Beheer. */
@@ -155,7 +155,7 @@ function createWebReturnStore(db, { orders, stock }) {
    * @returns {void}
    */
   function lockOrder(tenantId, orderId) {
-    if (isPg(db)) prepare('SELECT id FROM web_orders WHERE tenant_id = ? AND id = ? FOR UPDATE').get(tenantId, orderId);
+    prepare('SELECT id FROM web_orders WHERE tenant_id = ? AND id = ? FOR UPDATE').get(tenantId, orderId);
   }
 
   /**
@@ -165,7 +165,7 @@ function createWebReturnStore(db, { orders, stock }) {
    * @returns {object|undefined} De rij, met data.
    */
   function readForUpdate(tenantId, id) {
-    return prepare(`SELECT ${COLUMNS}, data FROM web_returns WHERE tenant_id = ? AND id = ?${isPg(db) ? ' FOR UPDATE' : ''}`).get(tenantId, String(id));
+    return prepare(`SELECT ${COLUMNS}, data FROM web_returns WHERE tenant_id = ? AND id = ? FOR UPDATE`).get(tenantId, String(id));
   }
 
   /**
