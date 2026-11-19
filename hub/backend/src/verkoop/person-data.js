@@ -129,15 +129,15 @@ function createPersonData(db, store) {
     const userId = customer.id;
     const email = String(customer.email || '').toLowerCase();
     const limit = ` LIMIT ${EXPORT_LIMIT}`;
-    const quotes = prepare(`SELECT number, status, title, customer, total_incl, created_at, sent_to, data FROM quotes
-      WHERE tenant_id = ? AND customer_id = ? AND deleted_at IS NULL ORDER BY created_at DESC${limit}`).all(tenantId, userId)
-      .map((row) => ({ number: row.number, status: row.status, title: row.title, total: Number(row.total_incl) || 0, createdAt: row.created_at, sentTo: row.sent_to || '', ...customerBlock(row.data) }));
-    const workOrders = prepare(`SELECT w.number, w.status, w.title, w.customer, w.address, w.planned_date, w.created_at, w.data FROM work_orders w
-      WHERE w.tenant_id = ? AND w.deleted_at IS NULL AND (w.customer_id = ?
+    const quotes = prepare(`SELECT number, status, title, customer, total_incl, created_at, sent_to, deleted_at, data FROM quotes
+      WHERE tenant_id = ? AND customer_id = ? ORDER BY created_at DESC${limit}`).all(tenantId, userId)
+      .map((row) => ({ number: row.number, status: row.status, title: row.title, total: Number(row.total_incl) || 0, createdAt: row.created_at, sentTo: row.sent_to || '', deletedAt: row.deleted_at || '', ...customerBlock(row.data) }));
+    const workOrders = prepare(`SELECT w.number, w.status, w.title, w.customer, w.address, w.planned_date, w.created_at, w.deleted_at, w.data FROM work_orders w
+      WHERE w.tenant_id = ? AND (w.customer_id = ?
         OR w.quote_id IN (SELECT q.id FROM quotes q WHERE q.tenant_id = w.tenant_id AND q.customer_id = ?)
         OR EXISTS (SELECT 1 FROM service_requests sr WHERE sr.tenant_id = w.tenant_id AND sr.work_order_id = w.id AND sr.customer_id = ?))
       ORDER BY w.created_at DESC${limit}`).all(tenantId, userId, userId, userId)
-      .map((row) => ({ number: row.number, status: row.status, title: row.title, plannedDate: row.planned_date || '', createdAt: row.created_at, ...customerBlock(row.data), address: row.address || customerBlock(row.data).address }));
+      .map((row) => ({ number: row.number, status: row.status, title: row.title, plannedDate: row.planned_date || '', createdAt: row.created_at, deletedAt: row.deleted_at || '', ...customerBlock(row.data), address: row.address || customerBlock(row.data).address }));
     const invoices = prepare(`SELECT number, status, kind, customer_name, total, invoice_date, due_date, data FROM invoices
       WHERE tenant_id = ? AND customer_id = ? ORDER BY invoice_date DESC${limit}`).all(tenantId, userId)
       .map((row) => ({ number: row.number || '', status: row.status, kind: row.kind, total: Number(row.total) || 0, invoiceDate: row.invoice_date, dueDate: row.due_date, ...customerBlock(row.data), name: row.customer_name || customerBlock(row.data).name }));
@@ -220,9 +220,9 @@ function createPersonData(db, store) {
       ] },
       { name: 'Account', columns: [text('Naam', 'name'), text('Gebruikersnaam', 'username'), text('E-mail', 'email', 28), text('Telefoon', 'phone'), text('Adres', 'address', 40), text('Bedrijf', 'company'), text('KvK', 'kvk'),
         text('Btw-nummer', 'vat'), text('Klantgroep', 'group'), text('Documenttaal', 'language'), text('Betaaltermijn (dagen)', 'paymentDays'), text('Aangemaakt', 'createdAt'), text('Laatst actief', 'lastSeenAt'), text('Kan inloggen', 'hasLogin')], rows: account },
-      { name: 'Offertes', columns: [text('Nummer', 'number'), text('Status', 'status'), text('Titel', 'title', 30), money('Totaal incl. btw', 'total'), text('Aangemaakt', 'createdAt'), text('Verstuurd naar', 'sentTo', 28),
+      { name: 'Offertes', columns: [text('Nummer', 'number'), text('Status', 'status'), text('Titel', 'title', 30), money('Totaal incl. btw', 'total'), text('Aangemaakt', 'createdAt'), text('Verstuurd naar', 'sentTo', 28), text('Verwijderd op', 'deletedAt'),
         text('Naam', 'name'), text('Contactpersoon', 'contact'), text('Adres', 'address', 40), text('E-mail', 'email', 28), text('Telefoon', 'phone')], rows: data.quotes },
-      { name: 'Werkorders', columns: [text('Nummer', 'number'), text('Status', 'status'), text('Omschrijving', 'title', 30), text('Gepland', 'plannedDate'), text('Aangemaakt', 'createdAt'),
+      { name: 'Werkorders', columns: [text('Nummer', 'number'), text('Status', 'status'), text('Omschrijving', 'title', 30), text('Gepland', 'plannedDate'), text('Aangemaakt', 'createdAt'), text('Verwijderd op', 'deletedAt'),
         text('Naam', 'name'), text('Contactpersoon', 'contact'), text('Adres', 'address', 40), text('E-mail', 'email', 28), text('Telefoon', 'phone')], rows: data.workOrders },
       { name: 'Facturen', columns: [text('Nummer', 'number'), text('Status', 'status'), text('Soort', 'kind'), money('Totaal', 'total'), text('Factuurdatum', 'invoiceDate'), text('Vervaldatum', 'dueDate'),
         text('Naam', 'name'), text('Adres', 'address', 40), text('E-mail', 'email', 28), text('Telefoon', 'phone')], rows: data.invoices },

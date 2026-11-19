@@ -37,6 +37,8 @@ async function setup() {
     VALUES (?, ?, ?, ?, ?, 'Tuin', 'Piet Jansen', ?, ?, ?, ?, 'piet@example.nl')`).run(id, main, owner.id, number, status, JSON.stringify({ customer: { name: 'Piet Jansen', address: 'Dorpsstraat 1', email: 'piet@example.nl', phone: '0612345678' }, internalNote: 'lastig' }), now, now, customer.id);
   quote('q-keep', 'O-1', 'akkoord');
   quote('q-wipe', 'O-2', 'concept');
+  quote('q-gone', 'O-3', 'concept');
+  db.prepare("UPDATE quotes SET deleted_at = ? WHERE id = 'q-gone'").run(now);
   /**
    * Voegt een factuur van de klant toe.
    * @param {string} id Id.
@@ -87,7 +89,7 @@ test('inzage geeft een Excel met de gegevens van de klant, alleen voor beheerder
   assert.strictEqual(out.status, 200);
   assert.match(out.type, /spreadsheetml/);
   const text = xlsxText(out.raw);
-  for (const expected of ['Piet Jansen', 'piet@example.nl', 'O-1', 'F-1', 'B-1', 'X1']) assert.ok(text.includes(expected), expected);
+  for (const expected of ['Piet Jansen', 'piet@example.nl', 'O-1', 'F-1', 'B-1', 'X1', 'O-3']) assert.ok(text.includes(expected), expected);
   assert.strictEqual((await installer.get(`/app/api/customers/${customer.id}/privacy-export`)).status, 403);
   assert.strictEqual((await admin.get('/app/api/customers/onbekend/privacy-export')).status, 404);
 });
