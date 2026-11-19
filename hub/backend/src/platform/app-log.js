@@ -16,6 +16,7 @@ const { transaction } = require('../database/db');
 const LEVELS = ['info', 'warn', 'error'];
 const MAX_MESSAGE = 500;
 const MAX_DATA = 2000;
+const MAX_STACK = 1200;
 const MAX_ROWS_PER_TENANT = 100000;
 const SENSITIVE_KEY = /pass|wachtwoord|token|secret|authorization|cookie|api[_-]?key|iban|email|e-mail/i;
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
@@ -36,17 +37,18 @@ function cleanText(value, maxLength = MAX_MESSAGE) {
  * lengte zijn begrensd.
  * @param {*} value De waarde.
  * @param {number} [depth] Resterende diepte.
+ * @param {number} [maxText] Maximale lengte van een tekstwaarde (een stacktrace onder de sleutel `stack` mag MAX_STACK tekens).
  * @returns {*} De schone kopie.
  */
-function cleanData(value, depth = 3) {
+function cleanData(value, depth = 3, maxText = 300) {
   if (value === null || value === undefined) return null;
   if (typeof value === 'number' || typeof value === 'boolean') return value;
-  if (typeof value === 'string') return cleanText(value, 300);
+  if (typeof value === 'string') return cleanText(value, maxText);
   if (depth <= 0) return '…';
   if (Array.isArray(value)) return value.slice(0, 20).map((item) => cleanData(item, depth - 1));
   if (typeof value === 'object') {
     const out = {};
-    for (const [key, item] of Object.entries(value).slice(0, 30)) out[key] = SENSITIVE_KEY.test(key) ? '***' : cleanData(item, depth - 1);
+    for (const [key, item] of Object.entries(value).slice(0, 30)) out[key] = SENSITIVE_KEY.test(key) ? '***' : cleanData(item, depth - 1, key === 'stack' ? MAX_STACK : maxText);
     return out;
   }
   return cleanText(String(value), 100);
@@ -58,7 +60,7 @@ function cleanData(value, depth = 3) {
  * @param {object} options.db De database (db.prepare).
  * @param {string} options.mainTenantId De hoofdtenant (eigenaar van platformregels).
  * @param {number} [options.flushMs] Hoe vaak de buffer naar de database gaat (standaard 2000; 0 = alleen met flush()).
- * @param {number} [options.batchSize] Bij zoveel regels in de buffer meteen wegschrijven.
+ * @param {number} [options.batchSize] Bij zoveel regels in de buffer volgt een wegschrijfbeurt (na het huidige verzoek, nooit midden erin).
  * @param {number} [options.perMinuteLimit] Hoogstens zoveel regels per bron per minuut.
  * @param {Function} [options.now] Klok in ms.
  * @param {Function} [options.write] Terugval als de database faalt (standaard console.error).
@@ -68,6 +70,7 @@ function createAppLog({ db, mainTenantId, flushMs = 2000, batchSize = 50, perMin
   let buffer = [];
   const bySource = new Map();
   let timer = null;
+  let flushScheduled = false;
 
   /**
    * Express-middleware: geeft elk verzoek een request-id (req.requestId en kop X-Request-Id). Een id van buiten wordt nooit overgenomen.
@@ -83,19 +86,23 @@ function createAppLog({ db, mainTenantId, flushMs = 2000, batchSize = 50, perMin
   }
 
   /**
-   * Of deze bron de grens per minuut al haalt (en telt mee).
+   * Of deze bron in deze omgeving de grens per minuut al haalt (en telt mee). Fouten hebben een dubbele grens en tellen apart.
+   * @param {string} owner De omgeving.
    * @param {string} source De bron.
+   * @param {string} level Het niveau.
    * @returns {boolean} true als de regel weggelaten moet worden.
    */
-  function limited(source) {
+  function limited(owner, source, level) {
     const minute = Math.floor(now() / 60000);
-    const state = bySource.get(source);
+    const key = `${owner}|${source}|${level === 'error' ? 'error' : 'overig'}`;
+    const state = bySource.get(key);
     if (!state || state.minute !== minute) {
-      bySource.set(source, { minute, count: 1 });
+      bySource.set(key, { minute, count: 1 });
+      if (bySource.size > 2000) for (const [oldKey, oldState] of bySource) if (oldState.minute !== minute) bySource.delete(oldKey);
       return false;
     }
     state.count += 1;
-    return state.count > perMinuteLimit;
+    return state.count > (level === 'error' ? perMinuteLimit * 2 : perMinuteLimit);
   }
 
   /**
@@ -110,10 +117,10 @@ function createAppLog({ db, mainTenantId, flushMs = 2000, batchSize = 50, perMin
     try {
       const cleanLevel = LEVELS.includes(level) ? level : 'info';
       const cleanSource = String(source || 'app').slice(0, 40);
-      if (limited(cleanSource)) return;
+      const owner = tenantId || mainTenantId;
+      if (limited(owner, cleanSource, cleanLevel)) return;
       const text = cleanText(message);
       const scope = tenantId ? 'tenant' : 'platform';
-      const owner = tenantId || mainTenantId;
       const key = `${owner}|${cleanSource}|${cleanLevel}|${errorCode}|${text}`;
       const same = buffer.find((row) => row.key === key);
       if (same) { same.repeat += 1; return; }
@@ -124,7 +131,10 @@ function createAppLog({ db, mainTenantId, flushMs = 2000, batchSize = 50, perMin
         requestId: String(requestId || '').slice(0, 32), errorCode: String(errorCode || '').slice(0, 32), message: text,
         data: json, durationMs: Math.max(0, Math.round(Number(durationMs) || 0)), repeat: 1,
       });
-      if (buffer.length >= batchSize) flush();
+      if (buffer.length >= batchSize && !flushScheduled) {
+        flushScheduled = true;
+        setImmediate(() => { flushScheduled = false; flush(); });
+      }
     } catch { /* logging mag nooit een verzoek of taak breken */ }
   }
 

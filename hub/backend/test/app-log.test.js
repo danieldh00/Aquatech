@@ -121,3 +121,28 @@ test('bewaartermijn: info en waarschuwingen na de termijn weg, fouten pas na de 
   clock.time += 15 * 86400000;
   assert.strictEqual(appLog.prune(MAIN, 14, 30), 2);
 });
+
+test('de limiet per minuut geldt per omgeving en bron; fouten hebben een eigen, dubbele grens', () => {
+  const { appLog, rows } = setup({ perMinuteLimit: 2 });
+  for (let i = 0; i < 6; i += 1) appLog.warn('traag', `a ${i}`, { tenantId: MAIN });
+  for (let i = 0; i < 6; i += 1) appLog.warn('traag', `b ${i}`, { tenantId: OTHER });
+  for (let i = 0; i < 6; i += 1) appLog.error('fout', `fout ${i}`, { tenantId: MAIN });
+  const result = rows();
+  assert.strictEqual(result.filter((row) => row.tenant_id === MAIN && row.source === 'traag').length, 2);
+  assert.strictEqual(result.filter((row) => row.tenant_id === OTHER).length, 2);
+  assert.strictEqual(result.filter((row) => row.source === 'fout').length, 4);
+});
+
+test('een stacktrace onder de sleutel stack mag 1200 tekens zijn, andere tekst 300', () => {
+  const cleaned = cleanData({ stack: 'x'.repeat(2000), note: 'y'.repeat(2000) });
+  assert.strictEqual(cleaned.stack.length, 1200);
+  assert.strictEqual(cleaned.note.length, 300);
+});
+
+test('bij een volle buffer volgt het wegschrijven na het huidige verzoek, niet erin', async () => {
+  const { appLog, db } = setup({ batchSize: 3 });
+  for (let i = 0; i < 3; i += 1) appLog.warn('traag', `regel ${i}`, { tenantId: MAIN });
+  assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM app_logs').get().n, 0);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM app_logs').get().n, 3);
+});

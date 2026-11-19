@@ -3738,6 +3738,7 @@ if (require.main === module) {
   for (const sig of ['SIGTERM', 'SIGINT']) {
     process.on(sig, () => {
       server.close(() => {
+        try { app.locals.appLog.stop(); } catch { /* het logboek mag het afsluiten niet breken */ }
         try { db.close(); } catch { /* al dicht */ }
         process.exit(0);
       });
