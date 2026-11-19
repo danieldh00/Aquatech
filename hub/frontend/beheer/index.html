@@ -452,6 +452,16 @@
           <div class="row"><button class="btn primary" type="submit">Opslaan</button></div>
           <div class="err" role="alert"></div>
         </form>
+        <form id="s-payment-reminders" class="card-form settings">
+          <h3>Betalingsherinneringen en aanmaningen</h3>
+          <p class="muted small">Elk uur kijkt AquaTech welke definitieve, onbetaalde facturen over de vervaldatum zijn en mailt de klant (met de factuur als PDF) volgens de stappen hieronder. Per factuur wordt elke stap hoogstens één keer verstuurd; wat verstuurd is staat op de factuur. Een betaalde of gecrediteerde factuur valt vanzelf af. Per klant zet je dit uit op de klantkaart. De teksten pas je aan onder <em>Mail-opmaak</em> (groep Facturen).</p>
+          <label class="chk"><input type="checkbox" name="enabled"> Betalingsherinneringen automatisch versturen</label>
+          <div id="s-payment-reminders-steps" class="form-grid"></div>
+          <label class="field">Niet meer automatisch mailen na (dagen over de vervaldatum)<input name="stopAfterDays" type="number" min="1" max="365" step="1" required><span class="hint">Oudere facturen pak je zelf op (bijvoorbeeld incasso); ze krijgen geen mails meer.</span></label>
+          <p class="muted small">Zet je dit voor het eerst aan, dan krijgt een factuur die al lang open staat alleen de laatst passende stap, niet alle stappen achter elkaar.</p>
+          <div class="row"><button class="btn primary" type="submit">Opslaan</button></div>
+          <div class="err" role="alert"></div>
+        </form>
         <form id="s-purchase-proposals" class="card-form settings">
           <h3>Automatische bestelvoorstellen</h3>
           <p class="muted small">Zakt een artikel onder de minimumvoorraad, dan zet AquaTech elk uur per voorkeursleverancier een concept-inkooporder klaar onder Inkooporders. Wat al onderweg is en wat op backorder staat telt mee. Er wordt nooit iets besteld zonder dat je het voorstel goedkeurt.</p>
@@ -843,17 +853,21 @@
         </div>
       </section>
       <section id="tab-updates" class="tabpane" hidden>
-        <section class="card" id="ht-card" aria-labelledby="ht-title">
+        <section class="card" id="ht-card" aria-labelledby="ht-title" hidden>
           <h3 id="ht-title">Servertaken</h3>
-          <p class="muted small">Dingen die op de Proxmox-host moeten gebeuren (bijvoorbeeld een serverscript opnieuw draaien). Eén commando voert alles uit wat nog open staat; taken die de server als gedaan meldt, worden vanzelf afgevinkt. Je kunt ook zelf afvinken.</p>
+          <p class="muted small">Dingen die op de Proxmox-host moeten gebeuren (bijvoorbeeld een serverscript opnieuw draaien). Eén commando voert alles uit wat nog open staat; taken die de server als gedaan meldt, verdwijnen vanzelf. Je kunt ook zelf afvinken.</p>
           <ul class="ht-list" id="ht-list"></ul>
           <div id="ht-command-box" hidden>
             <p class="muted small">Plak dit op de Proxmox-host (als root):</p>
             <pre class="ht-code" id="ht-command"></pre>
             <div class="form-actions"><button class="btn" type="button" id="ht-copy">Kopieer commando</button></div>
           </div>
-          <div id="ht-err" class="err" role="alert"></div>
         </section>
+        <div id="ht-err" class="err" role="alert"></div>
+        <details id="ht-history" class="ht-history" hidden>
+          <summary>Afgeronde servertaken</summary>
+          <ul class="ht-list" id="ht-done-list"></ul>
+        </details>
         <p class="muted small">Installeer een nieuwe versie van de software wanneer het jou uitkomt. Tijdens de update staat de site ongeveer een minuut in onderhoudsmodus: bekijken kan, opslaan even niet. Start de nieuwe versie niet goed, dan gaat de server vanzelf terug naar de huidige versie.</p>
         <div id="up-none" class="card" hidden>
           <h3>Niet ingericht</h3>
@@ -1080,6 +1094,8 @@
   <script src="drive-backup.js"></script>
   <script src="vps-draaiboek.js"></script>
   <script src="backup-restore.js"></script>
+  <script src="mail.js"></script>
+  <script src="verzending.js"></script>
   <script src="beheer.js"></script>
 </body>
 </html>

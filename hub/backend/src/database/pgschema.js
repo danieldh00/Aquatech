@@ -1274,6 +1274,23 @@ const PG_MIGRATIONS = [
   CREATE UNIQUE INDEX invoice_payments_mollie ON invoice_payments (tenant_id, mollie_id);
   CREATE INDEX invoice_payments_invoice ON invoice_payments (tenant_id, invoice_id, created_at);
   `,
+  // 85: betalingsherinneringen en aanmaningen (zie db.js).
+  `
+  ALTER TABLE users ADD COLUMN reminders_off BIGINT NOT NULL DEFAULT 0;
+  CREATE TABLE invoice_reminders (
+    id           ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id    ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    invoice_id   ${TEXT_TYPE} NOT NULL ${references('invoices(id)')},
+    step_key     ${TEXT_TYPE} NOT NULL,
+    status       ${TEXT_TYPE} NOT NULL DEFAULT 'verstuurd',
+    sent_at      ${TEXT_TYPE} NOT NULL,
+    sent_to      ${TEXT_TYPE} NOT NULL DEFAULT '',
+    reason       ${TEXT_TYPE} NOT NULL DEFAULT '',
+    days_overdue BIGINT NOT NULL DEFAULT 0,
+    UNIQUE (tenant_id, invoice_id, step_key)
+  );
+  CREATE INDEX invoices_due ON invoices (tenant_id, status, due_date, id);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

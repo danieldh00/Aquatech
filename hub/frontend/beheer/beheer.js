@@ -601,7 +601,7 @@
     shopForm.shopPlanner.checked = view.shopPlanner?.value !== false;
     shopForm.shopOrdering.checked = Boolean(view.shopOrdering?.value);
     shopForm.hidden = !state.storefrontAllowed;
-    renderShipping(view.shopShipping?.value);
+    window.BeheerVerzending.render(view.shopShipping?.value);
     $('#s-shipping').hidden = !state.storefrontAllowed;
     renderPayment(view);
     renderAnalytics(view);
@@ -611,6 +611,7 @@
     $('[data-clear="anthropicApiKey"]').disabled = !key.set;
     $('[data-clear="accessCode"]').disabled = !code.set;
     renderSeason(view.seasonReminders.value);
+    if (view.paymentReminders) renderPaymentReminders(view.paymentReminders.value);
     if (view.labelTemplates) renderLabelTemplates(view.labelTemplates.value);
     const outsourcingForm = $('#s-outsourcing');
     const outsourcing = view.outsourcing.value;
@@ -698,7 +699,7 @@
     if (sectionId === 'backup-drive' && state.backups) window.BeheerDrive.load();
     if (sectionId === 'restore' && state.backups) window.BeheerRestore.load();
     if (sectionId === 'mail' && !state.mailLoaded && !pending.mail) {
-      pending.mail = loadMail().then((loaded) => { state.mailLoaded = loaded; }).finally(() => { pending.mail = null; });
+      pending.mail = window.BeheerMail.load().then((loaded) => { state.mailLoaded = loaded; }).finally(() => { pending.mail = null; });
     }
     if (state.settings) return;
     if (!pending.settings) pending.settings = fetchSettings().finally(() => { pending.settings = null; });
@@ -727,6 +728,37 @@
         </div>
         <label>Tekst in de mail en het portaal<textarea name="text" rows="3" maxlength="1000">${esc(item.text)}</textarea></label>
       </fieldset>`).join('');
+  }
+
+  /**
+   * Toont de instelling paymentReminders in het formulier Betalingsherinneringen.
+   * @param {object} config De instelling paymentReminders.
+   * @returns {void}
+   */
+  function renderPaymentReminders(config) {
+    const reminderForm = $('#s-payment-reminders');
+    reminderForm.enabled.checked = config.enabled;
+    reminderForm.stopAfterDays.value = config.stopAfterDays;
+    $('#s-payment-reminders-steps').innerHTML = config.steps.map((step) => `
+      <div class="field" data-key="${esc(step.key)}">
+        <label class="chk"><input type="checkbox" name="stepEnabled"${step.enabled ? ' checked' : ''}> ${esc(step.title)}</label>
+        <label>Dagen over de vervaldatum<input name="stepDays" type="number" min="1" max="364" step="1" required value="${step.days}"></label>
+      </div>`).join('');
+  }
+
+  /**
+   * Leest het formulier Betalingsherinneringen uit.
+   * @returns {object} De instelling paymentReminders.
+   */
+  function readPaymentReminders() {
+    const reminderForm = $('#s-payment-reminders');
+    return {
+      enabled: reminderForm.enabled.checked,
+      stopAfterDays: Number(reminderForm.stopAfterDays.value),
+      steps: [...reminderForm.querySelectorAll('[data-key]')].map((field) => ({
+        key: field.dataset.key, enabled: field.querySelector('[name="stepEnabled"]').checked, days: Number(field.querySelector('[name="stepDays"]').value),
+      })),
+    };
   }
 
   /** Hoogstens zoveel etiketsjablonen (gelijk aan de server). */
@@ -952,153 +984,6 @@
     keyState.className = `state ${key.set ? 'ok' : 'off'}`;
   }
 
-  /**
-   * Zet een prijs of bedrag om naar tekst met een komma.
-   * @param {number} amount Het bedrag.
-   * @returns {string} Bijv. "6,95".
-   */
-  const decimalText = (amount) => String(amount).replace('.', ',');
-
-  /**
-   * Leest een getal met komma of punt.
-   * @param {string} text De ingevoerde tekst.
-   * @returns {number} Het getal (NaN als het geen getal is).
-   */
-  const parseDecimal = (text) => (String(text).trim() === '' ? NaN : Number(String(text).trim().replace(',', '.')));
-
-  /** De bezorgmethodes van de webshop met hun titel in het verzendformulier (zelfde sleutels als shipping.js). */
-  const SHIPPING_CARRIERS = [['dpd', 'DPD'], ['pallet', 'Pallet'], ['eigen', 'Eigen transport']];
-
-  /**
-   * Tekent een regel (land) in het verzendformulier bij een bezorgmethode.
-   * @param {HTMLElement} zones De lijst met landen van die methode.
-   * @param {{ country: string, name: string, freeFrom: number, tiers: { upToGrams: number, price: number }[] }} zone Het land met zijn tarieven.
-   * @param {boolean} [withQtyTiers] true bij pallet en eigen transport: dan komt er een veld voor de aantalstaffel bij.
-   * @returns {void}
-   */
-  function addShippingZone(zones, zone, withQtyTiers = false) {
-    const row = document.createElement('div');
-    row.className = 'ship-zone';
-    row.innerHTML = `<input data-f="country" maxlength="2" size="3" placeholder="NL" aria-label="Landcode" value="${esc(zone.country)}">
-      <input data-f="name" maxlength="60" placeholder="Nederland" aria-label="Naam" value="${esc(zone.name)}">
-      <input data-f="freeFrom" size="8" placeholder="Gratis vanaf" aria-label="Gratis vanaf" value="${zone.freeFrom ? esc(decimalText(zone.freeFrom)) : ''}">
-      <input data-f="tiers" placeholder="2000=6,95; 5000=8,95" aria-label="Weegklassen" value="${esc(zone.tiers.map((tier) => `${tier.upToGrams}=${decimalText(tier.price)}`).join('; '))}">
-      ${withQtyTiers ? `<input data-f="qtyTiers" placeholder="Aantalstaffel: 50=45; 200=80" aria-label="Aantalstaffel (t/m aantal=prijs)" value="${esc((zone.qtyTiers || []).map((tier) => `${tier.upToQty}=${decimalText(tier.price)}`).join('; '))}">` : ''}
-      <button type="button" class="btn danger" data-remove>Verwijder</button>`;
-    /**
-     * Verwijdert dit land uit het formulier.
-     * @returns {void}
-     */
-    row.querySelector('[data-remove]').onclick = () => row.remove();
-    zones.appendChild(row);
-  }
-
-  /**
-   * Tekent het blok van één bezorgmethode: aan/uit, de naam bij het afrekenen en de tarieven per land.
-   * @param {string} key De methode (dpd, pallet of eigen).
-   * @param {string} title De titel van het blok.
-   * @param {{ enabled: boolean, label: string, zones: object[] }} carrier De opgeslagen instelling van de methode.
-   * @returns {HTMLElement} Het blok (fieldset).
-   */
-  function shippingCarrierBlock(key, title, carrier) {
-    const block = document.createElement('fieldset');
-    block.className = 'ship-carrier';
-    block.dataset.carrier = key;
-    block.innerHTML = `<legend>${esc(title)}</legend>
-      <div class="form-grid">
-        <label class="field chk"><input type="checkbox" data-c="enabled"> <span>${esc(title)} aanbieden</span></label>
-        <label class="field">Naam bij het afrekenen<input data-c="label" maxlength="60"></label>
-        <label class="field">Levertijd van (dagen)<input data-c="leadMin" type="number" min="0" max="365" step="1" placeholder="leeg = op aanvraag"></label>
-        <label class="field">Levertijd tot (dagen)<input data-c="leadMax" type="number" min="0" max="365" step="1"></label>
-        <label class="field">Soort dagen<select data-c="dayType"><option value="calendar">Kalenderdagen</option><option value="working">Werkdagen</option></select></label>
-      </div>
-      <div data-zones></div>
-      <p><button type="button" class="btn" data-add-zone>Land toevoegen</button></p>`;
-    block.querySelector('[data-c="enabled"]').checked = carrier.enabled;
-    block.querySelector('[data-c="label"]').value = carrier.label;
-    block.querySelector('[data-c="leadMin"]').value = carrier.leadDays ? carrier.leadDays.min : '';
-    block.querySelector('[data-c="leadMax"]').value = carrier.leadDays ? carrier.leadDays.max : '';
-    block.querySelector('[data-c="dayType"]').value = carrier.dayType || 'calendar';
-    const zones = block.querySelector('[data-zones]');
-    const withQtyTiers = key !== 'dpd';
-    for (const zone of carrier.zones) addShippingZone(zones, zone, withQtyTiers);
-    /**
-     * Voegt een leeg land toe aan de tarieven van deze methode.
-     * @returns {void}
-     */
-    block.querySelector('[data-add-zone]').onclick = () => addShippingZone(zones, { country: '', name: '', freeFrom: 0, tiers: [], qtyTiers: [] }, withQtyTiers);
-    return block;
-  }
-
-  /**
-   * Vult het verzendformulier met de opgeslagen instelling.
-   * @param {object} config De instelling shopShipping (afhalen, defaultWeightGrams en per bezorgmethode aan/uit, naam en landen).
-   * @returns {void}
-   */
-  function renderShipping(config) {
-    const form = $('#s-shipping');
-    if (!config || !config.pickup || !config.dpd) return;
-    form.pickupEnabled.checked = config.pickup.enabled;
-    form.pickupLabel.value = config.pickup.label;
-    form.pickupNote.value = config.pickup.note;
-    form.defaultWeightGrams.value = config.defaultWeightGrams;
-    form.pickupLeadMin.value = config.pickup.leadDays ? config.pickup.leadDays.min : '';
-    form.pickupLeadMax.value = config.pickup.leadDays ? config.pickup.leadDays.max : '';
-    form.pickupDayType.value = config.pickup.dayType || 'calendar';
-    const container = $('#s-shipping-carriers');
-    container.innerHTML = '';
-    for (const [key, title] of SHIPPING_CARRIERS) container.appendChild(shippingCarrierBlock(key, title, config[key]));
-  }
-
-  /**
-   * Leest de tarieven per land van één bezorgmethode uit het formulier.
-   * @param {HTMLElement} block Het blok van de methode.
-   * @returns {{ country: string, name: string, freeFrom: number, tiers: object[] }[]} De landen; een weegklasse die niet te lezen is geeft een fout.
-   */
-  function readShippingZones(block) {
-    return [...block.querySelector('[data-zones]').children].map((row) => {
-      /**
-       * Leest een veld van dit land.
-       * @param {string} name Naam van het veld (data-f).
-       * @returns {string} De ingevoerde tekst.
-       */
-      const field = (name) => row.querySelector(`[data-f="${name}"]`).value;
-      const tiers = field('tiers').split(';').map((part) => part.trim()).filter(Boolean).map((part) => {
-        const [grams, price] = part.split('=');
-        const tier = { upToGrams: parseDecimal(grams == null ? '' : grams), price: parseDecimal(price == null ? '' : price) };
-        if (!Number.isFinite(tier.upToGrams) || !Number.isFinite(tier.price)) throw new Error(`Weegklasse "${part}" is niet te lezen. Gebruik gram=prijs, bijvoorbeeld 2000=6,95.`);
-        return tier;
-      });
-      const freeFrom = field('freeFrom').trim() ? parseDecimal(field('freeFrom')) : 0;
-      if (!Number.isFinite(freeFrom)) throw new Error('Gratis vanaf moet een bedrag zijn.');
-      const quantityInput = row.querySelector('[data-f="qtyTiers"]');
-      const qtyTiers = quantityInput ? quantityInput.value.split(';').map((part) => part.trim()).filter(Boolean).map((part) => {
-        const [quantity, price] = part.split('=');
-        const tier = { upToQty: parseDecimal(quantity == null ? '' : quantity), price: parseDecimal(price == null ? '' : price) };
-        if (!Number.isFinite(tier.upToQty) || !Number.isFinite(tier.price)) throw new Error(`Aantalklasse "${part}" is niet te lezen. Gebruik aantal=prijs, bijvoorbeeld 50=45.`);
-        return tier;
-      }) : undefined;
-      return { country: field('country').trim().toUpperCase(), name: field('name').trim(), freeFrom, tiers, ...(qtyTiers ? { qtyTiers } : {}) };
-    });
-  }
-
-  /**
-   * Leest de verzendinstelling uit het formulier.
-   * @returns {object} De instelling (afhalen, standaardgewicht en per bezorgmethode aan/uit, naam en landen); een weegklasse die niet te lezen is geeft een fout.
-   */
-  function readShipping() {
-    const form = $('#s-shipping');
-    const config = {
-      pickup: { enabled: form.pickupEnabled.checked, label: form.pickupLabel.value, note: form.pickupNote.value, leadDays: { min: form.pickupLeadMin.value, max: form.pickupLeadMax.value }, dayType: form.pickupDayType.value },
-      defaultWeightGrams: Number(form.defaultWeightGrams.value || 0),
-    };
-    for (const [key] of SHIPPING_CARRIERS) {
-      const block = form.querySelector(`[data-carrier="${key}"]`);
-      config[key] = { enabled: block.querySelector('[data-c="enabled"]').checked, label: block.querySelector('[data-c="label"]').value, zones: readShippingZones(block), leadDays: { min: block.querySelector('[data-c="leadMin"]').value, max: block.querySelector('[data-c="leadMax"]').value }, dayType: block.querySelector('[data-c="dayType"]').value };
-    }
-    return config;
-  }
-
   /** Koppelt de formulieren en knoppen van Instellingen. */
   function initSettings() {
     const aiForm = $('#s-ai');
@@ -1252,7 +1137,7 @@
      */
     shippingForm.onsubmit = (event) => {
       event.preventDefault();
-      try { saveSettings(shippingForm, { shopShipping: readShipping() }, 'Verzending opgeslagen'); } catch (error) { $('.err', shippingForm).textContent = error.message; }
+      try { saveSettings(shippingForm, { shopShipping: window.BeheerVerzending.read() }, 'Verzending opgeslagen'); } catch (error) { $('.err', shippingForm).textContent = error.message; }
     };
     /** Zet het kopje Planner in de webshop aan of uit. */
     shopForm.shopPlanner.onchange = () => {
@@ -1334,6 +1219,15 @@
       }
       saveSettings(seasonForm, { seasonReminders: config }, 'Seizoensherinneringen opgeslagen');
     };
+    const paymentRemindersForm = $('#s-payment-reminders');
+    /**
+     * Slaat de betalingsherinneringen op.
+     * @param {SubmitEvent} event het verzenden
+     */
+    paymentRemindersForm.onsubmit = (event) => {
+      event.preventDefault();
+      saveSettings(paymentRemindersForm, { paymentReminders: readPaymentReminders() }, 'Betalingsherinneringen opgeslagen');
+    };
     const labelsForm = $('#s-labels');
     /**
      * Voegt een leeg etiketsjabloon toe.
@@ -1383,144 +1277,6 @@
       const modules = {};
       modulesForm.querySelectorAll('[data-module]:not(:disabled)').forEach((checkbox) => { modules[checkbox.dataset.module] = checkbox.checked; });
       saveSettings(modulesForm, { modules }, 'Modules opgeslagen');
-    };
-  }
-
-  // ---------- E-mail (SMTP of Exchange-connector) ----------
-  /**
-   * Laadt de e-mailinstellingen in het formulier.
-   * @returns {Promise<boolean>} true als het laden lukte.
-   */
-  async function loadMail() {
-    const formElement = $('#s-mail');
-    try {
-      const result = await api('mail');
-      const config = result.config;
-      for (const key of ['host', 'port', 'user', 'from', 'replyTo', 'graphTenantId', 'graphClientId']) formElement[key].value = config[key] ?? '';
-      formElement.mode.value = config.mode || 'smtp';
-      formElement.secure.value = String(Boolean(config.secure));
-      formElement.password.value = '';
-      formElement.password.placeholder = result.passwordSet ? '•••••••• (ingesteld; leeg = ongewijzigd)' : '';
-      formElement.graphSecret.value = '';
-      formElement.graphSecret.placeholder = result.graphSecretSet ? '•••••••• (ingesteld; leeg = ongewijzigd)' : '';
-      const ok = config.mode === 'graph'
-        ? Boolean(config.graphTenantId && config.graphClientId && config.from && result.graphSecretSet)
-        : Boolean(config.host && config.from);
-      $('#m-state').textContent = ok ? 'De mailserver is ingesteld.' : 'Nog geen mailserver ingesteld.';
-      $('#m-state').className = `state ${ok ? 'ok' : 'off'}`;
-      mailMode();
-      return true;
-    } catch (error) {
-      $('#m-state').textContent = `Kan de e-mailinstellingen niet laden: ${error.message}`;
-      return false;
-    }
-  }
-
-  /**
-   * Connector: geen inlog, poort 25; het WAN-IP pas ophalen als het nodig is.
-   * @param {boolean} changed true als de soort net is gewijzigd (poort en host invullen)
-   */
-  function mailMode(changed) {
-    const formElement = $('#s-mail');
-    const connector = formElement.mode.value === 'connector';
-    const graph = formElement.mode.value === 'graph';
-    $('[data-connector]', formElement).hidden = !connector;
-    $('[data-login]', formElement).hidden = connector || graph;
-    $('[data-smtp]', formElement).hidden = graph;
-    $('[data-graph]', formElement).hidden = !graph;
-    if (changed && !graph) {
-      formElement.port.value = connector ? 25 : 587;
-      formElement.secure.value = 'false';
-      const domain = (formElement.from.value.match(/@([^>\s]+)/) || [])[1];
-      if (connector && !formElement.host.value && domain) formElement.host.value = `${domain.replace(/\./g, '-')}.mail.protection.outlook.com`;
-    }
-    if (connector && !state.wanIp) loadWanIp(false);
-  }
-
-  /**
-   * Haalt het WAN-IP van de server op en toont het.
-   * @param {boolean} refresh true om niet de bewaarde waarde te gebruiken
-   * @returns {Promise<void>}
-   */
-  async function loadWanIp(refresh) {
-    const ipElement = $('#m-wanip');
-    const note = $('#m-wanip-note');
-    ipElement.textContent = 'Bezig…';
-    try {
-      state.wanIp = await api(`wan-ip${refresh ? '?refresh=1' : ''}`);
-      ipElement.textContent = state.wanIp.ip;
-      note.textContent = state.wanIp.source === 'omgeving'
-        ? 'Vast ingesteld (WAN_IP in de Docker-omgeving). Dit adres geef je vrij in de connector van Office 365.'
-        : `Opgezocht ${when(state.wanIp.checkedAt)}. Dit adres geef je vrij in de connector van Office 365.`;
-    } catch (error) {
-      state.wanIp = null;
-      ipElement.textContent = 'onbekend';
-      note.textContent = error.message;
-    }
-  }
-
-  /**
-   * Slaat de e-mailinstellingen op en laadt ze opnieuw.
-   * @returns {Promise<void>}
-   */
-  async function saveMail() {
-    const formElement = $('#s-mail');
-    const connector = formElement.mode.value === 'connector';
-    const graph = formElement.mode.value === 'graph';
-    const body = {
-      config: { graphTenantId: formElement.graphTenantId.value.trim(), graphClientId: formElement.graphClientId.value.trim(), mode: formElement.mode.value, host: formElement.host.value.trim(), port: Number(formElement.port.value) || (connector ? 25 : 587), secure: formElement.secure.value === 'true', user: connector || graph ? '' : formElement.user.value.trim(), from: formElement.from.value.trim(), replyTo: formElement.replyTo.value.trim() },
-    };
-    if (!connector && !graph && formElement.password.value) body.password = formElement.password.value;
-    if (graph && formElement.graphSecret.value) body.graphSecret = formElement.graphSecret.value;
-    await api('mail', { method: 'PUT', body });
-    await loadMail();
-  }
-
-  /** Koppelt het e-mailformulier en de knoppen. */
-  function initMail() {
-    const formElement = $('#s-mail');
-    /** Past het formulier aan de gekozen soort aan. */
-    formElement.mode.onchange = () => { mailMode(true); };
-    /**
-     * Slaat de e-mailinstellingen op.
-     * @param {SubmitEvent} event het verzenden
-     * @returns {Promise<void>}
-     */
-    formElement.onsubmit = async (event) => {
-      event.preventDefault();
-      $('.err', formElement).textContent = '';
-      try { await saveMail(); toast('E-mailinstellingen opgeslagen'); } catch (error) { $('.err', formElement).textContent = error.message; }
-    };
-    /**
-     * Slaat op en verstuurt een testmail.
-     * @returns {Promise<void>}
-     */
-    $('#m-test').onclick = async () => {
-      const testButton = $('#m-test');
-      $('.err', formElement).textContent = '';
-      testButton.disabled = true;
-      try {
-        await saveMail();
-        await api('mail/test', { method: 'POST', body: { to: formElement.testTo.value } });
-        toast(`Testmail verstuurd naar ${formElement.testTo.value}`);
-      } catch (error) {
-        $('.err', formElement).textContent = error.message;
-      } finally {
-        testButton.disabled = false;
-      }
-    };
-    /**
-     * Zoekt het WAN-IP opnieuw op.
-     * @returns {Promise<void>}
-     */
-    $('#m-refresh').onclick = () => loadWanIp(true);
-    /**
-     * Kopieert het WAN-IP naar het klembord.
-     * @returns {Promise<void>}
-     */
-    $('#m-copy').onclick = async () => {
-      if (!state.wanIp) return;
-      try { await navigator.clipboard.writeText(state.wanIp.ip); toast('WAN-IP gekopieerd'); } catch (error) { toast('Kopiëren lukt niet; selecteer het adres zelf', true); }
     };
   }
 
@@ -1698,7 +1454,7 @@
     $('#u-view').onsubmit = startCustomerView;
     $('#u-guests').onchange = renderUsers;
     initSettings();
-    initMail();
+    window.BeheerMail.init({ toast });
     window.BeheerWebshop.init({ toast });
     window.BeheerWebshopInhoud.init({ toast });
     window.BeheerKortingen.init({ toast });

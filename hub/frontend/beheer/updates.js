@@ -240,14 +240,25 @@
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.message || window.AquatechCommon.statusMessage(response.status));
       errorBox.textContent = '';
-      byId('ht-list').innerHTML = body.tasks.map((task) => `
+      /**
+       * Eén taak als lijstregel: vinkje en titel links uitgelijnd, daaronder uitleg en stand.
+       * @param {object} task De taak uit de API.
+       * @returns {string} De HTML van de regel.
+       */
+      const itemHtml = (task) => `
         <li class="ht-item${task.done ? ' done' : ''}">
-          <label class="field chk"><input type="checkbox" data-task="${esc(task.id)}" ${task.done ? 'checked' : ''} ${task.doneBy === 'server' ? 'disabled' : ''}> <strong>${esc(task.title)}</strong></label>
+          <label class="ht-check"><input type="checkbox" data-task="${esc(task.id)}" ${task.done ? 'checked' : ''} ${task.doneBy === 'server' ? 'disabled' : ''}><strong>${esc(task.title)}</strong></label>
           <p class="muted small">${esc(task.description)}</p>
           <p class="muted small">${task.done ? `Gedaan ${esc(when(task.doneAt))} (${task.doneBy === 'server' ? 'gemeld door de server' : `afgevinkt door ${esc(task.doneByName || 'een beheerder')}`})` : `Toegevoegd ${esc(task.addedAt)}`}</p>
-        </li>`).join('');
+        </li>`;
+      const open = body.tasks.filter((task) => !task.done);
+      const done = body.tasks.filter((task) => task.done);
+      byId('ht-card').hidden = open.length === 0;
+      byId('ht-list').innerHTML = open.map(itemHtml).join('');
+      byId('ht-history').hidden = done.length === 0;
+      byId('ht-done-list').innerHTML = done.map(itemHtml).join('');
       byId('ht-command').textContent = body.command;
-      byId('ht-command-box').hidden = body.pending === 0;
+      byId('ht-command-box').hidden = open.length === 0;
     } catch (error) {
       errorBox.textContent = error.message;
     }
@@ -292,6 +303,7 @@
       byId('up-cancel').addEventListener('click', cancelUpdate);
       byId('up-auto').addEventListener('change', saveAuto);
       byId('ht-list').addEventListener('change', toggleHostTask);
+      byId('ht-done-list').addEventListener('change', toggleHostTask);
       byId('ht-copy').addEventListener('click', copyHostCommand);
     }
     loadHostTasks();

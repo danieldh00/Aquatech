@@ -21,6 +21,7 @@ const backups = require('./backup');
 const { createDriveBackup, sanitizeDriveBackup, DriveError, CALLBACK_PATH: DRIVE_CALLBACK_PATH } = require('./platform/drive-backup');
 const { createQuoteStore, registerQuoteRoutes, validShareBase, mailBody, Core: QuoteCore } = require('./verkoop/quotes');
 const { createCustomerStore, registerCustomerRoutes } = require('./verkoop/customers');
+const { createGlobalSearch, registerSearchRoutes } = require('./platform/global-search');
 const { createMailer, mailFailure } = require('./platform/mailer');
 const { createWanIp } = require('./platform/wan-ip');
 const { createAddressLookup, createAddressGuard, registerAddressRoute } = require('./platform/address-lookup');
@@ -65,6 +66,7 @@ const { createReturnMailer } = require('./webshop/web-returns-mail');
 const { createShopOrders } = require('./webshop/shop-orders');
 const { createDebtorStore, registerDebtorRoutes } = require('./verkoop/debtors');
 const { createInvoiceSender } = require('./verkoop/invoice-mail');
+const { createPaymentReminderStore, createPaymentReminderRunner } = require('./verkoop/payment-reminders');
 const { createInvoicePayments } = require('./verkoop/invoice-payments');
 const { registerInvoicePayLinkRoutes } = require('./verkoop/invoice-pay-routes');
 const { createInvoiceStore, registerInvoiceRoutes } = require('./verkoop/invoices');
@@ -2398,6 +2400,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // De betaallink in de mail (invoice-payments.js); de betaalfuncties worden verderop gemaakt, de aanroep komt pas later.
     payLinkOf: (tenantId, invoice) => invoicePayments.linkFor(tenantId, invoice),
   });
+  const paymentReminderStore = createPaymentReminderStore(database);
   const shopOrders = createShopOrders({
     db: database, invoices: invoiceStore, debtors: debtorStore, stock: stockStore, sender: invoiceSender,
     settingsFor: (id) => settingsFor(id), fetchImpl: shopFetch,
@@ -2465,6 +2468,21 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     invite: (customer) => shopAccounts.invite(customer),
   });
 
+  // Globaal zoeken (platform/global-search.js): klanten, offertes, werkorders, facturen en artikelen in één zoekveld.
+  const globalSearch = createGlobalSearch(database, {
+    // Een uitgezette module (Modules aan/uit) wordt niet doorzocht.
+    moduleOn: (tenantId, moduleId) => ModuleTools.isOn(moduleFlagsOf(tenantId), moduleId),
+    // Klanten horen bij de live-tenant; in een testomgeving komen de testklanten daarvan erbij (zoals tenantsOf hierboven).
+    searchCustomers: (user, text, limit) => {
+      const home = homeOf(user.tenant_id);
+      return store.listCustomerPage(home === user.tenant_id ? [home] : [home, user.tenant_id], { search: text, limit }).items;
+    },
+  });
+  registerSearchRoutes(app, {
+    search: globalSearch.search, identify,
+    limiter: createRateLimiter({ windowMs: 60 * 1000, max: 120, keyFn: (req) => `zoeken:${req.user?.id || clientKey(req)}` }),
+  });
+
   // De btw-controle bij VIES: gedeeld door de offertes (btw verleggen) en de webshop.
   const vies = createVies(viesFetch ? { fetchImpl: viesFetch } : {});
 
@@ -2489,10 +2507,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
      * @param {string} search De zoektekst.
      * @returns {object[]} De klanten met id, gebruikersnaam, naam, bedrijf, e-mail, telefoon en adres.
      */
-    searchCustomers: (req, search) => {
+    searchCustomers: async (req, search) => {
       const tid = req.tenantId || tenant.id;
       const home = homeOf(tid);
-      return store.listCustomerPage(home === tid ? [tid] : [home, tid], { search, limit: 20, activeOnly: true }).items
+      return (await store.listCustomerPageAsync(home === tid ? [tid] : [home, tid], { search, limit: 20, activeOnly: true })).items
         .map((customer) => ({ id: customer.id, username: customer.username, displayName: customer.displayName, companyName: customer.companyName,
           email: customer.email, phone: customer.phone, address: customer.address, vatNumber: customer.vatNumber, paymentDays: customer.paymentDays, documentLanguage: customer.documentLanguage }));
     },
@@ -2509,10 +2527,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     outsourcingOf: (tid) => outsourcingStore.marks(tid),
     can: (user, right) => Roles.can(user, right),
     // Klantrecords voor de klantkeuze en de controle op een gekozen klant (zoals bij de offerte).
-    searchCustomers: (req, search) => {
+    searchCustomers: async (req, search) => {
       const tid = req.tenantId || tenant.id;
       const home = homeOf(tid);
-      return store.listCustomerPage(home === tid ? [tid] : [home, tid], { search, limit: 20, activeOnly: true }).items
+      return (await store.listCustomerPageAsync(home === tid ? [tid] : [home, tid], { search, limit: 20, activeOnly: true })).items
         .map((customer) => ({ id: customer.id, username: customer.username, displayName: customer.displayName, companyName: customer.companyName, email: customer.email, phone: customer.phone, address: customer.address }));
     },
     customerOf: (req, id) => {
@@ -2794,7 +2812,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     loggedOf: (tid, woId) => workLogStore.list(tid, woId),
     articlesOf: (tid) => stockStore.saleInfo(tid),
     catalog: () => loadArticles(),
-    sender: invoiceSender, shopOrders,
+    sender: invoiceSender, shopOrders, paymentReminders: paymentReminderStore,
     mailConfigured: (req) => mailerFor(settingsFor(req.tenantId || tenant.id)).configured(),
     shopOf: (req) => settingsFor(req.tenantId || tenant.id).get('shopSource'),
     syncLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, keyFn: (req) => req.tenantId || tenant.id }),
@@ -3339,7 +3357,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // De klantlink heeft het adres van de openbare pagina nodig; dat kent
     // alleen de browser (padprefix achter een proxy).
     const extra = testdata.seedFeatures(
-      { db: database, quotes: quoteStore, quoteOrders, workorders: workOrderStore, shop: shopStore, photos: photoStore, worklog: workLogStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, stock: stockStore, suppliers: supplierStore, packagings: packagingStore, purchaseOrders: purchaseOrderStore, itemImages: itemImageStore, requests: serviceRequestStore, invoices: invoiceStore, sprinklers: sprinklerStore, seasonReminders: seasonReminderStore, settings: settingsFor(tenantRow.id) },
+      { db: database, quotes: quoteStore, quoteOrders, workorders: workOrderStore, shop: shopStore, photos: photoStore, worklog: workLogStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, stock: stockStore, suppliers: supplierStore, packagings: packagingStore, purchaseOrders: purchaseOrderStore, itemImages: itemImageStore, requests: serviceRequestStore, invoices: invoiceStore, sprinklers: sprinklerStore, seasonReminders: seasonReminderStore, paymentReminders: paymentReminderStore, settings: settingsFor(tenantRow.id) },
       testSet, { users: out.byKey, quoteIds: out.quoteIds, tenantId: tenantRow.id },
       { shareBase: validShareBase(req.body?.shareBase) },
     );
@@ -3617,6 +3635,22 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       .map((environment) => environment.id);
     return seasonReminders.runAll(activeIds, today);
   };
+  // Betalingsherinneringen en aanmaningen voor vervallen facturen (payment-reminders.js), alleen in omgevingen met de module Facturen aan.
+  const paymentReminders = createPaymentReminderRunner(paymentReminderStore, {
+    invoices: invoiceStore, sender: invoiceSender, settingsFor: (id) => settingsFor(id), mailerFor, mailBody, userTenantsOf: (id) => [id],
+    enabled: (id) => ModuleTools.isOn(moduleFlagsOf(id), 'facturen'),
+  });
+  /**
+   * Betalingsherinneringen in alle actieve omgevingen versturen (elk uur vanuit main).
+   * @param {string} [today] De dag als JJJJ-MM-DD (tests).
+   * @returns {Promise<object>} Aantallen per omgeving.
+   */
+  app.locals.paymentRemindersAll = async (today) => {
+    const activeIds = inScopeOnly(store.listTenants()).filter((live) => !live.disabled)
+      .flatMap((live) => [live, ...live.environments.filter((environment) => !environment.disabled)])
+      .map((environment) => environment.id);
+    return paymentReminders.runAll(activeIds, today);
+  };
   // Inkooporders, ook voor de uurlijkse bestelvoorstellen hieronder (tests kunnen autoPropose hier vervangen).
   app.locals.purchaseOrders = purchaseOrderStore;
   /**
@@ -3741,6 +3775,9 @@ if (require.main === module) {
       .catch((error) => console.error('Oude funneltellingen wissen mislukt:', error.message));
     slowLog.trackTask('oude zoektermen', async () => app.locals.searchMissesPurge())
       .catch((error) => console.error('Oude zoektermen wissen mislukt:', error.message));
+    slowLog.trackTask('betalingsherinneringen facturen', () => app.locals.paymentRemindersAll())
+      .then((sent) => { if (Object.keys(sent).length) console.log(`Betalingsherinneringen facturen: ${JSON.stringify(sent)}`); })
+      .catch((error) => console.error('Betalingsherinneringen facturen mislukt:', error.message));
     slowLog.trackTask('seizoensherinneringen', () => app.locals.seasonRemindersAll())
       .then((sent) => { if (Object.keys(sent).length) console.log(`Seizoensherinneringen: ${JSON.stringify(sent)}`); })
       .catch((error) => console.error('Seizoensherinneringen mislukt:', error.message));
