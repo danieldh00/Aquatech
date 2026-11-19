@@ -95,6 +95,22 @@ function exceedsThreshold(line, threshold) {
 }
 
 /**
+ * Het moment waarop de teller telde: het tijdstip van de client als dat een geldige tijd is, niet in de toekomst en niet vóór het bevriezen
+ * (een ingave die later aankomt, bijvoorbeeld na een trage verbinding, telt dan toch voor het juiste moment); anders de servertijd.
+ * @param {*} claimed Het tijdstip van de client (ISO-tekst).
+ * @param {string} frozenAt Het bevriezingsmoment van de telling.
+ * @param {string} now De servertijd nu (ISO-tekst).
+ * @returns {string} Het tijdstip (ISO-tekst) dat wordt vastgelegd.
+ */
+function countMoment(claimed, frozenAt, now) {
+  if (typeof claimed !== 'string' || claimed.length > 40) return now;
+  const parsed = new Date(claimed);
+  if (Number.isNaN(parsed.getTime())) return now;
+  const iso = parsed.toISOString();
+  return iso > now || iso < frozenAt ? now : iso;
+}
+
+/**
  * Maakt de opslag voor voorraadtellingen.
  * @param {object} db De database.
  * @param {{ stock: object }} deps De voorraad (artikelen/stock.js): `book` en `stockValue`.
@@ -203,8 +219,8 @@ function createStockCounts(db, { stock }) {
     const year = Number(referenceDate.slice(0, 4));
     const threshold = sanitizeThreshold(input.threshold);
     const note = cleanText(input.note, 300);
-    const averages = layerAverages(tenantId);
     return transaction(db, () => {
+      const averages = layerAverages(tenantId);
       const open = prepare("SELECT number FROM stock_counts WHERE tenant_id = ? AND status = 'tellen'").get(tenantId);
       if (open) return { error: `Telling ${open.number} loopt nog; sluit die eerst af of annuleer hem.`, code: 'count_open', status: 409 };
       if (kind === 'jaar') {
@@ -414,7 +430,7 @@ function createStockCounts(db, { stock }) {
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van de telling.
    * @param {string} lineId Id van de regel.
-   * @param {{ qty?: number, clientId?: string }} body De ingave.
+   * @param {{ qty?: number, clientId?: string, countedAt?: string }} body De ingave (met optioneel het tijdstip waarop de teller telde).
    * @param {object} user De teller.
    * @returns {{ line: object, repeated?: boolean }|{ error: string, code: string, status: number }} De blinde regel of een fout.
    */
@@ -437,11 +453,12 @@ function createStockCounts(db, { stock }) {
         }
         if (row.status !== 'tellen') return { error: 'Deze telling loopt niet meer.', code: 'closed', status: 409 };
         const now = new Date().toISOString();
+        const countedAt = countMoment(input.countedAt, row.frozen_at, now);
         const userName = user ? cleanText(user.display_name || user.displayName, 120) : '';
         prepare('INSERT INTO stock_count_entries (id, tenant_id, count_id, line_id, client_id, qty, counted_at, user_id, user_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-          .run(crypto.randomUUID(), tenantId, row.id, line.id, clientId, qty, now, user ? user.id : null, userName);
+          .run(crypto.randomUUID(), tenantId, row.id, line.id, clientId, qty, countedAt, user ? user.id : null, userName);
         prepare("UPDATE stock_count_lines SET counted_qty = ?, counted_at = ?, counted_by = ?, counted_by_name = ?, status = 'geteld' WHERE tenant_id = ? AND id = ?")
-          .run(qty, now, user ? user.id : null, userName, tenantId, line.id);
+          .run(qty, countedAt, user ? user.id : null, userName, tenantId, line.id);
         return { line: blindOf({ ...line, counted_qty: qty, status: 'geteld' }) };
       });
     } catch (error) {
@@ -610,6 +627,7 @@ function registerStockCountRoutes(app, { counts, getUser, requireRight, requireJ
    */
   const send = (res, out, status = 200) => (out.error ? res.status(out.status || 400).json({ error: out.code || 'invalid', message: out.error, ...(out.details || {}) }) : res.status(status).json(out));
   const countLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 600, keyFn: (req) => `telling-ingave:${req.tenantId}:${req.user && req.user.id}` });
+  const changeLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 60, keyFn: (req) => `telling-wijzigen:${req.tenantId}:${req.user && req.user.id}` });
   const closeLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 5, keyFn: (req) => `telling-afsluiten:${req.tenantId}:${req.user && req.user.id}` });
   /**
    * Zet de kop die caching van tellingen voorkomt.
@@ -626,7 +644,7 @@ function registerStockCountRoutes(app, { counts, getUser, requireRight, requireJ
     res.json({ counts: counts.list(req.tenantId) });
   });
 
-  app.post('/api/stock-counts', requireJson, requireStock, (req, res) => {
+  app.post('/api/stock-counts', requireJson, requireStock, changeLimiter, (req, res) => {
     const out = counts.start(req.tenantId, req.user, req.body);
     if (out.error) return send(res, out);
     audit(req, 'voorraadtelling_gestart', { number: out.count.number, kind: out.count.kind, referenceDate: out.count.referenceDate, lines: out.lines });
@@ -655,7 +673,7 @@ function registerStockCountRoutes(app, { counts, getUser, requireRight, requireJ
     res.json(out);
   });
 
-  app.post('/api/stock-counts/:id/recount', requireJson, requireStock, (req, res) => {
+  app.post('/api/stock-counts/:id/recount', requireJson, requireStock, changeLimiter, (req, res) => {
     const out = counts.requestRecount(req.tenantId, req.params.id, req.body);
     if (out.error) return send(res, out);
     audit(req, 'voorraadtelling_hertellen', { id: req.params.id, marked: out.marked });
@@ -675,11 +693,14 @@ function registerStockCountRoutes(app, { counts, getUser, requireRight, requireJ
       audit(req, 'voorraadtelling_afgesloten', { number: out.count.number, referenceDate: out.count.referenceDate, booked: out.booked, totals: out.count.totals });
       res.json({ count: out.count, booked: out.booked });
     } catch (error) {
+      if (error && (error.code === 'count_changed' || error.code === 'item_missing')) {
+        return res.status(409).json({ error: error.code, message: 'De telling of een artikel is intussen gewijzigd; er is niets geboekt. Laad de telling opnieuw en probeer het nog eens.' });
+      }
       next(error);
     }
   });
 
-  app.post('/api/stock-counts/:id/cancel', requireJson, requireStock, (req, res) => {
+  app.post('/api/stock-counts/:id/cancel', requireJson, requireStock, changeLimiter, (req, res) => {
     const out = counts.cancel(req.tenantId, req.params.id);
     if (out.error) return send(res, out);
     audit(req, 'voorraadtelling_geannuleerd', { number: out.count.number });
