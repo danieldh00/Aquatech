@@ -70,7 +70,7 @@
       <td class="nowrap">${esc(when(item.at))}</td>
       <td><span class="mon-badge ${item.level === 'error' ? 'bad' : item.level === 'warn' ? 'warn' : 'info'}">${esc(LEVEL_TEXT[item.level] || item.level)}</span></td>
       <td>${esc(item.source)}${item.scope === 'platform' ? ' <span class="mon-tag">Platform</span>' : ''}</td>
-      <td class="wrap">${esc(item.message)}${item.repeat > 1 ? ` <span class="muted small">(${esc(item.repeat)}×)</span>` : ''}${ids ? `<br><span class="muted small">${esc(ids)}</span>` : ''}${details}</td>
+      <td class="wrap">${esc(item.message)}${item.repeat > 1 ? ` <span class="muted small">(${esc(item.repeat)}×${item.firstAt ? `, eerste ${esc(when(item.firstAt))}` : ''})</span>` : ''}${ids ? `<br><span class="muted small">${esc(ids)}</span>` : ''}${details}</td>
       <td class="num">${item.durationMs ? esc(`${item.durationMs} ms`) : ''}</td>
     </tr>`;
   };
@@ -143,13 +143,13 @@
       workbook.created = new Date();
       const sheet = workbook.addWorksheet('Logboek');
       sheet.columns = [
-        { header: 'Tijdstip', key: 'at', width: 22 }, { header: 'Niveau', key: 'level', width: 14 }, { header: 'Bron', key: 'source', width: 14 },
+        { header: 'Tijdstip (laatste)', key: 'at', width: 22 }, { header: 'Eerste keer', key: 'firstAt', width: 22 }, { header: 'Niveau', key: 'level', width: 14 }, { header: 'Bron', key: 'source', width: 14 },
         { header: 'Melding', key: 'message', width: 70 }, { header: 'Foutcode', key: 'errorCode', width: 12 }, { header: 'Verzoek-id', key: 'requestId', width: 16 },
         { header: 'Duur (ms)', key: 'durationMs', width: 11 }, { header: 'Aantal', key: 'repeat', width: 9 }, { header: 'Details', key: 'data', width: 60 },
       ];
       sheet.getRow(1).font = { bold: true };
       items.slice(0, EXPORT_MAX).forEach((item) => sheet.addRow({
-        at: when(item.at), level: LEVEL_TEXT[item.level] || item.level, source: item.source, message: item.message, errorCode: item.errorCode,
+        at: when(item.at), firstAt: item.firstAt ? when(item.firstAt) : '', level: LEVEL_TEXT[item.level] || item.level, source: item.source, message: item.message, errorCode: item.errorCode,
         requestId: item.requestId, durationMs: item.durationMs || '', repeat: item.repeat, data: item.data && Object.keys(item.data).length ? JSON.stringify(item.data) : '',
       }));
       const buffer = await workbook.xlsx.writeBuffer();
