@@ -360,8 +360,8 @@ function createPaymentReminderRunner(reminders, { invoices, sender, settingsFor,
         }
         // De mail is weg: de uitkomst vastleggen. Een databasefout hier telt niet als mailfout; de reservering blijft staan, dus geen tweede mail.
         try {
-          skipEarlier();
           reminders.finish(tenantId, invoice.id, target.key, { status: 'verstuurd', sentTo: to });
+          skipEarlier();
         } catch (error) {
           console.error(`Betalingsherinnering ${invoice.number}: vastleggen na het mailen mislukt:`, error.message);
         }
