@@ -1,5 +1,5 @@
 // Startscherm "Openstaande taken": wat er voor de ingelogde gebruiker nog te doen ligt (api/tasks):
-// webshopbestellingen verwerken, bestelvoorstellen goedkeuren, prijsvoorstellen beoordelen. Per taak
+// webshopbestellingen verwerken, bestelvoorstellen goedkeuren. Per taak
 // het aantal en een link; bij bestellingen de oudste vijf. Zonder openstaande taken blijft het blok weg.
 (function () {
   /**

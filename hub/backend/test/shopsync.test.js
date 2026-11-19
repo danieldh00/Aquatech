@@ -150,6 +150,17 @@ test('webshop: zonder terugschrijven blijft de webshop leidend; fouten blijven z
   assert.strictEqual(stock.get(tid, it.id).shop.error, '');
 });
 
+test('webshop: een artikel in de modus factor neemt de prijs nooit over uit de webshop', async () => {
+  const products = new Map([product(22, 'FAC-1', '2.42', 7)]);
+  const { tid, stock, sync } = setup(products, { url: 'http://shop.test', mode: 'rest', push: false, pricesIncludeTax: true, vatRate: 21 });
+  const factorItem = stock.create(tid, null, { code: 'FAC-1', name: 'Factorartikel', salePrice: 9, onHand: 1, priceMode: 'factor' }).item;
+  const fixedItem = stock.create(tid, null, { code: 'VAST-1', name: 'Vast artikel', salePrice: 9, onHand: 1 }).item;
+  products.set('23', { ...products.get('22'), id: 23, sku: 'VAST-1' });
+  await sync.run(tid);
+  assert.strictEqual(stock.get(tid, factorItem.id).salePrice, 9, 'de berekende prijs blijft staan');
+  assert.strictEqual(stock.get(tid, fixedItem.id).salePrice, 2, 'een vast artikel volgt de webshop zoals altijd');
+});
+
 test('webshop: alles uit de webshop wordt voorraad, rest gearchiveerd en weer teruggezet', async () => {
   const products = new Map([product(21, 'PE-25', '2.42', 4), product(22, '', '10.00', null)]);
   const { tid, stock, sync } = setup(products, { url: 'http://shop.test', mode: 'rest', push: false, pricesIncludeTax: true, vatRate: 21 });

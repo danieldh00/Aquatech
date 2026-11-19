@@ -148,7 +148,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
    * @param {boolean} onlyDirty Alleen gewijzigde, al gekoppelde artikelen.
    * @returns {object[]} De artikelrijen.
    */
-  const itemsOf = (tenantId, onlyDirty) => prepare(`SELECT i.id, i.code, i.on_hand, i.sale_price, i.vat_rate, i.shop_product_id, i.shop_dirty,
+  const itemsOf = (tenantId, onlyDirty) => prepare(`SELECT i.id, i.code, i.on_hand, i.sale_price, i.vat_rate, i.price_mode, i.shop_product_id, i.shop_dirty,
       i.shop_price_seen, i.shop_stock_seen, i.has_variants, i.parent_id, parent.shop_product_id AS shop_parent_id,
       ${onlyDirty ? 'COALESCE((SELECT SUM(r.qty) FROM stock_reservations r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id), 0)' : 'COALESCE(r.qty, 0)'} AS reserved,
       EXISTS (SELECT 1 FROM stock_movements m WHERE m.tenant_id = i.tenant_id AND m.item_id = i.id) AS moved
@@ -275,13 +275,15 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
 
         // 2. Prijs.
         const raw = product.rawRegular != null ? product.rawRegular : null;
-        if (raw == null && !shopConfig.push && product.price != null && (salePrice == null || Math.abs(product.price - salePrice) >= 0.005)) {
+        // Artikelen in de modus factor: de prijs komt uit de berekening, nooit uit de webshop (anders heen-en-weer bij het uurlijkse herrekenen).
+        const priceFromShop = item.price_mode !== 'factor';
+        if (priceFromShop && raw == null && !shopConfig.push && product.price != null && (salePrice == null || Math.abs(product.price - salePrice) >= 0.005)) {
           // Store API: alleen de prijs excl. btw is bekend (geen rawRegular).
           prepare('UPDATE stock_items SET sale_price = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(product.price, timestamp, tenantId, item.id);
           salePrice = product.price;
           summary.pricesFromShop++;
         }
-        if (raw != null) {
+        if (raw != null && priceFromShop) {
           const shopChanged = priceSeen != null && Math.abs(raw - Number(priceSeen)) >= 0.005 && !Number(item.shop_dirty);
           if (!shopConfig.push || salePrice == null || shopChanged) {
             const excl = exclOf(raw, item.vat_rate, shopConfig);

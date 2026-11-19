@@ -1,16 +1,12 @@
 // Prijsfactor op de inkoopprijs (punt 19): de verkoopprijs (excl. btw) van een artikel is de inkoopprijs maal een factor,
 // afgerond volgens een instelbare regel. De factor komt van het meest specifieke niveau dat er een heeft:
 //   artikel (eigen factor) > voorkeursleverancier > categorie van de webshop (de diepste met een factor) > standaard.
-// Per artikel kies je tussen een vaste prijs (zoals altijd) en prijs volgens factor. Wijzigt de inkoopprijs, dan blijft de
-// verkoopprijs staan tot de beheerder de herberekening doorvoert; die toont eerst een voorbeeld (oude en nieuwe prijs, marge).
-// Dat voorbeeld is ook de lijst met prijsvoorstellen: een nieuwe inkoopprijs (ontvangst of artikel bewerken) geeft een voorstel
-// voor een nieuwe verkoopprijs, dat de beheerder per artikel of voor alles tegelijk goedkeurt (doorvoeren) of afwijst. Een
-// afgewezen voorstel komt pas terug als de inkoopprijs of de voorgestelde prijs verandert. Artikelen met een vaste prijs doen niet mee.
-// Alleen bij het opslaan van een artikel waarvan modus, factor of inkoopprijs verandert, wordt de prijs meteen berekend.
+// Per artikel kies je tussen een vaste prijs (zoals altijd) en prijs volgens factor. De verkoopprijs volgt automatisch, zonder
+// goedkeuring: een nieuwe inkoopprijs (artikel bewerken, handmatige inkoopprijs, ontvangst of inkooporder) of een andere factor
+// (artikel, leverancier, categorie, standaard of afronding) zet hem direct goed, en elke automatische wijziging komt met oud, nieuw
+// en bron in het auditlog (stock.repriceItem / stock.applyAutoPrices). Artikelen met een vaste prijs doen niet mee.
 // Kortingen voor zakelijke klanten (category-discounts.js) rekenen over de uitkomst; verpakkingen zonder eigen prijs volgen
 // de stukprijs. De instelling `priceFactors` bewaart standaardfactor, afronding en de factoren per categorie en leverancier.
-const crypto = require('node:crypto');
-const { transaction } = require('../database/db');
 const { placeIn } = require('../webshop/category-tree');
 const { categoryNamesOf } = require('../webshop/storefront-data');
 const { flatten } = require('../webshop/category-discounts');
@@ -189,9 +185,9 @@ const ROWS_SQL = `SELECT i.id, i.code, i.name, i.unit, i.cost_price, i.sale_pric
 /**
  * Maakt de opslaglaag voor de prijsfactor.
  * @param {object} db De database.
- * @param {{ stock: object, settingsOf: Function, treeOf: Function }} ctx stock = voorraadopslag (setSalePrices), settingsOf(tenantId) = de instellingen van de omgeving,
+ * @param {{ stock: object, settingsOf: Function, treeOf: Function }} ctx stock = voorraadopslag (applyAutoPrices), settingsOf(tenantId) = de instellingen van de omgeving,
  *   treeOf(tenantId) = de categorieboom van de webshop van de omgeving.
- * @returns {object} configOf, saveConfig, view, preview, apply en priceFor.
+ * @returns {object} configOf, view, repriceAll en priceFor.
  */
 function createPriceFactorStore(db, { stock, settingsOf, treeOf }) {
   /**
@@ -257,24 +253,18 @@ function createPriceFactorStore(db, { stock, settingsOf, treeOf }) {
    * Alle actieve artikelen in de modus factor, met de nieuwe prijs.
    * @param {string} tenantId Id van de omgeving.
    * @param {?string} [onlyItemId] Alleen dit artikel (voor het artikelscherm), anders alle artikelen.
-   * @returns {object[]} Rijen: id, code, name, unit, costPrice, oldPrice, newPrice, factor, source, problem, changed, rejected, marginOld, marginNew.
+   * @returns {object[]} Rijen: id, code, name, unit, costPrice, oldPrice (= de huidige verkoopprijs), newPrice (volgens de instelling), factor, source, problem, marginOld, marginNew.
    */
   function rowsOf(tenantId, onlyItemId = null) {
     const config = configOf(tenantId);
     const lookup = categoryLookup(tenantId, config);
     const rows = db.prepare(`${ROWS_SQL} AND i.archived = 0 AND i.has_variants = 0 AND i.price_mode = 'factor'${onlyItemId ? ' AND i.id = ?' : ''} ORDER BY i.code`).all(...(onlyItemId ? [tenantId, onlyItemId] : [tenantId]));
-    const rejections = new Map(db.prepare(`SELECT item_id, cost_price, proposed_price FROM price_proposal_rejections WHERE tenant_id = ?${onlyItemId ? ' AND item_id = ?' : ''}`).all(...(onlyItemId ? [tenantId, onlyItemId] : [tenantId])).map((entry) => [entry.item_id, entry]));
     return rows.map((row) => {
       const result = compute(row, config, lookup);
       const oldPrice = row.sale_price == null ? null : Number(row.sale_price);
       const costPrice = row.cost_price == null ? null : Number(row.cost_price);
-      const changed = result.price !== null && (oldPrice === null || Math.abs(oldPrice - result.price) >= 0.005);
-      const rejection = rejections.get(row.id);
-      // Afgewezen geldt alleen voor dit voorstel: een andere inkoopprijs of een andere voorgestelde prijs maakt het weer open.
-      const rejected = changed && Boolean(rejection) && Math.abs(Number(rejection.cost_price) - Number(costPrice)) < 0.00005 && Math.abs(Number(rejection.proposed_price) - result.price) < 0.005;
       return {
         id: row.id, code: row.code, name: row.name, unit: row.unit, costPrice, oldPrice, newPrice: result.price, factor: result.factor, source: result.source, problem: result.problem,
-        changed, rejected,
         marginOld: marginPct(oldPrice, costPrice), marginNew: marginPct(result.price, costPrice),
       };
     });
@@ -284,106 +274,28 @@ function createPriceFactorStore(db, { stock, settingsOf, treeOf }) {
    * Het scherm: instelling, de keuzelijsten en het voorbeeld van de herberekening.
    * @param {string} tenantId Id van de omgeving.
    * @param {{ suppliers: { id: string, name: string }[] }} choices De leveranciers om uit te kiezen.
-   * @returns {object} config, categories, suppliers, roundingModes, directions, preview (de artikelen in de modus factor: open voorstellen eerst, dan afgewezen), changedCount (open voorstellen) en rejectedCount.
+   * @returns {object} config, categories, suppliers, roundingModes, directions en preview (de artikelen in de modus factor, met opmerkingen eerst).
    */
   function view(tenantId, choices) {
-    const preview = rowsOf(tenantId).sort((left, right) => Number(right.changed && !right.rejected) - Number(left.changed && !left.rejected) || Number(right.changed) - Number(left.changed) || left.code.localeCompare(right.code));
+    const preview = rowsOf(tenantId).sort((left, right) => Number(Boolean(right.problem)) - Number(Boolean(left.problem)) || left.code.localeCompare(right.code));
     return {
       config: configOf(tenantId), categories: flatten(treeOf(tenantId)), suppliers: choices.suppliers,
       roundingModes: Object.entries(ROUNDING_MODES).map(([mode, rule]) => ({ mode, label: rule.label })), directions: DIRECTIONS,
-      preview, changedCount: preview.filter((row) => row.changed && !row.rejected).length, rejectedCount: preview.filter((row) => row.rejected).length,
+      preview,
     };
   }
 
   /**
-   * De open prijsvoorstellen (de prijs wijkt af en is niet afgewezen), voor de melding bij het artikel en de indicatie in de lijst.
+   * Zet de verkoopprijs van alle artikelen in de modus factor goed volgens de instelling (na een wijziging van de instelling).
    * @param {string} tenantId Id van de omgeving.
-   * @param {?string} [onlyItemId] Alleen dit artikel (artikelscherm), anders alle.
-   * @returns {{ id: string, oldPrice: ?number, newPrice: number, costPrice: ?number }[]} Per artikel het huidige en het voorgestelde bedrag.
+   * @param {object|null} user Wie de instelling wijzigde.
+   * @param {string} [source] Bron voor het auditlog.
+   * @returns {number} Aantal artikelen waarvan de prijs wijzigde.
    */
-  function openProposals(tenantId, onlyItemId = null) {
-    return rowsOf(tenantId, onlyItemId).filter((row) => row.changed && !row.rejected)
-      .map((row) => ({ id: row.id, oldPrice: row.oldPrice, newPrice: row.newPrice, costPrice: row.costPrice, marginNew: row.marginNew }));
-  }
-
-  /**
-   * Zet de nieuwe prijzen door voor de gevraagde artikelen. De prijzen worden opnieuw berekend; een artikel waarvan de
-   * uitkomst intussen anders is dan in het voorbeeld (instelling of inkoopprijs veranderde) of die is afgewezen, wordt overgeslagen:
-   * een afwijzing maak je alleen ongedaan met reopen.
-   * @param {string} tenantId Id van de omgeving.
-   * @param {{ id: string, newPrice: number }[]} requested Wat het voorbeeld toonde.
-   * @returns {{ updated: number, skipped: number }} Aantal doorgevoerd en overgeslagen.
-   */
-  function apply(tenantId, requested) {
-    const current = new Map(rowsOf(tenantId).map((row) => [row.id, row]));
-    const changes = [];
-    let skipped = 0;
-    for (const entry of requested) {
-      const row = current.get(String(entry && entry.id));
-      if (!row || !row.changed || row.rejected || !(Math.abs(Number(entry.newPrice) - row.newPrice) < 0.005)) { skipped += 1; continue; }
-      changes.push({ id: row.id, salePrice: row.newPrice });
-    }
-    if (changes.length) {
-      stock.setSalePrices(tenantId, changes);
-      forget(tenantId, changes.map((change) => change.id));
-    }
-    return { updated: changes.length, skipped };
-  }
-
-  /**
-   * Wist de onthouden afwijzingen van artikelen (na doorvoeren, of om een voorstel opnieuw te openen).
-   * @param {string} tenantId Id van de omgeving.
-   * @param {string[]} itemIds De artikelen.
-   * @returns {void}
-   */
-  function forget(tenantId, itemIds) {
-    // Per blok van 500 in één statement: geen rondgang per artikel (en geen transactie nodig, want setSalePrices nest niet).
-    for (let start = 0; start < itemIds.length; start += 500) {
-      const chunk = itemIds.slice(start, start + 500);
-      db.prepare(`DELETE FROM price_proposal_rejections WHERE tenant_id = ? AND item_id IN (${chunk.map(() => '?').join(',')})`).run(tenantId, ...chunk);
-    }
-  }
-
-  /**
-   * Wijst voorstellen af. Net als bij doorvoeren moet de prijs overeenkomen met het huidige voorstel, anders wordt het
-   * artikel overgeslagen (het voorstel is intussen veranderd en moet opnieuw bekeken worden).
-   * @param {string} tenantId Id van de omgeving.
-   * @param {{ id: string, newPrice: number }[]} requested Wat het voorbeeld toonde.
-   * @param {?string} userId De beheerder die afwijst.
-   * @returns {{ rejected: number, skipped: number }} Aantal afgewezen en overgeslagen.
-   */
-  function reject(tenantId, requested, userId) {
-    const current = new Map(rowsOf(tenantId).map((row) => [row.id, row]));
-    const timestamp = new Date().toISOString();
-    const accepted = new Map();
-    let skipped = 0;
-    for (const entry of requested) {
-      const row = current.get(String(entry && entry.id));
-      if (!row || !row.changed || row.costPrice === null || !(Math.abs(Number(entry.newPrice) - row.newPrice) < 0.005)) { skipped += 1; continue; }
-      accepted.set(row.id, row);
-    }
-    const rows = [...accepted.values()];
-    // In blokken van 500 in één statement vastleggen (geen rondgang per artikel); ON CONFLICT vangt twee gelijktijdige afwijzingen van hetzelfde artikel op.
-    transaction(db, () => {
-      for (let start = 0; start < rows.length; start += 500) {
-        const chunk = rows.slice(start, start + 500);
-        db.prepare(`INSERT INTO price_proposal_rejections (id, tenant_id, item_id, cost_price, proposed_price, rejected_by, rejected_at) VALUES ${chunk.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ')}
-          ON CONFLICT (tenant_id, item_id) DO UPDATE SET cost_price = excluded.cost_price, proposed_price = excluded.proposed_price, rejected_by = excluded.rejected_by, rejected_at = excluded.rejected_at`)
-          .run(...chunk.flatMap((row) => [crypto.randomUUID(), tenantId, row.id, row.costPrice, row.newPrice, userId || null, timestamp]));
-      }
-    });
-    const rejected = rows.length;
-    return { rejected, skipped };
-  }
-
-  /**
-   * Opent afgewezen voorstellen weer.
-   * @param {string} tenantId Id van de omgeving.
-   * @param {string[]} itemIds De artikelen.
-   * @returns {void}
-   */
-  function reopen(tenantId, itemIds) {
-    transaction(db, () => forget(tenantId, itemIds));
+  function repriceAll(tenantId, user, source = 'factorinstelling') {
+    // Eén bulkberekening voor de hele omgeving (geen query per artikel); alleen afwijkende prijzen worden geschreven.
+    const changes = rowsOf(tenantId).filter((row) => row.newPrice !== null && (row.oldPrice === null || Math.abs(row.oldPrice - row.newPrice) >= 0.005));
+    return stock.applyAutoPrices(tenantId, changes, source, user);
   }
 
   /**
@@ -399,11 +311,11 @@ function createPriceFactorStore(db, { stock, settingsOf, treeOf }) {
     return compute({ ...row, cost_price: item.costPrice, price_factor: item.priceFactor }, config, categoryLookup(tenantId, config)).price;
   }
 
-  return { configOf, view, openProposals, apply, reject, reopen, priceFor, sanitize: sanitizePriceFactors };
+  return { configOf, view, repriceAll, priceFor, sanitize: sanitizePriceFactors };
 }
 
 /**
- * Hangt de routes aan de app: lezen en voorbeeld (recht voorraad), instelling opslaan en doorvoeren (recht beheer).
+ * Hangt de routes aan de app: lezen (recht voorraad) en de instelling opslaan (recht beheer; de prijzen volgen meteen).
  * @param {object} app De Express-app.
  * @param {{ priceFactors: object, suppliers: object, settingsOf: Function, treeOf: Function, requireRight: Function, requireJson: Function, audit: Function }} ctx
  *   De opslag en hulpfuncties van de server.
@@ -431,12 +343,6 @@ function registerPriceFactorRoutes(app, { priceFactors, suppliers, settingsOf, t
     res.json(priceFactors.view(tenantId, { suppliers: supplierChoices(tenantId) }));
   });
 
-  // Open prijsvoorstellen voor het artikelscherm en de lijst (alleen lezen, recht voorraad).
-  app.get('/api/stock/price-proposals', requireStock, (req, res) => {
-    res.set('Cache-Control', 'no-store');
-    res.json({ items: priceFactors.openProposals(tenantOf(req), req.query.id ? String(req.query.id) : null) });
-  });
-
   app.put('/api/stock/price-factors', requireAdmin, requireJson, (req, res) => {
     const tenantId = tenantOf(req);
     const known = new Set(flatten(treeOf(tenantId)).map((node) => node.slug));
@@ -444,33 +350,11 @@ function registerPriceFactorRoutes(app, { priceFactors, suppliers, settingsOf, t
     if (problem) return res.status(400).json({ error: 'invalid_price_factors', message: problem });
     const clean = sanitizePriceFactors(req.body);
     settingsOf(tenantId).update({ priceFactors: clean }, req.user.id);
-    audit(req, 'prijsfactor_gewijzigd', { standaard: clean.defaultFactor, afronding: clean.rounding.mode, categorieen: clean.categories.length, leveranciers: clean.suppliers.length });
+    // De prijzen volgen de nieuwe instelling meteen (elke wijziging staat per artikel in het auditlog).
+    const repriced = priceFactors.repriceAll(tenantId, req.user);
+    audit(req, 'prijsfactor_gewijzigd', { standaard: clean.defaultFactor, afronding: clean.rounding.mode, categorieen: clean.categories.length, leveranciers: clean.suppliers.length, prijzenBijgewerkt: repriced });
     res.set('Cache-Control', 'no-store');
-    res.json(priceFactors.view(tenantId, { suppliers: supplierChoices(tenantId) }));
-  });
-
-  app.post('/api/stock/price-factors/apply', requireAdmin, requireJson, (req, res) => {
-    const requested = req.body && Array.isArray(req.body.items) ? req.body.items.slice(0, 20000) : null;
-    if (!requested || !requested.length) return res.status(400).json({ error: 'invalid', message: 'Kies de artikelen waarvan de prijs wijzigt.' });
-    const out = priceFactors.apply(tenantOf(req), requested);
-    audit(req, 'prijsfactor_doorgevoerd', { aantal: out.updated, overgeslagen: out.skipped });
-    res.json(out);
-  });
-
-  app.post('/api/stock/price-factors/reject', requireAdmin, requireJson, (req, res) => {
-    const requested = req.body && Array.isArray(req.body.items) ? req.body.items.slice(0, 20000) : null;
-    if (!requested || !requested.length) return res.status(400).json({ error: 'invalid', message: 'Kies de voorstellen die je wilt afwijzen.' });
-    const out = priceFactors.reject(tenantOf(req), requested, req.user.id);
-    audit(req, 'prijsvoorstel_afgewezen', { aantal: out.rejected, overgeslagen: out.skipped });
-    res.json(out);
-  });
-
-  app.post('/api/stock/price-factors/reopen', requireAdmin, requireJson, (req, res) => {
-    const ids = req.body && Array.isArray(req.body.ids) ? req.body.ids.slice(0, 20000).map(String) : null;
-    if (!ids || !ids.length) return res.status(400).json({ error: 'invalid', message: 'Kies de voorstellen die je opnieuw wilt openen.' });
-    priceFactors.reopen(tenantOf(req), ids);
-    audit(req, 'prijsvoorstel_heropend', { aantal: ids.length });
-    res.json({ reopened: ids.length });
+    res.json({ ...priceFactors.view(tenantId, { suppliers: supplierChoices(tenantId) }), repriced });
   });
 }
 

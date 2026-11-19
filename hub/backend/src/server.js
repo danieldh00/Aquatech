@@ -2803,6 +2803,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   registerSupplierRoutes(app, { suppliers: supplierStore, requireRight, requireJson, audit });
   const priceFactorStore = createPriceFactorStore(database, { stock: stockStore, settingsOf: (tenantId) => settingsFor(tenantId), treeOf: (tenantId) => shopContentStore.publicContent(tenantId).tree });
   stockStore.setPricer((tenantId, item) => priceFactorStore.priceFor(tenantId, item));
+  stockStore.setPriceLogger((entries) => store.auditMany(entries));
   registerPriceFactorRoutes(app, { priceFactors: priceFactorStore, suppliers: supplierStore, settingsOf: (tenantId) => settingsFor(tenantId), treeOf: (tenantId) => shopContentStore.publicContent(tenantId).tree, requireRight, requireJson, audit });
   // Producttekst door de AI: de browser vraagt per portie van 5 artikelen, dus ruimer dan de limiet voor plannen (de dagelijkse limiet telt per artikel).
   const itemTextLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 120, keyFn: (req) => `${req.tenantId || tenant.id}|${clientKey(req)}` });
@@ -3098,7 +3099,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.set('Cache-Control', 'no-store');
     res.json(describeKpiCatalog(settingsFor(req.tenantId).get('dashboardKpis'), (moduleId) => ModuleTools.isOn(moduleFlagsOf(req.tenantId), moduleId)));
   });
-  registerOpenTaskRoutes(app, { identify, canUpdate, sources: { hostTasks, orders: webOrders, purchaseOrders: purchaseOrderStore, priceFactors: priceFactorStore, proposalsEnabled,
+  registerOpenTaskRoutes(app, { identify, canUpdate, sources: { hostTasks, orders: webOrders, purchaseOrders: purchaseOrderStore, proposalsEnabled,
     shopEnabled: (tenantId) => Boolean(settingsFor(tenantId).get('storefront')), stockEnabled: (tenantId) => ModuleTools.isOn(moduleFlagsOf(tenantId), 'voorraad') } });
 
   registerWebOrderRoutes(app, { orders: webOrders, requireJson, audit, invoices: webOrderInvoices, payments: webPayments, returns: webReturns });
@@ -3499,6 +3500,26 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     return summary;
   });
   /**
+   * Zet de verkoopprijs van artikelen met prijs volgens factor goed in elke actieve omgeving (vangt wijzigingen van leverancier,
+   * categorie of webshopmenu en oude open prijsvoorstellen op); elke wijziging staat in het auditlog.
+   * @returns {Promise<object>} Per omgeving het aantal bijgewerkte prijzen.
+   */
+  app.locals.pricesRefreshAll = () => asSystem(async () => {
+    const activeIds = inScopeOnly(store.listTenants()).filter((live) => !live.disabled)
+      .flatMap((live) => [live, ...live.environments.filter((environment) => !environment.disabled)])
+      .map((environment) => environment.id);
+    const summary = {};
+    for (const tenantId of activeIds) {
+      try {
+        const changed = priceFactorStore.repriceAll(tenantId, null, 'onderhoud');
+        if (changed) summary[tenantId] = changed;
+      } catch (error) {
+        console.error(`Verkoopprijzen bijwerken voor omgeving ${tenantId} mislukt:`, error.message);
+      }
+    }
+    return summary;
+  });
+  /**
    * Automatische back-up als de nieuwste ouder is dan een dag.
    * @returns {Promise<object|null>} De back-up, of null als het niet nodig was.
    */
@@ -3602,6 +3623,9 @@ if (require.main === module) {
     slowLog.trackTask('offerte-opvolging', () => app.locals.quoteFollowUpAll())
       .then((sent) => { if (Object.keys(sent).length) console.log(`Offerte-opvolging: ${JSON.stringify(sent)}`); })
       .catch((error) => console.error('Offerte-opvolging mislukt:', error.message));
+    slowLog.trackTask('verkoopprijzen volgens factor', () => app.locals.pricesRefreshAll())
+      .then((changed) => { if (changed && Object.keys(changed).length) console.log(`Verkoopprijzen automatisch bijgewerkt: ${JSON.stringify(changed)}`); })
+      .catch((error) => console.error('Verkoopprijzen bijwerken mislukt:', error.message));
     // Een halve minuut later, zodat de server bij het opstarten eerst luistert (niet blokkerend).
     setTimeout(runPurchaseProposals, 30 * 1000).unref();
     slowLog.trackTask('back-up', () => app.locals.backupIfDue())

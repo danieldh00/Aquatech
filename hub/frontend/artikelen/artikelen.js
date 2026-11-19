@@ -70,8 +70,10 @@
   function syncPricing(form) {
     const byFactor = form.priceMode.value === 'factor';
     form.priceFactor.disabled = !byFactor;
-    form.salePrice.title = byFactor ? 'Wordt berekend uit de inkoopprijs zodra je de inkoopprijs of de factor wijzigt en opslaat. Zonder factor of inkoopprijs blijft deze prijs staan.' : '';
     const cost = num(form.costPrice.value);
+    // In de modus factor is de verkoopprijs het resultaat van de berekening (ook elk uur bijgewerkt): alleen-lezen zodra er een inkoopprijs is.
+    form.salePrice.readOnly = byFactor && cost != null;
+    form.salePrice.title = byFactor ? 'Wordt automatisch berekend uit de inkoopprijs en de factor; wijzig de factor of de inkoopprijs om de prijs te veranderen. Zonder inkoopprijs blijft deze prijs staan.' : '';
     const sale = num(form.salePrice.value);
     const hint = form.querySelector('[data-margin]');
     hint.textContent = cost != null && sale ? `Marge nu: ${nl(Math.round(((sale - cost) / sale) * 1000) / 10)}% (op ${eur(sale)} excl. btw)` : '';
@@ -176,7 +178,7 @@
   };
   const KINDS = { ontvangst: 'Ontvangst', afboeking: 'Afboeking', retour: 'Retour', correctie: 'Correctie', telling: 'Telling' };
 
-  const state = { items: [], reservations: [], moves: null, tab: 'stock', item: null, units: [], open: new Set(), newImage: null, media: null, proposals: new Map(), canApprove: false };
+  const state = { items: [], reservations: [], moves: null, tab: 'stock', item: null, units: [], open: new Set(), newImage: null, media: null };
 
   /**
    * Toont kort een melding onderin het scherm.
@@ -324,7 +326,7 @@
         <td class="num">${item.reserved ? `${esc(nl(item.reserved))}<span class="sub">${item.orders} werkorder${item.orders === 1 ? '' : 's'}</span>` : ''}</td>
         <td class="num avail">${esc(nl(item.available))}${item.low ? ' <span class="pill low">Bijbestellen</span>' : ''}</td>
         <td class="num">${item.minQty && !item.hasVariants ? esc(nl(item.minQty)) : ''}</td>
-        <td class="num">${item.hasVariants ? '' : `${esc(eur(item.salePrice))}${item.salePrice != null && item.vatRate !== 21 ? `<span class="sub">${item.vatRate}% btw</span>` : ''}${item.priceMode === 'factor' ? '<span class="sub">× factor</span>' : ''}${state.proposals.has(item.id) ? `<span class="pill proposal" title="Nieuwe verkoopprijs voorgesteld: ${esc(eur(state.proposals.get(item.id).newPrice))}">Voorstel ${esc(eur(state.proposals.get(item.id).newPrice))}</span>` : ''}`}</td>
+        <td class="num">${item.hasVariants ? '' : `${esc(eur(item.salePrice))}${item.salePrice != null && item.vatRate !== 21 ? `<span class="sub">${item.vatRate}% btw</span>` : ''}${item.priceMode === 'factor' ? '<span class="sub">× factor</span>' : ''}`}</td>
         <td class="num${item.margin != null && item.margin < 0 ? ' neg' : ''}">${item.hasVariants || item.margin == null ? '' : `${esc(nl(item.margin))}%`}</td>
         <td>${shopPill(item)}</td>
         <td class="num">${esc(eur(item.value))}</td>
@@ -461,69 +463,11 @@
   async function load() {
     const [stock, reservations] = await Promise.all([api(`stock${$('#f-archived').checked ? '?archived=1' : ''}`), api('stock/reservations')]);
     state.items = stock.items;
-    // Voorstellen alleen ophalen als er artikelen met prijs volgens factor zijn (anders is er niets te berekenen).
-    if (state.items.some((item) => item.priceMode === 'factor')) await loadProposals(); else state.proposals = new Map();
     state.reservations = reservations.items;
     renderStats();
     renderStock();
     renderReserved();
     if (state.moves) loadMoves();
-  }
-
-  /**
-   * Haalt de open prijsvoorstellen op (nieuwe verkoopprijs na een andere inkoopprijs). Een fout laat het scherm gewoon werken zonder voorstellen.
-   * @param {?string} [itemId] Alleen het voorstel van dit artikel verversen (artikelscherm), anders alle voorstellen.
-   * @returns {Promise<void>}
-   */
-  async function loadProposals(itemId = null) {
-    try {
-      const items = (await api(`stock/price-proposals${itemId ? `?id=${encodeURIComponent(itemId)}` : ''}`)).items;
-      // Voor één artikel: alleen dat voorstel verversen, de rest van de lijst blijft staan.
-      if (itemId) { state.proposals.delete(itemId); for (const entry of items) state.proposals.set(entry.id, entry); } else state.proposals = new Map(items.map((entry) => [entry.id, entry]));
-    } catch (error) {
-      if (!itemId) state.proposals = new Map();
-    }
-  }
-
-  /**
-   * Tekent de melding bij het geopende artikel: voorgestelde verkoopprijs met Goedkeuren en Negeren.
-   * @returns {void}
-   */
-  function renderProposal() {
-    const box = $('#d-proposal');
-    const item = state.item;
-    const proposal = item && state.proposals.get(item.id);
-    box.hidden = !proposal;
-    if (!proposal) { box.innerHTML = ''; return; }
-    const margin = proposal.marginNew == null ? '' : ` (marge ${esc(nl(proposal.marginNew))}%)`;
-    box.innerHTML = `<div><b>Nieuwe verkoopprijs voorgesteld:</b> ${esc(eur(proposal.oldPrice) || 'geen prijs')} → <b>${esc(eur(proposal.newPrice))}</b> excl. btw${margin}<span class="sub">Door een nieuwe inkoopprijs of factor. De verkoopprijs verandert pas na jouw goedkeuring.</span></div>
-      ${state.canApprove ? '<div class="proposal-actions"><button class="btn primary" type="button" data-proposal="apply">Goedkeuren</button><button class="btn" type="button" data-proposal="reject">Negeren</button></div>' : '<div class="muted small">Alleen een beheerder kan dit goedkeuren.</div>'}`;
-    box.querySelectorAll('[data-proposal]').forEach((button) => {
-      /** Keurt het voorstel goed of negeert het. */
-      button.onclick = () => { decideProposal(button.dataset.proposal).catch((error) => toast(error.message, true)); };
-    });
-  }
-
-  /**
-   * Keurt het voorstel van het geopende artikel goed of negeert het, en ververst het scherm.
-   * @param {'apply'|'reject'} action Wat er gebeurt.
-   * @returns {Promise<void>}
-   */
-  async function decideProposal(action) {
-    const proposal = state.proposals.get(state.item.id);
-    if (!proposal) return;
-    for (const button of $('#d-proposal').querySelectorAll('button')) button.disabled = true;
-    let result;
-    try {
-      result = await api(`stock/price-factors/${action}`, { method: 'POST', body: { items: [{ id: proposal.id, newPrice: proposal.newPrice }] } });
-    } finally {
-      for (const button of $('#d-proposal').querySelectorAll('button')) button.disabled = false;
-    }
-    const done = action === 'apply' ? result.updated : result.rejected;
-    if (done) toast(action === 'apply' ? `Verkoopprijs gezet op ${eur(proposal.newPrice)}` : 'Voorstel genegeerd');
-    else toast('Het voorstel is intussen gewijzigd; bekijk het nieuwe voorstel.', true);
-    await reloadItem();
-    renderStock();
   }
 
   // ---------- Eenheden ----------
@@ -779,7 +723,6 @@
   /** Tekent het geopende artikel: tellers, formulier, webshop, reserveringen en mutaties. */
   function renderItem() {
     const item = state.item;
-    renderProposal();
     $('#d-title').innerHTML = `<span class="code">${esc(item.code)}</span> ${esc(item.name)}${item.archived ? ' <span class="pill">Gearchiveerd</span>' : ''}`;
     document.title = `${item.code} – Artikelen`;
     $('#d-stats').innerHTML = [
@@ -1087,7 +1030,7 @@
    */
   async function openItem(id, push = false, pending = null, { focus = false, keepScroll = false } = {}) {
     try {
-      [state.item] = await Promise.all([pending || api(`stock/items/${encodeURIComponent(id)}`), loadProposals(id)]);
+      state.item = await (pending || api(`stock/items/${encodeURIComponent(id)}`));
     } catch (error) {
       toast(error.status === 404 ? 'Artikel niet gevonden.' : error.message, true);
       showList();
@@ -1580,7 +1523,6 @@
     if (pendingItem) pendingItem.catch(() => {});
     const me = await window.AquatechAccount.load('../');
     const rights = me.rights || [];
-    state.canApprove = rights.includes('beheer');
     if (!me.user || !rights.includes('voorraad')) {
       const deniedBox = $('#v-denied');
       deniedBox.hidden = false;
