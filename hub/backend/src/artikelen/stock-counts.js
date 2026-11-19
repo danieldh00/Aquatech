@@ -507,6 +507,14 @@ function createStockCounts(db, { stock }) {
       }
       const now = new Date().toISOString();
       const note = `Voorraadtelling ${row.number} (peildatum ${row.reference_date})`;
+      // Mutaties sinds het bevriezen per artikel in één query (alleen nodig voor regels die niet geteld zijn).
+      const movedSinceFreeze = new Map();
+      if (untouched.length) {
+        for (const moved of prepare(`SELECT item_id, SUM(qty) AS qty FROM stock_movements WHERE tenant_id = ? AND created_at > ?
+          AND item_id IN (SELECT item_id FROM stock_count_lines WHERE tenant_id = ? AND count_id = ? AND counted_qty IS NULL) GROUP BY item_id`).all(tenantId, row.frozen_at, tenantId, row.id)) {
+          movedSinceFreeze.set(moved.item_id, round3(moved.qty));
+        }
+      }
       const resolvedAll = [];
       for (const line of computed) {
         let counted = line.countedQty;
@@ -516,7 +524,7 @@ function createStockCounts(db, { stock }) {
         let difference = line.difference;
         if (counted == null) {
           // Niet geteld: de stand op dit moment is het uitgangspunt (verwacht + alle mutaties sinds het bevriezen).
-          const sinceFreeze = round3(prepare('SELECT COALESCE(SUM(qty), 0) AS qty FROM stock_movements WHERE tenant_id = ? AND item_id = ? AND created_at > ?').get(tenantId, line.itemId, row.frozen_at).qty);
+          const sinceFreeze = movedSinceFreeze.get(line.itemId) || 0;
           movedSince = sinceFreeze;
           expectedAtCount = round3(line.expectedQty + sinceFreeze);
           if (input.open === 'nul') { counted = 0; resolution = 'nul'; difference = round3(0 - expectedAtCount); } else { counted = expectedAtCount; resolution = 'ongewijzigd'; difference = 0; }
