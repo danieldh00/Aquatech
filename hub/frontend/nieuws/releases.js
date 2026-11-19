@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.21.8',
+      date: '2026-11-19',
+      title: 'Miniaturen van artikelfoto\'s maken ook in Safari',
+      items: [
+        { text: '*Afbeeldingen en miniaturen* maakt de miniaturen nu ook in Safari (iPhone, iPad, Mac). Safari kan geen WebP maken, dus daar wordt de miniatuur een JPEG. Bij een eerdere poging gemaakte afbeeldingen krijgen bij een nieuwe run alsnog hun miniatuur.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.21.7',
       date: '2026-11-19',
       title: 'Logboek in Beheer',

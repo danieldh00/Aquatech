@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.21.8
+
+- `artikelen/item-images.js` (server): `setThumb` accepteert naast WebP ook JPEG (zelfde grenzen: 480 px, 100 kB, controle op inhoud); `thumbFile` herkent het formaat aan de bytes en levert het juiste `Content-Type`.
+- Browser (`makeThumb`): probeert WebP en valt terug op JPEG als de browser WebP niet kan coderen.
+
 ## 1.21.7
 
 Centraal applicatielogboek, deel 2: `GET /api/admin/logs` (`platform/app-log-routes.js`: filters niveau/bron/periode, zoeken op tekst, request-id of foutcode, cursor-paginering; platformregels en een andere omgeving alleen met canPlatform), `appLog.list/sources`, Beheer-sectie Logboek (`beheer/logboek.js`, Excel-export tot 5000 regels) en de instellingen `logRetentionDays`/`logErrorRetentionDays` in het formulier Sessies en bewaartermijnen.
