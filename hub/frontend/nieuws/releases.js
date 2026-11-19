@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.26.6',
+      date: '2026-11-19',
+      title: 'Verkoopprijs volgt de factor automatisch',
+      items: [
+        { text: 'De verkoopprijs van artikelen met prijs volgens factor wordt automatisch bijgewerkt bij een nieuwe inkoopprijs of een andere factor. Prijsvoorstellen en goedkeuren zijn vervallen.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.26.5',
       date: '2026-11-19',
       title: 'Strengere limieten op herstel- en bevestigingsmails',
