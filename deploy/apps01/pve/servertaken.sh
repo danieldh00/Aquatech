@@ -338,8 +338,14 @@ refresh_update_script() {
     echo "  update.sh niet bijgewerkt: het opgehaalde bestand is niet zoals verwacht"; rm -f "$tmp"; return 0
   fi
   if cmp -s "$tmp" "$APP_DIR/update.sh"; then echo "  update.sh is al de nieuwste"; rm -f "$tmp"; return 0; fi
+  # Niet midden in een lopende update het bestand vervangen.
+  if [[ -f "$APP_DIR/update/status/maintenance.json" ]] || [[ "$(json_field "$APP_DIR/update/status/run.json" state)" == "bezig" ]]; then
+    echo "  update.sh niet bijgewerkt: er loopt een update (probeer het straks opnieuw)"; rm -f "$tmp"; return 0
+  fi
   cp -a "$APP_DIR/update.sh" "$APP_DIR/update.sh.bak-$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
   install -m 755 "$tmp" "$APP_DIR/update.sh" && echo "  update.sh bijgewerkt (oude als update.sh.bak-<datum> bewaard)"
+  # Alleen de laatste drie back-ups van update.sh bewaren.
+  ls -1t "$APP_DIR"/update.sh.bak-* 2>/dev/null | tail -n +4 | xargs -r rm -f --
   rm -f "$tmp"
 }
 # Ruimt veilig op: oude app-images (de draaiende versie en de twee nieuwste blijven), ongebruikte images, build-cache,
