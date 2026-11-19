@@ -1,4 +1,6 @@
+---
 titel: Strengere limieten op herstel- en bevestigingsmails
+---
 
 ## Nieuws
 - De webshop beperkt nu hoe vaak één e-mailadres een wachtwoordherstelmail kan krijgen en hoe vaak een account een nieuwe bevestigingsmail kan aanvragen.
