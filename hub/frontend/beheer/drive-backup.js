@@ -92,7 +92,7 @@
     warn.textContent = warnings.join(' ');
     const events = status.events || [];
     byId('d-events').innerHTML = events.length
-      ? `<ul class="timeline">${events.map((event) => `<li>${esc(when(event.at))} · ${event.ok ? 'gelukt' : 'mislukt'} · ${esc(event.source || '')} · ${esc(event.message)}</li>`).join('')}</ul>`
+      ? window.BeheerCollapse.render(events.map((event) => `<li>${esc(when(event.at))} · ${event.ok ? 'gelukt' : 'mislukt'} · ${esc(event.source || '')} · ${esc(event.message)}</li>`))
       : 'Nog niets gebeurd.';
     renderRemote(status);
   }
@@ -107,7 +107,7 @@
     if (status.remoteError) { element.textContent = `Kan Drive niet lezen: ${status.remoteError}`; return; }
     const files = status.remote || [];
     element.innerHTML = files.length
-      ? `<ul class="timeline">${files.map((file) => `<li>${esc(file.name)} · ${esc(when(file.createdTime || file.at))} · ${esc(size(Number(file.size) || 0))}</li>`).join('')}</ul>`
+      ? window.BeheerCollapse.render(files.map((file) => `<li>${esc(file.name)} · ${esc(when(file.createdTime || file.at))} · ${esc(size(Number(file.size) || 0))}</li>`))
       : 'Nog geen bestanden op Drive.';
   }
 
