@@ -236,6 +236,14 @@ test('servertaken.sh schijf: de draaiende en de twee nieuwste versies blijven, d
   assert.strictEqual(run.status, 0, 'ook zonder eerdere update.sh.bak-bestanden gaat het opruimen door');
   const again = spawnSync('bash', [servertaken, 'schijf-run'], { env, encoding: 'utf8', timeout: 30000 });
   assert.match(again.stdout, /al de nieuwste/);
+  // Zonder bestaande update.sh (en dus zonder back-up) mag het opruimen niet stoppen: de glob van de back-ups is dan leeg.
+  fs.rmSync(path.join(setup.appDir, 'update.sh'));
+  for (const name of fs.readdirSync(setup.appDir).filter((entry) => entry.startsWith('update.sh.bak-'))) fs.rmSync(path.join(setup.appDir, name));
+  fs.rmSync(path.join(setup.state, 'system-calls.log'));
+  const fresh = spawnSync('bash', [servertaken, 'schijf-run'], { env, encoding: 'utf8', timeout: 30000 });
+  assert.strictEqual(fresh.status, 0, fresh.stdout + fresh.stderr);
+  assert.match(fresh.stdout, /update\.sh bijgewerkt/);
+  assert.match(fs.readFileSync(path.join(setup.state, 'system-calls.log'), 'utf8'), /journalctl/, 'de stappen na update.sh gebeuren nog steeds');
   const unpinned = spawnSync('bash', [servertaken, 'schijf-run'], { env: { ...env, UPDATE_SH_REF: '' }, encoding: 'utf8', timeout: 30000 });
   assert.match(unpinned.stdout, /geef UPDATE_SH_REF/, 'zonder vaste commit gebeurt er niets (geen master)');
   const onMaster = spawnSync('bash', [servertaken, 'schijf-run'], { env: { ...env, UPDATE_SH_REF: 'master' }, encoding: 'utf8', timeout: 30000 });
