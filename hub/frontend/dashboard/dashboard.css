@@ -193,3 +193,18 @@ h2 .h2-link:hover { text-decoration: underline; }
 .news-banner-text { flex: 1 1 240px; min-width: 0; }
 .news-banner .btn { flex: none; text-decoration: none; padding: 7px 14px; border-radius: 6px; background: var(--primary); color: #fff; font-weight: 600; }
 .news-banner .btn:hover { background: var(--primary-dark); }
+
+/* Startscherm "Openstaande taken" (dashboard/tasks.js) */
+.tasks { margin-bottom: 16px; }
+.tasks h2 { margin: 0 0 10px; font-size: 18px; text-transform: none; letter-spacing: 0; color: var(--primary-dark); }
+.tasks-count, .task-badge { display: inline-block; min-width: 24px; padding: 1px 8px; font-size: 13px; font-weight: 700; text-align: center; color: #fff; background: var(--primary); border-radius: 999px; }
+.tasks-count { margin-left: 6px; }
+.tasks-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); align-items: start; }
+.task { background: var(--panel); border: 1px solid var(--line); border-left: 5px solid var(--primary); border-radius: var(--radius); }
+.task-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; color: var(--primary-dark); font-weight: 700; text-decoration: none; }
+.task-items { list-style: none; margin: 0; padding: 0 14px 6px; }
+.task-items a { display: grid; gap: 1px; padding: 6px 0; border-top: 1px solid var(--line); color: inherit; text-decoration: none; }
+.task-label { overflow-wrap: anywhere; }
+.task-meta { font-size: 13px; color: var(--muted); }
+.task-more { margin: 0; padding: 0 14px 10px; font-size: 14px; }
+.task-more a { color: var(--primary); font-weight: 600; text-decoration: none; }

@@ -87,6 +87,7 @@ const { createItemTextWriter: createDefaultItemTextWriter } = require('./artikel
 const { createItemTextDraftStore, registerItemTextRoutes } = require('./artikelen/item-text-drafts');
 const { createPackagingStore, registerPackagingRoutes } = require('./artikelen/packagings');
 const { createPurchaseOrderStore, registerPurchaseOrderRoutes } = require('./artikelen/purchase-orders');
+const { registerOpenTaskRoutes } = require('./platform/open-tasks');
 const { createPurchaseOrderMailer } = require('./artikelen/purchase-order-mail');
 const { createNewsStore, registerNewsRoutes, unreadCount } = require('./platform/news');
 const { createSprinklerStore, registerSprinklerRoutes } = require('./beregening/sprinklers');
@@ -3024,6 +3025,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     receipts: createGoodsReceipt(database, { purchaseOrders: purchaseOrderStore, release: (tenantId, itemIds) => webOrders.markBackorderReady(tenantId, itemIds) }),
     requireJson, audit,
   });
+  // Openstaande taken op het dashboard (volgen de rechten van de gebruiker).
+  registerOpenTaskRoutes(app, { identify, sources: { orders: webOrders, purchaseOrders: purchaseOrderStore, priceFactors: priceFactorStore, proposalsEnabled,
+    shopEnabled: (tenantId) => Boolean(settingsFor(tenantId).get('storefront')), stockEnabled: (tenantId) => ModuleTools.isOn(moduleFlagsOf(tenantId), 'voorraad') } });
+
   registerWebOrderRoutes(app, { orders: webOrders, requireJson, audit, invoices: webOrderInvoices, payments: webPayments, returns: webReturns });
   // Offerte omzetten naar bestelling (verkoop/quote-orders.js).
   const quoteOrders = createQuoteOrders(database, { orders: webOrders });
