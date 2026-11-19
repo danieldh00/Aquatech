@@ -3,7 +3,7 @@
 // `aquatech.tenants` op de verbinding en de policies in PostgreSQL (pgdb.js, lockDown) laten alleen rijen van die
 // omgevingen door. Een vergeten `WHERE tenant_id = ?` lekt dan geen gegevens van een andere organisatie.
 // Lege lijst = systeem (opstarten, onderhoud, hoofdbeheerder, inloggen): dan geldt geen beperking.
-// SQLite heeft geen policies; daar blijft het filter in de code (en tools/tenant-filter.js) de bescherming.
+// Naast de policies blijft het filter in de code (en tools/tenant-filter.js) de eerste bescherming.
 const { AsyncLocalStorage, AsyncResource } = require('async_hooks');
 
 const scopes = new AsyncLocalStorage();

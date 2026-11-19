@@ -10,7 +10,7 @@ const { createCaptcha, cspWith: captchaCspWith } = require('./beveiliging/captch
 const { loadOrCreateSecret } = require('./beveiliging/session-secret');
 const { createPlanAnalyzer, AnalyzeError, PROMPT_VERSION } = require('./beregening/plan-analyzer');
 const { createRecognitionStore, sanitizeSamples, sanitizeFinalPlan, imageHash } = require('./beregening/recognitions');
-const { openDb, openDatabase, isPg } = require('./database/db');
+const { openDb, openDatabase } = require('./database/db');
 const { createSlowLog, timedFetch, normalizePath } = require('./platform/slow-log');
 const { createStore, withRequestCache, hashPassword, passwordProblem, preferencesOf, fingerprintOf } = require('./platform/store');
 const { withScope, limitTo, bindStream, asSystem } = require('./database/tenant-scope');
@@ -3644,8 +3644,8 @@ if (require.main === module) {
   const master = loadOrCreateMasterKey(dataDir);
   console.log(`Hoofdsleutel voor versleuteling: ${master.source}`);
   const port = Number(process.env.PORT) || 3300;
-  const db = openDatabase(dataDir);
-  console.log(isPg(db) ? `Database: PostgreSQL (schema ${db.schema})` : 'Database: SQLite (aquatech.db in de datamap)');
+  const db = openDatabase();
+  console.log(`Database: PostgreSQL (schema ${db.schema})`);
   const backupDir = process.env.BACKUP_DIR || path.join(dataDir, 'backups');
   const app = createApp({ secret, db, env: process.env, vault: createVault(master.key), backupDir, backupInChild: true });
   const { settings, slowLog } = app.locals;

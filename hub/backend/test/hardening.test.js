@@ -7,20 +7,19 @@ const http = require('http');
 const path = require('path');
 const zlib = require('zlib');
 const { createApp } = require('../src/server');
-const { openDb, openSqlite } = require('../src/database/db');
+const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { createSettings } = require('../src/platform/settings');
 const { createMailer } = require('../src/platform/mailer');
 const { remoteIp } = require('../src/beveiliging/auth');
 const { pinnedFetch, readLimited } = require('../src/beveiliging/pinned-fetch');
-const { copyDatabase, describe, rowsOf } = require('../src/database/db-copy');
+const { describe, rowsOf } = require('../src/database/table-rows');
 const { wrap, textWidth } = require('../src/verkoop/pdf');
 const { createClient, createLogin, listen } = require('./helpers/http-client');
 const OfflineCore = require(path.join(__dirname, '..', '..', 'frontend', 'shared', 'offline-core.js'));
 const WorkOrderCore = require(path.join(__dirname, '..', '..', 'frontend', 'werkorders', 'workorder-core.js'));
 
 const PW = 'Tuin-Plan-2026!';
-const PG = Boolean(process.env.TEST_DATABASE_URL);
 
 /**
  * Testserver met een hoofdbeheerder, een beheerder, een planner en een klant in de hoofdtenant.
@@ -250,12 +249,11 @@ test('werkorder: titel blijft één regel (geen extra regels in het agendabestan
   assert.strictEqual(WorkOrderCore.sanitize({ title: 'Aanleg\r\nEND:VEVENT\nBEGIN:VEVENT' }).title, 'Aanleg END:VEVENT BEGIN:VEVENT');
 });
 
-test('back-up: kopiëren in porties na de laatste sleutel (geen OFFSET), alle rijen gelijk', { skip: PG && 'alleen SQLite → SQLite' }, () => {
-  const from = openSqlite(':memory:');
+test('back-up: rijen in porties na de laatste sleutel (geen OFFSET), alle rijen komen langs', () => {
+  const from = openDb();
   const store = createStore(from);
   const tid = store.ensureTenant().id;
   for (let i = 0; i < 450; i++) store.audit({ tenantId: tid, userId: null, action: 'test', detail: { i }, ip: '' });
-  const to = openSqlite(':memory:');
   const statements = [];
   const prepare = from.prepare.bind(from);
   /**
@@ -264,18 +262,10 @@ test('back-up: kopiëren in porties na de laatste sleutel (geen OFFSET), alle ri
    * @returns {object} Het prepared statement.
    */
   from.prepare = (sql) => { statements.push(sql); return prepare(sql); };
-  const result = copyDatabase(from, to);
-  assert.strictEqual(result.tables.audit, Number(prepare('SELECT COUNT(*) AS n FROM audit').get().n));
+  const rows = [...rowsOf(from, 'audit', describe(from).audit)];
+  assert.strictEqual(rows.length, Number(prepare('SELECT COUNT(*) AS n FROM audit').get().n));
+  assert.strictEqual(new Set(rows.map((row) => row.id)).size, rows.length, 'elke rij precies één keer');
   assert.ok(!statements.some((sql) => /FROM audit .*OFFSET/.test(sql)), 'audit heeft een primaire sleutel');
-});
-
-test('back-up: primaire sleutel met een NULL (SQLite) valt terug op OFFSET, geen rij overgeslagen', { skip: PG && 'alleen SQLite' }, () => {
-  const db = openSqlite(':memory:');
-  db.exec('CREATE TABLE losse_sleutel (id TEXT PRIMARY KEY, waarde TEXT)');
-  db.exec("INSERT INTO losse_sleutel (id, waarde) VALUES (NULL, 'a'), ('b', 'b'), ('c', 'c')");
-  const description = describe(db).losse_sleutel;
-  assert.strictEqual(description.nullableKey, true);
-  assert.strictEqual([...rowsOf(db, 'losse_sleutel', description)].length, 3);
 });
 
 test('PDF: een letter met accent blijft bij het afbreken heel', () => {

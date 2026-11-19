@@ -1,6 +1,6 @@
 // Tenantafscherming in PostgreSQL (2 uit de audit van 1.7.3): policies op elke tabel met tenant_id laten binnen een
 // verzoek van een gebruiker alleen rijen van de eigen organisatie door, ook als een query het tenantfilter vergeet.
-// Alleen met TEST_DATABASE_URL (SQLite kent geen policies); de rekenregels van tenant-scope.js gelden altijd.
+// Alleen met TEST_DATABASE_URL; de rekenregels van tenant-scope.js gelden altijd.
 const test = require('node:test');
 const { after } = test;
 const assert = require('node:assert');

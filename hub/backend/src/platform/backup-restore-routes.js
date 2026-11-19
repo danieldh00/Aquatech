@@ -27,7 +27,7 @@ function registerBackupRestoreRoutes(app, { backupDir, vault, database, store, a
    * @returns {Promise<*>} Wat de functie teruggeeft.
    */
   async function withBackup(req, name, callback) {
-    const opened = await restore.openBackup({ dir: backupDir, name: String(name || ''), vault });
+    const opened = await restore.openBackup({ dir: backupDir, name: String(name || ''), vault, current: database });
     try {
       const customerRoleKeys = store.roles.keysOfKind(req.tenantId, 'klant');
       return await callback({ backup: opened.db, current: database, context: { tenantId: req.tenantId, customerRoleKeys } });

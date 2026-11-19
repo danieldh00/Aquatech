@@ -26,9 +26,8 @@ Nieuwe migratie: toevoegen in `MIGRATIONS` (db.js) **én** `PG_MIGRATIONS` (pgsc
 ## Commando's
 ```sh
 cd hub/backend && npm install
-DATA_DIR=/tmp/bp PORT=3300 node src/server.js     # http://localhost:3300/app/ → eerste beheerder
-npm test                                           # node --test (SQLite)
-TEST_DATABASE_URL=postgres://… npm test            # dezelfde suite tegen PostgreSQL (CI: test-postgres)
+DATABASE_URL=postgres://… DATA_DIR=/tmp/bp PORT=3300 node src/server.js   # http://localhost:3300/app/ → eerste beheerder
+TEST_DATABASE_URL=postgres://… npm test            # node --test tegen PostgreSQL (verplicht; CI: test-postgres)
 npm run codestyle                                  # namen + doc-blokken
 npm run tenant-filter                              # tenant_id-filter in queries
 kill $(lsof -ti tcp:3300)                          # testserver stoppen (nooit pkill -f)
@@ -44,7 +43,7 @@ Docker is niet beschikbaar in de cloud-sandbox. Er is geen aparte linter; `codes
 
 ## Codeconventies
 - Beschrijvende namen (geen namen van één letter behalve `i`/`j`/`x`/`y`, geen cryptische afkortingen) en een `/** … */`-blok in het Nederlands bij elke functie; bestand begint met een kopcommentaar. Bewaakt door `test/codestyle.test.js`.
-- Backend: geen `SELECT *`/`t.*`, geen N+1, elke query op een tabel met `tenant_id` filtert daarop, parameters altijd via `?`. SQL moet in SQLite én PostgreSQL werken.
+- Backend: geen `SELECT *`/`t.*`, geen N+1, elke query op een tabel met `tenant_id` filtert daarop, parameters altijd via `?`. SQL is PostgreSQL (er is geen andere database).
 - Frontend: gewone `<script>`-tags, alle URL's **relatief**, geen CDN (vendor lokaal), kleuren via `--at-*`-variabelen, scripts/CSS met `?v=<versie>`.
 - Rechten op de server met `requireRight(recht)`; tests voor elke nieuwe route: andere tenant → 404, ontbrekend recht → 403. Elk openbaar of duur endpoint krijgt een limiet (`createRateLimiter`).
 - Tests verplicht, ook voor randgevallen; unit + PostgreSQL.
@@ -60,7 +59,7 @@ Docker is niet beschikbaar in de cloud-sandbox. Er is geen aparte linter; `codes
 - Nooit tokens of geheimen in logs, audit of frontend.
 
 ## Deploy in het kort
-`release.yml` bouwt na een merge met fragment het image `ghcr.io/danieldh00/aquatech:<versie>` (+ `:latest`); op de server rolt een timer (`deploy/apps01/update.sh`, ~15 min, met rollback) het uit. Database: eigen PostgreSQL-container naast de app (`deploy/apps01/pve/db-local.sh`), Supabase alleen als terugval, SQLite voor lokaal/tests. Scripts voor de beheerder draaien **vanaf de Proxmox-host** (via `pct exec`/`qm guest exec`/ssh naar de gast). Tijdzone Europe/Amsterdam.
+`release.yml` bouwt na een merge met fragment het image `ghcr.io/danieldh00/aquatech:<versie>` (+ `:latest`); op de server rolt een timer (`deploy/apps01/update.sh`, ~15 min, met rollback) het uit. Database: eigen PostgreSQL-container naast de app (`deploy/apps01/pve/db-local.sh`), Supabase alleen als terugval. PostgreSQL is de enige database. Scripts voor de beheerder draaien **vanaf de Proxmox-host** (via `pct exec`/`qm guest exec`/ssh naar de gast). Tijdzone Europe/Amsterdam.
 
 ## Zuinig werken (vaste werkwijze, besluit Daniël 2026-11-16)
 1. **Gerichte opdracht**: lees alleen de genoemde bestanden en hun directe afhankelijkheden; geen brede greps, geen subagents tenzij de kwaliteit aantoonbaar stijgt. `CLAUDE.md` is groot: zoek er gericht in (bijv. "Prijsfactor", "Orderpick") in plaats van het hele bestand te lezen.

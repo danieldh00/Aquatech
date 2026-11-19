@@ -109,8 +109,8 @@ jobs:
 
             Doe een code review van deze pull request. Lees eerst CLAUDE.md in de root: daar staan de
             projectregels (checklist voor elke nieuwe feature, codestijl, harde regels). Controleer vooral:
-            - juistheid en randgevallen (ook gelijktijdigheid), werkt de SQL in SQLite én PostgreSQL, migratie in
-              MIGRATIONS én PG_MIGRATIONS;
+            - juistheid en randgevallen (ook gelijktijdigheid), werkt de SQL in PostgreSQL, migratie in
+              PG_MIGRATIONS;
             - tenant-isolatie, rechten (requireRight), rate limits, geheimen, invoer saneren, uploads;
             - queries: geen SELECT *, geen N+1, indexen met tenant_id vooraan, geen zware queries op een warme pad;
             - frontend: relatieve URL's, geen CDN's, --at-*-kleurvariabelen, getJson voor api/me en api/config;
@@ -200,7 +200,7 @@ jobs:
             Doe een securityreview van deze pull request, zoals het commando /security-review: zoek alleen
             kwetsbaarheden die deze wijziging introduceert en die realistisch uitbuitbaar zijn (injectie, autorisatie,
             geheimen, SSRF, onveilige uploads, XSS), met weinig valse positieven.
-            Dit is een multitenant webapp (Node/Express, SQLite en PostgreSQL met RLS). Let extra op: ontbrekend
+            Dit is een multitenant webapp (Node/Express, PostgreSQL met RLS). Let extra op: ontbrekend
             tenant_id-filter in queries, ontbrekende requireRight op routes, IDOR via id's uit de URL, SSRF bij
             uitgaande verbindingen (netguard.publicAddress), SQL die tekst plakt in plaats van ?-parameters,
             geheimen in logs, audit-detail of frontend, uploads zonder inhoudscontrole, openbare tokens in URL's

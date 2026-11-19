@@ -241,7 +241,7 @@ kleuren mogen afwijken.
 
 Plannen worden automatisch op twee plekken bewaard: in de browser van het
 toestel en, een paar seconden na elke wijziging, in **Mijn plannen** op de
-server (database in Supabase/PostgreSQL, zie *Database: Supabase
+server (database in Supabase/PostgreSQL, zie *Database: PostgreSQL
 (PostgreSQL)*; zonder databaseverbinding het bestand `/data/aquatech.db`). Via **Mijn plannen** in de planner (of op het dashboard) open je
 een eerder plan. Iedere gebruiker ziet daar alleen de eigen plannen.
 **Opslaan** downloadt daarnaast nog steeds een `.aquaplan.json`-bestand en
@@ -885,7 +885,7 @@ docker compose up -d --build        # http://<server>:3300
   (of naar de containernaam `aquatech:3300` als cloudflared in hetzelfde
   Docker-netwerk draait).
 
-## Database: Supabase (PostgreSQL)
+## Database: PostgreSQL
 
 > **Eigen PostgreSQL**: de productieserver kan in plaats van Supabase een eigen PostgreSQL-container naast de app
 > gebruiken (geen egress-limiet, geen netwerkvertraging). Overstappen, back-ups en terugdraaien: zie
@@ -893,11 +893,10 @@ docker compose up -d --build        # http://<server>:3300
 > (voor de eigen database `postgresql://aquatech:…@postgres:5432/aquatech?sslmode=disable`; `sslmode=disable` mag alleen op het
 > interne Docker-netwerk), de rol `aquatech` is geen superuser maar mag `aquatech_app` aannemen voor de tenant-RLS.
 
-De productieserver draaide op Supabase (PostgreSQL), via `DATABASE_URL_FILE`
-(een Docker-secret met de URL) of `DATABASE_URL`. Zonder die instelling
-gebruikt de app het SQLite-bestand `/data/aquatech.db`: handig voor lokaal
-ontwikkelen, de tests en als noodterugval. Beide databases hebben hetzelfde
-schema en elke wijziging wordt in CI op beide getest.
+PostgreSQL is de enige database. De app leest de verbinding uit `DATABASE_URL_FILE`
+(een Docker-secret met de URL) of `DATABASE_URL`; zonder die instelling start hij niet
+en meldt dat. Voor lokaal ontwikkelen bevat `docker-compose.yml` een PostgreSQL-container;
+de tests draaien tegen `TEST_DATABASE_URL` (elke test een eigen schema).
 
 - **Back-up nu maken** (ook terwijl de app draait):
   `docker compose exec -u 1000 aquatech node src/backup.js create`. Zo doet
@@ -907,9 +906,8 @@ schema en elke wijziging wordt in CI op beide getest.
   dat schema stelt Supabase open via zijn REST-API. Op elke tabel staat row
   level security aan zonder policies, en de rollen `anon` en `authenticated`
   hebben geen rechten; alleen de app (eigenaar) leest en schrijft.
-- **Gelijk aan SQLite**: dezelfde tabellen, kolommen, controles, foreign
-  keys en indexen; tekst met bytevolgorde (`COLLATE "C"`), gehele getallen
-  64-bits. De app maakt het schema bij de eerste start zelf aan.
+- **Schema**: tekst met bytevolgorde (`COLLATE "C"`), gehele getallen
+  64-bits. De app maakt het schema bij de eerste start zelf aan en voert nieuwe migraties (`PG_MIGRATIONS` in `pgschema.js`) zelf uit.
 - **Verbinding**: gebruik in Supabase *Connect → Session pooler* (poort
   5432, werkt via IPv4). De *Transaction pooler* (6543) weigert de app. TLS
   is verplicht met controle van het certificaat; de root-CA van Supabase
@@ -928,37 +926,11 @@ schema en elke wijziging wordt in CI op beide getest.
   elke query noemt zijn kolommen.
 - **Hoofdsleutel blijft nodig**: geheimen staan versleuteld in de database
   met de hoofdsleutel van de app; die sleutel gaat niet naar Supabase.
-- **Back-ups**: de dagelijkse versleutelde back-up van de app werkt ook met
-  PostgreSQL (een SQLite-bestand met alle rijen). Supabase maakt daarnaast
-  eigen back-ups (afhankelijk van het abonnement).
-
-**Overstappen (één op één).** Eerst moet de server deze versie draaien. Dan,
-in `/opt/apps/aquatech` (of de map met `docker-compose.yml`):
-
-```sh
-# 1. URL van Supabase (Connect -> Session pooler) als secret, met het wachtwoord erin
-printf '%s' 'postgresql://postgres.<project>:<wachtwoord>@aws-0-eu-central-1.pooler.supabase.com:5432/postgres' > secrets/database-url
-sudo chown 1000:1000 secrets/database-url && sudo chmod 400 secrets/database-url
-# 2. In compose.yml de regels voor database-url aanzetten (environment + secrets)
-# 3. App stoppen en alles kopiëren + controleren
-docker compose stop aquatech
-docker compose run --rm --no-deps aquatech node src/migrate-to-postgres.js
-# 4. Zegt het script "Alles is één op één gelijk", dan starten
-docker compose up -d aquatech
-docker compose logs aquatech | grep Database     # Database: PostgreSQL (schema aquatech)
-```
-
-Het script vergelijkt na het kopiëren per tabel het aantal rijen en een
-SHA-256 over alle waarden; bij een verschil stopt het en blijft de app op
-SQLite. Het kopieert alleen naar een leeg schema. Later opnieuw controleren:
-`node src/migrate-to-postgres.js --check`. **Terug naar SQLite**: de
-`DATABASE_URL_FILE`-regel weer uitzetten en herstarten; `/data/aquatech.db`
-blijft ongewijzigd staan (zonder wat er daarna in PostgreSQL is veranderd).
-
-**Back-up terugzetten naar PostgreSQL**: ontsleutel de back-up (zie
-*Beveiliging en privacy*) en kopieer hem met
-`node src/migrate-to-postgres.js --from /data/terug.db --schema <nieuw_schema>`
-naar een leeg schema; zet daarna `DATABASE_SCHEMA` op dat schema.
+- **Back-ups**: de dagelijkse versleutelde back-up van de app bevat alle rijen van alle tabellen (gzip + AES-256-GCM,
+  bestandsnaam `aquatech-JJJJMMDD-UUMMSS.db.enc`, formaatversie 2). Losse records zet je terug in de app (Beheer > Systeem >
+  *Terugzetten uit back-up*): de back-up wordt dan tijdelijk in een eigen schema naast de database ingelezen. De hele
+  database terugzetten gaat met de `pg_dump`-back-ups op de server (`deploy/apps01/pve/db-local.sh restore`). Back-ups in
+  het oude SQLite-formaat (versie 1, van vóór de afschaffing van SQLite) worden niet meer gelezen.
 
 ## Meetcorpus planherkenning
 
@@ -1042,7 +1014,7 @@ Getoetst aan OWASP ASVS (niveau 2) en de AVG.
 | Back-ups | dagelijks, AES-256-GCM, 14 dagen bewaard (instelbaar), downloadbaar voor opslag elders |
 | Foto's | verkleind zonder EXIF/GPS, AES-256-GCM in de database (eigen afgeleide sleutel, tenant + foto-id als AAD), alleen JPEG/PNG/WebP |
 | Recht op vergetelheid | Plannenoverzicht → plan → *Definitief wissen* (plan + inhoud van de historie) |
-| Database | SQLite: rechten 0600, `secure_delete`, integriteitscontrole bij de start; PostgreSQL: TLS met certificaatcontrole, eigen schema met row level security |
+| Database | PostgreSQL: TLS met certificaatcontrole, eigen schema met row level security |
 | Proces | draait als gewone gebruiker (uid 1000), niet als root |
 | Browser | Content-Security-Policy, X-Frame-Options, HSTS via https, `no-store` op de API |
 
@@ -1061,15 +1033,12 @@ Docker-secret* aan. Bewaar daarnaast een kopie van de sleutel in een
 wachtwoordkluis: zonder de sleutel zijn de opgeslagen geheimen onbruikbaar
 (een nieuwe sleutel betekent API-sleutel en toegangscode opnieuw invullen).
 
-**Back-ups terugzetten.** Stop de app, ontsleutel de back-up en zet die
-als database terug:
+**Back-ups terugzetten.** Losse records: in de app, zie hieronder. De hele database: met de `pg_dump`-back-up op de server
+(`deploy/apps01/pve/db-local.sh restore`). Een back-up van de app zelf is uit te pakken om te controleren wat erin staat:
 
 ```sh
-docker compose stop aquatech
 docker compose run --rm --no-deps -e RUN_AS_ROOT=1 aquatech \
-  node src/backup.js decrypt /data/backups/aquatech-JJJJMMDD-UUMMSS.db.enc /data/terug.db
-# controleer, en vervang daarna /data/aquatech.db door /data/terug.db
-docker compose start aquatech
+  node src/backup.js decrypt /data/backups/aquatech-JJJJMMDD-UUMMSS.db.enc /data/terug.ndjson.gz
 ```
 
 Een wis-opdracht (definitief wissen) staat nog in de back-ups tot die na de
@@ -1106,7 +1075,7 @@ Het overzicht toont de koppeling, de bestanden op Drive, het logboek en een waar
 Google de toegang heeft ingetrokken. Na een fout probeert de app het automatisch na een kwartier opnieuw; *Nu uploaden* probeert het
 meteen. Het clientgeheim en het refresh token staan versleuteld in de database (nooit in de browser). De back-ups op Drive zijn alleen
 te lezen met de hoofdsleutel van de server: bewaar die apart. De koppeling is per installatie en hoort niet bij een testomgeving.
-Terugzetten: download het bestand uit Drive en volg *Back-ups terugzetten*.
+Terugzetten: zet het bestand uit Drive terug in de back-upmap en kies het in *Terugzetten uit back-up*.
 
 **Nog te regelen bij de serverinrichting**
 

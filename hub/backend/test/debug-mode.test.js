@@ -25,7 +25,7 @@ function miniApp({ debug = false, logs = [] } = {}) {
   app.use(report.attach);
   app.use(express.json({ limit: '1kb' }));
   app.get('/sync', () => { throw new Error('kapot in sync'); });
-  app.get('/async', async () => { throw Object.assign(new Error('UNIQUE constraint failed: quotes.number'), { code: 'ERR_SQLITE_ERROR', errcode: 2067 }); });
+  app.get('/async', async () => { throw Object.assign(new Error('duplicate key value violates unique constraint "quotes_number"'), { code: '23505' }); });
   app.get('/geheim', async () => { throw new Error('verbinding postgres://aquatech:Super-Geheim-99@db.example:5432/x mislukt, Bearer abcdefghijkl123'); });
   app.get('/eigen', (req, res) => withCause(res, new Error('SMTP 535 login mislukt')).status(502).json({ error: 'send_failed', message: 'Versturen mislukt.' }));
   app.get('/goed', (req, res) => res.json({ ok: true }));
@@ -95,8 +95,8 @@ test('foutafhandeling: met debugmodus details, zonder geheimen', async () => {
     assert.strictEqual(debug.method, 'GET');
     assert.strictEqual(debug.path, '/async');
     assert.strictEqual(debug.errorId, failing.body.errorId);
-    assert.strictEqual(debug.cause.message, 'UNIQUE constraint failed: quotes.number');
-    assert.strictEqual(debug.cause.code, 'ERR_SQLITE_ERROR');
+    assert.strictEqual(debug.cause.message, 'duplicate key value violates unique constraint "quotes_number"');
+    assert.strictEqual(debug.cause.code, '23505');
     // De plek in de code: dit testbestand valt buiten src/, dus geen eigen regels; de vorm klopt wel.
     assert.ok(Array.isArray(debug.cause.stack));
 

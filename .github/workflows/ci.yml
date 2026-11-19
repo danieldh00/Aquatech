@@ -41,6 +41,8 @@ jobs:
             echo "Geen code gewijzigd (alleen docs of changes/): tests en image-build overgeslagen."
           fi
 
+  # Alleen de afhankelijkhedencontrole: de tests zelf draaien in test-postgres (PostgreSQL is de enige database). De naam
+  # `test` blijft bestaan omdat hij een verplichte controle op master is.
   test:
     needs: changes
     if: needs.changes.outputs.code == 'true'
@@ -57,11 +59,9 @@ jobs:
           cache: npm
           cache-dependency-path: hub/backend/package-lock.json
       - run: npm ci
-      - run: npm test
       - run: npm audit --omit=dev --audit-level=high
 
-  # Dezelfde testsuite tegen PostgreSQL (zoals Supabase), plus de tests van
-  # het schema en de overstap van SQLite.
+  # De testsuite tegen PostgreSQL (de enige database), inclusief de tests van het schema en de back-ups.
   test-postgres:
     needs: changes
     if: needs.changes.outputs.code == 'true'
@@ -75,7 +75,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
     defaults:
       run:
         working-directory: hub/backend
@@ -115,13 +115,16 @@ jobs:
           hub
       - name: Smoketest
         run: |
-          docker run -d --name hl --platform ${{ matrix.platform }} -p 3300:3300 -e ACCESS_CODE=ci hub:test
+          docker network create smokenet
+          docker run -d --name smokedb --network smokenet -e POSTGRES_PASSWORD=smoke postgres:17
+          for i in $(seq 1 30); do docker exec smokedb pg_isready -U postgres && break; sleep 2; done
+          docker run -d --name hl --network smokenet --platform ${{ matrix.platform }} -p 3300:3300 -e DATABASE_URL="postgres://postgres:smoke@smokedb:5432/postgres?sslmode=disable" -e ACCESS_CODE=ci hub:test
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3300/api/health && exit 0; sleep 2; done
           docker logs hl
           exit 1
       - name: Smoketest eerste start (instelscherm voor de eerste beheerder)
         run: |
-          docker run -d --name solo --platform ${{ matrix.platform }} -p 3301:3300 hub:test
+          docker run -d --name solo --network smokenet --platform ${{ matrix.platform }} -p 3301:3300 -e DATABASE_URL="postgres://postgres:smoke@smokedb:5432/postgres?sslmode=disable" -e DATABASE_SCHEMA=eerste_start hub:test
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3301/api/health && break; sleep 2; done
           docker logs solo
           docker logs solo 2>&1 | grep -q 'eerste beheerdersaccount'

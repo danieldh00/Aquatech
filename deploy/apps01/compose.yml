@@ -19,7 +19,7 @@ services:
       - TZ=${TZ:-Europe/Amsterdam}
       - AQUATECH_MASTER_KEY_FILE=/run/secrets/master-key
       # Database in Supabase (PostgreSQL), zie DOCS.md > Database: Supabase.
-      # Zonder deze regel valt de app terug op SQLite in data/aquatech.db.
+      # PostgreSQL is de enige database: zonder deze regel start de app niet.
       - DATABASE_URL_FILE=/run/secrets/database-url
       # Updaten vanuit de app (Beheer > Systeem > Updates), zie update.sh: de status alleen-lezen,
       # alleen de aanvraagmap is schrijfbaar (uid 1000). Aanmaken met setup-app-update.sh.

@@ -2,7 +2,7 @@
 
 AquaTech Hub is een modulair, ERP-achtig pakket voor beregeningsbedrijven, met een eigen webshop. Na het inloggen
 kom je op een dashboard met een tegel per module (beheerders krijgen een zijbalk). Alles draait als één
-webserver in Docker (poort 3300) met PostgreSQL (een eigen container naast de app, of Supabase) of SQLite als database.
+webserver in Docker (poort 3300) met PostgreSQL als enige database (een eigen container naast de app, of een externe server zoals Supabase).
 
 | Onderdeel | Wat het doet |
 |---|---|
@@ -138,10 +138,9 @@ hub/                               de app (AquaTech Hub; de planner is module `f
   backend/
     src/server.js                    Express: pagina's, modules, login en alle /api-routes
     src/backup.js                    versleutelde back-ups (ook als opdracht: node src/backup.js create)
-    src/migrate-to-postgres.js       overstap SQLite -> PostgreSQL (opdracht)
     src/paths.js                     vaste mappen (frontend, pagina's)
     src/paginas/                     inloggen, eerste beheerder, wachtwoord wijzigen
-    src/database/                    SQLite/PostgreSQL, schema en migraties, kopiëren
+    src/database/                    PostgreSQL: verbinding, schema en migraties, rijen uitvoeren/inlezen (back-ups)
     src/beveiliging/                 sessies, versleuteling, limieten, netwerkcontrole, meekijken
     src/platform/                    gebruikers/tenants (store), instellingen, rollen, mail, nieuws, foutmeldingen, testdata
     src/beregening/                  plan herkennen (AI), geleerde herkenning, tekening indienen, sproeiers
@@ -173,15 +172,15 @@ server geladen (dezelfde berekening aan beide kanten).
 
 ```sh
 cd hub/backend && npm install
-DATA_DIR=/tmp/bp PORT=3300 node src/server.js   # http://localhost:3300/app/ -> eerste beheerder aanmaken
-npm test                                        # node --test (SQLite)
-TEST_DATABASE_URL=postgres://… npm test         # dezelfde suite tegen PostgreSQL
+# PostgreSQL is verplicht (docker compose up -d postgres in de root start er een; zie docker-compose.yml)
+DATABASE_URL=postgres://aquatech:aquatech-lokaal@127.0.0.1:5432/aquatech DATA_DIR=/tmp/bp PORT=3300 node src/server.js   # http://localhost:3300/app/ -> eerste beheerder aanmaken
+TEST_DATABASE_URL=postgres://… npm test         # node --test tegen PostgreSQL (zonder TEST_DATABASE_URL falen de tests met een duidelijke melding)
 ```
 
 - `master` is productie. Elke wijziging gaat via een eigen branch en een pull request; een wijziging in
   `hub/` vraagt een bestand `changes/<naam>.md` met releasenotes (zie `changes/README.md`); het
   versienummer, `CHANGELOG.md` en `frontend/nieuws/releases.js` worden na het mergen automatisch bijgewerkt. Werk dit README bij als een PR features of de installatie wijzigt.
-- Een PR merget pas als de tests (SQLite en PostgreSQL), de releasenotes-controle en de verplichte controles **Claude code
+- Een PR merget pas als de tests (tegen PostgreSQL), de releasenotes-controle en de verplichte controles **Claude code
   review** en **Claude security review** (`.github/workflows/claude-review.yml`) groen zijn. CodeRabbit is uitgeschakeld;
   vóór go-live volgt eenmalig een handmatige deep scan met CodeRabbit.
 - **Rooktests na elke uitrol** (`tests/smoke`, workflow `rooktests.yml`): Playwright tegen de live omgeving, alleen lezen; secrets en werking in `tests/smoke/README.md`.

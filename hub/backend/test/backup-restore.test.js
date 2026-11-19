@@ -55,15 +55,15 @@ async function world() {
  * @returns {Promise<*>} Wat de functie teruggeeft.
  */
 async function withBackup(scene, callback) {
-  const opened = await restore.openBackup({ dir: scene.dir, name: scene.backupName, vault: scene.vault });
+  const opened = await restore.openBackup({ dir: scene.dir, name: scene.backupName, vault: scene.vault, current: scene.db });
   try { return await callback({ backup: opened.db, current: scene.db, context: { tenantId: scene.tenantId, customerRoleKeys: ['klant'] } }); } finally { opened.close(); }
 }
 
 test('openen: verkeerde sleutel of onbekende naam wordt geweigerd en er blijft niets achter', async () => {
   const scene = await world();
   try {
-    await assert.rejects(restore.openBackup({ dir: scene.dir, name: scene.backupName, vault: createVault(crypto.randomBytes(32)) }), /Ontsleutelen mislukt/);
-    await assert.rejects(restore.openBackup({ dir: scene.dir, name: '../x.db.enc', vault: scene.vault }), /niet gevonden/);
+    await assert.rejects(restore.openBackup({ dir: scene.dir, name: scene.backupName, vault: createVault(crypto.randomBytes(32)), current: scene.db }), /Ontsleutelen mislukt/);
+    await assert.rejects(restore.openBackup({ dir: scene.dir, name: '../x.db.enc', vault: scene.vault, current: scene.db }), /niet gevonden/);
     assert.deepStrictEqual(fs.readdirSync(scene.dir).filter((name) => name.startsWith('.restore-')), []);
     await withBackup(scene, async () => {});
     assert.deepStrictEqual(fs.readdirSync(scene.dir).filter((name) => name.startsWith('.restore-')), [], 'tijdelijk bestand gewist');

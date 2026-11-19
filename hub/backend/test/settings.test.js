@@ -7,7 +7,6 @@ const os = require('os');
 const path = require('path');
 const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
-const PG = Boolean(process.env.TEST_DATABASE_URL); // testsuite tegen PostgreSQL
 
 const { createStore } = require('../src/platform/store');
 const { createSettings, SettingsError } = require('../src/platform/settings');
@@ -127,7 +126,6 @@ test('instellingen blijven bewaard na een herstart', () => {
     // De sleutel staat versleuteld in de database, niet als leesbare tekst.
     assert.ok(!db.prepare('SELECT value FROM settings').all().some((row) => row.value.includes(KEY)));
     db.close();
-    if (!PG) assert.ok(!fs.readFileSync(file).includes(KEY));
     db = openDb(file);
     tenant = createStore(db).ensureTenant();
     // Met een andere hoofdsleutel is het geheim onbruikbaar (en wordt het genegeerd).

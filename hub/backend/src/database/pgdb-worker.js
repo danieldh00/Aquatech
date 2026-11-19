@@ -4,7 +4,7 @@
 const { workerData } = require('worker_threads');
 const { Client, types } = require('pg');
 
-// BIGINT (ook COUNT(*)) en NUMERIC als gewoon getal, zoals in SQLite.
+// BIGINT (ook COUNT(*)) en NUMERIC als gewoon getal.
 types.setTypeParser(20, (text) => Number(text));
 types.setTypeParser(1700, (text) => Number(text));
 
@@ -101,8 +101,8 @@ function txState(sql) {
   const head = String(sql).trimStart().slice(0, 10).toUpperCase();
   if (head.startsWith('BEGIN')) inTransaction = true;
   else if (head.startsWith('COMMIT') || head.startsWith('END')) inTransaction = false;
-  // Een teruggedraaide transactie draait ook set_config terug: de volgende query zet de omgevingen opnieuw.
-  else if (head.startsWith('ROLLBACK')) { inTransaction = false; scope = null; }
+  // Een teruggedraaide transactie draait ook set_config en search_path terug: de volgende query zet beide opnieuw.
+  else if (head.startsWith('ROLLBACK')) { inTransaction = false; scope = null; schema = null; }
 }
 
 /**

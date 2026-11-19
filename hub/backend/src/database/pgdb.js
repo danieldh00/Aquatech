@@ -1,20 +1,20 @@
-// PostgreSQL (bijv. Supabase) als database, met dezelfde synchrone interface
-// als node:sqlite: db.prepare(sql).get/all/run(...) en db.exec(sql). Zo werkt
-// alle code in store.js, quotes.js enz. ongewijzigd op beide databases.
+// PostgreSQL als database, met een synchrone interface: db.prepare(sql).get/all/run(...)
+// en db.exec(sql). Alle code in store.js, quotes.js enz. schrijft SQL met ?-parameters.
 //
 // Hoe: een werkthread (pgdb-worker.js) houdt de verbinding open; de
 // hoofdthread geeft een query door en wacht met Atomics.wait tot het antwoord
-// er is. Elke query is daardoor (net als bij SQLite) blokkerend; alle queries
+// er is. Elke query is daardoor blokkerend; alle queries
 // lopen na elkaar over één verbinding, dus transacties lopen nooit door elkaar.
 //
 // Daarnaast heeft de database een asynchrone kant (db.async, async-db.js en
 // pg-pool.js): losse queries over een pool van verbindingen, zonder de
 // hoofdthread stil te zetten.
 //
-// SQL schrijft de code met ?-parameters (SQLite-stijl); die worden hier
-// omgezet naar $1, $2, ... Dialectverschillen (JSON, schema opvragen) lost
+// SQL schrijft de code met ?-parameters ; die worden hier
+// omgezet naar $1, $2, ... Verschillen bij JSON en het schema opvragen lost
 // db.js op met kleine hulpfuncties.
 const fs = require('fs');
+const crypto = require('crypto');
 const path = require('path');
 const { Worker, MessageChannel, receiveMessageOnPort } = require('worker_threads');
 const { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS } = require('./pgschema');
@@ -137,7 +137,7 @@ class Bridge {
 
 /**
  * Zet ?-parameters om naar $1, $2, ... (niet binnen strings, namen of commentaar).
- * @param {string} sql SQL in SQLite-stijl.
+ * @param {string} sql SQL met ?-parameters.
  * @returns {string} SQL voor PostgreSQL.
  */
 function toPgParams(sql) {
@@ -173,7 +173,7 @@ const toPgValue = (value) => (value === undefined ? null : typeof value === 'big
 
 class PgDatabase {
   /**
-   * Database in PostgreSQL met dezelfde synchrone interface als node:sqlite.
+   * Database in PostgreSQL met een synchrone interface.
    * @param {Bridge} bridge De werkthread met de verbinding.
    * @param {string} schema Het schema van deze database.
    */
@@ -197,7 +197,7 @@ class PgDatabase {
   }
 
   /**
-   * De SQL voor PostgreSQL ($1, $2, ...) bij SQL in SQLite-stijl; de omzetting wordt onthouden (ook voor db.async).
+   * De SQL voor PostgreSQL ($1, $2, ...) bij SQL met ?-parameters; de omzetting wordt onthouden (ook voor db.async).
    * @param {string} sql SQL met ?-parameters.
    * @returns {string} SQL met $-parameters.
    */
@@ -213,8 +213,8 @@ class PgDatabase {
 
   /**
    * Bereidt een SQL-opdracht met ?-parameters voor (de omzetting wordt onthouden).
-   * @param {string} sql SQL in SQLite-stijl.
-   * @returns {{ get: Function, all: Function, run: Function }} Statement met dezelfde functies als node:sqlite.
+   * @param {string} sql SQL met ?-parameters.
+   * @returns {{ get: Function, all: Function, run: Function }} Statement met get, all en run.
    */
   prepare(sql) {
     const text = this.pgText(sql);
@@ -241,7 +241,7 @@ class PgDatabase {
   }
 
   /**
-   * Voert één of meer statements zonder parameters uit (BEGIN IMMEDIATE wordt BEGIN).
+   * Voert één of meer statements zonder parameters uit (BEGIN IMMEDIATE wordt BEGIN, voor SQL in de oude stijl).
    * @param {string} sql De SQL.
    * @returns {void}
    */
@@ -459,11 +459,44 @@ END $$`);
 }
 
 /**
- * Schemaversie (gelijk aan PRAGMA user_version van SQLite).
+ * Schemaversie (het aantal uitgevoerde migraties).
  * @param {PgDatabase} db De database.
  * @returns {number} De versie.
  */
 const pgVersion = (db) => db.prepare('SELECT version FROM schema_version').get()?.version || 0;
+
+/**
+ * Maakt naast de database een tijdelijk schema met lege kopieën van alle tabellen (zelfde kolommen en standaardwaarden,
+ * zonder sleutels, foreign keys en afscherming) op dezelfde verbinding. Gebruikt om een back-up in te lezen en alleen te
+ * lezen; ruim op met dropScratch.
+ * @param {PgDatabase} db De bestaande database (levert de verbinding en de tabelvorm).
+ * @returns {PgDatabase} De tijdelijke database.
+ */
+function openScratch(db) {
+  const schema = `aqt_scratch_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`;
+  const scratch = new PgDatabase(db.bridge, schema);
+  const tables = db.prepare("SELECT table_name AS name FROM information_schema.tables WHERE table_schema = current_schema() AND table_type = 'BASE TABLE'").all().map((row) => row.name);
+  // De werkthread maakt het schema zelf aan bij de eerste query.
+  try {
+    for (const name of tables) scratch.exec(`CREATE TABLE "${schema}"."${name}" (LIKE "${db.schema}"."${name}" INCLUDING DEFAULTS)`);
+    scratch.prepare('DELETE FROM schema_version').run();
+    scratch.prepare('INSERT INTO schema_version (version) VALUES (?)').run(pgVersion(db));
+  } catch (error) {
+    scratch.exec(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+    throw error;
+  }
+  return scratch;
+}
+
+/**
+ * Verwijdert een tijdelijk schema uit openScratch.
+ * @param {PgDatabase} scratch De tijdelijke database.
+ * @returns {void}
+ */
+function dropScratch(scratch) {
+  if (!/^aqt_scratch_[0-9a-f]+$/.test(scratch.schema)) throw new Error('Geen tijdelijk schema.');
+  scratch.exec(`DROP SCHEMA IF EXISTS "${scratch.schema}" CASCADE`);
+}
 
 /**
  * Verwijdert alle schema's met dit voorvoegsel (alleen voor tests).
@@ -478,4 +511,4 @@ function dropSchemas(url, prefix) {
   }
 }
 
-module.exports = { openPg, pgConfig, pgVersion, toPgParams, dropSchemas, DatabaseError, PgDatabase };
+module.exports = { openPg, openScratch, dropScratch, pgConfig, pgVersion, toPgParams, dropSchemas, DatabaseError, PgDatabase };

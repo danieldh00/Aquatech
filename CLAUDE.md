@@ -109,7 +109,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   rehash bij inloggen. Eerste beheerder vereist installatiecode (log,
   `SETUP_CODE`) of toegangscode. Tabel `audit` (`store.audit`, nooit geheimen
   in `detail`), bewaartermijnen via `app.locals.maintenance` (elk uur).
-  Back-ups (`backup.js`, 0.19.0): VACUUM INTO (PostgreSQL: kopie naar SQLite) + AES-GCM (`vault.derive('back-ups')`),
+  Back-ups (`backup.js`, 0.19.0; sinds SQLite weg is formaatversie 2): alle rijen uit één leestransactie als gzip-regels JSON (`database/table-rows.js` `exportLines`) + AES-GCM (`vault.derive('back-ups')`; bestandsnaam blijft `.db.enc`; versie 1 = SQLite wordt geweigerd),
   ook via `node src/backup.js create` (update.sh doet dat vóór elke update),
   `/data/backups` of `BACKUP_DIR`, dagelijks via `app.locals.backupIfDue`,
   `backupKeepDays`; `store.purgePlan` wist plan + historie-inhoud (AVG).
@@ -159,9 +159,9 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   maatlijn, schaal 1:50). Zelfde uitvoerformaat als de AI; bij een AI-fout valt
   `makeConcept` terug op lokaal. Unittests in `backend/test/localrecog.test.js`
   laden de frontendcode in een vm-sandbox.
-- **Database** (`backend/src/database/db.js`, `node:sqlite`, geen npm-module) in
-  `/data/aquatech.db` (of PostgreSQL, zie hieronder); migraties via `PRAGMA user_version` (alleen nieuwe
-  toevoegen). Tenant-klaar: elke tabel heeft `tenant_id`, id's zijn UUID's.
+- **Database** (`backend/src/database/db.js`): PostgreSQL is de enige database; zonder `DATABASE_URL`/`DATABASE_URL_FILE` start de app niet
+  (`openDatabase` geeft een duidelijke fout; SQLite is volledig verwijderd, besluit Daniël 2026-11-19). Migraties alleen in `PG_MIGRATIONS`
+  (pgschema.js, `schema_version`). Tenant-klaar: elke tabel heeft `tenant_id`, id's zijn UUID's.
   `store.js`: users (rol `beheerder`|`installateur`|`klant`, soort `account`|`gast`|
   `systeem`), plans (alleen eigenaar of beheerder) en `history` (append-only
   historie van aanvragen, snapshot zonder achtergrond, wijzigingen binnen 30
@@ -175,25 +175,19 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   van het gratis plan; `deploy/apps01/compose.localdb.yml`, `localdb/local-db.sh`, bediening vanaf de Proxmox-host met `pve/db-local.sh`:
   `migrate`, `rollback`, `status`, `backup`, `restore`; dagelijkse versleutelde `pg_dump` via `aquatech-pg-backup.timer`; **elk script dat
   Daniël draait, draait vanaf de Proxmox-host**; Supabase-gegevens: schema `aquatech`,
-  Session pooler, secret `secrets/database-url` op apps01, blijft als terugvaloptie staan). Elke feature moet
-  op PostgreSQL werken: CI (`test-postgres`) en `release.yml` draaien de hele
-  suite ook tegen PostgreSQL. SQLite blijft de terugval zonder URL (lokaal,
-  tests, noodgeval) en het formaat van de back-ups. Opslag in de database
+  Session pooler, secret `secrets/database-url` op apps01, blijft als terugvaloptie staan). Opslag in de database
   telt mee voor de Supabase-limiet (gratis: 500 MB), denk aan grote blobs.
-- **PostgreSQL/Supabase** (0.34.0): `DATABASE_URL`/`DATABASE_URL_FILE` →
-  `pgdb.js` (zelfde synchrone interface als node:sqlite via werkthread +
+- **PostgreSQL** (0.34.0; SQLite eruit 2026-11-19): `DATABASE_URL`/`DATABASE_URL_FILE` →
+  `pgdb.js` (synchrone interface `prepare().get/all/run` en `exec` via werkthread +
   `Atomics.wait`, `?` → `$n`), schema in `pgschema.js` (eigen schema
-  `aquatech`, RLS aan, `COLLATE "C"`, BIGINT, DEFERRABLE FK's). Zonder URL
-  SQLite. SQL in de code moet in beide werken (`lower()` i.p.v. `COLLATE
-  NOCASE`, `lower(x) LIKE lower(?)`); verschillen via helpers in db.js
+  `aquatech`, RLS aan, `COLLATE "C"`, BIGINT, DEFERRABLE FK's). SQL schrijf je voor PostgreSQL; kleine verschillen via helpers in db.js
   (`jsonField`, `jsonWithout`, `listTables`, `tableColumns`, `foreignKeys`,
-  `deferForeignKeys`, `schemaVersion`). **Nieuwe migratie: in `MIGRATIONS`
-  (db.js) én `PG_MIGRATIONS` (pgschema.js)**; `test/postgres.test.js`
-  vergelijkt de schema's. Overstap: `src/migrate-to-postgres.js` (db-copy.js,
-  aantallen + SHA-256 per tabel). Testsuite tegen PG: `TEST_DATABASE_URL`
-  (elke `openDb()` een eigen schema `aqt_test_*`; CI-job `test-postgres`).
-  Lokaal: `/usr/lib/postgresql/16/bin` staat in de sandbox (initdb als
-  gebruiker postgres, poort 5433).
+  `deferForeignKeys`, `schemaVersion`). **Nieuwe migratie: alleen in `PG_MIGRATIONS` (pgschema.js)**; `test/postgres.test.js`
+  controleert schemaversie en RLS. Testsuite: `TEST_DATABASE_URL` is verplicht (`openDb()` zonder gooit een duidelijke fout; elke
+  `openDb()` een eigen schema `aqt_test_*`; CI-job `test-postgres`; de job `test` doet alleen `npm audit` en blijft bestaan als verplichte controle).
+  **Terugzetten uit back-up** leest het bestand in een tijdelijk schema `aqt_scratch_*` op dezelfde verbinding (`openScratch`/`dropScratch` in pgdb.js,
+  `importLines` in table-rows.js) en ruimt dat altijd op. Lokaal: `/usr/lib/postgresql/16/bin` staat in de sandbox (`pg_ctlcluster 16 main start`,
+  wachtwoord van `postgres` zetten, poort 5432). Smoketests in CI starten een `postgres:17`-container op een eigen netwerk (`?sslmode=disable`).
 - **Multitenant** (0.20.0): tenants in `tenants` (`environment` `live`|`test`,
   `parent_id`, `disabled`); een testomgeving is een eigen tenant onder een
   live-tenant (eigen plannen/historie/instellingen, gebruikers van de
@@ -246,9 +240,9 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `PG_TENANT_RLS=0`; zonder CREATEROLE alleen een waarschuwing. `test/tenant-rls.test.js`.
 - **Databasepool** (1.7.7, `database/async-db.js` + `pg-pool.js`): `db.async.get/all/run(sql, ...params)` = Promise, met
   PostgreSQL via `pg.Pool` (`PG_POOL_SIZE`, standaard 5, 0 = uit; houdt `search_path`, `statement_timeout` en de RLS-scope per
-  verbinding bij), met SQLite synchroon in een Promise. **Alleen losse queries, nooit een transactie** (geweigerd; transacties
+  verbinding bij), met PG_POOL_SIZE=0 synchroon in een Promise. **Alleen losse queries, nooit een transactie** (geweigerd; transacties
   blijven `db.prepare`/`transaction`). Nu gebruikt voor de sessie van API-verzoeken (`store.prefetchSession`) en de
-  webshopcatalogus (`storefrontData.warm`). Een trage leesquery die de server niet mag stilzetten: via `db.async` (alleen met een actieve PostgreSQL-pool; bij SQLite en `PG_POOL_SIZE=0` draait de query synchroon en blokkeert een trage query de eventloop alsnog). Supabase:
+  webshopcatalogus (`storefrontData.warm`). Een trage leesquery die de server niet mag stilzetten: via `db.async` (alleen met een actieve PostgreSQL-pool; bij `PG_POOL_SIZE=0` draait de query synchroon en blokkeert een trage query de eventloop alsnog). Supabase:
   Session pooler houden (niet 6543), *Pool Size* ≥ `PG_POOL_SIZE` + 2.
 - **Verwijderen** (0.33.0): live-tenant via `DELETE /api/platform/tenants/:id`
   met `{ confirm: <slug> }` (`store.deleteTenant`: wist elke tabel met
@@ -718,7 +712,7 @@ reviewproces wijzigt; een fragment `changes/<naam>.md` (notes voor CHANGELOG en 
   de hele omgeving, maar per rij via de index (bijv. `(SELECT SUM(r.qty) FROM stock_reservations r
   WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id)`); de groepering past bij hele lijsten (1.6.6).
 - Een nieuwe `WHERE`/`ORDER BY` op een groeiende tabel krijgt een index met
-  `tenant_id` vooraan (migratie in `MIGRATIONS` én `PG_MIGRATIONS`).
+  `tenant_id` vooraan (migratie in `PG_MIGRATIONS`).
 - Gebruiker/tenant per verzoek niet opnieuw opvragen (`req.user`,
   `withRequestCache`). Breid `test/queries.test.js` uit voor nieuwe routes.
 
