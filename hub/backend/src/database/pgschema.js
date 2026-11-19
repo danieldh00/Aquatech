@@ -1255,6 +1255,7 @@ const PG_MIGRATIONS = [
   // `first_at` = eerste keer (leeg = één keer voorgekomen).
   `
   ALTER TABLE app_logs ADD COLUMN first_at ${TEXT_TYPE};
+  `,
   // 84: online betalen van een factuur (zie db.js).
   `
   CREATE TABLE invoice_payments (

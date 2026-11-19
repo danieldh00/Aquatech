@@ -1510,6 +1510,7 @@ const MIGRATIONS = [
   // `first_at` = eerste keer (leeg = één keer voorgekomen).
   `
   ALTER TABLE app_logs ADD COLUMN first_at TEXT;
+  `,
   // 84: online betalen van een factuur in het klantportaal (verkoop/invoice-payments.js): per poging één Mollie-betaling. Een factuur gaat pas op
   // betaald na een opvraging bij Mollie zelf; status open|betaald|mislukt. Geen geheimen, alleen het Mollie-id en de betaalpagina.
   `
