@@ -10,7 +10,7 @@ Webshop = `/` (hoofdmap), de app = `/app/` (dashboard, modules, `/app/api`). Dra
 ## Kaart van de codebase
 | Pad | Inhoud |
 |---|---|
-| `hub/backend/src/server.js` | Express-app, routes samenstellen, `identify()`, CSP |
+| `hub/backend/src/server.js` | Express-app, routes samenstellen, `identify()`, CSP (hoofdbeheerroutes `/api/platform` staan in `platform/platform-routes.js`) |
 | `hub/backend/src/<onderwerp>/` | `database/` (db.js migraties `MIGRATIONS`, pgschema.js `PG_MIGRATIONS`), `beveiliging/`, `platform/` (store, instellingen, rollen, mail, nieuws, bewaking, back-ups), `beregening/`, `verkoop/` (offertes, facturen, klanten, Visma), `webshop/`, `uitvoering/` (werkorders, planning, portaal), `artikelen/` (voorraad, inkoop, prijsfactor), `mcp/` (AI-koppeling), `paginas/` (HTML door de server gevuld) |
 | `hub/backend/test/` | `node --test`; gedeelde hulp in `test/helpers/` (`http-client.js`, fakes voor Mollie/PDOK/VIES/captcha/Google) |
 | `hub/backend/tools/` | `codestyle.js`, `tenant-filter.js`, `release-notes.js`, baselines |
