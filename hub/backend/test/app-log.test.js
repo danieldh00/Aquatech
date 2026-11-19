@@ -146,3 +146,38 @@ test('bij een volle buffer volgt het wegschrijven na het huidige verzoek, niet e
   await new Promise((resolve) => setImmediate(resolve));
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM app_logs').get().n, 3);
 });
+
+test('herhalingen na het wegschrijven werken dezelfde regel bij: teller, laatste tijdstip, eerste tijdstip en langste duur', () => {
+  const { appLog, clock, db, rows } = setup();
+  appLog.warn('taak', 'Trage taak: webshopsynchronisatie', { durationMs: 1200 });
+  appLog.warn('stilstand', 'Hoofdthread stond stil', { durationMs: 1500 });
+  assert.strictEqual(rows().length, 2);
+  for (let i = 0; i < 35; i += 1) {
+    clock.time += 5 * 60 * 1000;
+    appLog.warn('taak', 'Trage taak: webshopsynchronisatie', { durationMs: 900 + i * 100 });
+    rows();
+  }
+  const row = db.prepare("SELECT repeat_count, created_at, first_at, duration_ms FROM app_logs WHERE source = 'taak'").all();
+  assert.strictEqual(row.length, 1);
+  assert.strictEqual(Number(row[0].repeat_count), 36);
+  assert.strictEqual(row[0].first_at, '2026-11-19T10:00:00.000Z');
+  assert.strictEqual(row[0].created_at, new Date(clock.time).toISOString());
+  assert.strictEqual(Number(row[0].duration_ms), 4300);
+  assert.strictEqual(db.prepare("SELECT COUNT(*) AS aantal FROM app_logs WHERE source = 'stilstand'").get().aantal, 1);
+  const item = appLog.list(MAIN, { includePlatform: true }).items.find((entry) => entry.source === 'taak');
+  assert.strictEqual(item.repeat, 36);
+  assert.strictEqual(item.firstAt, '2026-11-19T10:00:00.000Z');
+});
+
+test('na meer dan een uur stilte of na 24 uur begint een nieuwe regel; fouten worden nooit samengevoegd', () => {
+  const { appLog, clock, rows } = setup();
+  appLog.warn('taak', 'Trage taak: x');
+  rows();
+  clock.time += 61 * 60 * 1000;
+  appLog.warn('taak', 'Trage taak: x');
+  assert.strictEqual(rows().filter((row) => row.source === 'taak').length, 2);
+  appLog.error('fout', 'GET /app/api/x', { tenantId: OTHER, errorCode: 'e1' });
+  rows();
+  appLog.error('fout', 'GET /app/api/x', { tenantId: OTHER, errorCode: 'e1' });
+  assert.strictEqual(rows().filter((row) => row.source === 'fout').length, 2);
+});

@@ -1506,6 +1506,11 @@ const MIGRATIONS = [
   CREATE INDEX app_logs_tenant_level ON app_logs (tenant_id, level, created_at);
   CREATE INDEX app_logs_request ON app_logs (tenant_id, request_id);
   `,
+  // 83: herhaalde logregels (taak, stilstand, traag) blijven na het wegschrijven één regel met teller: `created_at` = laatste keer,
+  // `first_at` = eerste keer (leeg = één keer voorgekomen).
+  `
+  ALTER TABLE app_logs ADD COLUMN first_at TEXT;
+  `,
 ];
 
 /**

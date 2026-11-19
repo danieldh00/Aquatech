@@ -653,7 +653,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
      * @returns {void}
      */
     onRecord: (entry) => {
-      if (entry.kind === 'stilstand') appLog.warn('stilstand', `Hoofdthread stond ${entry.stalledMs} ms stil`, { durationMs: entry.stalledMs, data: { runningDuring: entry.runningDuring } });
+      if (entry.kind === 'stilstand') appLog.warn('stilstand', 'Hoofdthread stond stil', { durationMs: entry.stalledMs, data: { runningDuring: entry.runningDuring } });
       else if (entry.kind === 'taak') appLog.warn('taak', `Trage taak: ${entry.task}`, { durationMs: entry.durationMs, data: { queries: entry.queries, dbMs: entry.dbMs, externalCalls: entry.externalCalls, externalMs: entry.externalMs } });
       else appLog.warn('traag', `${entry.method} ${entry.path} (${entry.status}${entry.aborted ? ', afgebroken' : ''})`, { tenantId: entry.tenantId, requestId: entry.requestId, durationMs: entry.durationMs, data: { queries: entry.queries, dbMs: entry.dbMs, externalCalls: entry.externalCalls, externalMs: entry.externalMs } });
     },

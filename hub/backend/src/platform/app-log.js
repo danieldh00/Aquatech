@@ -18,6 +18,11 @@ const MAX_MESSAGE = 500;
 const MAX_DATA = 2000;
 const MAX_STACK = 1200;
 const MAX_ROWS_PER_TENANT = 100000;
+// Bronnen waarvan herhalingen ook na het wegschrijven één regel met teller blijven (zonder eigen verzoek-id of foutcode per regel).
+const MERGE_SOURCES = new Set(['taak', 'stilstand', 'traag']);
+const MERGE_GAP_MS = 60 * 60 * 1000;
+const MERGE_SPAN_MS = 24 * 60 * 60 * 1000;
+const MAX_RECENT = 500;
 const SENSITIVE_KEY = /pass|wachtwoord|token|secret|authorization|cookie|api[_-]?key|iban|email|e-mail/i;
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 const IBAN = /\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?\b/g;
@@ -77,6 +82,9 @@ function parseData(text) {
  */
 function createAppLog({ db, mainTenantId, flushMs = 2000, batchSize = 50, perMinuteLimit = 600, now = Date.now, write = (line) => console.error(line) }) {
   let buffer = [];
+  // Laatst weggeschreven regel per samenvoegbare sleutel, zodat een herhaling na het wegschrijven de bestaande regel bijwerkt.
+  const recent = new Map();
+  const updates = new Map();
   const bySource = new Map();
   let timer = null;
   let flushScheduled = false;
@@ -131,14 +139,32 @@ function createAppLog({ db, mainTenantId, flushMs = 2000, batchSize = 50, perMin
       const text = cleanText(message);
       const scope = tenantId ? 'tenant' : 'platform';
       const key = `${owner}|${cleanSource}|${cleanLevel}|${errorCode}|${text}`;
+      const duration = Math.max(0, Math.round(Number(durationMs) || 0));
       const same = buffer.find((row) => row.key === key);
-      if (same) { same.repeat += 1; return; }
+      if (same) {
+        same.repeat += 1;
+        same.durationMs = Math.max(same.durationMs, duration);
+        same.lastMs = now();
+        return;
+      }
+      const written = MERGE_SOURCES.has(cleanSource) ? recent.get(key) : null;
+      if (written) {
+        const at = now();
+        if (at - written.lastMs <= MERGE_GAP_MS && at - written.firstMs <= MERGE_SPAN_MS) {
+          written.repeat += 1;
+          written.lastMs = at;
+          written.durationMs = Math.max(written.durationMs, duration);
+          updates.set(written.id, written);
+          return;
+        }
+        recent.delete(key);
+      }
       let json = data ? JSON.stringify(cleanData(data)) : '{}';
       if (json.length > MAX_DATA) json = JSON.stringify({ afgekapt: true });
       buffer.push({
         key, id: crypto.randomUUID(), owner, scope, at: new Date(now()).toISOString(), level: cleanLevel, source: cleanSource,
         requestId: String(requestId || '').slice(0, 32), errorCode: String(errorCode || '').slice(0, 32), message: text,
-        data: json, durationMs: Math.max(0, Math.round(Number(durationMs) || 0)), repeat: 1,
+        data: json, durationMs: duration, repeat: 1, firstMs: now(), lastMs: now(),
       });
       if (buffer.length >= batchSize && !flushScheduled) {
         flushScheduled = true;
@@ -153,27 +179,51 @@ function createAppLog({ db, mainTenantId, flushMs = 2000, batchSize = 50, perMin
    * @returns {number} Aantal weggeschreven regels.
    */
   function flush() {
-    if (!buffer.length) return 0;
+    if (!buffer.length && !updates.size) return 0;
     const rows = buffer;
     buffer = [];
-    const insertSql = `INSERT INTO app_logs (id, tenant_id, scope, created_at, level, source, request_id, error_code, message, data, duration_ms, repeat_count)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    const changed = [...updates.values()];
+    updates.clear();
+    const insertSql = `INSERT INTO app_logs (id, tenant_id, scope, created_at, level, source, request_id, error_code, message, data, duration_ms, repeat_count, first_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     /**
      * Schrijft één regel.
      * @param {object} row De regel uit de buffer.
      * @returns {void}
      */
-    const insertRow = (row) => db.prepare(insertSql).run(row.id, row.owner, row.scope, row.at, row.level, row.source, row.requestId, row.errorCode, row.message, row.data, row.durationMs, row.repeat);
+    const insertRow = (row) => db.prepare(insertSql).run(row.id, row.owner, row.scope, new Date(row.lastMs).toISOString(), row.level, row.source, row.requestId, row.errorCode, row.message, row.data, row.durationMs, row.repeat, row.repeat > 1 ? row.at : null);
+    /**
+     * Werkt een eerder weggeschreven regel bij met de herhalingen daarna (teller, laatste tijdstip, langste duur); eerste voorkomen blijft in `first_at`.
+     * @param {object} entry De samengevoegde regel uit `recent`.
+     * @returns {void}
+     */
+    const updateRow = (entry) => db.prepare('UPDATE app_logs SET repeat_count = ?, created_at = ?, first_at = ?, duration_ms = ? WHERE id = ? AND tenant_id = ?')
+      .run(entry.repeat, new Date(entry.lastMs).toISOString(), new Date(entry.firstMs).toISOString(), entry.durationMs, entry.id, entry.owner);
+    /**
+     * Onthoudt een weggeschreven regel, zodat een herhaling hem later bijwerkt.
+     * @param {object} row De regel uit de buffer.
+     * @returns {void}
+     */
+    const remember = (row) => {
+      if (!MERGE_SOURCES.has(row.source)) return;
+      if (recent.size >= MAX_RECENT) for (const [oldKey, entry] of recent) if (now() - entry.lastMs > MERGE_GAP_MS) recent.delete(oldKey);
+      if (recent.size >= MAX_RECENT) recent.delete(recent.keys().next().value);
+      recent.set(row.key, { id: row.id, owner: row.owner, repeat: row.repeat, firstMs: row.firstMs, lastMs: row.lastMs, durationMs: row.durationMs });
+    };
     try {
       return asSystem(() => {
+        for (const entry of changed) {
+          try { updateRow(entry); } catch { /* regel is al opgeruimd: overslaan */ }
+        }
         try {
           transaction(db, () => { for (const row of rows) insertRow(row); });
+          rows.forEach(remember);
           return rows.length;
         } catch {
           // Eén onbruikbare regel (bijvoorbeeld een onbekende omgeving) mag de rest niet meenemen: regel voor regel opnieuw.
           let written = 0;
           for (const row of rows) {
-            try { insertRow(row); written += 1; } catch { /* overslaan */ }
+            try { insertRow(row); remember(row); written += 1; } catch { /* overslaan */ }
           }
           if (!written) throw new Error('niets weggeschreven');
           return written;
@@ -236,11 +286,11 @@ function createAppLog({ db, mainTenantId, flushMs = 2000, batchSize = 50, perMin
       where.push('(created_at < ? OR (created_at = ? AND id < ?))');
       args.push(cursorAt, cursorAt, cursorId);
     }
-    const rows = db.prepare(`SELECT id, scope, created_at, level, source, request_id, error_code, message, data, duration_ms, repeat_count
+    const rows = db.prepare(`SELECT id, scope, created_at, level, source, request_id, error_code, message, data, duration_ms, repeat_count, first_at
       FROM app_logs WHERE tenant_id = ?${where.map((part) => ` AND ${part}`).join('')} ORDER BY created_at DESC, id DESC LIMIT ?`).all(...args, pageSize);
     const items = rows.map((row) => ({
       id: row.id, scope: row.scope, at: row.created_at, level: row.level, source: row.source, requestId: row.request_id,
-      errorCode: row.error_code, message: row.message, data: parseData(row.data), durationMs: Number(row.duration_ms) || 0, repeat: Number(row.repeat_count) || 1,
+      errorCode: row.error_code, message: row.message, data: parseData(row.data), durationMs: Number(row.duration_ms) || 0, repeat: Number(row.repeat_count) || 1, firstAt: row.first_at || null,
     }));
     const last = rows[rows.length - 1];
     return { items, next: rows.length === pageSize && last ? `${last.created_at}|${last.id}` : null };
