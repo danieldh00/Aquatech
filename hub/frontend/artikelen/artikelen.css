@@ -164,3 +164,10 @@ body.has-nav .tab[data-purchasing] { display: none; }
 #po-mail .form-grid > p { margin: 0; }
 #po-mail textarea { font: inherit; resize: vertical; }
 #po-mail .row.actions { margin-top: 16px; }
+
+.proposal-box { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 14px; padding: 12px 14px; border: 1px solid var(--at-teal); border-left-width: 4px; border-radius: var(--radius); background: var(--at-green-soft); }
+.proposal-box[hidden] { display: none; }
+.proposal-box .sub { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); }
+.proposal-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.pill.proposal { display: block; width: fit-content; margin: 2px 0 0 auto; background: var(--at-teal); color: #fff; }
+@media (max-width: 640px) { .proposal-box { flex-direction: column; align-items: stretch; } .proposal-actions .btn { flex: 1; } }

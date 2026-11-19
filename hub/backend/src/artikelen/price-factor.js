@@ -256,13 +256,14 @@ function createPriceFactorStore(db, { stock, settingsOf, treeOf }) {
   /**
    * Alle actieve artikelen in de modus factor, met de nieuwe prijs.
    * @param {string} tenantId Id van de omgeving.
+   * @param {?string} [onlyItemId] Alleen dit artikel (voor het artikelscherm), anders alle artikelen.
    * @returns {object[]} Rijen: id, code, name, unit, costPrice, oldPrice, newPrice, factor, source, problem, changed, rejected, marginOld, marginNew.
    */
-  function rowsOf(tenantId) {
+  function rowsOf(tenantId, onlyItemId = null) {
     const config = configOf(tenantId);
     const lookup = categoryLookup(tenantId, config);
-    const rows = db.prepare(`${ROWS_SQL} AND i.archived = 0 AND i.has_variants = 0 AND i.price_mode = 'factor' ORDER BY i.code`).all(tenantId);
-    const rejections = new Map(db.prepare('SELECT item_id, cost_price, proposed_price FROM price_proposal_rejections WHERE tenant_id = ?').all(tenantId).map((entry) => [entry.item_id, entry]));
+    const rows = db.prepare(`${ROWS_SQL} AND i.archived = 0 AND i.has_variants = 0 AND i.price_mode = 'factor'${onlyItemId ? ' AND i.id = ?' : ''} ORDER BY i.code`).all(...(onlyItemId ? [tenantId, onlyItemId] : [tenantId]));
+    const rejections = new Map(db.prepare(`SELECT item_id, cost_price, proposed_price FROM price_proposal_rejections WHERE tenant_id = ?${onlyItemId ? ' AND item_id = ?' : ''}`).all(...(onlyItemId ? [tenantId, onlyItemId] : [tenantId])).map((entry) => [entry.item_id, entry]));
     return rows.map((row) => {
       const result = compute(row, config, lookup);
       const oldPrice = row.sale_price == null ? null : Number(row.sale_price);
@@ -292,6 +293,17 @@ function createPriceFactorStore(db, { stock, settingsOf, treeOf }) {
       roundingModes: Object.entries(ROUNDING_MODES).map(([mode, rule]) => ({ mode, label: rule.label })), directions: DIRECTIONS,
       preview, changedCount: preview.filter((row) => row.changed && !row.rejected).length, rejectedCount: preview.filter((row) => row.rejected).length,
     };
+  }
+
+  /**
+   * De open prijsvoorstellen (de prijs wijkt af en is niet afgewezen), voor de melding bij het artikel en de indicatie in de lijst.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {?string} [onlyItemId] Alleen dit artikel (artikelscherm), anders alle.
+   * @returns {{ id: string, oldPrice: ?number, newPrice: number, costPrice: ?number }[]} Per artikel het huidige en het voorgestelde bedrag.
+   */
+  function openProposals(tenantId, onlyItemId = null) {
+    return rowsOf(tenantId, onlyItemId).filter((row) => row.changed && !row.rejected)
+      .map((row) => ({ id: row.id, oldPrice: row.oldPrice, newPrice: row.newPrice, costPrice: row.costPrice, marginNew: row.marginNew }));
   }
 
   /**
@@ -387,7 +399,7 @@ function createPriceFactorStore(db, { stock, settingsOf, treeOf }) {
     return compute({ ...row, cost_price: item.costPrice, price_factor: item.priceFactor }, config, categoryLookup(tenantId, config)).price;
   }
 
-  return { configOf, view, apply, reject, reopen, priceFor, sanitize: sanitizePriceFactors };
+  return { configOf, view, openProposals, apply, reject, reopen, priceFor, sanitize: sanitizePriceFactors };
 }
 
 /**
@@ -417,6 +429,12 @@ function registerPriceFactorRoutes(app, { priceFactors, suppliers, settingsOf, t
     const tenantId = tenantOf(req);
     res.set('Cache-Control', 'no-store');
     res.json(priceFactors.view(tenantId, { suppliers: supplierChoices(tenantId) }));
+  });
+
+  // Open prijsvoorstellen voor het artikelscherm en de lijst (alleen lezen, recht voorraad).
+  app.get('/api/stock/price-proposals', requireStock, (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json({ items: priceFactors.openProposals(tenantOf(req), req.query.id ? String(req.query.id) : null) });
   });
 
   app.put('/api/stock/price-factors', requireAdmin, requireJson, (req, res) => {
