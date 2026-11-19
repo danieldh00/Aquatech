@@ -231,6 +231,10 @@
       row.onclick = () => { go(`id=${encodeURIComponent(row.dataset.id)}`); };
     });
     table.querySelectorAll('input[data-select]').forEach((box) => {
+      /**
+       * Voorkomt dat een klik op het vinkje de offerte opent.
+       * @param {MouseEvent} event de klik
+       */
       box.onclick = (event) => event.stopPropagation();
       /** Zet de offerte in of uit de selectie. */
       box.onchange = () => {
@@ -242,6 +246,10 @@
     });
     const all = table.querySelector('input[data-select-all]');
     if (all) {
+      /**
+       * Voorkomt dat een klik op het vinkje de kolom sorteert.
+       * @param {MouseEvent} event de klik
+       */
       all.onclick = (event) => event.stopPropagation();
       /** Selecteert alle zichtbare offertes of heft de selectie op. */
       all.onchange = () => {
@@ -1784,6 +1792,7 @@
     $('#l-profile').onclick = openProfile;
     $('#l-export').onclick = exportListXlsx;
     $('#l-bulk-close').onclick = closeSelected;
+    /** Heft de selectie op. */
     $('#l-bulk-clear').onclick = () => { state.selected.clear(); renderList(); };
     $('#pf').onsubmit = saveProfile;
     $('#sf').onsubmit = sendQuote;
