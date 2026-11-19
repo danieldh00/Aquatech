@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.27.2',
+      date: '2026-11-19',
+      title: 'Telstaat en telformulier als pdf',
+      items: [
+        { text: 'Bij een voorraadtelling kun je nu een telstaat als pdf downloaden (ook met alleen de verschillen) voor de boekhouding.' },
+        { text: 'Voor tellen op papier is er een blanco telformulier: per locatie een blad met de artikelen en een leeg vak, zonder verwacht aantal of prijs.' },
+      ],
+    },
+    {
       version: '1.27.1',
       date: '2026-11-19',
       title: 'Mail via Microsoft Graph automatisch instellen werkt weer',

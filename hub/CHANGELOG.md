@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.27.2
+
+- Voorraadtelling: `GET /api/stock-counts/:id/telstaat.pdf` (optioneel `?alleen=verschillen`) en `telformulier.pdf` (optioneel `?locatie=`), recht `voorraad`, met de documentopmaak van de organisatie; knoppen in Artikelen > Telling.
+
 ## 1.27.1
 
 - `mail-graph-setup.js`: standaard inlog-client is nu Microsoft Graph Command Line Tools (`14d82eec-…`, device code flow) in plaats van de Azure CLI-client, die Microsoft met AADSTS65002 weigert voor Graph-tokens van app-registraties. Nog steeds te vervangen met `GRAPH_SETUP_CLIENT_ID`.
