@@ -11,11 +11,12 @@
 const fs = require('fs');
 const path = require('path');
 
-/** Eén vast commando voor de Proxmox-host (als root): haalt de nieuwste lijst van master op en pint hem op de exacte commit. */
+/** Eén vast commando voor de Proxmox-host (als root): haalt de nieuwste lijst van master op en pint hem op de exacte commit; het script gaat naar een eigen tijdelijk bestand (mktemp, geen voorspelbaar pad in /tmp) dat daarna wordt opgeruimd. */
 const HOST_COMMAND = [
   "REF=$(curl -fsSL -H 'Accept: application/vnd.github.sha' https://api.github.com/repos/danieldh00/Aquatech/commits/master)",
-  '&& curl -fsSL "https://raw.githubusercontent.com/danieldh00/Aquatech/$REF/deploy/apps01/pve/servertaken.sh" -o /tmp/servertaken.sh',
-  '&& APPS01_SSH=daniel@apps01 TASKS_REF="$REF" bash /tmp/servertaken.sh openstaand',
+  '&& T=$(mktemp) && trap \'rm -f "$T"\' EXIT',
+  '&& curl -fsSL "https://raw.githubusercontent.com/danieldh00/Aquatech/$REF/deploy/apps01/pve/servertaken.sh" -o "$T"',
+  '&& APPS01_SSH=daniel@apps01 TASKS_REF="$REF" bash "$T" openstaand',
 ].join(' ');
 
 /**

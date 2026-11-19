@@ -78,7 +78,10 @@ test('de lijst in de app en in het hostscript zijn gelijk, met unieke id\'s in h
     assert.ok(task.title && task.description && /^\d{4}-\d{2}-\d{2}$/.test(task.addedAt), `taak ${task.id} is onvolledig`);
     assert.ok(script.includes(`hosttask_${task.id.replace(/-/g, '_')}() {`), `functie voor ${task.id} ontbreekt`);
   }
-  assert.match(HOST_COMMAND, /servertaken\.sh openstaand/);
+  assert.match(HOST_COMMAND, /servertaken\.sh/);
+  assert.match(HOST_COMMAND, /bash "\$T" openstaand/);
+  assert.match(HOST_COMMAND, /T=\$\(mktemp\)/, 'een eigen tijdelijk bestand, geen voorspelbaar pad in /tmp');
+  assert.doesNotMatch(HOST_COMMAND, /\/tmp\//);
   assert.match(HOST_COMMAND, /APPS01_SSH=daniel@apps01/, 'het commando draait vanaf de Proxmox-host via daniel@apps01 + sudo');
   assert.ok(fs.readFileSync(SETUP_SCRIPT, 'utf8').includes('SETUP_REF'));
 });
