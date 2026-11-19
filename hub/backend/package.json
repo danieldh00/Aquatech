@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test",
+    "test": "node --import ./test/helpers/fast-scrypt.js --test",
     "codestyle": "node tools/codestyle.js",
     "tenant-filter": "node tools/tenant-filter.js",
     "recog-bench": "node tools/recog-bench.js"

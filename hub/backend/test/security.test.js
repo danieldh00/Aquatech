@@ -10,7 +10,7 @@ const { createApp } = require('../src/server');
 const { openDb, openSqlite } = require('../src/database/db');
 const PG = Boolean(process.env.TEST_DATABASE_URL); // testsuite tegen PostgreSQL
 
-const { createStore, passwordProblem, hashPassword, verifyPassword, needsRehash } = require('../src/platform/store');
+const { createStore, passwordProblem, hashPassword, scryptParams, verifyPassword, needsRehash } = require('../src/platform/store');
 const { createSettings } = require('../src/platform/settings');
 const { createVault, loadOrCreateMasterKey } = require('../src/beveiliging/vault');
 const { createClient, listen } = require('./helpers/http-client');
@@ -91,7 +91,12 @@ test('wachtwoordbeleid en sterkere hash met automatische upgrade', async () => {
   assert.match(passwordProblem('jan.devries-2026', 'jan.devries'), /gebruikersnaam/);
   assert.strictEqual(passwordProblem('paard batterij nietje'), null);
   const hash = await hashPassword(PW);
-  assert.match(hash, /^scrypt\$131072\$8\$1\$/);
+  assert.match(hash, /^scrypt\$\d+\$8\$1\$/);
+  // Productie rekent altijd met 2^17; alleen de testrun mag dat verlagen (en NODE_ENV=production negeert dat).
+  assert.strictEqual(scryptParams({}).N, 131072);
+  assert.strictEqual(scryptParams({ AQUATECH_TEST_SCRYPT_N: '1024' }).N, 1024);
+  assert.strictEqual(scryptParams({ AQUATECH_TEST_SCRYPT_N: '1024', NODE_ENV: 'production' }).N, 131072);
+  assert.strictEqual(scryptParams({ AQUATECH_TEST_SCRYPT_N: '1000' }).N, 131072);
   assert.ok(await verifyPassword(PW, hash));
   assert.ok(!(await verifyPassword('fout', hash)));
 

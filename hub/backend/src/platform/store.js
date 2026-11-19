@@ -74,7 +74,21 @@ const newId = () => crypto.randomUUID();
 // 128 MiB geheugen per berekening). Asynchroon, zodat de server tijdens het
 // rekenen andere verzoeken blijft beantwoorden. Oudere, lichtere hashes worden
 // bij de eerstvolgende geslaagde inlog vervangen (needsRehash).
-const SCRYPT = { N: 2 ** 17, r: 8, p: 1, keylen: 32 };
+const SCRYPT_PRODUCTION_N = 2 ** 17;
+
+/**
+ * Bepaalt de scrypt-kosten. Alleen de testrun (`npm test` zet AQUATECH_TEST_SCRYPT_N) mag ze verlagen, zodat honderden
+ * testaccounts niet elk een volle OWASP-hash kosten; in productie (NODE_ENV=production) of zonder die variabele geldt altijd 2^17.
+ * @param {object} [env] De omgevingsvariabelen (standaard process.env).
+ * @returns {{ N: number, r: number, p: number, keylen: number }} De scrypt-parameters.
+ */
+function scryptParams(env = process.env) {
+  const testCost = Number(env.AQUATECH_TEST_SCRYPT_N);
+  const allowed = env.NODE_ENV !== 'production' && Number.isInteger(testCost) && testCost >= 1024 && testCost < SCRYPT_PRODUCTION_N && (testCost & (testCost - 1)) === 0;
+  return { N: allowed ? testCost : SCRYPT_PRODUCTION_N, r: 8, p: 1, keylen: 32 };
+}
+
+const SCRYPT = scryptParams();
 const SCRYPT_MAXMEM = 256 * 1024 * 1024;
 
 /**
@@ -2001,4 +2015,4 @@ function createStore(db) {
  */
 const fingerprintOf = (value) => crypto.createHash('sha256').update(`fp:${value || ''}`).digest('base64url').slice(0, 22);
 
-module.exports = { createStore, withRequestCache, preferencesOf, PREFERENCES, hashPassword, verifyPassword, needsRehash, passwordProblem, fingerprintOf, summarize, ROLES };
+module.exports = { createStore, withRequestCache, preferencesOf, PREFERENCES, hashPassword, scryptParams, verifyPassword, needsRehash, passwordProblem, fingerprintOf, summarize, ROLES };
