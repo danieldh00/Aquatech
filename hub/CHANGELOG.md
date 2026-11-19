@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.21.9
+
+Levertijd tonen (fase 3 van de levermethode-spec): `delivery-times.js` (`etaPhrase`, `etaSentence`) en `delivery-rules.js` (`describeRules`); nieuw invulveld `{levertijd}` in de mailtypes *Orderbevestiging* (online betaald en op rekening; leeg bij afhalen of zonder levertijd), aanvulling in de melding aan het bedrijf; blok *Verwachte levertijd* op de bestelpagina (alleen bij status nieuw, zonder volgcode); beperking per artikel op de productpagina (`leadInfoOf` geeft ook de regels van artikel en hoofdartikel); `GET /api/stock/items/:id/delivery-preview` (recht `voorraad`, `webshop/delivery-preview.js`) en overzicht in het artikelformulier; levermethode en levertijd bij een bestelling in Beheer en kolom *Levertijd bij bestellen* in de Excel. Geen migratie.
+
 ## 1.21.8
 
 - `artikelen/item-images.js` (server): `setThumb` accepteert naast WebP ook JPEG (zelfde grenzen: 480 px, 100 kB, controle op inhoud); `thumbFile` herkent het formaat aan de bytes en levert het juiste `Content-Type`.

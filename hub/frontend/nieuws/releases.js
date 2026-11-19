@@ -13,6 +13,17 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.21.9',
+      date: '2026-11-19',
+      title: 'Levertijd zichtbaar in shop, mail en Beheer',
+      items: [
+        { text: 'De webshop toont bij een artikel in gewone taal welke levermethode bij welk aantal geldt, bijvoorbeeld "pallet vanaf 100 stuks".' },
+        { text: 'De bestelpagina en de orderbevestigingsmail noemen de verwachte levertijd, steeds als indicatie en niet als toezegging.' },
+        { text: 'Bij een webshopbestelling staan de levermethode en de levertijd bij het bestellen, ook in de Excel-export.', for: ['webshop'] },
+        { text: 'Bij een artikel toont Beheer per levermethode de aantallen en de levertijd, op voorraad en niet op voorraad.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.21.8',
       date: '2026-11-19',
       title: 'Miniaturen van artikelfoto\'s maken ook in Safari',
