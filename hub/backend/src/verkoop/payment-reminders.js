@@ -65,7 +65,7 @@ const daysBetween = (from, to) => Math.round((Date.parse(`${to}T12:00:00Z`) - Da
 /**
  * Maakt de opslag voor verstuurde betalingsherinneringen.
  * @param {object} db De database.
- * @returns {object} candidates, optedOut, byInvoice, latestByInvoice, record en forInvoice.
+ * @returns {object} candidates, optedOut, byInvoice, latestByInvoice, record, claim, finish, release en forInvoice.
  */
 function createPaymentReminderStore(db) {
   /**
@@ -171,19 +171,57 @@ function createPaymentReminderStore(db) {
   }
 
   /**
+   * Reserveert een stap vóór het mailen (status 'verzenden'), zodat een databasefout of herstart na het mailen nooit tot een tweede mail leidt.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} invoiceId Id van de factuur.
+   * @param {string} stepKey Sleutel van de stap.
+   * @param {number} daysOverdue Dagen over de vervaldatum.
+   * @returns {boolean} true als de stap nieuw is en deze aanroep hem mag versturen.
+   */
+  function claim(tenantId, invoiceId, stepKey, daysOverdue) {
+    const out = prepare(`INSERT INTO invoice_reminders (id, tenant_id, invoice_id, step_key, status, sent_at, days_overdue) VALUES (?, ?, ?, ?, 'verzenden', ?, ?)
+      ON CONFLICT (tenant_id, invoice_id, step_key) DO NOTHING`).run(crypto.randomUUID(), tenantId, String(invoiceId), stepKey, new Date().toISOString(), daysOverdue);
+    return Number(out.changes) > 0;
+  }
+
+  /**
+   * Zet een gereserveerde stap op de uitkomst (verstuurd of overgeslagen).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} invoiceId Id van de factuur.
+   * @param {string} stepKey Sleutel van de stap.
+   * @param {{ status: string, sentTo?: string, reason?: string }} outcome Uitkomst.
+   * @returns {void}
+   */
+  function finish(tenantId, invoiceId, stepKey, { status, sentTo = '', reason = '' }) {
+    prepare('UPDATE invoice_reminders SET status = ?, sent_at = ?, sent_to = ?, reason = ? WHERE tenant_id = ? AND invoice_id = ? AND step_key = ?')
+      .run(status, new Date().toISOString(), String(sentTo).slice(0, 400), String(reason).slice(0, 300), tenantId, String(invoiceId), stepKey);
+  }
+
+  /**
+   * Geeft een gereserveerde stap vrij na een tijdelijke mailfout, zodat de volgende ronde het opnieuw probeert.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} invoiceId Id van de factuur.
+   * @param {string} stepKey Sleutel van de stap.
+   * @returns {void}
+   */
+  function release(tenantId, invoiceId, stepKey) {
+    prepare("DELETE FROM invoice_reminders WHERE tenant_id = ? AND invoice_id = ? AND step_key = ? AND status = 'verzenden'").run(tenantId, String(invoiceId), stepKey);
+  }
+
+  /**
    * Alle vastgelegde stappen van één factuur, voor de factuurkaart.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} invoiceId Id van de factuur.
    * @returns {{ stepKey: string, title: string, status: string, sentAt: string, sentTo: string, reason: string, daysOverdue: number }[]} De stappen, oudste eerst.
    */
   function forInvoice(tenantId, invoiceId) {
-    return prepare('SELECT step_key, status, sent_at, sent_to, reason, days_overdue FROM invoice_reminders WHERE tenant_id = ? AND invoice_id = ? ORDER BY sent_at')
+    return prepare('SELECT step_key, status, sent_at, sent_to, reason, days_overdue FROM invoice_reminders WHERE tenant_id = ? AND invoice_id = ? AND status <> \'verzenden\' ORDER BY sent_at')
       .all(tenantId, String(invoiceId))
       .map((row) => ({ stepKey: row.step_key, title: (STEPS.find((step) => step.key === row.step_key) || {}).title || row.step_key, status: row.status,
         sentAt: row.sent_at, sentTo: row.sent_to, reason: row.reason, daysOverdue: Number(row.days_overdue) }));
   }
 
-  return { candidates, optedOut, byInvoice, latestByInvoice, record, forInvoice };
+  return { candidates, optedOut, byInvoice, latestByInvoice, record, claim, finish, release, forInvoice };
 }
 
 /**
@@ -273,6 +311,8 @@ function createPaymentReminderRunner(reminders, { invoices, sender, settingsFor,
           result.skipped++;
           continue;
         }
+        // Eerst reserveren: pas mailen als deze stap echt van ons is (nooit dubbel, ook niet bij een databasefout of herstart na het mailen).
+        if (!reminders.claim(tenantId, invoice.id, target.key, daysOverdue)) continue;
         budget--;
         const values = { ...sender.values(tenantId, invoice), dagen_te_laat: String(daysOverdue) };
         const language = DocText.clean(invoice.data.language);
@@ -283,21 +323,29 @@ function createPaymentReminderRunner(reminders, { invoices, sender, settingsFor,
             ...mailBody(profile, composed.paragraphs, undefined, mailStyleOf(settings)),
             attachments: [{ filename: `${invoice.number || 'factuur'}.pdf`, content: sender.pdfOf(tenantId, invoice), contentType: 'application/pdf' }],
           });
-          skipEarlier();
-          reminders.record(tenantId, invoice.id, target.key, { status: 'verstuurd', sentTo: to, daysOverdue });
-          result.sent++;
         } catch (error) {
           result.failed++;
-          // Afzender geweigerd of de mailserver is weg: geldt voor elke factuur, dus deze ronde stoppen.
-          if (error.command === 'MAIL FROM') return result;
           // Adres definitief geweigerd: vastleggen, anders blokkeert deze factuur elke ronde.
           if (permanentFailure(error)) {
-            reminders.record(tenantId, invoice.id, target.key, { status: 'overgeslagen', reason: mailFailure(error), daysOverdue });
+            reminders.finish(tenantId, invoice.id, target.key, { status: 'overgeslagen', reason: mailFailure(error) });
             continue;
           }
+          // Tijdelijke fout: de reservering vrijgeven, volgende ronde opnieuw.
+          reminders.release(tenantId, invoice.id, target.key);
+          // Afzender geweigerd of de mailserver is weg: geldt voor elke factuur, dus deze ronde stoppen.
+          if (error.command === 'MAIL FROM') return result;
           transientFailures++;
           if (transientFailures >= 3) return result;
+          continue;
         }
+        // De mail is weg: de uitkomst vastleggen. Een databasefout hier telt niet als mailfout; de reservering blijft staan, dus geen tweede mail.
+        try {
+          skipEarlier();
+          reminders.finish(tenantId, invoice.id, target.key, { status: 'verstuurd', sentTo: to });
+        } catch (error) {
+          console.error(`Betalingsherinnering ${invoice.number}: vastleggen na het mailen mislukt:`, error.message);
+        }
+        result.sent++;
       }
       if (candidates.length < CANDIDATE_LIMIT) break;
     }

@@ -153,3 +153,32 @@ test('een Engelse factuur krijgt een Engelse mail; een mailfout wordt niet als v
   assert.strictEqual((await broken.runner.runEnvironment(broken.tenantId, TODAY)).failed, 1);
   assert.deepStrictEqual(broken.reminders.forInvoice(broken.tenantId, invoice.id), [], 'volgende ronde opnieuw');
 });
+
+test('API: herinneringen op de factuur en in de lijst; zonder recht 403, andere organisatie 404', async () => {
+  const { createApp } = require('../src/server');
+  const { createLogin, listen } = require('./helpers/http-client');
+  const db = openDb();
+  const store = createStore(db);
+  const main = store.ensureTenant().id;
+  await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
+  await store.createAccount(main, { username: 'kees', displayName: 'Kees', role: 'installateur', password: PW });
+  const other = store.createTenant({ slug: 'ander', name: 'Ander BV' }).tenant;
+  await store.createAccount(other.id, { username: 'vreemd', displayName: 'Vreemd', role: 'beheerder', password: PW, mustChangePassword: false });
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: 's'.repeat(64), db, loginDelayMs: 0 }));
+  try {
+    const as = createLogin(base, { password: PW });
+    const baas = await as('baas');
+    const date = Core.addDays(Core.today(), -30);
+    const made = (await baas.post('/app/api/invoices', { data: { date, dueDate: Core.addDays(date, 14), customer: { name: 'Jan' }, lines: [{ description: 'Sproeier', qty: 1, unit: 'st', price: 100, vat: 21, group: 'producten' }] } })).body;
+    assert.strictEqual((await baas.post(`/app/api/invoices/${made.id}/finalize`, {})).status, 200);
+    createPaymentReminderStore(db).record(main, made.id, 'herinnering', { sentTo: 'jan@voorbeeld.test', daysOverdue: 16 });
+    const card = (await baas.get(`/app/api/invoices/${made.id}`)).body;
+    assert.deepStrictEqual(card.reminders.map((entry) => [entry.stepKey, entry.status, entry.sentTo]), [['herinnering', 'verstuurd', 'jan@voorbeeld.test']]);
+    const listed = (await baas.get('/app/api/invoices')).body.items.find((item) => item.id === made.id);
+    assert.strictEqual(listed.reminder.title, 'Betalingsherinnering');
+    assert.strictEqual((await (await as('kees')).get(`/app/api/invoices/${made.id}`)).status, 403);
+    assert.strictEqual((await (await as('vreemd', 'ander')).get(`/app/api/invoices/${made.id}`)).status, 404);
+  } finally {
+    server.close();
+  }
+});
