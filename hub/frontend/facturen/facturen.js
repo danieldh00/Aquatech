@@ -244,7 +244,9 @@
           const draft = await api(`invoices/${encodeURIComponent(invoice.id)}/mail`);
           if (!draft.configured) { skipped.push(`${label}: geen mailserver ingesteld, de rest is niet verwerkt`); break; }
           if (!draft.to) { skipped.push(`${label}: geen e-mailadres`); continue; }
-          await api(`invoices/${encodeURIComponent(invoice.id)}/send`, { method: 'POST', body: { to: draft.to, subject: draft.subject, message: draft.message } });
+          const sent = await api(`invoices/${encodeURIComponent(invoice.id)}/send`, { method: 'POST', body: { to: draft.to, subject: draft.subject, message: draft.message } });
+          // Het overzicht klopt zo ook als het herladen straks mislukt: een verstuurde factuur is niet nog eens te mailen.
+          invoice.sentAt = (sent && sent.sentAt) || new Date().toISOString();
           done += 1;
           state.selected.delete(invoice.id);
         } catch (error) {
