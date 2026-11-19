@@ -213,7 +213,12 @@ test('update.sh: een mislukte update ruimt geen images op (de terugval heeft ze 
 test('servertaken.sh schijf: de draaiende en de twee nieuwste versies blijven, de rest wordt opgeruimd', { skip: !bashAvailable }, () => {
   const setup = install({ current: '1.14.1' });
   const servertaken = path.join(__dirname, '..', '..', '..', 'deploy', 'apps01', 'pve', 'servertaken.sh');
-  const env = { ...process.env, PATH: `${path.join(setup.root, 'bin')}:${process.env.PATH}`, SERVERTAKEN_REMOTE: '1', APP_DIR: setup.appDir, FAKE_STATE: setup.state, FAKE_TAGS: '1.14.5 1.14.4 1.14.3 1.14.2 1.14.1 1.14.0 latest' };
+  // update.sh komt uit een lokale kopie van de GitHub-indeling (file://), nooit van het echte netwerk.
+  const ref = 'a'.repeat(40);
+  fs.mkdirSync(path.join(setup.root, 'raw', ref, 'deploy', 'apps01'), { recursive: true });
+  fs.copyFileSync(SCRIPT, path.join(setup.root, 'raw', ref, 'deploy', 'apps01', 'update.sh'));
+  fs.writeFileSync(path.join(setup.appDir, 'update.sh'), '#!/usr/bin/env bash\n# oude versie\n');
+  const env = { ...process.env, UPDATE_SH_BASE: `file://${path.join(setup.root, 'raw')}`, UPDATE_SH_REF: ref, PATH: `${path.join(setup.root, 'bin')}:${process.env.PATH}`, SERVERTAKEN_REMOTE: '1', APP_DIR: setup.appDir, FAKE_STATE: setup.state, FAKE_TAGS: '1.14.5 1.14.4 1.14.3 1.14.2 1.14.1 1.14.0 latest' };
   // De opruimstappen buiten docker mogen het systeem van wie de test draait nooit raken: stubs die alleen loggen.
   for (const name of ['journalctl', 'apt-get']) fs.writeFileSync(path.join(setup.root, 'bin', name), `#!/usr/bin/env bash\necho "${name} $*" >> "$FAKE_STATE/system-calls.log"\n`, { mode: 0o755 });
   const check = spawnSync('bash', [servertaken, 'schijf-check'], { env, encoding: 'utf8', timeout: 30000 });
@@ -225,6 +230,14 @@ test('servertaken.sh schijf: de draaiende en de twee nieuwste versies blijven, d
   const systemCalls = fs.readFileSync(path.join(setup.state, 'system-calls.log'), 'utf8');
   assert.match(systemCalls, /journalctl --vacuum-size=200M/);
   assert.match(systemCalls, /apt-get clean/);
+  assert.strictEqual(fs.readFileSync(path.join(setup.appDir, 'update.sh'), 'utf8'), fs.readFileSync(SCRIPT, 'utf8'), 'update.sh op de server is bijgewerkt');
+  assert.ok(fs.readdirSync(setup.appDir).some((name) => name.startsWith('update.sh.bak-')), 'de oude blijft als back-up staan');
+  assert.match(run.stdout, /update\.sh bijgewerkt/);
+  const again = spawnSync('bash', [servertaken, 'schijf-run'], { env, encoding: 'utf8', timeout: 30000 });
+  assert.match(again.stdout, /al de nieuwste/);
+  const broken = spawnSync('bash', [servertaken, 'schijf-run'], { env: { ...env, UPDATE_SH_REF: 'niet-een-commit' }, encoding: 'utf8', timeout: 30000 });
+  assert.match(broken.stdout, /ongeldige verwijzing/, 'een ongeldige verwijzing wordt geweigerd en het opruimen gaat door');
+  assert.strictEqual(broken.status, 0);
   const few = spawnSync('bash', [servertaken, 'schijf-check'], { env: { ...env, FAKE_TAGS: '1.14.1 1.14.0' }, encoding: 'utf8', timeout: 30000 });
   assert.match(few.stdout, /0 oude versie\(s\)/, 'met een oude naast de draaiende gebeurt niets (die is de tweede van de twee nieuwste)');
 });
