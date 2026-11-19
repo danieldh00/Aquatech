@@ -46,13 +46,18 @@ function copyMinified(sourceDir, targetDir, rootDir, totals) {
       continue;
     }
     const source = fs.readFileSync(sourcePath, 'utf8');
-    const result = esbuild.transformSync(source, {
-      loader: kind,
-      minify: true,
-      legalComments: 'none',
-      target: kind === 'js' ? 'es2020' : 'chrome90',
-      sourcefile: entry.name,
-    });
+    let result;
+    try {
+      result = esbuild.transformSync(source, {
+        loader: kind,
+        minify: true,
+        legalComments: 'none',
+        target: kind === 'js' ? 'es2020' : 'chrome90',
+        sourcefile: entry.name,
+      });
+    } catch (error) {
+      throw new Error(`Verkleinen mislukt voor ${sourcePath}: ${error.message}`, { cause: error });
+    }
     fs.writeFileSync(targetPath, result.code);
     totals.files += 1;
     totals.before += Buffer.byteLength(source);
