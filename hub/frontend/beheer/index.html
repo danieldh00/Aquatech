@@ -251,6 +251,10 @@
             <label>IP-adressen bewaren (dagen) <span class="src" data-origin="ipRetentionDays"></span><input name="ipRetentionDays" type="number" min="1" max="3650" step="1" required></label>
             <label>Auditlog bewaren (dagen) <span class="src" data-origin="auditRetentionDays"></span><input name="auditRetentionDays" type="number" min="30" max="3650" step="1" required></label>
           </div>
+          <div class="row">
+            <label>Logboek: informatie en waarschuwingen bewaren (dagen) <span class="src" data-origin="logRetentionDays"></span><input name="logRetentionDays" type="number" min="1" max="90" step="1" required></label>
+            <label>Logboek: fouten bewaren (dagen) <span class="src" data-origin="logErrorRetentionDays"></span><input name="logErrorRetentionDays" type="number" min="1" max="180" step="1" required></label>
+          </div>
           <div class="row"><button class="btn primary" type="submit">Opslaan</button></div>
           <div class="err" role="alert"></div>
         </form>
@@ -874,6 +878,29 @@
           <div class="form-actions"><button class="btn" type="button" id="mon-more" hidden>Oudere meldingen</button></div>
         </section>
       </section>
+      <section id="tab-logboek" class="tabpane" hidden>
+        <p class="muted small">Fouten, trage verzoeken, stilstand van de server, mislukte taken en bewakingsmeldingen van deze omgeving. Elke foutmelding in de app noemt een foutcode of verzoek-id: zoek die hier om te zien wat er gebeurde. Wachtwoorden, sleutels, e-mailadressen en IBAN's worden nooit bewaard. De bewaartermijn stel je in bij <a href="#security">Sessies en bewaartermijnen</a>.</p>
+        <section class="card" aria-labelledby="log-title">
+          <h3 id="log-title">Logboek</h3>
+          <div class="form-grid cols-4 log-filters">
+            <label class="field">Niveau
+              <select id="log-level"><option value="">Alles</option><option value="error">Fouten</option><option value="warn,error">Waarschuwingen en fouten</option><option value="info">Informatie</option></select>
+            </label>
+            <label class="field">Bron <select id="log-source"><option value="">Alle bronnen</option></select></label>
+            <label class="field">Van <input type="date" id="log-from"></label>
+            <label class="field">Tot en met <input type="date" id="log-to"></label>
+            <label class="field span-2">Zoeken <input type="search" id="log-q" maxlength="100" placeholder="Foutcode, verzoek-id of tekst" autocomplete="off"></label>
+            <label class="field" id="log-env-wrap" hidden>Omgeving <select id="log-env"></select></label>
+          </div>
+          <div class="form-actions">
+            <button class="btn primary" type="button" id="log-search">Zoeken</button>
+            <button class="btn" type="button" id="log-export">Exporteer naar Excel</button>
+          </div>
+          <div id="log-err" class="err" role="alert"></div>
+          <div class="tablewrap"><table class="grid" id="log-table"></table></div>
+          <div class="form-actions"><button class="btn" type="button" id="log-more" hidden>Oudere regels</button></div>
+        </section>
+      </section>
       <section id="tab-aikosten" class="tabpane" hidden>
         <div class="filters">
           <select id="ai-range" aria-label="Periode">
@@ -947,6 +974,7 @@
   <script src="mailopmaak.js"></script>
   <script src="updates.js"></script>
   <script src="bewaking.js"></script>
+  <script src="logboek.js"></script>
   <script src="drive-backup.js"></script>
   <script src="backup-restore.js"></script>
   <script src="beheer.js"></script>

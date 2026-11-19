@@ -47,6 +47,10 @@ webserver in Docker (poort 3300) met PostgreSQL (een eigen container naast de ap
   (bekijken kan, opslaan niet); start de nieuwe versie niet goed, dan gaat de server terug naar de vorige. De app
   rolt zelf niets uit: het updatescript op de server pakt de aanvraag op (zie `deploy/apps01/README.md`, eenmalig
   inrichten met `setup-app-update.sh`).
+- **Logboek** (Beheer > Systeem > Logboek): één plek voor fouten, trage verzoeken, stilstand van de server, mislukte taken en
+  bewakingsmeldingen. Elke foutmelding in de app noemt een foutcode en verzoek-id; zoek die in het logboek (filters op niveau,
+  bron, periode en tekst, Excel-export). Gebufferd en begrensd opgeslagen in de database (`app_logs`), bewaartermijn instelbaar
+  bij Sessies en bewaartermijnen (standaard 14 dagen, fouten 30). Wachtwoorden, sleutels, e-mailadressen en IBAN's komen er nooit in.
 - **Bewaking en meldingen** (Beheer > Systeem > Bewaking): de app controleert zelf elke 5 minuten of de database, de schijf, de
   lokale back-up, de update, de serverfouten, Google Drive, de mailserver, Mollie, Visma, de webshopsynchronisatie en de
   AI-dienst werken. Bij een storing komt er een incident in Beheer en een melding per e-mail en/of webhook; bij herstel volgt
