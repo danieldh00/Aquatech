@@ -462,6 +462,16 @@
           <div class="row"><button class="btn primary" type="submit">Opslaan</button></div>
           <div class="err" role="alert"></div>
         </form>
+        <form id="s-kpis" class="card-form settings">
+          <h3>Dashboard: KPI's</h3>
+          <p class="muted small">Kies welke KPI's beheerders op het dashboard zien en in welke volgorde. Een wijziging geldt meteen. KPI's van een module die uit staat kun je niet kiezen. Je ziet er alleen die bij jouw rechten horen.</p>
+          <ul id="s-kpis-list" class="kpi-settings" aria-label="KPI's"></ul>
+          <label class="field" id="s-kpis-period-field">Periode voor KPI's over een tijdvak
+            <select name="period"></select>
+            <span class="hint">Geldt voor de KPI's met het label <em>periode</em>, zoals gefactureerd of webshop-omzet.</span>
+          </label>
+          <div class="err" role="alert"></div>
+        </form>
         <form id="s-quote-followup" class="card-form settings">
           <h3>Offerte-opvolging</h3>
           <p class="muted small">Heeft een klant na het mailen van een offerte niet gereageerd, dan stuurt AquaTech na het gekozen aantal dagen automatisch een vriendelijke herinnering met de knop naar de digitale offerte. Er komt geen herinnering voor een offerte met antwoord, een verlopen offerte of een offerte die alleen via een link is gedeeld.</p>
@@ -1104,6 +1114,7 @@
   <script src="collapse-list.js"></script>
   <script src="drive-backup.js"></script>
   <script src="vps-draaiboek.js"></script>
+  <script src="dashboard-kpis.js"></script>
   <script src="backup-restore.js"></script>
   <script src="mail.js"></script>
   <script src="verzending.js"></script>

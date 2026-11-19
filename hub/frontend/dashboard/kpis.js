@@ -1,4 +1,4 @@
-// Startscherm "Kengetallen" voor beheerders (api/kpis): openstaand bedrag, vervallen facturen, open offertes en de
+// Startscherm "Cijfers" voor beheerders (api/kpis): openstaand bedrag, vervallen facturen, open offertes en de
 // bezetting van deze week, elk als tegel met een link naar de module. Zonder tegels (geen recht) blijft het blok weg.
 (function () {
   /**
@@ -19,14 +19,14 @@
   }
 
   /**
-   * Tekent het blok met de kengetallen.
+   * Tekent het blok met de KPI's.
    * @param {HTMLElement} container Het element #kpis.
    * @param {{ key: string, title: string, value: number, unit: string, detail: string, href: string }[]} kpis De tegels uit api/kpis.
    * @returns {void}
    */
   function render(container, kpis) {
     container.innerHTML = `
-      <h2>Kengetallen</h2>
+      <h2>KPI's</h2>
       <div class="kpi-grid">${kpis.map((kpi) => `
         <a class="kpi" data-kpi="${esc(kpi.key)}" href="${esc(kpi.href)}">
           <span class="kpi-title">${esc(kpi.title)}</span>
@@ -37,7 +37,7 @@
   }
 
   /**
-   * Haalt de kengetallen op en toont ze (alleen voor beheerders).
+   * Haalt de KPI's op en toont ze (alleen voor beheerders).
    * @param {object} me Antwoord van api/me.
    * @returns {Promise<void>}
    */

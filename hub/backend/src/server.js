@@ -96,6 +96,7 @@ const { registerOpenTaskRoutes } = require('./platform/open-tasks');
 const { createHostTasks } = require('./platform/host-tasks');
 const { registerHostTaskRoutes } = require('./platform/host-tasks-routes');
 const { registerKpiRoutes } = require('./platform/kpis');
+const { describeCatalog: describeKpiCatalog } = require('./platform/kpi-catalog');
 const { createPurchaseOrderMailer } = require('./artikelen/purchase-order-mail');
 const { createNewsStore, registerNewsRoutes, unreadCount } = require('./platform/news');
 const { createSprinklerStore, registerSprinklerRoutes } = require('./beregening/sprinklers');
@@ -3072,8 +3073,16 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     requireJson, audit,
   });
   // Openstaande taken op het dashboard (volgen de rechten van de gebruiker).
-  // Kengetallen voor beheerders op het dashboard (platform/kpis.js).
-  registerKpiRoutes(app, { identify, db: database });
+  // KPI's voor beheerders op het dashboard (platform/kpis.js).
+  registerKpiRoutes(app, { identify, db: database, settingsFor, isModuleOn: (tenantId, moduleId) => ModuleTools.isOn(moduleFlagsOf(tenantId), moduleId) });
+  // Keuzescherm van de KPI's in Beheer: alle KPI's, aan/uit en of hun module aan staat.
+  app.get('/api/admin/kpi-catalog', (req, res) => {
+    const user = identify(req);
+    if (!user) return res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
+    if (!Roles.can(user, 'beheer')) return res.status(403).json({ error: 'forbidden', message: 'Alleen voor beheerders.' });
+    res.set('Cache-Control', 'no-store');
+    res.json(describeKpiCatalog(settingsFor(req.tenantId).get('dashboardKpis'), (moduleId) => ModuleTools.isOn(moduleFlagsOf(req.tenantId), moduleId)));
+  });
   registerOpenTaskRoutes(app, { identify, canUpdate, sources: { hostTasks, orders: webOrders, purchaseOrders: purchaseOrderStore, priceFactors: priceFactorStore, proposalsEnabled,
     shopEnabled: (tenantId) => Boolean(settingsFor(tenantId).get('storefront')), stockEnabled: (tenantId) => ModuleTools.isOn(moduleFlagsOf(tenantId), 'voorraad') } });
 

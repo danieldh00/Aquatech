@@ -1,7 +1,7 @@
 # AquaTech Hub
 
 AquaTech Hub is een modulair, ERP-achtig pakket voor beregeningsbedrijven, met een eigen webshop. Na het inloggen
-kom je op een dashboard met een tegel per module (beheerders krijgen een zijbalk), voor beheerders een blok *Kengetallen* (openstaand bedrag, vervallen facturen, open offertes, bezetting van de week; `GET /api/kpis`, per tegel het eigen recht) en een blok *Openstaande taken*
+kom je op een dashboard met een tegel per module (beheerders krijgen een zijbalk), voor beheerders een blok *KPI's* (een catalogus van vaste KPI's: openstaand bedrag, vervallen facturen, gefactureerd, open en geaccepteerde offertes, open werkorders, webshopbestellingen en -omzet, voorraad onder het minimum, inkooporders onderweg en bezetting; per omgeving kies je in Beheer > Modules > *Dashboard: KPI's* welke aan staan, in welke volgorde en over welke periode; `GET /api/kpis`, per tegel het eigen recht en de module moet aan staan) en een blok *Openstaande taken*
 (webshopbestellingen verwerken, bestelvoorstellen goedkeuren, prijsvoorstellen beoordelen; volgt de rechten, `GET /api/tasks`; hetzelfde aantal staat als belletje met teller in de kopbalk). Alles draait als één
 webserver in Docker (poort 3300) met PostgreSQL (een eigen container naast de app, of Supabase) of SQLite als database.
 
