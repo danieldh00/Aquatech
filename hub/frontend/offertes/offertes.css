@@ -127,3 +127,10 @@ table.lines .c-kind { width: 112px; }
 .vat-shift #e-vs-box { margin-top: 8px; }
 .newcust .form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 560px) { .newcust .form-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* Offertesjablonen: keuzelijst en knoppen op één lijn, onder elkaar op smalle schermen. */
+.tpl-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: end; margin-bottom: 8px; }
+.tpl-row .full { grid-column: 1 / -1; margin: 0; }
+.tpl-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.tpl-box select, .tpl-box input { width: 100%; box-sizing: border-box; }
+@media (max-width: 600px) { .tpl-row { grid-template-columns: 1fr; } }

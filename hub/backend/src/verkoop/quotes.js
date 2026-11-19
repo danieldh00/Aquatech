@@ -13,6 +13,7 @@ const { requireVerifiedAddress } = require('../platform/address-lookup');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
 const { linkExpired } = require('../platform/public-links');
 const { sanitizeDocumentLayout } = require('./document-layout');
+const { sanitizeQuoteTemplates, upsertTemplate, MAX_TEMPLATES } = require('./quote-templates');
 
 /**
  * Kopie (bcc) van een verstuurde mail naar de afzender, als die dat in Mijn
@@ -723,6 +724,33 @@ function registerQuoteRoutes(app, ctx) {
     settings.update({ quoteProfile: next }, req.user?.id);
     audit(req, 'instellingen_gewijzigd', { fields: ['quoteProfile'] });
     res.json({ profile: settings.get('quoteProfile') });
+  });
+
+  // Offertesjablonen: kiezen mag elke medewerker met het recht offertes, bewaren en verwijderen alleen de beheerder.
+  app.get('/api/quote-templates', requireQuotes, (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json(sanitizeQuoteTemplates(settingsOf(req).get('quoteTemplates')));
+  });
+
+  app.put('/api/quote-templates', requireJson, requireAdmin, (req, res) => {
+    const settings = settingsOf(req);
+    const result = upsertTemplate(sanitizeQuoteTemplates(settings.get('quoteTemplates')), req.body && req.body.template);
+    if (result.error === 'too_many') return res.status(400).json({ error: result.error, message: `Er kunnen hoogstens ${MAX_TEMPLATES} sjablonen zijn; verwijder er eerst een.` });
+    if (result.error) return res.status(400).json({ error: result.error, message: 'Geef het sjabloon een naam en minstens een tekst of een regel.' });
+    settings.update({ quoteTemplates: result.config }, req.user?.id);
+    audit(req, 'offertesjabloon_bewaard', { name: result.template.name });
+    res.json({ template: result.template, templates: result.config.templates });
+  });
+
+  app.delete('/api/quote-templates/:id', requireAdmin, (req, res) => {
+    const settings = settingsOf(req);
+    const current = sanitizeQuoteTemplates(settings.get('quoteTemplates'));
+    const removed = current.templates.find((template) => template.id === req.params.id);
+    if (!removed) return res.status(404).json({ error: 'not_found', message: 'Sjabloon niet gevonden.' });
+    const config = { templates: current.templates.filter((template) => template.id !== removed.id) };
+    settings.update({ quoteTemplates: config }, req.user?.id);
+    audit(req, 'offertesjabloon_verwijderd', { name: removed.name });
+    res.json({ templates: config.templates });
   });
 
   /**

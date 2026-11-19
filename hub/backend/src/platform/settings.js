@@ -13,6 +13,7 @@ const { sanitizeSeasonReminders } = require('../uitvoering/season-reminders');
 const { sanitizeVisma, sanitizeVismaApp } = require('../verkoop/visma');
 const { sanitizeDriveBackup, sanitizeDriveState } = require('./drive-backup');
 const { sanitizeLabelTemplates } = require('../artikelen/labels');
+const { sanitizeQuoteTemplates } = require('../verkoop/quote-templates');
 const { sanitizeCategoryDiscounts } = require('../webshop/category-discounts');
 const { sanitizePriceFactors } = require('../artikelen/price-factor');
 const { sanitizeDocumentLayout } = require('../verkoop/document-layout');
@@ -110,6 +111,8 @@ const FIELDS = {
   monitoring: { type: 'object', default: {}, sanitize: sanitizeMonitoring, internal: true, liveOnly: true },
   // Bedrijfsgegevens, uurtarief en standaardteksten voor offertes (quotes.js).
   quoteProfile: { type: 'object', default: {}, sanitize: sanitizeProfile },
+  // Offertesjablonen (verkoop/quote-templates.js): vaste teksten en standaardregels; alleen via /api/quote-templates.
+  quoteTemplates: { type: 'object', default: {}, sanitize: sanitizeQuoteTemplates, internal: true, notInView: true },
   // Eigen SMTP-server voor offertes en bevestigingen (mailer.js); het
   // wachtwoord staat apart en versleuteld.
   mailServer: { type: 'object', default: {}, sanitize: sanitizeMail, liveOnly: true },
