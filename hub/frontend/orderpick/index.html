@@ -32,6 +32,7 @@
       <div class="op-modes" role="tablist" aria-label="Wat wil je doen?">
         <button type="button" class="op-mode active" data-mode="pick" role="tab" aria-selected="true">Picken</button>
         <button type="button" class="op-mode" data-mode="receive" role="tab" aria-selected="false">Ontvangen</button>
+        <button type="button" class="op-mode" data-mode="count" role="tab" aria-selected="false">Tellen</button>
       </div>
       <div class="op-head">
         <h1>Te picken</h1>
@@ -69,6 +70,7 @@
       <div class="op-modes" role="tablist" aria-label="Wat wil je doen?">
         <button type="button" class="op-mode" data-mode="pick" role="tab" aria-selected="false">Picken</button>
         <button type="button" class="op-mode active" data-mode="receive" role="tab" aria-selected="true">Ontvangen</button>
+        <button type="button" class="op-mode" data-mode="count" role="tab" aria-selected="false">Tellen</button>
       </div>
       <div class="op-head">
         <h1>Goederen ontvangen</h1>
@@ -100,6 +102,35 @@
     </section>
 
     <section id="rc-done" hidden></section>
+
+    <section id="ct-list" hidden>
+      <div class="op-modes" role="tablist" aria-label="Wat wil je doen?">
+        <button type="button" class="op-mode" data-mode="pick" role="tab" aria-selected="false">Picken</button>
+        <button type="button" class="op-mode" data-mode="receive" role="tab" aria-selected="false">Ontvangen</button>
+        <button type="button" class="op-mode active" data-mode="count" role="tab" aria-selected="true">Tellen</button>
+      </div>
+      <div class="op-head">
+        <h1 id="ct-title">Voorraad tellen</h1>
+        <button class="btn" id="ct-refresh" type="button">Vernieuwen</button>
+      </div>
+      <p id="ct-note" class="muted"></p>
+      <div id="ct-locations" class="op-orders"></div>
+    </section>
+
+    <section id="ct-location" hidden>
+      <div class="op-head">
+        <button class="btn" id="ct-back" type="button">← Locaties</button>
+        <h1 id="ct-location-title"></h1>
+        <span id="ct-location-meta" class="muted"></span>
+      </div>
+      <div class="op-scanbar">
+        <input id="ct-scan" type="text" placeholder="Scan of typ de code en druk op Enter" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Code van het artikel">
+        <button class="btn" id="ct-camera" type="button" hidden>Camera</button>
+      </div>
+      <div id="ct-current" class="op-current"></div>
+      <h2>Alle artikelen op deze locatie</h2>
+      <div id="ct-lines" class="op-lines"></div>
+    </section>
   </main>
 
   <div id="op-camera-view" class="op-camera" hidden>
@@ -119,5 +150,7 @@
   <script src="orderpick.js"></script>
   <script src="receiving-core.js"></script>
   <script src="receiving.js"></script>
+  <script src="counting-core.js"></script>
+  <script src="counting.js"></script>
 </body>
 </html>

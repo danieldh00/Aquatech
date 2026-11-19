@@ -1,4 +1,4 @@
-// Test: heen en weer wisselen tussen Picken en Ontvangen in de orderpick-pagina laat altijd precies één scherm zien.
+// Test: heen en weer wisselen tussen Picken, Ontvangen en Tellen in de orderpick-pagina laat altijd precies één scherm zien.
 // De twee scripts (orderpick.js en receiving.js) draaien in een vm-sandbox met een minimale nagebootste pagina.
 const test = require('node:test');
 const assert = require('node:assert');
@@ -7,7 +7,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const DIR = path.join(__dirname, '..', '..', 'frontend', 'orderpick');
-const SECTIONS = ['#op-list', '#op-order', '#op-done', '#rc-list', '#rc-order', '#rc-done'];
+const SECTIONS = ['#op-list', '#op-order', '#op-done', '#rc-list', '#rc-order', '#rc-done', '#ct-list', '#ct-location'];
 
 /**
  * Maakt een nagebootst element dat elke eigenschap en methode accepteert.
@@ -15,7 +15,7 @@ const SECTIONS = ['#op-list', '#op-order', '#op-done', '#rc-list', '#rc-order', 
  * @returns {object} Het element.
  */
 function fakeElement(selector) {
-  const data = { hidden: !selector.match(/^#(op-list)$/) && /^#(op|rc)-(list|order|done)$/.test(selector), dataset: {}, value: '', innerHTML: '', textContent: '' };
+  const data = { hidden: !selector.match(/^#(op-list)$/) && /^#(op|rc|ct)-(list|order|done|location)$/.test(selector), dataset: {}, value: '', innerHTML: '', textContent: '' };
   return new Proxy(data, {
     get(target, key) {
       if (key in target) return target[key];
@@ -66,7 +66,7 @@ async function loadPage() {
   };
   sandbox.window = sandbox;
   vm.createContext(sandbox);
-  for (const file of ['orderpick-core.js', 'orderpick.js', 'receiving-core.js', 'receiving.js']) {
+  for (const file of ['orderpick-core.js', 'orderpick.js', 'receiving-core.js', 'receiving.js', 'counting-core.js', 'counting.js']) {
     vm.runInContext(fs.readFileSync(path.join(DIR, file), 'utf8'), sandbox, { filename: file });
   }
   await sandbox.OrderpickUi.ready;
@@ -87,13 +87,19 @@ async function loadPage() {
   return { clickMode, visible, sandbox };
 }
 
-test('wisselen tussen Picken en Ontvangen toont steeds precies één scherm', async () => {
+test('wisselen tussen Picken, Ontvangen en Tellen toont steeds precies één scherm', async () => {
   const { clickMode, visible } = await loadPage();
   assert.deepStrictEqual(visible(), ['#op-list']);
   for (let round = 0; round < 3; round += 1) {
     clickMode('receive');
     await new Promise((resolve) => setTimeout(resolve, 5));
     assert.deepStrictEqual(visible(), ['#rc-list'], `ronde ${round}: ontvangen`);
+    clickMode('count');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.deepStrictEqual(visible(), ['#ct-list'], `ronde ${round}: tellen`);
+    clickMode('receive');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.deepStrictEqual(visible(), ['#rc-list'], `ronde ${round}: weer ontvangen`);
     clickMode('pick');
     await new Promise((resolve) => setTimeout(resolve, 5));
     assert.deepStrictEqual(visible(), ['#op-list'], `ronde ${round}: picken`);

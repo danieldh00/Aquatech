@@ -215,7 +215,7 @@
   function showList() {
     stopCamera();
     state.order = null;
-    for (const section of ['#op-order', '#op-done', '#rc-list', '#rc-order', '#rc-done']) $(section).hidden = true;
+    for (const section of ['#op-order', '#op-done', '#rc-list', '#rc-order', '#rc-done', '#ct-list', '#ct-location']) $(section).hidden = true;
     $('#op-list').hidden = false;
     history.replaceState(null, '', location.pathname);
     loadList().catch((error) => toast(`Kan de bestellingen niet laden: ${error.message}`, true));
@@ -701,7 +701,7 @@
     Object.assign(window.OrderpickUi, { allowed: true, owner: state.owner, rights: me.rights || [] });
     bind();
     // Goederenontvangst (receiving.js) neemt het scherm over met #ontvangst of ?ontvangst=<inkooporder>.
-    if (!id && (location.hash === '#ontvangst' || new URLSearchParams(location.search).has('ontvangst'))) return;
+    if (!id && (location.hash === '#tellen' || location.hash === '#ontvangst' || new URLSearchParams(location.search).has('ontvangst'))) return;
     if (id) {
       await openOrder(id);
       if (state.order) return;
