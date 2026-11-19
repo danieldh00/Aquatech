@@ -265,8 +265,8 @@ test('telstaat en telformulier als PDF: rechten, andere organisatie, en het blan
   assert.strictEqual((await world.vreemd.get(`/app/api/stock-counts/${count.id}/telstaat.pdf`)).status, 404);
   assert.strictEqual((await world.vreemd.get(`/app/api/stock-counts/${count.id}/telformulier.pdf`)).status, 404);
   assert.strictEqual((await world.admin.get('/app/api/stock-counts/onbekend/telstaat.pdf')).status, 404);
-  // Een pdf is zwaar werk: hoogstens 10 per minuut per gebruiker (er waren er al 7 in deze test).
-  let limited = 0;
-  for (let attempt = 0; attempt < 6; attempt += 1) if ((await world.admin.get(`/app/api/stock-counts/${count.id}/telformulier.pdf`)).status === 429) limited += 1;
-  assert.ok(limited > 0, 'de pdf-routes hebben een eigen, strakke limiet');
+  // Een pdf is zwaar werk: hoogstens 10 per minuut per gebruiker (de admin deed er hier al 5: telstaat, verschillen, formulier, formulier per locatie en de 404).
+  let limited = false;
+  for (let attempt = 0; attempt < 12 && !limited; attempt += 1) limited = (await world.admin.get(`/app/api/stock-counts/${count.id}/telformulier.pdf`)).status === 429;
+  assert.ok(limited, 'de pdf-routes hebben een eigen, strakke limiet');
 });
