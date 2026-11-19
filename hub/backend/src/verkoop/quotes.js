@@ -14,7 +14,7 @@ const { requireVerifiedAddress } = require('../platform/address-lookup');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
 const { linkExpired } = require('../platform/public-links');
 const { sanitizeDocumentLayout } = require('./document-layout');
-const { sanitizeQuoteTemplates, upsertTemplate, MAX_TEMPLATES } = require('./quote-templates');
+const { sanitizeQuoteTemplates, upsertTemplate, MAX_TEMPLATES, MAX_TEMPLATE_LINES } = require('./quote-templates');
 
 /**
  * Kopie (bcc) van een verstuurde mail naar de afzender, als die dat in Mijn
@@ -765,6 +765,7 @@ function registerQuoteRoutes(app, ctx) {
     const settings = settingsOf(req);
     const result = upsertTemplate(sanitizeQuoteTemplates(settings.get('quoteTemplates')), req.body && req.body.template);
     if (result.error === 'too_many') return res.status(400).json({ error: result.error, message: `Er kunnen hoogstens ${MAX_TEMPLATES} sjablonen zijn; verwijder er eerst een.` });
+    if (result.error === 'too_many_lines') return res.status(400).json({ error: result.error, message: `Een sjabloon kan hoogstens ${MAX_TEMPLATE_LINES} regels hebben; haal er een paar weg of splits het in twee sjablonen.` });
     if (result.error) return res.status(400).json({ error: result.error, message: 'Geef het sjabloon een naam en minstens een tekst of een regel.' });
     settings.update({ quoteTemplates: result.config }, req.user?.id);
     audit(req, 'offertesjabloon_bewaard', { name: result.template.name });

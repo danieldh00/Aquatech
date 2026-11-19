@@ -71,6 +71,7 @@ function sanitizeQuoteTemplates(raw) {
  * @returns {{ config: { templates: object[] }, template: object }|{ error: string }} De nieuwe instelling en het bewaarde sjabloon, of een foutcode.
  */
 function upsertTemplate(current, raw) {
+  if (raw && Array.isArray(raw.lines) && raw.lines.length > MAX_TEMPLATE_LINES) return { error: 'too_many_lines' };
   const template = cleanTemplate(raw);
   if (!template) return { error: 'invalid_template' };
   const templates = current.templates.filter((existing) => existing.id !== template.id);

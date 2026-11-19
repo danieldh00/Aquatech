@@ -4,7 +4,7 @@ const assert = require('node:assert');
 const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
-const { sanitizeQuoteTemplates, upsertTemplate, MAX_TEMPLATES } = require('../src/verkoop/quote-templates');
+const { sanitizeQuoteTemplates, upsertTemplate, MAX_TEMPLATES, MAX_TEMPLATE_LINES } = require('../src/verkoop/quote-templates');
 const { createClient, createLogin, listen } = require('./helpers/http-client');
 
 const PASSWORD = 'Tuin-Plan-2026!';
@@ -50,6 +50,12 @@ async function setup() {
   const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: 'z'.repeat(64), db }));
   return { server, base, as: createLogin(base, { password: PASSWORD }), store, tid };
 }
+
+test('bewaren: meer regels dan het maximum geeft een fout in plaats van stil afkappen', () => {
+  const lines = Array.from({ length: MAX_TEMPLATE_LINES + 1 }, (_, i) => ({ description: `Regel ${i}`, qty: 1, price: 1 }));
+  assert.strictEqual(upsertTemplate({ templates: [] }, { name: 'Groot', lines }).error, 'too_many_lines');
+  assert.strictEqual(upsertTemplate({ templates: [] }, { name: 'Past', lines: lines.slice(0, MAX_TEMPLATE_LINES) }).template.lines.length, MAX_TEMPLATE_LINES);
+});
 
 test('API: sjablonen kiezen door medewerkers, bewaren en verwijderen door de beheerder', async () => {
   const { server, base, as } = await setup();
