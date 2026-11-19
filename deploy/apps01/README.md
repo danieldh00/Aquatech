@@ -208,8 +208,10 @@ Cloudflare cachet standaard alleen adressen met een bestandsextensie. Artikelfot
 afbeelding verandert nooit onder hetzelfde id, dus cachen is veilig.
 
 1. Cloudflare → het domein → *Caching* → *Cache Rules* → *Create rule*.
-2. Naam: `Artikelfoto's en media`. Voorwaarde (*Custom filter expression*):
-   `(http.request.uri.path matches "^/(artikelfoto|media)/")`.
+2. Naam: `Artikelfoto's en media`. Voorwaarde (*Custom filter expression*), zonder `matches` (reguliere expressies vragen een
+   Business-plan; `starts_with` werkt op het gratis plan):
+   `(starts_with(http.request.uri.path, "/artikelfoto/")) or (starts_with(http.request.uri.path, "/media/"))`.
+   In de editor zonder code: *URI Path* *starts with* `/artikelfoto/`, dan *Or* en *URI Path* *starts with* `/media/`.
 3. *Cache eligibility*: *Eligible for cache*. *Edge TTL*: *Use cache-control header if present* (anders 1 jaar). *Browser TTL*: *Respect origin*.
 4. Opslaan en controleren: `curl -sI https://<webadres>/artikelfoto/<id>/klein | grep -i cf-cache-status` geeft bij de tweede aanroep `HIT`.
 
