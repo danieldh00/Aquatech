@@ -107,7 +107,7 @@ test('mailFailure: leesbare melding per soort fout, met het antwoord van de mail
   assert.strictEqual(mailFailure(smtpError('EAUTH', { response: '535 5.7.3\r\n Authentication unsuccessful' })),
     'Versturen mislukt: de mailserver weigert de inloggegevens. Controleer gebruikersnaam en wachtwoord (bij Microsoft 365 of Gmail vaak een app-wachtwoord) in Beheer → Integraties → E-mail. (mailserver: 535 5.7.3 Authentication unsuccessful)');
   assert.match(mailFailure(smtpError('ETIMEDOUT')), /^Versturen mislukt: de mailserver geeft geen antwoord \(time-out\)/);
-  assert.match(mailFailure(smtpError('ECONNECTION')), /lukt niet.*Controleer server en poort/);
+  assert.match(mailFailure(smtpError('ECONNECTION')), /de mailserver is niet bereikbaar\. Controleer server en poort/);
   const tagged = { mailHost: 'smtp.example.nl', mailPort: 25 };
   assert.match(mailFailure(smtpError('ETIMEDOUT', tagged)), /smtp\.example\.nl:25 geeft geen antwoord \(time-out\).*poort 25.*587/);
   assert.match(mailFailure(Object.assign(new Error('Greeting never received'), { code: 'ETIMEDOUT', ...tagged })), /geen antwoord/);
@@ -115,7 +115,7 @@ test('mailFailure: leesbare melding per soort fout, met het antwoord van de mail
   assert.match(mailFailure(Object.assign(new Error('getaddrinfo ENOTFOUND smtp.example.nl'), { code: 'EDNS', ...tagged })), /naam van smtp\.example\.nl:25 is niet gevonden/);
   assert.match(mailFailure(Object.assign(new Error('connect ENETUNREACH 2001:db8::1:587'), { code: 'ECONNECTION', ...tagged })), /niet bereikbaar.*IPv6/);
   assert.match(mailFailure(Object.assign(new Error('self-signed certificate in certificate chain'), { code: 'ESOCKET' })), /beveiligde verbinding \(TLS\)/);
-  assert.match(mailFailure(Object.assign(new Error('Connection closed unexpectedly'), { code: 'ESOCKET' })), /lukt niet/);
+  assert.match(mailFailure(Object.assign(new Error('Connection closed unexpectedly'), { code: 'ESOCKET' })), /niet bereikbaar/);
   assert.match(mailFailure(Object.assign(new Error('unable to verify the first certificate'), { code: 'ETLS' })), /beveiligde verbinding \(TLS\)/);
   assert.match(mailFailure(Object.assign(new Error('self-signed certificate in certificate chain'), { code: 'SELF_SIGNED_CERT_IN_CHAIN' })), /beveiligde verbinding \(TLS\)/);
   assert.match(mailFailure(Object.assign(new Error('unable to verify the first certificate'), { code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' })), /beveiligde verbinding \(TLS\)/);

@@ -235,7 +235,7 @@ function mailFailure(error) {
     if (code === 'ETIMEDOUT' || /timeout|never received/i.test(text)) {
       return withReply(`${where} geeft geen antwoord (time-out). Meestal blokkeert een firewall of de internetprovider uitgaand verkeer naar die poort (bij consumentenabonnementen vaak poort 25). Probeer 587 met STARTTLS of 465 met SSL/TLS, en controleer of de server naar buiten mag verbinden.`);
     }
-    return withReply(`de verbinding met ${where} lukt niet. Controleer server en poort (587 met STARTTLS of 465 met SSL/TLS) en of de server naar buiten mag verbinden.`);
+    return withReply(`${where} is niet bereikbaar. Controleer server en poort (587 met STARTTLS of 465 met SSL/TLS) en of de server naar buiten mag verbinden.`);
   }
   if (code === 'EENVELOPE') {
     return withReply(error.command === 'MAIL FROM'
