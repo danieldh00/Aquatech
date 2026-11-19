@@ -206,7 +206,14 @@
     const setOpen = (open) => {
       popup.hidden = !open;
       toggle.setAttribute('aria-expanded', String(open));
-      if (open) refresh(true);
+      if (open) {
+        // Het gebruikersmenu sluit mee (de klik bereikt wireMenu niet door stopPropagation).
+        const userPopup = container.querySelector('.user-pop');
+        const userButton = container.querySelector('.user-btn');
+        if (userPopup) userPopup.hidden = true;
+        if (userButton) userButton.setAttribute('aria-expanded', 'false');
+        refresh(true);
+      }
     };
     /**
      * Klik op het belletje: venster open of dicht.
