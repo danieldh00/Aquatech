@@ -129,6 +129,8 @@
       debtorStart: Math.round(clampNumber(fields.debtorStart, 1, 99999999, 1000)),
       // Definitieve facturen meteen per e-mail (met de PDF) naar de klant.
       autoSend: fields.autoSend === true,
+      // Bij Gereed van een werkorder meteen een conceptfactuur klaarzetten (standaard aan; alleen een concept).
+      draftOnDone: fields.draftOnDone !== false,
       mailSubject: typeof fields.mailSubject === 'string' && fields.mailSubject.trim() ? limitText(fields.mailSubject, 200).replace(/[\r\n]/g, ' ') : DEFAULT_SUBJECT,
       mailText: typeof fields.mailText === 'string' && fields.mailText.trim() ? limitText(fields.mailText, 4000) : DEFAULT_MAIL,
       shopOrders: sanitizeShopOrders(fields.shopOrders),

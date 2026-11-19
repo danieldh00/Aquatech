@@ -320,6 +320,7 @@
     formElement.footer.value = settings.footer;
     formElement.debtorStart.value = settings.debtorStart;
     formElement.autoSend.checked = settings.autoSend;
+    formElement.draftOnDone.checked = settings.draftOnDone;
     formElement.mailSubject.value = settings.mailSubject;
     formElement.mailText.value = settings.mailText;
     $('#s-mailwarn').hidden = state.config.mail !== false;
@@ -365,7 +366,7 @@
       try {
         state.settings = (await api('invoices/settings', { method: 'PUT', body: {
           prefix: formElement.prefix.value.trim(), paymentDays: Number(formElement.paymentDays.value), paymentText: formElement.paymentText.value, footer: formElement.footer.value, categories,
-          debtorStart: Number(formElement.debtorStart.value) || undefined, autoSend: formElement.autoSend.checked, mailSubject: formElement.mailSubject.value, mailText: formElement.mailText.value,
+          debtorStart: Number(formElement.debtorStart.value) || undefined, autoSend: formElement.autoSend.checked, draftOnDone: formElement.draftOnDone.checked, mailSubject: formElement.mailSubject.value, mailText: formElement.mailText.value,
           shopOrders: { enabled: formElement.ordersEnabled.checked, status: formElement.ordersStatus.value, since: formElement.ordersSince.value, finalize: formElement.ordersFinalize.checked },
           webOrders: { enabled: formElement.webEnabled.checked, finalize: formElement.webFinalize.checked },
         } })).settings;

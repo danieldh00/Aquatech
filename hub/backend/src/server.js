@@ -2524,6 +2524,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     },
     // Voorraad: reserveren na elke wijziging, afboeken bij Gereed (zie stock.js).
     onChange: (tid, id, user) => stockStore.onWorkOrderChange(tid, id, user),
+    // Bij Gereed een conceptfactuur klaarzetten (instelling Facturen > Instellingen); invoiceRoutes bestaat pas na het registreren van de facturen.
+    onDone: (req, id) => invoiceRoutes.draftOnDone(req, id),
     // Medewerkers horen bij de live-tenant; in een testomgeving komen de
     // testaccounts daarvan erbij (net als bij de klantaccounts hierboven).
     staffTenantsOf: (req) => {
@@ -2790,7 +2792,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     importLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, keyFn: (req) => req.tenantId || tenant.id }) });
 
   // ---------- Facturen en export naar de boekhouding (zie invoices.js) ----------
-  registerInvoiceRoutes(app, {
+  const invoiceRoutes = registerInvoiceRoutes(app, {
     invoices: invoiceStore, requireRight, requireJson, audit, addressGuard,
     settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
     loggedOf: (tid, woId) => workLogStore.list(tid, woId),
