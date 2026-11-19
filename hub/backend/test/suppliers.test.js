@@ -252,6 +252,10 @@ test('leveranciers: prioriteit, voorraadstatus en een backup in het bestelvoorst
     const placed3 = (await kees.post(`/app/api/purchase-orders/${manual.id}/place`)).body;
     await kees.post(`/app/api/purchase-orders/${manual.id}/receive`, { lines: [{ lineId: placed3.lines[0].id, qty: 1 }] });
     assert.strictEqual((await kees.get(`/app/api/stock/items/${item.id}`)).body.costPrice, 3);
+    // Ook als de voorkeur wel leverbaar is blijft een bestelling bij Fitwerk een backup-bestelling: de verkoopprijs hoort bij de voorkeur, niet bij de voorraadstatus.
+    await link(saved.body.items.map((row) => ({ ...row, stockStatus: 'in_stock' })));
+    const inStockOrder = (await kees.post('/app/api/purchase-orders', { supplierId: backup.id, lines: [{ itemId: item.id, qty: 2 }] })).body;
+    assert.strictEqual(inStockOrder.lines[0].backup.preferredSupplierName, 'Teruplast');
     // Is de voorkeur gearchiveerd, dan is de volgende actieve leverancier de effectieve voorkeur en geldt Fitwerk niet meer als backup.
     await kees.del(`/app/api/suppliers/${teruplast.id}`);
     const later = (await kees.post('/app/api/purchase-orders', { supplierId: backup.id, lines: [{ itemId: item.id, qty: 1 }] })).body;

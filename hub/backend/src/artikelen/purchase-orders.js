@@ -243,7 +243,7 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
 
   /**
    * Bij welke artikelen de gegeven leverancier als backup levert: het artikel heeft de leverancier als koppeling, maar de
-   * effectieve voorkeur (de eerste actieve leverancier op prioriteit, zoals in suppliers.preferredByItem) is een ander.
+   * voorkeur (de eerste actieve leverancier op prioriteit, ongeacht de voorraadstatus: de verkoopprijs en de prijsfactor horen bij de voorkeur) een ander is.
    * Een leverancier zonder koppeling (handmatige order) is geen backup: daar gedraagt de order zich zoals altijd.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} supplierId De leverancier van de order.
