@@ -104,16 +104,19 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
   /**
    * Facturen van een tenant, nieuwste eerst (hooguit LIST_LIMIT).
    * @param {string} tenantId Id van de tenant.
-   * @param {object} [filters] status, from en to (factuurdatum) en workOrderId.
+   * @param {object} [filters] status, from en to (factuurdatum), workOrderId, customerId (alleen facturen van die klant), kinds ('factuur'/'credit') en statuses (meerdere statussen).
    * @returns {object[]} De facturen zonder inhoud.
    */
-  function list(tenantId, { status = '', from = '', to = '', workOrderId = '' } = {}) {
+  function list(tenantId, { status = '', from = '', to = '', workOrderId = '', customerId = '', kinds = null, statuses = null } = {}) {
     const args = [tenantId];
     let sql = `SELECT ${LIST_COLS} FROM invoices WHERE tenant_id = ?`;
     if (Core.STATUSES[status]) { sql += ' AND status = ?'; args.push(status); }
     if (Core.isDate(from)) { sql += ' AND invoice_date >= ?'; args.push(from); }
     if (Core.isDate(to)) { sql += ' AND invoice_date <= ?'; args.push(to); }
     if (workOrderId) { sql += ' AND work_order_id = ?'; args.push(String(workOrderId)); }
+    if (customerId) { sql += ' AND customer_id = ?'; args.push(String(customerId)); }
+    if (Array.isArray(kinds) && kinds.length) { sql += ` AND kind IN (${marks(kinds.length)})`; args.push(...kinds); }
+    if (Array.isArray(statuses) && statuses.length) { sql += ` AND status IN (${marks(statuses.length)})`; args.push(...statuses); }
     return prepare(`${sql} ORDER BY invoice_date DESC, created_at DESC LIMIT ${LIST_LIMIT}`).all(...args).map(toInvoice);
   }
 

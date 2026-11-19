@@ -10,7 +10,8 @@
 // Optioneel (komen uit andere onderdelen, het portaal werkt ook zonder):
 // - ctx.photos: opleverfoto's per werkorder (photos.list met customerOnly);
 // - workorders.respond: een afspraak bevestigen of om een ander moment vragen;
-// - ctx.requests: eigen meldingen (storing, onderhoud; service-requests.js).
+// - ctx.requests: eigen meldingen (storing, onderhoud; service-requests.js);
+// - ctx.invoicePayments (+ ctx.invoiceSender): eigen facturen met PDF en online betalen via Mollie (verkoop/invoice-payments.js).
 // Seizoensherinneringen (season-reminders.js) staan bovenaan als ze lopen.
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
@@ -18,6 +19,7 @@ const { forCustomer } = require('./service-requests');
 const { portalReminders } = require('./season-reminders');
 const { preferencesOf } = require('../platform/store');
 const { locationKey } = require('./photos');
+const { invoiceFileName } = require('../verkoop/invoice-pdf');
 
 const Core = require(path.join(FRONTEND_DIR, 'werkorders', 'workorder-core.js'));
 const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
@@ -174,7 +176,9 @@ function registerPortalRoutes(app, ctx) {
       workorders: workOrders,
       // Eigen meldingen (storing, onderhoud), zie service-requests.js.
       requests: ctx.requests ? ctx.requests.list(tenantId, { customerId: user.id }).map(withLocation) : [],
-      features: { photos: Boolean(ctx.photos), appointments: typeof workorders.respond === 'function', requests: Boolean(ctx.requests) },
+      // Eigen facturen (definitief en betaald), met of er online betaald kan worden.
+      invoices: ctx.invoicePayments ? ctx.invoicePayments.listOwn(tenantId, user.id) : [],
+      features: { photos: Boolean(ctx.photos), appointments: typeof workorders.respond === 'function', requests: Boolean(ctx.requests), invoices: Boolean(ctx.invoicePayments) },
     });
   });
 
@@ -184,6 +188,51 @@ function registerPortalRoutes(app, ctx) {
     const workOrder = workorders.get(tenantOf(req), req.params.id, { customerId: req.user.id });
     if (!workOrder) return notFound(res);
     res.json({ ...customerWorkOrder(workOrder, { detail: true }), photos: photosOf(tenantOf(req), workOrder.id) });
+  });
+
+  /**
+   * Stuurt het antwoord 404 "factuur niet gevonden".
+   * @param {object} res Het Express-antwoord.
+   * @returns {object} Het antwoord.
+   */
+  const invoiceNotFound = (res) => res.status(404).json({ error: 'not_found', message: 'Factuur niet gevonden.' });
+  const payLimiter = ctx.payLimiter || ((req, res, next) => next());
+
+  // Een eigen factuur als PDF (dezelfde als de bijlage van de mail).
+  app.get('/api/portal/invoices/:id/pdf', requirePortal, (req, res) => {
+    const invoice = ctx.invoicePayments && ctx.invoiceSender ? ctx.invoicePayments.own(tenantOf(req), req.user.id, req.params.id) : null;
+    if (!invoice) return invoiceNotFound(res);
+    const name = invoiceFileName(invoice);
+    res.set({
+      'Content-Type': 'application/pdf', 'Cache-Control': 'private, no-store',
+      'Content-Disposition': `${req.query.download === '1' ? 'attachment' : 'inline'}; filename="${name}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+    });
+    res.send(ctx.invoiceSender.pdfOf(tenantOf(req), invoice));
+  });
+
+  // Online betalen: geeft het adres van de betaalpagina bij Mollie.
+  app.post('/api/portal/invoices/:id/pay', requireJson, requirePortal, payLimiter, async (req, res) => {
+    const invoice = ctx.invoicePayments ? ctx.invoicePayments.own(tenantOf(req), req.user.id, req.params.id) : null;
+    if (!invoice) return invoiceNotFound(res);
+    res.setHeader('Cache-Control', 'no-store');
+    const out = await ctx.invoicePayments.start(tenantOf(req), invoice);
+    if (out.error) return res.status(out.status || 400).json({ error: 'pay_failed', message: out.error });
+    if (!out.paid) audit(req, 'factuur_betaling_gestart', { invoiceId: invoice.id, number: invoice.number });
+    res.json(out.paid ? { paid: true } : { checkoutUrl: out.checkoutUrl });
+  });
+
+  // Terug van de betaalpagina: de uitkomst eerst bij Mollie opvragen, want de webhook kan nog onderweg zijn.
+  app.post('/api/portal/invoices/:id/check', requireJson, requirePortal, payLimiter, async (req, res) => {
+    const invoice = ctx.invoicePayments ? ctx.invoicePayments.own(tenantOf(req), req.user.id, req.params.id) : null;
+    if (!invoice) return invoiceNotFound(res);
+    res.setHeader('Cache-Control', 'no-store');
+    try {
+      await ctx.invoicePayments.sync(tenantOf(req), invoice.id);
+    } catch (error) {
+      return res.status(502).json({ error: 'check_failed', message: 'De betaalstatus is nu niet op te vragen. Probeer het zo opnieuw.' });
+    }
+    const fresh = ctx.invoicePayments.own(tenantOf(req), req.user.id, invoice.id);
+    res.json({ status: fresh ? fresh.status : invoice.status });
   });
 
   // Afspraak bevestigen of om een ander moment vragen.

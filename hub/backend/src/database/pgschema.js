@@ -1256,6 +1256,24 @@ const PG_MIGRATIONS = [
   `
   ALTER TABLE app_logs ADD COLUMN first_at ${TEXT_TYPE};
   `,
+  // 84: online betalen van een factuur (zie db.js).
+  `
+  CREATE TABLE invoice_payments (
+    id           ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id    ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    invoice_id   ${TEXT_TYPE} NOT NULL,
+    mollie_id    ${TEXT_TYPE} NOT NULL,
+    status       ${TEXT_TYPE} NOT NULL DEFAULT 'open',
+    amount       DOUBLE PRECISION NOT NULL,
+    checkout_url ${TEXT_TYPE} NOT NULL DEFAULT '',
+    method       ${TEXT_TYPE} NOT NULL DEFAULT '',
+    mode         ${TEXT_TYPE} NOT NULL DEFAULT '',
+    created_at   ${TEXT_TYPE} NOT NULL,
+    paid_at      ${TEXT_TYPE}
+  );
+  CREATE UNIQUE INDEX invoice_payments_mollie ON invoice_payments (tenant_id, mollie_id);
+  CREATE INDEX invoice_payments_invoice ON invoice_payments (tenant_id, invoice_id, created_at);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };
