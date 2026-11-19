@@ -36,7 +36,17 @@ async function loadPage() {
   const listeners = {};
   const document = {
     hidden: false,
+    /**
+     * Zoekt (en onthoudt) het nagebootste element bij een selector.
+     * @param {string} selector De selector.
+     * @returns {object} Het element.
+     */
     querySelector(selector) { return elements[selector] || (elements[selector] = fakeElement(selector)); },
+    /**
+     * Bewaart een luisteraar op de pagina.
+     * @param {string} type Soort gebeurtenis.
+     * @param {Function} handler De luisteraar.
+     */
     addEventListener(type, handler) { (listeners[type] = listeners[type] || []).push(handler); },
   };
   const sandbox = {
@@ -45,6 +55,10 @@ async function loadPage() {
     location: { pathname: '/app/orderpick/', search: '', hash: '' },
     history: { replaceState(_state, _title, url) { const [, hash] = String(url).split('#'); sandbox.location.hash = hash ? `#${hash}` : ''; } },
     localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+    /**
+     * Geeft een lege lijst terug voor elk verzoek.
+     * @returns {Promise<object>} Het nagebootste antwoord.
+     */
     fetch: async () => ({ ok: true, status: 200, json: async () => ({ items: [], orders: [] }), headers: { get: () => '' } }),
     AquatechAccount: { load: async () => ({ user: { kind: 'account' }, rights: ['orderpick'] }) },
     AquatechCommon: { ownerOf: () => 'test@live', onReturn() {}, statusMessage: (status) => `fout ${status}` },
@@ -57,11 +71,18 @@ async function loadPage() {
   }
   await sandbox.OrderpickUi.ready;
   await new Promise((resolve) => setTimeout(resolve, 20));
-  /** Klikt op een van de knoppen Picken/Ontvangen. */
+  /**
+   * Klikt op een van de knoppen Picken/Ontvangen.
+   * @param {string} mode 'pick' of 'receive'.
+   */
   const clickMode = (mode) => {
     const target = { closest: () => ({ dataset: { mode } }) };
     for (const handler of listeners.click || []) handler({ target });
   };
+  /**
+   * Geeft de selectors van de schermen die nu zichtbaar zijn.
+   * @returns {string[]} De zichtbare schermen.
+   */
   const visible = () => SECTIONS.filter((selector) => !document.querySelector(selector).hidden);
   return { clickMode, visible, sandbox };
 }
