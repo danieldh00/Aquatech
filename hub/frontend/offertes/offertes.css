@@ -127,3 +127,9 @@ table.lines .c-kind { width: 112px; }
 .vat-shift #e-vs-box { margin-top: 8px; }
 .newcust .form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 560px) { .newcust .form-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* Bulkacties in het offerteoverzicht. */
+.bulk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--at-border, #d5dbe6); border-radius: 8px; background: var(--at-surface-alt, #f3f6fb); }
+.bulk-bar[hidden] { display: none; }
+.grid .c-select { width: 32px; text-align: center; }
+.grid tr.picked td { background: var(--at-surface-alt, #f3f6fb); }
