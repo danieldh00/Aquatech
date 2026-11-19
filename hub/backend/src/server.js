@@ -91,6 +91,7 @@ const { createPurchaseOrderStore, registerPurchaseOrderRoutes } = require('./art
 const { registerOpenTaskRoutes } = require('./platform/open-tasks');
 const { createHostTasks } = require('./platform/host-tasks');
 const { registerHostTaskRoutes } = require('./platform/host-tasks-routes');
+const { registerKpiRoutes } = require('./platform/kpis');
 const { createPurchaseOrderMailer } = require('./artikelen/purchase-order-mail');
 const { createNewsStore, registerNewsRoutes, unreadCount } = require('./platform/news');
 const { createSprinklerStore, registerSprinklerRoutes } = require('./beregening/sprinklers');
@@ -3048,6 +3049,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     requireJson, audit,
   });
   // Openstaande taken op het dashboard (volgen de rechten van de gebruiker).
+  // Kengetallen voor beheerders op het dashboard (platform/kpis.js).
+  registerKpiRoutes(app, { identify, db: database });
   registerOpenTaskRoutes(app, { identify, canUpdate, sources: { hostTasks, orders: webOrders, purchaseOrders: purchaseOrderStore, priceFactors: priceFactorStore, proposalsEnabled,
     shopEnabled: (tenantId) => Boolean(settingsFor(tenantId).get('storefront')), stockEnabled: (tenantId) => ModuleTools.isOn(moduleFlagsOf(tenantId), 'voorraad') } });
 
