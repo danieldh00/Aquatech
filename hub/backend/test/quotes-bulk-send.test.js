@@ -69,13 +69,13 @@ test('bulk mailen: elke klant krijgt zijn bericht, de rest wordt overgeslagen', 
       assert.deepStrictEqual([result2.sent.length, result2.skipped[0].reason], [0, 'Niet gevonden.']);
       assert.strictEqual(sent.length, mailCount);
     }
-    // Een mislukte mail: gemeld, offerte blijft een concept.
+    // Een mislukte mail: gemeld, offerte blijft een concept (de link is weer ingetrokken).
     failNext = true;
     const draft = (await kees.post('/app/api/quotes', { data: { title: 'Mailfout', customer: { name: 'Fam. E', email: 'e@klant.test' } } })).body.id;
     const failed = (await kees.post('/app/api/quotes-bulk/send', { ids: [draft], url: URL_OK })).body;
     assert.strictEqual(failed.sent.length, 0);
     assert.strictEqual(failed.skipped.length, 1);
-    assert.strictEqual((await kees.get(`/app/api/quotes/${draft}`)).body.status, 'verzonden', 'de link bestaat al, maar er is niets verstuurd');
+    assert.strictEqual((await kees.get(`/app/api/quotes/${draft}`)).body.status, 'concept', 'er is niets verstuurd, dus blijft het een concept');
   } finally {
     server.close();
   }

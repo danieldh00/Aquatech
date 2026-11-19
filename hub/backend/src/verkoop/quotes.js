@@ -129,7 +129,7 @@ function validSignature(dataUrl) {
  * Maakt de opslag voor offertes, met de openbare link en het akkoord van de klant.
  * @param {object} db De database.
  * @param {{ vault?: object }} [options] De kluis voor het versleutelde linktoken.
- * @returns {object} list, get, create, update, respond, decide, share, unshare, markSent, byToken, markViewed, publicView, shareLink, remove, purge, acceptedNumber en nextNumber.
+ * @returns {object} list, get, create, update, respond, decide, share, unshare, markSent, restoreDraft, byToken, markViewed, publicView, shareLink, remove, purge, acceptedNumber en nextNumber.
  */
 function createQuoteStore(db, { vault = createVault() } = {}) {
   /**
@@ -513,6 +513,15 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
   }
 
   /**
+   * Zet een offerte die door het maken van de link op Verzonden kwam, maar waarvan de mail mislukte, terug naar concept (en trekt de link in).
+   * Doet niets als er al een mail is verstuurd.
+   * @param {string} id Id van de offerte.
+   */
+  function restoreDraft(id) {
+    prepare("UPDATE quotes SET status = 'concept', share_hash = NULL, share_token = NULL, shared_at = NULL WHERE id = ? AND status = 'verzonden' AND sent_at IS NULL").run(id);
+  }
+
+  /**
    * Zoekt een offerte op het token van de openbare link (over alle tenants;
    * het token is het enige geheim). De volledige rij, zodat publicView en
    * decide niet opnieuw hoeven te lezen. Een verlopen link telt als onbekend.
@@ -601,7 +610,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
     return prepare('DELETE FROM quotes WHERE tenant_id = ? AND id = ?').run(tenantId, String(id)).changes > 0;
   }
 
-  return { list, get, create, update, respond, decide, share, unshare, markSent, byToken, markViewed, publicView, shareLink, remove, purge, acceptedNumber, isConverted, nextNumber };
+  return { list, get, create, update, respond, decide, share, unshare, markSent, restoreDraft, byToken, markViewed, publicView, shareLink, remove, purge, acceptedNumber, isConverted, nextNumber };
 }
 
 /**
@@ -1076,6 +1085,7 @@ function registerQuoteRoutes(app, ctx) {
         });
       } catch (error) {
         console.warn(`Offerte ${quote.number} niet verstuurd: ${error.code || ''} ${error.message}`);
+        if (current.status === 'concept') quotes.restoreDraft(quote.id);
         skipped.push({ id, number: quote.number, reason: mailFailure(error) });
         continue;
       }
