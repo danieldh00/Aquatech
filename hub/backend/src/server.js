@@ -3017,7 +3017,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     requireJson, audit,
   });
   // Openstaande taken op het dashboard (volgen de rechten van de gebruiker).
-  registerOpenTaskRoutes(app, { identify, sources: { orders: webOrders, purchaseOrders: purchaseOrderStore, priceFactors: priceFactorStore, proposalsEnabled } });
+  registerOpenTaskRoutes(app, { identify, sources: { orders: webOrders, purchaseOrders: purchaseOrderStore, priceFactors: priceFactorStore, proposalsEnabled,
+    shopEnabled: (tenantId) => Boolean(settingsFor(tenantId).get('storefront')), stockEnabled: (tenantId) => ModuleTools.isOn(moduleFlagsOf(tenantId), 'voorraad') } });
 
   registerWebOrderRoutes(app, { orders: webOrders, requireJson, audit, invoices: webOrderInvoices, payments: webPayments, returns: webReturns });
   // Offerte omzetten naar bestelling (verkoop/quote-orders.js).
