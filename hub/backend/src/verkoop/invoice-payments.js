@@ -108,9 +108,10 @@ function createInvoicePayments({ db, invoices, mollie, settingsFor, log = consol
     const state = MOLLIE_STATES[payment.status] || 'open';
     if (state === 'betaald') {
       const paidAt = payment.paidAt || new Date().toISOString();
-      const changes = prepare("UPDATE invoice_payments SET status = 'betaald', paid_at = ?, method = ? WHERE tenant_id = ? AND mollie_id = ? AND status <> 'betaald'")
-        .run(paidAt, payment.method || '', tenantId, payment.id).changes;
-      if (!Number(changes)) return { becamePaid: false, status: 'betaald' };
+      prepare("UPDATE invoice_payments SET status = 'betaald', paid_at = ?, method = ? WHERE tenant_id = ? AND mollie_id = ? AND status <> 'betaald'")
+        .run(paidAt, payment.method || '', tenantId, payment.id);
+      // Ook als de rij al betaald was: staat de factuur nog open (een eerdere verwerking viel halverwege weg), dan herstelt deze aanroep dat.
+      // setPaid is voorwaardelijk op de status, zodat gelijktijdige aanroepen de factuur maar één keer betaald maken.
       let becamePaid = false;
       const current = invoices.get(tenantId, invoice.id);
       if (current && current.status === 'definitief') {
