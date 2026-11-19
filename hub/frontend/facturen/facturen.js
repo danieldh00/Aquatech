@@ -138,6 +138,8 @@
     const table = $('#l-table');
     if (!state.items.length) {
       table.innerHTML = '<tbody><tr><td class="empty">Nog geen facturen. Open een werkorder en kies in het menu <b>Factuur maken</b>, of maak een <b>losse factuur</b>.</td></tr></tbody>';
+      state.selected.clear();
+      renderBulkBar();
       return;
     }
     const items = visible();
@@ -194,10 +196,10 @@
 
   // ---------- Bulkacties ----------
   /**
-   * Geeft de geselecteerde facturen die nog in de lijst staan.
-   * @returns {object[]} de geselecteerde facturen
+   * Geeft de geselecteerde facturen die nu in het overzicht zichtbaar zijn: wat je ziet is wat je verstuurt of exporteert.
+   * @returns {object[]} de geselecteerde zichtbare facturen
    */
-  const selectedInvoices = () => state.items.filter((invoice) => state.selected.has(invoice.id));
+  const selectedInvoices = () => visible().filter((invoice) => state.selected.has(invoice.id));
 
   /**
    * Of een factuur in de bulkronde per e-mail verstuurd wordt: definitief, nog niet betaald en nog niet eerder verstuurd (opnieuw sturen kan per factuur).
@@ -208,7 +210,8 @@
 
   /** Toont of verbergt de balk met bulkacties en werkt de tellers bij. */
   function renderBulkBar() {
-    for (const id of [...state.selected]) if (!state.items.some((invoice) => invoice.id === id)) state.selected.delete(id);
+    const shownIds = new Set(visible().map((invoice) => invoice.id));
+    for (const id of [...state.selected]) if (!shownIds.has(id)) state.selected.delete(id);
     const chosen = selectedInvoices();
     $('#l-bulk').hidden = !chosen.length;
     $('#l-bulk-count').textContent = `${chosen.length} geselecteerd`;
