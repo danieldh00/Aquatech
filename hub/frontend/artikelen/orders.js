@@ -82,6 +82,18 @@
     form.scrollIntoView({ block: 'nearest' });
   }
 
+  /**
+   * De melding bij een orderregel die bij een backupleverancier is besteld, met het meerprijsverschil.
+   * @param {object} line De regel (backup: { preferredSupplierName, extraPerUnit, extraAmount }).
+   * @returns {string} HTML met de melding, of leeg.
+   */
+  function backupBadge(line) {
+    if (!line.backup) return '';
+    const { eur } = context;
+    const extra = line.backup.extraAmount == null || line.backup.extraAmount === 0 ? '' : `: ${line.backup.extraAmount > 0 ? '+' : '−'}${eur(Math.abs(line.backup.extraAmount))} t.o.v. de voorkeur`;
+    return `<br><span class="pill" title="Dit artikel wordt hier als backup besteld; de artikelprijzen blijven bij de voorkeur horen">Backup</span> <span class="muted small">${context.esc(line.backup.preferredSupplierName)}${extra}</span>`;
+  }
+
   /** Tekent de regels en zet de knoppen die bij de status passen aan of uit. */
   function renderLines() {
     const { esc, nl, eur } = context;
@@ -106,12 +118,12 @@
       : '<th>Code</th><th>Omschrijving</th><th>Art.nr. leverancier</th><th class="num">Aantal</th><th class="num">Inkoopprijs (€)</th><th></th>';
     const rows = state.lines.map((line, index) => {
       if (editable) {
-        return `<tr data-line="${index}"><td>${esc(line.code)}</td><td class="wrap">${esc(line.name)}</td><td>${esc(line.supplierSku)}</td>
+        return `<tr data-line="${index}"><td>${esc(line.code)}</td><td class="wrap">${esc(line.name)}</td><td>${esc(line.supplierSku)}${backupBadge(line)}</td>
           <td class="num"><input data-field="qty" type="number" min="0" step="any" inputmode="decimal" value="${line.qty}" aria-label="Aantal"></td>
           <td class="num"><input data-field="unitCost" type="number" min="0" step="0.0001" inputmode="decimal" value="${line.unitCost == null ? '' : line.unitCost}" placeholder="standaard" aria-label="Inkoopprijs"></td>
           <td class="num"><button class="btn small danger" type="button" data-drop="${index}">Weghalen</button></td></tr>`;
       }
-      return `<tr data-line="${index}"><td>${esc(line.code)}</td><td class="wrap">${esc(line.name)}</td><td>${esc(line.supplierSku)}</td>
+      return `<tr data-line="${index}"><td>${esc(line.code)}</td><td class="wrap">${esc(line.name)}</td><td>${esc(line.supplierSku)}${backupBadge(line)}</td>
         <td class="num">${nl(line.qty)} ${esc(line.unit)}</td><td class="num">${nl(line.receivedQty)}</td><td class="num">${nl(line.openQty)}</td><td class="num">${line.unitCost == null ? '' : eur(line.unitCost)}</td>
         ${receiving ? `<td class="num"><input data-field="receive" type="number" min="0" step="any" inputmode="decimal" value="${line.openQty || ''}" aria-label="Nu ontvangen"></td>` : ''}</tr>`;
     });

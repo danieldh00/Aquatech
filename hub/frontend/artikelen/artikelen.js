@@ -409,6 +409,18 @@
   const TABS = ['stock', 'reserved', 'moves', 'reorder', 'suppliers', 'orders', 'pricefactor', 'counts', 'media', 'texts'];
 
   /**
+   * De melding bij een bestelvoorstelregel die bij een backupleverancier uitkomt.
+   * @param {object} item De voorstelregel (backup, allSuppliersUnavailable).
+   * @returns {string} HTML met de melding, of leeg.
+   */
+  function backupNote(item) {
+    if (item.allSuppliersUnavailable) return '<br><span class="err small">Alle leveranciers staan op niet leverbaar</span>';
+    if (!item.backup) return '';
+    const extra = item.backup.extraAmount == null || item.backup.extraAmount === 0 ? '' : `, ${item.backup.extraAmount > 0 ? '+' : '−'}${esc(eur(Math.abs(item.backup.extraAmount)))} t.o.v. de voorkeur`;
+    return `<br><span class="pill">Backup</span> <span class="muted small">${esc(item.backup.preferredSupplierName)} is niet leverbaar${extra}</span>`;
+  }
+
+  /**
    * Tekent het bestelvoorstel op het scherm: per leverancier de artikelen die onder het minimum zitten.
    * @returns {Promise<void>}
    */
@@ -420,7 +432,7 @@
     ]);
     $('#rv-table').innerHTML = proposal.items.length
       ? `<thead><tr><th>Leverancier</th><th>Code</th><th>Omschrijving</th><th class="num">Beschikbaar</th><th class="num">Onderweg</th><th class="num">Minimum</th><th class="num">Te bestellen</th><th class="num">Bedrag</th></tr></thead><tbody>${proposal.items.map((item) => `<tr>
-        <td>${esc(item.supplierName || 'Zonder leverancier')}</td><td>${esc(item.code)}</td><td class="wrap">${esc(item.name)}</td>
+        <td>${esc(item.supplierName || 'Zonder leverancier')}${backupNote(item)}</td><td>${esc(item.code)}</td><td class="wrap">${esc(item.name)}</td>
         <td class="num">${esc(nl(item.available))} ${esc(item.unit)}</td><td class="num">${item.incoming ? esc(nl(item.incoming)) : ''}</td><td class="num">${esc(nl(item.minQty))}</td>
         <td class="num"><b>${esc(nl(item.orderQty))}</b> ${esc(item.unit)}</td><td class="num">${item.amount == null ? '' : esc(eur(item.amount))}</td></tr>`).join('')}</tbody>`
       : '<tbody><tr><td class="empty">Niets te bestellen: alle artikelen zitten op of boven de minimumvoorraad.</td></tr></tbody>';
