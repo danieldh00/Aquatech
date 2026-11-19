@@ -55,6 +55,10 @@ async function setup() {
   invoice('i-con', null, 'concept', null);
   db.prepare(`INSERT INTO web_orders (id, tenant_id, number, user_id, status, customer_name, email, total, data, created_at, updated_at)
     VALUES ('o-1', ?, 'B-1', ?, 'afgerond', 'Piet Jansen', 'piet@example.nl', 10, ?, ?, ?)`).run(main, customer.id, JSON.stringify({ customer: { name: 'Piet Jansen', phone: '0612345678' }, address: { street: 'Dorpsstraat' } }), now, now);
+  db.prepare(`INSERT INTO web_orders (id, tenant_id, number, user_id, status, customer_name, email, total, data, created_at, updated_at)
+    VALUES ('o-2', ?, 'B-9', ?, 'afgerond', 'Piet Jansen', 'piet@example.nl', 20, '{}', ?, ?)`).run(main, customer.id, now, now);
+  db.prepare(`INSERT INTO invoices (id, tenant_id, number, status, customer_id, customer_name, shop_order_id, invoice_date, due_date, total, data, created_at, updated_at)
+    VALUES ('i-web', ?, 'F-2', 'betaald', ?, 'Piet Jansen', 'web:o-2', '2026-11-01', '2026-12-01', 20, '{}', ?, ?)`).run(main, customer.id, now, now);
   db.prepare(`INSERT INTO stock_alerts (id, tenant_id, item_code, email, created_at) VALUES ('a-1', ?, 'X1', 'piet@example.nl', ?)`).run(main, now);
   const other = store.createTenant({ slug: 'ander', name: 'Ander BV' }).tenant;
   await store.createAccount(other.id, { username: 'vreemd', displayName: 'Vreemd', role: 'beheerder', password: PW, mustChangePassword: false });
@@ -108,7 +112,7 @@ test('wissen vraagt de naam, anonimiseert en bewaart wat de bewaarplicht bescher
   assert.strictEqual((await admin.post(`/app/api/customers/${customer.id}/anonymize`, { confirm: 'fout' })).status, 409);
   const done = await admin.post(`/app/api/customers/${customer.id}/anonymize`, { confirm: 'Piet Jansen' });
   assert.strictEqual(done.status, 200, JSON.stringify(done.body));
-  assert.strictEqual(done.body.result.kept.invoices, 1);
+  assert.strictEqual(done.body.result.kept.invoices, 2);
   assert.strictEqual(done.body.result.kept.quotes, 1);
   const user = db.prepare('SELECT username, display_name, email, phone, address, password_hash, disabled FROM users WHERE id = ?').get(customer.id);
   assert.strictEqual(user.display_name, 'Verwijderde persoon');
@@ -124,6 +128,8 @@ test('wissen vraagt de naam, anonimiseert en bewaart wat de bewaarplicht bescher
   assert.strictEqual(db.prepare("SELECT customer_name FROM invoices WHERE id = 'i-con'").get().customer_name, 'Verwijderde persoon');
   const order = db.prepare("SELECT customer_name, email, data FROM web_orders WHERE id = 'o-1'").get();
   assert.strictEqual(order.email, '');
+  assert.strictEqual(db.prepare("SELECT customer_name FROM web_orders WHERE id = 'o-2'").get().customer_name, 'Piet Jansen');
+  assert.strictEqual(done.body.result.kept.orders, 1);
   assert.ok(!order.data.includes('0612345678'));
   assert.strictEqual(Number(db.prepare('SELECT COUNT(*) AS n FROM stock_alerts').get().n), 0);
   assert.strictEqual(Number(db.prepare('SELECT COUNT(*) AS n FROM plans WHERE owner_id = ?').get(customer.id).n), 0);

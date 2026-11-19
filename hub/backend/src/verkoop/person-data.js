@@ -115,6 +115,7 @@ function createPersonData(db, store) {
    * De gegevens die de bewaarplicht beschermen: definitieve facturen van de persoon en wat daarop rust.
    * @param {string} tenantId De omgeving.
    * @param {string} userId Id van de persoon.
+   * (Facturen van webbestellingen dragen `shop_order_id` = `web:<bestelling>`.)
    * @returns {{ invoiceIds: string[], quoteIds: Set<string>, workOrderIds: Set<string>, orderIds: Set<string>, debtorIds: Set<string> }} De te bewaren onderdelen.
    */
   function retainedOf(tenantId, userId) {
@@ -126,7 +127,7 @@ function createPersonData(db, store) {
      * @returns {Set<string>} De waarden.
      */
     const pick = (field) => new Set(invoices.map((row) => row[field]).filter(Boolean));
-    return { invoiceIds: invoices.map((row) => row.id), quoteIds: pick('quote_id'), workOrderIds: pick('work_order_id'), orderIds: pick('shop_order_id'), debtorIds: pick('debtor_id') };
+    return { invoiceIds: invoices.map((row) => row.id), quoteIds: pick('quote_id'), workOrderIds: pick('work_order_id'), orderIds: new Set([...pick('shop_order_id')].filter((key) => key.startsWith('web:')).map((key) => key.slice('web:'.length))), debtorIds: pick('debtor_id') };
   }
 
   /**
