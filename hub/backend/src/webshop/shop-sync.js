@@ -567,7 +567,8 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
         out[id] = await run(id, { full: true });
       } catch (error) {
         log.warn(`Webshop (${id}): synchronisatie mislukt: ${error.code || error.message}`);
-        if (error instanceof SourceError) shop.setStatus(id, { error: error.message });
+        // Ook bij een onverwachte fout een melding (zonder interne tekst), anders volgt de uur-wachttijd niet.
+        shop.setStatus(id, { error: error instanceof SourceError ? error.message : 'De synchronisatie is mislukt (zie het log).' });
       }
     }
     return out;
