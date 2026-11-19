@@ -95,7 +95,7 @@ sect "Klaar"; date
 echo "Diagnose van $NAME ($MODE ${GUEST_ID:-$SSH_TARGET}); schrijft naar $OUT; duurt ca. $(( ${SAMPLE_SECONDS:-150} / 60 + 1 )) minuten ..."
 ENVS="APP_DIR='${APP_DIR:-/opt/apps/aquatech}' SAMPLE_SECONDS='${SAMPLE_SECONDS:-150}' LOG_SINCE='${LOG_SINCE:-48h}'"
 if [[ "$MODE" == "pct" ]]; then
-  pct exec "$GUEST_ID" -- bash -c "$ENVS; $REMOTE_SCRIPT" >"$OUT" 2>&1
+  pct exec "$GUEST_ID" -- bash -c "$ENVS; $REMOTE_SCRIPT" </dev/null >"$OUT" 2>&1
 else
   ssh -o BatchMode=yes -o ConnectTimeout=10 "$SSH_TARGET" "$SUDO env $ENVS bash -s" <<<"$REMOTE_SCRIPT" >"$OUT" 2>&1
 fi
