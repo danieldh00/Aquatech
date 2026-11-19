@@ -1231,6 +1231,26 @@ const PG_MIGRATIONS = [
   `
   ALTER TABLE item_images ADD COLUMN thumb ${TEXT_TYPE};
   `,
+  // 82: centraal applicatielogboek (zie db.js).
+  `
+  CREATE TABLE app_logs (
+    id           ${TEXT_TYPE} PRIMARY KEY,
+    tenant_id    ${TEXT_TYPE} NOT NULL ${references('tenants(id)')},
+    scope        ${TEXT_TYPE} NOT NULL DEFAULT 'tenant',
+    created_at   ${TEXT_TYPE} NOT NULL,
+    level        ${TEXT_TYPE} NOT NULL DEFAULT 'info',
+    source       ${TEXT_TYPE} NOT NULL,
+    request_id   ${TEXT_TYPE} NOT NULL DEFAULT '',
+    error_code   ${TEXT_TYPE} NOT NULL DEFAULT '',
+    message      ${TEXT_TYPE} NOT NULL DEFAULT '',
+    data         ${TEXT_TYPE} NOT NULL DEFAULT '{}',
+    duration_ms  BIGINT NOT NULL DEFAULT 0,
+    repeat_count BIGINT NOT NULL DEFAULT 1
+  );
+  CREATE INDEX app_logs_tenant_time ON app_logs (tenant_id, created_at);
+  CREATE INDEX app_logs_tenant_level ON app_logs (tenant_id, level, created_at);
+  CREATE INDEX app_logs_request ON app_logs (tenant_id, request_id);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };
