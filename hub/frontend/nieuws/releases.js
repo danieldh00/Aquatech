@@ -13,6 +13,46 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.25.1',
+      date: '2026-11-19',
+      title: 'Bulkacties in de offertelijst',
+      items: [
+        { text: 'In het offerteoverzicht kun je meerdere offertes aanvinken: exporteer alleen de selectie naar Excel of sluit alle open offertes in één keer af als afgewezen.', for: ['offertes'] },
+      ],
+    },
+    {
+      version: '1.25.0',
+      date: '2026-11-19',
+      title: 'Beheer-code overzichtelijker opgedeeld',
+      items: [],
+    },
+    {
+      version: '1.24.9',
+      date: '2026-11-19',
+      title: 'MCP-tools in kleinere bestanden',
+      items: [],
+    },
+    {
+      version: '1.24.8',
+      date: '2026-11-19',
+      title: 'Webshop-kop netjes uitgelijnd',
+      items: [],
+    },
+    {
+      version: '1.24.7',
+      date: '2026-11-19',
+      title: 'Eén zoekveld voor alles',
+      items: [
+        { text: 'Bovenaan de zijbalk staat nu een zoekveld (sneltoets Ctrl+K of /) dat in één keer klanten, offertes, werkorders, facturen en artikelen doorzoekt, op naam, nummer, adres of artikelcode. Je ziet alleen de soorten waar je het recht voor hebt; een klik opent het item direct.', for: ['offertes', 'werkorders', 'facturen', 'voorraad', 'klanten'] },
+      ],
+    },
+    {
+      version: '1.24.6',
+      date: '2026-11-19',
+      title: 'Klanten zoeken houdt de server niet meer op',
+      items: [],
+    },
+    {
       version: '1.24.5',
       date: '2026-11-19',
       title: 'Automatische betalingsherinneringen en aanmaningen',

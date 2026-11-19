@@ -62,6 +62,31 @@ a.at-nav-item:focus-visible, .at-nav-collapse:focus-visible, .at-nav-toggle:focu
 .at-nav-sec.open .at-nav-sec-count { display: none; }
 .at-nav-toggle, .at-nav-backdrop { display: none; }
 
+/* Globaal zoeken: veld bovenaan de zijbalk, resultaten in een paneel naast de zijbalk (op een telefoon eronder over de volle breedte). */
+.at-nav-search { position: relative; flex: none; display: flex; align-items: center; margin: 2px 0 6px; }
+.at-nav-search > .ico { position: absolute; left: 10px; width: 16px; height: 16px; opacity: 0.7; pointer-events: none; }
+.at-search-input {
+  box-sizing: border-box; width: 100%; min-height: 32px; padding: 5px 10px 5px 32px; font: inherit; color: #fff;
+  background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 6px;
+}
+.at-search-input::placeholder { color: rgba(255, 255, 255, 0.6); }
+.at-search-input:focus-visible { outline: 2px solid var(--at-teal); outline-offset: 1px; background: rgba(255, 255, 255, 0.16); }
+.at-search-results {
+  position: fixed; z-index: 45; top: calc(var(--at-topbar-h, 48px) + 8px); left: calc(var(--at-nav-w) + 8px); width: min(440px, calc(100vw - var(--at-nav-w) - 24px));
+  max-height: min(70vh, 520px); overflow-y: auto; box-sizing: border-box; padding: 6px;
+  background: var(--at-surface); color: var(--at-ink-strong); border-radius: 8px; box-shadow: 0 8px 28px var(--at-shadow);
+}
+body.nav-compact .at-search-results { left: calc(var(--at-nav-w-compact) + 8px); width: min(440px, calc(100vw - var(--at-nav-w-compact) - 24px)); }
+.at-search-title { padding: 6px 10px 2px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--at-muted); }
+.at-search-item { display: flex; flex-direction: column; gap: 1px; padding: 6px 10px; border-radius: 6px; color: inherit; text-decoration: none; }
+.at-search-item:hover, .at-search-item.is-selected { background: var(--at-green-soft); }
+.at-search-item:focus-visible { outline: 2px solid var(--at-teal); outline-offset: -2px; }
+.at-search-main { font-weight: 600; overflow-wrap: anywhere; }
+.at-search-sub { font-size: 12px; color: var(--at-muted); overflow-wrap: anywhere; }
+.at-search-empty { padding: 10px; color: var(--at-muted); }
+/* Ingeklapte zijbalk: het veld past niet; Ctrl+K klapt de zijbalk open. */
+body.nav-compact .at-nav-search { display: none; }
+
 /* Inhoud naast de zijbalk; het logo staat dan in de zijbalk, niet in de kopbalk.
    De menuknop en de zijbalk vervangen de knop "Overzicht" van de planner. */
 body.has-nav .topbar .home-link { display: none; }
@@ -97,6 +122,7 @@ body.nav-compact .at-nav-collapse .ico { transform: rotate(180deg); }
   body.nav-compact .at-nav-sec:not(.open) .at-nav-sec-body { display: none; }
   body.nav-compact .at-nav-sec-body { margin: 1px 0 3px 19px; padding-left: 6px; border-left: 1px solid rgba(255, 255, 255, 0.15); }
   body.nav-compact .at-nav-sec-body .at-nav-item { padding: 4px 8px; }
+  body.nav-compact .at-nav-search { display: flex; }
   body.nav-compact .at-nav-mark { display: none; }
   body.nav-compact .at-nav-head { justify-content: space-between; padding: 0 14px; }
   .at-nav { padding-top: max(10px, env(safe-area-inset-top)); }
@@ -105,6 +131,8 @@ body.nav-compact .at-nav-collapse .ico { transform: rotate(180deg); }
   /* Op een telefoon blijven de rijen groot genoeg om te raken (44px). */
   .at-nav-item, .at-nav-sec-head, .at-nav-sec-body .at-nav-item { min-height: 44px; font-size: 15px; }
   .at-nav-collapse { display: none; }
+  .at-search-input { min-height: 44px; font-size: 16px; }
+  .at-search-results, body.nav-compact .at-search-results { left: 8px; right: 8px; width: auto; top: calc(var(--at-topbar-h, 56px) + 76px); max-height: 60vh; }
   .at-nav-close {
     display: inline-flex; align-items: center; justify-content: center; flex: none; width: 36px; height: 36px;
     font: inherit; font-size: 16px; color: #fff; background: none; border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 6px; cursor: pointer;

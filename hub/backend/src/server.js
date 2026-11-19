@@ -21,6 +21,7 @@ const backups = require('./backup');
 const { createDriveBackup, sanitizeDriveBackup, DriveError, CALLBACK_PATH: DRIVE_CALLBACK_PATH } = require('./platform/drive-backup');
 const { createQuoteStore, registerQuoteRoutes, validShareBase, mailBody, Core: QuoteCore } = require('./verkoop/quotes');
 const { createCustomerStore, registerCustomerRoutes } = require('./verkoop/customers');
+const { createGlobalSearch, registerSearchRoutes } = require('./platform/global-search');
 const { createMailer, mailFailure } = require('./platform/mailer');
 const { createWanIp } = require('./platform/wan-ip');
 const { createAddressLookup, createAddressGuard, registerAddressRoute } = require('./platform/address-lookup');
@@ -2467,6 +2468,21 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     invite: (customer) => shopAccounts.invite(customer),
   });
 
+  // Globaal zoeken (platform/global-search.js): klanten, offertes, werkorders, facturen en artikelen in één zoekveld.
+  const globalSearch = createGlobalSearch(database, {
+    // Een uitgezette module (Modules aan/uit) wordt niet doorzocht.
+    moduleOn: (tenantId, moduleId) => ModuleTools.isOn(moduleFlagsOf(tenantId), moduleId),
+    // Klanten horen bij de live-tenant; in een testomgeving komen de testklanten daarvan erbij (zoals tenantsOf hierboven).
+    searchCustomers: (user, text, limit) => {
+      const home = homeOf(user.tenant_id);
+      return store.listCustomerPage(home === user.tenant_id ? [home] : [home, user.tenant_id], { search: text, limit }).items;
+    },
+  });
+  registerSearchRoutes(app, {
+    search: globalSearch.search, identify,
+    limiter: createRateLimiter({ windowMs: 60 * 1000, max: 120, keyFn: (req) => `zoeken:${req.user?.id || clientKey(req)}` }),
+  });
+
   // De btw-controle bij VIES: gedeeld door de offertes (btw verleggen) en de webshop.
   const vies = createVies(viesFetch ? { fetchImpl: viesFetch } : {});
 
@@ -2491,10 +2507,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
      * @param {string} search De zoektekst.
      * @returns {object[]} De klanten met id, gebruikersnaam, naam, bedrijf, e-mail, telefoon en adres.
      */
-    searchCustomers: (req, search) => {
+    searchCustomers: async (req, search) => {
       const tid = req.tenantId || tenant.id;
       const home = homeOf(tid);
-      return store.listCustomerPage(home === tid ? [tid] : [home, tid], { search, limit: 20, activeOnly: true }).items
+      return (await store.listCustomerPageAsync(home === tid ? [tid] : [home, tid], { search, limit: 20, activeOnly: true })).items
         .map((customer) => ({ id: customer.id, username: customer.username, displayName: customer.displayName, companyName: customer.companyName,
           email: customer.email, phone: customer.phone, address: customer.address, vatNumber: customer.vatNumber, paymentDays: customer.paymentDays, documentLanguage: customer.documentLanguage }));
     },
@@ -2511,10 +2527,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     outsourcingOf: (tid) => outsourcingStore.marks(tid),
     can: (user, right) => Roles.can(user, right),
     // Klantrecords voor de klantkeuze en de controle op een gekozen klant (zoals bij de offerte).
-    searchCustomers: (req, search) => {
+    searchCustomers: async (req, search) => {
       const tid = req.tenantId || tenant.id;
       const home = homeOf(tid);
-      return store.listCustomerPage(home === tid ? [tid] : [home, tid], { search, limit: 20, activeOnly: true }).items
+      return (await store.listCustomerPageAsync(home === tid ? [tid] : [home, tid], { search, limit: 20, activeOnly: true })).items
         .map((customer) => ({ id: customer.id, username: customer.username, displayName: customer.displayName, companyName: customer.companyName, email: customer.email, phone: customer.phone, address: customer.address }));
     },
     customerOf: (req, id) => {

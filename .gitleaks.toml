@@ -1,0 +1,14 @@
+# Gitleaks-configuratie: de standaardregels plus een uitzondering voor testbestanden. De vondsten in de historie zijn
+# alleen nagebootste sleutels in tests (bijv. nep-API-sleutels voor Mollie, WooCommerce en captcha), geen echte geheimen.
+# Een echt geheim in code buiten tests blijft dus gevonden worden.
+title = "AquaTech Hub"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Nagebootste sleutels in tests"
+paths = [
+  '''(^|/)test/.*''',
+  '''(^|/)tests/.*''',
+]
