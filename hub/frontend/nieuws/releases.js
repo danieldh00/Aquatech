@@ -13,6 +13,22 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.21.7',
+      date: '2026-11-19',
+      title: 'Logboek in Beheer',
+      items: [
+        { text: 'Nieuw: Beheer > Systeem > Logboek. Zoek op foutcode of verzoek-id en filter op niveau, bron en periode; exporteren naar Excel kan ook. De bewaartermijn van het logboek stel je in bij Sessies en bewaartermijnen.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.21.6',
+      date: '2026-11-19',
+      title: 'Centraal logboek voor fouten en traagheid',
+      items: [
+        { text: 'Fouten, trage verzoeken en storingen worden nu bewaard in een centraal logboek (zoeken en bekijken in Beheer volgt). Elke foutmelding noemt ook een verzoek-id, zodat de beheerder precies kan terugvinden wat er gebeurde.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.21.5',
       date: '2026-11-19',
       title: 'Afbeeldingen uit de oude webshop overnemen werkt ook met AVIF',

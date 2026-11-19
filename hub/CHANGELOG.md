@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.21.7
+
+Centraal applicatielogboek, deel 2: `GET /api/admin/logs` (`platform/app-log-routes.js`: filters niveau/bron/periode, zoeken op tekst, request-id of foutcode, cursor-paginering; platformregels en een andere omgeving alleen met canPlatform), `appLog.list/sources`, Beheer-sectie Logboek (`beheer/logboek.js`, Excel-export tot 5000 regels) en de instellingen `logRetentionDays`/`logErrorRetentionDays` in het formulier Sessies en bewaartermijnen.
+
+## 1.21.6
+
+Centraal applicatielogboek, deel 1 (`platform/app-log.js`, migratie 82 `app_logs`): gebufferd schrijven (2 s of 50 regels), herhalingen samengevoegd, max. 600 regels per bron per minuut, harde grens van 100.000 regels per omgeving, redactie van geheimen, e-mailadressen en IBAN. Request-id per verzoek (kop `X-Request-Id`, ook in de 500-melding). Bronnen: 500-fouten (met foutcode), trage verzoeken, stilstand, trage en mislukte taken, bewakingsincidenten. Bewaartermijn via instellingen `logRetentionDays` (14) en `logErrorRetentionDays` (30), uurlijks opgeruimd in het onderhoud.
+
 ## 1.21.5
 
 - `artikelen/item-images.js`: `storeImage` herkent AVIF/HEIC (ftyp-merk) en geeft `unsupported_format` (415) in plaats van de misleidende melding over 8000 pixels; het overnemen meldt zulke artikelen met `convert: true` en `itemId`.
