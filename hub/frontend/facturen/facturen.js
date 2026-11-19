@@ -232,10 +232,13 @@
     if (!confirm(`${sendable.length} ${sendable.length === 1 ? 'factuur' : 'facturen'} nu per e-mail versturen aan de klant, met de PDF als bijlage? Facturen zonder e-mailadres worden overgeslagen.${already ? ` ${already} al eerder verstuurde ${already === 1 ? 'factuur wordt' : 'facturen worden'} niet opnieuw gestuurd.` : ''}`)) return;
     state.bulkBusy = true;
     $('#l-bulk-mail').disabled = true;
+    $('#l-bulk-clear').disabled = true;
+    document.querySelectorAll('#l-table input[type="checkbox"]').forEach((box) => { box.disabled = true; });
     let done = 0;
     const skipped = [];
     try {
       for (const invoice of sendable) {
+        if (!state.selected.has(invoice.id)) continue;
         const label = invoice.number || 'concept';
         try {
           const draft = await api(`invoices/${encodeURIComponent(invoice.id)}/mail`);
@@ -250,6 +253,7 @@
       }
     } finally {
       state.bulkBusy = false;
+      $('#l-bulk-clear').disabled = false;
     }
     await load();
     toast(`${done} ${done === 1 ? 'factuur' : 'facturen'} verstuurd${skipped.length ? `; overgeslagen: ${skipped.join('; ')}` : ''}`, skipped.length > 0);
