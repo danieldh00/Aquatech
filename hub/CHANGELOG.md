@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.23.4
+
+- `tableColumns` gebruikt op PostgreSQL `pg_catalog` i.p.v. `information_schema` (±150 ms → ±1 ms per tabel); tenant verwijderen, leegmaken en terugzetten uit back-up wordt daardoor niet trager bij meer tabellen.
+- Testrun gebruikt goedkope scrypt-kosten (`AQUATECH_TEST_SCRYPT_N`, via `node --import test/helpers/fast-scrypt.js`); `scryptParams` negeert die variabele in productie en bij niet-machten van twee onder 1024. Productie blijft 2^17.
+- Test goods-receipt controleert veldnamen i.p.v. losse tekst ("1.5" kwam toevallig in een tijdstempel voor en maakte de test af en toe rood).
+
+## 1.23.3
+
+- Migratie 83: `app_logs.first_at`. Herhalingen van de bronnen taak, stilstand en traag werken ook na het wegschrijven de bestaande regel bij (`created_at` = laatste keer, `first_at` = eerste keer, `repeat_count`, langste duur) zolang er binnen een uur een nieuwe komt en de regel jonger is dan 24 uur. Fouten blijven los (eigen foutcode en verzoek-id).
+- De stilstandmelding heeft een vaste tekst ("Hoofdthread stond stil"); de duur staat in het veld Duur.
+- Excel-export: kolommen *Tijdstip (laatste)* en *Eerste keer*.
+
 ## 1.23.2
 
 - Nieuw: `GET /api/tasks` (`platform/open-tasks.js`, ingelogd; taken volgen de rechten `beheer` en `voorraad`, per omgeving) en het dashboardblok `dashboard/tasks.js`. Nieuw: `webOrders.listUnprocessed` (status Nieuw; online alleen na betaling).

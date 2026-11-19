@@ -13,6 +13,20 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.23.4',
+      date: '2026-11-19',
+      title: 'Snellere en stabielere testsuite',
+      items: [],
+    },
+    {
+      version: '1.23.3',
+      date: '2026-11-19',
+      title: 'Logboek: herhaalde meldingen als één regel',
+      items: [
+        { text: 'In het Logboek staat een herhaalde melding (bijvoorbeeld een trage taak of stilstand) nu als één regel met het aantal en de eerste en laatste keer, ook in de Excel-export.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.23.2',
       date: '2026-11-19',
       title: 'Openstaande taken op het dashboard',
