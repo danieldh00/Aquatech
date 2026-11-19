@@ -39,6 +39,7 @@ async function setup() {
   quote('q-keep', 'O-1', 'akkoord');
   quote('q-wipe', 'O-2', 'concept');
   quote('q-gone', 'O-3', 'concept');
+  db.prepare("INSERT INTO plans (id, tenant_id, owner_id, title, customer, address, data, created_at, updated_at) VALUES ('p-1', ?, ?, 'Tuinplan', 'Piet Jansen', 'Dorpsstraat 1', '{}', ?, ?)").run(main, customer.id, now, now);
   db.prepare("UPDATE quotes SET deleted_at = ? WHERE id = 'q-gone'").run(now);
   /**
    * Voegt een factuur van de klant toe.
@@ -125,6 +126,7 @@ test('wissen vraagt de naam, anonimiseert en bewaart wat de bewaarplicht bescher
   assert.strictEqual(order.email, '');
   assert.ok(!order.data.includes('0612345678'));
   assert.strictEqual(Number(db.prepare('SELECT COUNT(*) AS n FROM stock_alerts').get().n), 0);
+  assert.strictEqual(Number(db.prepare('SELECT COUNT(*) AS n FROM plans WHERE owner_id = ?').get(customer.id).n), 0);
   assert.strictEqual((await admin.post(`/app/api/customers/${customer.id}/anonymize`, { confirm: 'Verwijderde persoon' })).status, 409);
   assert.ok(db.prepare("SELECT id FROM audit WHERE action = 'klant_geanonimiseerd'").get());
 });

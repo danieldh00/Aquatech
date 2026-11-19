@@ -330,7 +330,10 @@ function createPersonData(db, store) {
     counts.requests = prepare(`UPDATE service_requests SET customer_id = NULL, customer_name = ?, description = '', address = '', phone = '', email = '', preferred = '', reply = '', note = ''
       WHERE tenant_id = ? AND customer_id = ?`).run(ANONYMOUS_NAME, tenantId, userId).changes;
     for (const plan of prepare('SELECT id FROM plans WHERE tenant_id = ? AND owner_id = ?').all(tenantId, userId)) {
-      if (store.purgePlan(tenantId, plan.id)) counts.plans += 1;
+      // Zoals store.purgePlan, maar zonder eigen transactie (een transactie nest niet).
+      prepare(`UPDATE history SET snapshot = NULL, title = 'Gewist plan', customer = '', address = '', summary = '{}', ip = '' WHERE tenant_id = ? AND plan_id = ?`).run(tenantId, plan.id);
+      prepare('DELETE FROM plans WHERE tenant_id = ? AND id = ?').run(tenantId, plan.id);
+      counts.plans += 1;
     }
     for (const row of prepare('SELECT id FROM debtors WHERE tenant_id = ? AND (customer_id = ? OR shop_customer_id = ?)').all(tenantId, userId, userId)) {
       if (keep.debtorIds.has(row.id)) { counts.kept.debtors += 1; continue; }
