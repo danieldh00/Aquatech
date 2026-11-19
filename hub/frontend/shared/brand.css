@@ -80,12 +80,12 @@
   .tablewrap > table:not(:has(> tbody > tr > td:first-child > input[type=checkbox])) > :is(thead, tbody, tfoot) > tr > :is(th, td):first-child:not([colspan]),
   .tablewrap > table:has(> tbody > tr > td:first-child > input[type=checkbox]) > :is(thead, tbody, tfoot) > tr > :is(th, td):nth-child(2):not([colspan]) {
     position: sticky; left: 0; z-index: 1;
-    background-color: var(--panel, #fff);
-    box-shadow: 6px 0 6px -6px rgba(15, 23, 42, 0.28);
+    background-color: var(--at-surface);
+    box-shadow: 6px 0 6px -6px var(--at-shadow);
     max-width: min(46vw, 190px); min-width: var(--stick-min, 0px);
     overflow: hidden; text-overflow: ellipsis;
   }
-  .tablewrap > table > thead > tr > :is(th, td):is(:first-child, :nth-child(2)) { background-color: #fafbfc; z-index: 2; }
+  .tablewrap > table > thead > tr > :is(th, td):is(:first-child, :nth-child(2)) { background-color: var(--at-preview-bg); z-index: 2; }
   .tablewrap > table :is(td.wrap, td.c-desc) { --stick-min: 120px; }
-  .tablewrap > table tr[data-id]:hover > :is(td):is(:first-child, :nth-child(2)) { background-color: var(--primary-soft, #eef6f8); }
+  .tablewrap > table tr[data-id]:hover > :is(td):is(:first-child, :nth-child(2)) { background-color: var(--at-green-soft); }
 }
