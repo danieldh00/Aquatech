@@ -177,3 +177,10 @@ test('een tijdstip van de client wordt genegeerd: het telmoment is de servertijd
   const stored = world.db.prepare('SELECT counted_at FROM stock_count_lines WHERE id = ?').get(line.id).counted_at;
   assert.ok(stored > middle, 'een opgegeven tijdstip telt niet');
 });
+
+test('de leesroute van de tellers heeft een limiet', async () => {
+  const world = await countWorld();
+  let status = 200;
+  for (let attempt = 0; attempt < 620 && status === 200; attempt += 1) status = (await world.picker.get('/app/api/orderpick/counts/open')).status;
+  assert.strictEqual(status, 429);
+});

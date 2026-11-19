@@ -497,6 +497,10 @@ function createStockCounts(db, { stock }) {
       const row = findCount(tenantId, id);
       if (!row) return { error: 'Telling niet gevonden.', code: 'not_found', status: 404 };
       if (row.status !== 'tellen') return { error: 'Deze telling is al afgesloten of geannuleerd.', code: 'closed', status: 409 };
+      // Artikelrijen vergrendelen (vaste volgorde, geen deadlock) vóór iets wordt berekend of gelezen: een pick of ontvangst die nu committ,
+      // is dan al zichtbaar in de mutaties en een nieuwe wacht tot deze afsluiting klaar is.
+      prepare(`SELECT i.id FROM stock_items i JOIN stock_count_lines l ON l.tenant_id = i.tenant_id AND l.item_id = i.id
+        WHERE l.tenant_id = ? AND l.count_id = ? ORDER BY i.id FOR UPDATE OF i`).all(tenantId, row.id);
       const count = countOf(row);
       const computed = computeLines(tenantId, row, lineRows(tenantId, row.id), count.threshold);
       const untouched = computed.filter((line) => line.countedQty == null);
@@ -507,10 +511,6 @@ function createStockCounts(db, { stock }) {
       if (pendingRecount.length && input.acceptRecounts !== true) {
         return { error: `${pendingRecount.length} regels moeten nog worden herteld: tel ze opnieuw of accepteer het eerdere aantal.`, code: 'recount_open', status: 409, details: { recount: pendingRecount.length } };
       }
-      // Artikelrijen vergrendelen (vaste volgorde, geen deadlock) vóór de mutaties worden gelezen: een pick of ontvangst die nu committ,
-      // is dan al zichtbaar in de mutaties en een nieuwe wacht tot deze afsluiting klaar is.
-      prepare(`SELECT i.id FROM stock_items i JOIN stock_count_lines l ON l.tenant_id = i.tenant_id AND l.item_id = i.id
-        WHERE l.tenant_id = ? AND l.count_id = ? ORDER BY i.id FOR UPDATE OF i`).all(tenantId, row.id);
       const now = new Date().toISOString();
       const note = `Voorraadtelling ${row.number} (peildatum ${row.reference_date})`;
       // Mutaties sinds het bevriezen per artikel in één query (alleen nodig voor regels die niet geteld zijn).
