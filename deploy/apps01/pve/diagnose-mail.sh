@@ -19,19 +19,20 @@ SUDO=""; [[ "${SSH_TARGET%%@*}" != "root" ]] && SUDO="sudo -n"
 # Poorttest met time-out; bash /dev/tcp, dus geen extra programma nodig.
 probe() { # host poort
   local start=$SECONDS
-  if timeout 6 bash -c "exec 3<>/dev/tcp/$1/$2" 2>/dev/null; then echo "  $1:$2  OPEN ($((SECONDS - start)) s)"
+  if timeout 6 bash -c 'exec 3<>/dev/tcp/"$1"/"$2"' _ "$1" "$2" 2>/dev/null; then echo "  $1:$2  OPEN ($((SECONDS - start)) s)"
   else echo "  $1:$2  GEEN VERBINDING (na $((SECONDS - start)) s: time-out = geblokkeerd/gefilterd, snel = geweigerd)"; fi
 }
 
 REMOTE_SCRIPT='
 APP_DIR="${APP_DIR:-/opt/apps/aquatech}"
 sect() { printf "\n\n===== %s =====\n" "$*"; }
-probe() { local start=$SECONDS; if timeout 6 bash -c "exec 3<>/dev/tcp/$1/$2" 2>/dev/null; then echo "  $1:$2  OPEN ($((SECONDS - start)) s)"; else echo "  $1:$2  GEEN VERBINDING (na $((SECONDS - start)) s: time-out = geblokkeerd/gefilterd, snel = geweigerd)"; fi; }
+probe() { local start=$SECONDS; if timeout 6 bash -c '"'"'exec 3<>/dev/tcp/"$1"/"$2"'"'"' _ "$1" "$2" 2>/dev/null; then echo "  $1:$2  OPEN ($((SECONDS - start)) s)"; else echo "  $1:$2  GEEN VERBINDING (na $((SECONDS - start)) s: time-out = geblokkeerd/gefilterd, snel = geweigerd)"; fi; }
 sect "Ingestelde mailserver (alleen host, poort, beveiliging en inlogsoort; nooit het wachtwoord)"
 CFG=$(docker exec -u postgres aquatech-postgres psql -X -A -t -d aquatech -c "SELECT t.slug || chr(9) || s.value FROM aquatech.settings s JOIN aquatech.tenants t ON t.id = s.tenant_id WHERE s.key = '"'"'mailServer'"'"'" 2>&1)
 echo "$CFG" | sed -E "s/\"(user|from|replyTo)\":\"[^\"]*\"/\"\\1\":\"…\"/g"
 HOST="${MAIL_HOST:-}"
 [ -z "$HOST" ] && HOST=$(echo "$CFG" | grep -oE "\"host\":\"[^\"]+\"" | head -1 | cut -d\" -f4)
+case "$HOST" in *[!A-Za-z0-9.-]*) echo "WAARSCHUWING: de ingestelde host ziet er niet uit als een hostnaam en wordt niet getest."; HOST="";; esac
 echo "Te testen host: ${HOST:-(geen gevonden; geef MAIL_HOST mee)}"
 sect "Algemeen uitgaand verkeer (controle: 443 moet openen)"
 probe 1.1.1.1 443; probe www.google.com 443
@@ -71,6 +72,8 @@ HOST="${MAIL_HOST:-}"
 if [[ -z "$HOST" ]]; then
   HOST=$(ssh -o BatchMode=yes -o ConnectTimeout=10 "$SSH_TARGET" "$SUDO docker exec -u postgres aquatech-postgres psql -X -A -t -d aquatech -c \"SELECT value FROM aquatech.settings WHERE key = 'mailServer' LIMIT 1\"" </dev/null 2>/dev/null | grep -oE '"host":"[^"]+"' | head -1 | cut -d'"' -f4)
 fi
+# De host komt uit een instelling die een beheerder kan wijzigen: alleen een gewone hostnaam of IP toestaan.
+if [[ -n "$HOST" && ! "$HOST" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]{0,198}[A-Za-z0-9])?$ ]]; then echo "WAARSCHUWING: de ingestelde host ziet er niet uit als een hostnaam en wordt niet getest." >&2; HOST=""; fi
 echo "Ingestelde host: ${HOST:-(niet gevonden)}"
 for h in ${HOST:+"$HOST"} smtp.gmail.com; do for p in 25 465 587; do probe "$h" "$p"; done; done
 echo; echo "##### Proxmox-firewall"; pve-firewall status 2>&1 | head -3; grep -hE "^(enable|policy_out)" /etc/pve/firewall/cluster.fw 2>/dev/null
