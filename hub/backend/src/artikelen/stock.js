@@ -2048,7 +2048,9 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     const existing = findItem(tenantId, itemId);
     if (!existing || Number(existing.has_variants) || !Number.isFinite(unitCost) || unitCost < 0) return;
     if (existing.cost_price != null && Math.abs(Number(existing.cost_price) - unitCost) <= 0.00005) return;
-    if (costs.addPrice(tenantId, existing, { price: unitCost, note, user }).error) return;
+    // Een fout in de prijshistorie mag de ontvangst van goederen niet blokkeren: de voorraad is dan al geboekt. De fout komt wel in het log.
+    const added = costs.addPrice(tenantId, existing, { price: unitCost, note, user });
+    if (added.error) { console.error(`[inkoopprijs] ontvangst ${existing.code}: ${added.error}`); return; }
     repriceItem(tenantId, itemId, 'ontvangst', user);
     dirty(tenantId);
   }
@@ -2080,10 +2082,11 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         for (const { change, price } of block) args.push(change.id, price);
         const result = prepare(`UPDATE stock_items SET sale_price = CASE id ${whens} END, updated_at = ?,
           shop_dirty = CASE WHEN shop_sync = 1 AND shop_product_id IS NOT NULL THEN 1 ELSE shop_dirty END
-          WHERE tenant_id = ? AND id IN (${marks}) AND has_variants = 0 AND archived = 0 AND price_mode = 'factor'`)
-          .run(...args, currentTimestamp(), tenantId, ...block.map(({ change }) => change.id));
-        changed += Number(result.changes);
-        for (const { change, price } of block) logPriceChange(tenantId, change, change.oldPrice, price, source, user, audits);
+          WHERE tenant_id = ? AND id IN (${marks}) AND has_variants = 0 AND archived = 0 AND price_mode = 'factor' RETURNING id`)
+          .all(...args, currentTimestamp(), tenantId, ...block.map(({ change }) => change.id));
+        const touched = new Set(result.map((row) => row.id));
+        changed += touched.size;
+        for (const { change, price } of block.filter(({ change }) => touched.has(change.id))) logPriceChange(tenantId, change, change.oldPrice, price, source, user, audits);
         if (audits.length && priceLogger) priceLogger(audits);
       });
     }
