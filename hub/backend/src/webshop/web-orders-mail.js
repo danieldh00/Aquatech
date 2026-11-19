@@ -8,6 +8,7 @@ const { validEmail, mailFailure, MAIL_SETUP_FAILED } = require('../platform/mail
 const { mailStyleOf, composeFor } = require('../platform/mail-layout');
 const { WITHDRAWAL_DAYS } = require('./legal-pages');
 const { cleanPublicUrl } = require('./mollie');
+const DeliveryTimes = require('./delivery-times');
 
 /**
  * Een ISO-datum als dd-mm-jjjj voor in een mail.
@@ -115,7 +116,7 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody, guestLink
     try {
       const style = mailStyleOf(settings);
       const composed = composeFor(settings, paid ? 'order_betaald' : 'order_rekening', {
-        klant: order.customer.name, nummer: order.number, bedrag: EUR.format(order.totals.total), bestelling: details,
+        klant: order.customer.name, nummer: order.number, bedrag: EUR.format(order.totals.total), bestelling: details, levertijd: DeliveryTimes.etaSentence(order.shipping),
         statuslink: link ? `Bekijk de status van je bestelling, download de factuur of vraag een retour aan via deze persoonlijke link (bewaar deze mail en deel de link niet):\n${link}` : '',
       });
       // De tekst over het herroepingsrecht is wettelijk en staat altijd onderaan, welke eigen tekst er ook is ingesteld.
@@ -123,7 +124,7 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody, guestLink
       const customerMail = mailBody(profile, [...composed.paragraphs, withdrawal], undefined, style);
       await mailer.send({ to: order.email, subject: composed.subject, text: customerMail.text, html: customerMail.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
       if (validEmail(profile.email)) {
-        const shopMail = mailBody(profile, [`Nieuwe webshopbestelling ${order.number} van ${order.customer.company || order.customer.name} (${order.email})${paid ? ', online betaald' : ''}.`, details], undefined, style);
+        const shopMail = mailBody(profile, [`Nieuwe webshopbestelling ${order.number} van ${order.customer.company || order.customer.name} (${order.email})${paid ? ', online betaald' : ''}.`, details, ...(DeliveryTimes.etaSentence(order.shipping) ? [`Aan de klant doorgegeven: ${DeliveryTimes.etaSentence(order.shipping)}`] : [])], undefined, style);
         await mailer.send({ to: profile.email, subject: `Nieuwe webshopbestelling ${order.number}`, text: shopMail.text, html: shopMail.html });
       }
     } catch (failure) {

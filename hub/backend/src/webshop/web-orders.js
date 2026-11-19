@@ -1291,7 +1291,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
     return { released };
   }
 
-  return { priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, countGuestSince, guestAccessOf, attachToUser, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, reminderAllowed, releaseExpired, listToPick, getMany, pickable, markPackingSlipsPrinted, setDropshippingSlip, onShipped, onCancelled, onTracking, withFulfilment, getDetailed, ship, recordShipmentLabel, setAllowPartial, listBackorders, markBackorderReady, onPartialShipped };
+  return { deliveryRulesOf, priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, countGuestSince, guestAccessOf, attachToUser, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, reminderAllowed, releaseExpired, listToPick, getMany, pickable, markPackingSlipsPrinted, setDropshippingSlip, onShipped, onCancelled, onTracking, withFulfilment, getDetailed, ship, recordShipmentLabel, setAllowPartial, listBackorders, markBackorderReady, onPartialShipped };
 }
 
 /**

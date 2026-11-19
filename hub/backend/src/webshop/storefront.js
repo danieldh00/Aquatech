@@ -28,6 +28,7 @@ const { returnsBlock } = require('./storefront-return-pages');
 const { legalDefaults, LEGAL_SLUGS, LEGAL_TITLES } = require('./legal-pages');
 const Shipping = require('./shipping');
 const DeliveryTimes = require('./delivery-times');
+const DeliveryRules = require('./delivery-rules');
 const Vat = require('./vat');
 const { validPaymentId, cleanPublicUrl, sanitizePayment } = require('./mollie');
 const Analytics = require('./shop-analytics');
@@ -1477,9 +1478,20 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
       const lead = DeliveryTimes.leadFor({ override: info.override, inStock, methodLead: leadMethod.leadDays, dayType: leadMethod.dayType, expectedDate: info.expectedDate, supplierLeadDays: info.supplierLeadDays });
       return lead ? (lead.max === 0 ? 'Direct beschikbaar' : `Levertijd ca. ${DeliveryTimes.leadText(lead)}`) : DeliveryTimes.UNKNOWN_TEXT;
     };
+    /**
+     * De beperkingen op de levermethode van een artikel in gewone taal (bijvoorbeeld pallet vanaf 100 stuks).
+     * @param {string} itemCode Artikelcode.
+     * @returns {string} De tekst, of leeg zonder beperkingen.
+     */
+    const deliveryNoteFor = (itemCode) => {
+      const info = leadInfo.get(itemCode);
+      if (!info || !orders || !orders.deliveryRulesOf) return '';
+      const rules = DeliveryRules.effectiveRules(info.itemRules, info.parentRules, orders.deliveryRulesOf(tenantId).get(itemCode));
+      return DeliveryRules.describeRules(rules, (method) => (shipping[method] ? shipping[method].label : method), product.unit);
+    };
     const firstZone = leadMethod && leadMethod.zones ? leadMethod.zones.find((zone) => zone.tiers.length || (zone.qtyTiers || []).length) : null;
     const trust = { freeFrom: firstZone ? firstZone.freeFrom : 0, online: Boolean(orders && payments && payments.optionsFor(tenantId, accounts ? accounts.viewer(req) : null).includes('online')) };
-    sendPage(req, res, 200, () => productPage(product, catalog.groups, chosenCode || (variant ? variant.code : ''), details, { packagingsFor, packCode, leadTextFor, trust, stockAlert: alertsOn() ? { status: ['ja', 'fout'].includes(req.query.melding) ? req.query.melding : '' } : null }));
+    sendPage(req, res, 200, () => productPage(product, catalog.groups, chosenCode || (variant ? variant.code : ''), details, { packagingsFor, packCode, leadTextFor, deliveryNoteFor, trust, stockAlert: alertsOn() ? { status: ['ja', 'fout'].includes(req.query.melding) ? req.query.melding : '' } : null }));
   });
 
   router.use((req, res) => {

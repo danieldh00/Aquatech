@@ -36,6 +36,7 @@ const FIELDS = {
   bedrag: { hint: 'totaalbedrag', sample: '€ 125,00' },
   bedrijf: { hint: 'naam van je bedrijf', sample: 'AquaTech Service' },
   bestelling: { hint: 'de regels van de bestelling met totalen (wordt automatisch ingevuld)', sample: 'Bestelling W2026-0042\n\n2 × Druppelslang 16 mm (DS-16)\n1 × Sproeier (SP-01)\n\nTotaal € 125,00' },
+  levertijd: { hint: 'zin met de verwachte levertijd als indicatie (leeg bij afhalen of zonder levertijd)', sample: 'Verwachte levertijd: ca. 1-2 dagen. Dit is een indicatie en geen toezegging: we zijn afhankelijk van externe partijen.' },
   statuslink: { hint: 'zin met de persoonlijke link naar de bestelling (alleen voor gasten, anders leeg)', sample: 'Bekijk de status van je bestelling via deze persoonlijke link:\nhttps://voorbeeld.nl/bestelling/123/' },
   volgcode: { hint: 'volgcode van het pakket', sample: 'DPD123456' },
   volglink: { hint: 'link om het pakket te volgen', sample: 'https://tracking.voorbeeld.nl/DPD123456' },
@@ -61,11 +62,11 @@ const FIELDS = {
  */
 const TYPES = [
   { key: 'order_betaald', group: 'Bestellingen', label: 'Orderbevestiging (online betaald)', subject: 'Bevestiging van je bestelling {nummer}',
-    body: 'Beste {klant},\n\nBedankt voor je bestelling en je betaling. We hebben beide ontvangen en reserveren de artikelen voor je.\n\n{bestelling}\n\nJe hebt {bedrag} online betaald. Je ontvangt de factuur van ons. Zodra je bestelling onderweg is of klaarstaat, laten we het je weten.\n\n{statuslink}',
-    fields: ['klant', 'nummer', 'bedrag', 'bestelling', 'statuslink'], note: 'De tekst over het herroepingsrecht wordt altijd automatisch onderaan toegevoegd.' },
+    body: 'Beste {klant},\n\nBedankt voor je bestelling en je betaling. We hebben beide ontvangen en reserveren de artikelen voor je.\n\n{bestelling}\n\n{levertijd}\n\nJe hebt {bedrag} online betaald. Je ontvangt de factuur van ons. Zodra je bestelling onderweg is of klaarstaat, laten we het je weten.\n\n{statuslink}',
+    fields: ['klant', 'nummer', 'bedrag', 'bestelling', 'levertijd', 'statuslink'], note: 'De tekst over het herroepingsrecht wordt altijd automatisch onderaan toegevoegd.' },
   { key: 'order_rekening', group: 'Bestellingen', label: 'Orderbevestiging (op rekening)', subject: 'Bevestiging van je bestelling {nummer}',
-    body: 'Beste {klant},\n\nBedankt voor je bestelling. We hebben hem ontvangen en reserveren de artikelen voor je.\n\n{bestelling}\n\nJe bestelling gaat op rekening: je ontvangt de factuur van ons. Zodra je bestelling onderweg is of klaarstaat, laten we het je weten.\n\n{statuslink}',
-    fields: ['klant', 'nummer', 'bestelling', 'statuslink'], note: 'De tekst over het herroepingsrecht wordt altijd automatisch onderaan toegevoegd.' },
+    body: 'Beste {klant},\n\nBedankt voor je bestelling. We hebben hem ontvangen en reserveren de artikelen voor je.\n\n{bestelling}\n\n{levertijd}\n\nJe bestelling gaat op rekening: je ontvangt de factuur van ons. Zodra je bestelling onderweg is of klaarstaat, laten we het je weten.\n\n{statuslink}',
+    fields: ['klant', 'nummer', 'bestelling', 'levertijd', 'statuslink'], note: 'De tekst over het herroepingsrecht wordt altijd automatisch onderaan toegevoegd.' },
   { key: 'verzonden_volgcode', group: 'Bestellingen', label: 'Verzonden met volgcode', subject: 'Je bestelling {nummer} is onderweg (volgcode {volgcode})',
     body: 'Beste {klant},\n\nJe bestelling {nummer} is onderweg. Volg je pakket met de code {volgcode}: {volglink}\n\n{bestelling}\n\n{bestellink}\n\n{backorder}',
     fields: ['klant', 'nummer', 'volgcode', 'volglink', 'bestelling', 'bestellink', 'backorder'] },
