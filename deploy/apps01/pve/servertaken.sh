@@ -7,7 +7,7 @@
 #   bash servertaken.sh migraties        controleert de databaseversie; loopt hij achter, dan de app herstarten (migreren)
 #   bash servertaken.sh update           nu updaten naar de nieuwste versie in GHCR (met back-up en terugval)
 #   bash servertaken.sh schijf           toont wat de schijf vult en ruimt na bevestiging op (oude app-images, build-cache, journal)
-#                                        en werkt update.sh op de server bij (UPDATE_SH_REF=<commit> voor een vaste versie, anders master)
+#                                        en werkt update.sh op de server bij (met UPDATE_SH_REF=<volledige commit>; zonder blijft hij ongemoeid)
 #   bash servertaken.sh help             deze uitleg
 #
 # Opties: --yes (of YES=1) = geen bevestigingsvraag (voor automatisering). `migraties` en `update` herstarten de app,
@@ -324,12 +324,14 @@ remote_disk_check() {
   (( old_count > 0 || reclaimable > 0 )) && return 10
   return 0
 }
-# Haalt de nieuwste update.sh uit GitHub (vaste commit via UPDATE_SH_REF, anders master) en installeert hem in APP_DIR als hij
+# Haalt update.sh uit GitHub op een vaste commit (UPDATE_SH_REF, 40 tekens; zonder verwijzing gebeurt er niets) en installeert hem in APP_DIR als hij
 # afwijkt. Eerst controleren (syntaxis, verwachte inhoud), de oude blijft als update.sh.bak-<datum>. Mislukt het, dan blijft de
 # huidige update.sh staan en gaat het opruimen gewoon door.
 refresh_update_script() {
-  local ref="${UPDATE_SH_REF:-master}" base="${UPDATE_SH_BASE:-https://raw.githubusercontent.com/danieldh00/Aquatech}" tmp
-  [[ "$ref" == master || "$ref" =~ ^[0-9a-f]{40}$ ]] || { echo "  update.sh niet bijgewerkt: ongeldige verwijzing '$ref'"; return 0; }
+  local ref="${UPDATE_SH_REF:-}" base="${UPDATE_SH_BASE:-https://raw.githubusercontent.com/danieldh00/Aquatech}" tmp
+  # Alleen een vaste commit (geen master): een root-script op de server mag niet meeveranderen met een branch.
+  [[ -n "$ref" ]] || { echo "  update.sh niet bijgewerkt: geef UPDATE_SH_REF=<commit van 40 tekens> mee"; return 0; }
+  [[ "$ref" =~ ^[0-9a-f]{40}$ ]] || { echo "  update.sh niet bijgewerkt: ongeldige verwijzing '$ref' (een volledige commit is nodig)"; return 0; }
   tmp="$(mktemp)"
   if ! curl -fsSL -m 30 "$base/$ref/deploy/apps01/update.sh" -o "$tmp" 2>/dev/null; then echo "  update.sh niet bijgewerkt: ophalen mislukt"; rm -f "$tmp"; return 0; fi
   if ! bash -n "$tmp" 2>/dev/null || ! grep -q '^VERSION_RE=' "$tmp" || ! grep -q 'org.opencontainers.image.version' "$tmp"; then

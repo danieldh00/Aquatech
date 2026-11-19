@@ -235,6 +235,10 @@ test('servertaken.sh schijf: de draaiende en de twee nieuwste versies blijven, d
   assert.match(run.stdout, /update\.sh bijgewerkt/);
   const again = spawnSync('bash', [servertaken, 'schijf-run'], { env, encoding: 'utf8', timeout: 30000 });
   assert.match(again.stdout, /al de nieuwste/);
+  const unpinned = spawnSync('bash', [servertaken, 'schijf-run'], { env: { ...env, UPDATE_SH_REF: '' }, encoding: 'utf8', timeout: 30000 });
+  assert.match(unpinned.stdout, /geef UPDATE_SH_REF/, 'zonder vaste commit gebeurt er niets (geen master)');
+  const onMaster = spawnSync('bash', [servertaken, 'schijf-run'], { env: { ...env, UPDATE_SH_REF: 'master' }, encoding: 'utf8', timeout: 30000 });
+  assert.match(onMaster.stdout, /ongeldige verwijzing/, 'ook master wordt geweigerd');
   const broken = spawnSync('bash', [servertaken, 'schijf-run'], { env: { ...env, UPDATE_SH_REF: 'niet-een-commit' }, encoding: 'utf8', timeout: 30000 });
   assert.match(broken.stdout, /ongeldige verwijzing/, 'een ongeldige verwijzing wordt geweigerd en het opruimen gaat door');
   assert.strictEqual(broken.status, 0);
