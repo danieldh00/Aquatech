@@ -323,3 +323,37 @@ test('miniatuur: opslaan, tonen in de shop met terugval, porties en afkeuren van
   assert.strictEqual(badThumb.status, 200);
   assert.match((await anonymous.get(`/artikelfoto/${badThumb.body.imageId}/klein`)).type, /image\/png/);
 });
+
+test('afbeeldingen overnemen: AVIF van de oude webshop wordt gemeld als omzetten in de browser en de bytes zijn op te halen', async () => {
+  const { admin, klant, vreemd, db, main, responses } = await setup();
+  const item = await article(admin, 'AVIF-1');
+  const loose = await article(admin, 'AVIF-2');
+  const url = 'https://oud.example/honda.avif';
+  db.prepare('INSERT INTO shop_products (tenant_id, id, sku, name, price, currency, url, image, in_stock, code, categories) VALUES (?, ?, ?, ?, 10, ?, ?, ?, 1, ?, ?)').run(main, 'pa', 'AVIF-1', 'x', 'EUR', '', url, 'AVIF-1', '[]');
+  db.prepare('UPDATE stock_items SET shop_product_id = ? WHERE tenant_id = ? AND id = ?').run('pa', main, item.id);
+  // Een AVIF-bestand: ftyp-vak met het merk avif (de server kan de inhoud niet decoderen).
+  const avif = Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypavif'), Buffer.alloc(40)]);
+  responses.set(url, avif);
+  const run = await admin.post('/app/api/stock/images-import', { after: '' });
+  assert.strictEqual(run.status, 200);
+  assert.strictEqual(run.body.failed.length, 1);
+  assert.strictEqual(run.body.failed[0].convert, true);
+  assert.strictEqual(run.body.failed[0].itemId, item.id);
+  assert.match(run.body.failed[0].reason, /AVIF/);
+  // Een kapot adres blijft een gewone fout zonder omzetten.
+  responses.set(url, Buffer.from('<html>geen afbeelding</html>'));
+  assert.strictEqual((await admin.post('/app/api/stock/images-import', { after: '' })).body.failed[0].convert, false);
+  responses.set(url, avif);
+  // De browser haalt de bytes op via het artikel (nooit via een adres uit het verzoek).
+  const bytes = await admin.get(`/app/api/stock/items/${item.id}/shop-image`);
+  assert.strictEqual(bytes.status, 200);
+  assert.match(bytes.type, /octet-stream/);
+  assert.strictEqual(bytes.size, avif.length);
+  assert.strictEqual((await admin.get(`/app/api/stock/items/${loose.id}/shop-image`)).status, 404, 'artikel zonder webshopproduct');
+  assert.strictEqual((await admin.get('/app/api/stock/items/geen-id/shop-image')).status, 404);
+  assert.strictEqual((await klant.get(`/app/api/stock/items/${item.id}/shop-image`)).status, 403);
+  assert.strictEqual((await vreemd.get(`/app/api/stock/items/${item.id}/shop-image`)).status, 404, 'andere organisatie');
+  // Na het omzetten door de browser (JPEG/PNG uploaden) is het artikel niet meer in afwachting.
+  assert.strictEqual((await admin.put(`/app/api/stock/items/${item.id}/image`, { name: 'AVIF-1.png', data: pngBase64(21) })).status, 200);
+  assert.deepStrictEqual((await admin.get('/app/api/stock/images-import')).body, { pending: 0 });
+});
