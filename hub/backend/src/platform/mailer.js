@@ -74,6 +74,18 @@ function inlineImages(html) {
 }
 
 /**
+ * Legt vast bij welke mailserver (host, poort, beveiliging) een fout hoort, zodat de melding aan de gebruiker die
+ * kan noemen. Het wachtwoord komt hier nooit in.
+ * @param {Error} error De fout van nodemailer.
+ * @param {{ host: string, port: number, secure: boolean }} server De instelling mailServer.
+ * @returns {Error} Dezelfde fout, met mailHost, mailPort en mailSecure.
+ */
+function tagServer(error, server) {
+  if (error && typeof error === 'object' && !error.mailHost) Object.assign(error, { mailHost: server.host, mailPort: server.port, mailSecure: Boolean(server.secure) });
+  return error;
+}
+
+/**
  * Maakt de mailer van een tenant. De mailserver moet een openbaar adres hebben
  * (zie netguard.js); er wordt verbonden met het gevonden adres, het certificaat
  * blijft op naam gecontroleerd.
@@ -136,13 +148,17 @@ function createMailer(settings, { createTransport = nodemailer.createTransport, 
     if (!list.length) throw Object.assign(new Error('Geen geldig e-mailadres.'), { code: 'invalid_to' });
     const { transport, server } = await openTransport();
     const inline = inlineImages(html);
-    return transport.sendMail({
+    try {
+      return await transport.sendMail({
       from: server.from, to: list.join(', '), bcc: bcc && validEmail(bcc) ? bcc.trim() : undefined, replyTo: replyTo && validEmail(replyTo) ? replyTo : server.replyTo || undefined,
       subject: String(subject || '').replace(/[\r\n]/g, ' ').slice(0, 300), text, html: inline.html,
       attachments: Array.isArray(attachments) && attachments.length ? attachments.slice(0, 5).map((attachment) => ({
         filename: String(attachment.filename || 'bijlage').replace(/[\r\n"\\/]/g, '').slice(0, 120), content: attachment.content, contentType: attachment.contentType,
       })).concat(inline.attachments) : (inline.attachments.length ? inline.attachments : undefined),
-    });
+      });
+    } catch (error) {
+      throw tagServer(error, server);
+    }
   }
   /**
    * Controleert of de mailserver bereikbaar is en de inloggegevens accepteert, zonder iets te versturen (SMTP-verify
@@ -152,10 +168,12 @@ function createMailer(settings, { createTransport = nodemailer.createTransport, 
    */
   async function verify() {
     if (!configured()) throw Object.assign(new Error('Er is geen mailserver ingesteld.'), { code: 'not_configured' });
-    const { transport } = await openTransport();
+    const { transport, server } = await openTransport();
     try {
       await transport.verify();
       return true;
+    } catch (error) {
+      throw tagServer(error, server);
     } finally {
       if (typeof transport.close === 'function') transport.close();
     }
@@ -203,7 +221,21 @@ function mailFailure(error) {
     return withReply('de beveiligde verbinding (TLS) met de mailserver lukt niet. Controleer de poort en de instelling SSL/TLS; een ongeldig certificaat wordt niet geaccepteerd.');
   }
   if (connectionProblem) {
-    return withReply('de mailserver is niet bereikbaar. Controleer server en poort (587 met STARTTLS of 465 met SSL/TLS) en of de server naar buiten mag verbinden.');
+    const where = error.mailHost ? `${error.mailHost}:${error.mailPort}` : 'de mailserver';
+    const text = `${code} ${String(error && error.message || '')}`;
+    if (code === 'EDNS' || /ENOTFOUND|EAI_AGAIN/.test(text)) {
+      return withReply(`de naam van ${where} is niet gevonden. Controleer de servernaam en of de server DNS kan gebruiken.`);
+    }
+    if (/ECONNREFUSED/.test(text)) {
+      return withReply(`${where} weigert de verbinding. Controleer de poort (587 met STARTTLS of 465 met SSL/TLS) en of de mailserver die poort aanbiedt.`);
+    }
+    if (/ENETUNREACH|EHOSTUNREACH/.test(text)) {
+      return withReply(`${where} is vanaf de server niet bereikbaar (geen route naar het netwerk; bij een IPv6-adres kan dat aan ontbrekend IPv6 liggen).`);
+    }
+    if (code === 'ETIMEDOUT' || /timeout|never received/i.test(text)) {
+      return withReply(`${where} geeft geen antwoord (time-out). Meestal blokkeert een firewall of de internetprovider uitgaand verkeer naar die poort (bij consumentenabonnementen vaak poort 25). Probeer 587 met STARTTLS of 465 met SSL/TLS, en controleer of de server naar buiten mag verbinden.`);
+    }
+    return withReply(`de verbinding met ${where} lukt niet. Controleer server en poort (587 met STARTTLS of 465 met SSL/TLS) en of de server naar buiten mag verbinden.`);
   }
   if (code === 'EENVELOPE') {
     return withReply(error.command === 'MAIL FROM'
