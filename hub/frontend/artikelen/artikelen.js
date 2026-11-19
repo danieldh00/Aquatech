@@ -467,13 +467,16 @@
 
   /**
    * Haalt de open prijsvoorstellen op (nieuwe verkoopprijs na een andere inkoopprijs). Een fout laat het scherm gewoon werken zonder voorstellen.
+   * @param {?string} [itemId] Alleen het voorstel van dit artikel verversen (artikelscherm), anders alle voorstellen.
    * @returns {Promise<void>}
    */
-  async function loadProposals() {
+  async function loadProposals(itemId = null) {
     try {
-      state.proposals = new Map((await api('stock/price-proposals')).items.map((entry) => [entry.id, entry]));
+      const items = (await api(`stock/price-proposals${itemId ? `?id=${encodeURIComponent(itemId)}` : ''}`)).items;
+      // Voor één artikel: alleen dat voorstel verversen, de rest van de lijst blijft staan.
+      if (itemId) { state.proposals.delete(itemId); for (const entry of items) state.proposals.set(entry.id, entry); } else state.proposals = new Map(items.map((entry) => [entry.id, entry]));
     } catch (error) {
-      state.proposals = new Map();
+      if (!itemId) state.proposals = new Map();
     }
   }
 
@@ -505,7 +508,12 @@
     const proposal = state.proposals.get(state.item.id);
     if (!proposal) return;
     for (const button of $('#d-proposal').querySelectorAll('button')) button.disabled = true;
-    const result = await api(`stock/price-factors/${action}`, { method: 'POST', body: { items: [{ id: proposal.id, newPrice: proposal.newPrice }] } });
+    let result;
+    try {
+      result = await api(`stock/price-factors/${action}`, { method: 'POST', body: { items: [{ id: proposal.id, newPrice: proposal.newPrice }] } });
+    } finally {
+      for (const button of $('#d-proposal').querySelectorAll('button')) button.disabled = false;
+    }
     const done = action === 'apply' ? result.updated : result.rejected;
     if (done) toast(action === 'apply' ? `Verkoopprijs gezet op ${eur(proposal.newPrice)}` : 'Voorstel genegeerd');
     else toast('Het voorstel is intussen gewijzigd; bekijk het nieuwe voorstel.', true);
@@ -1073,7 +1081,7 @@
    */
   async function openItem(id, push = false, pending = null, { focus = false, keepScroll = false } = {}) {
     try {
-      [state.item] = await Promise.all([pending || api(`stock/items/${encodeURIComponent(id)}`), loadProposals()]);
+      [state.item] = await Promise.all([pending || api(`stock/items/${encodeURIComponent(id)}`), loadProposals(id)]);
     } catch (error) {
       toast(error.status === 404 ? 'Artikel niet gevonden.' : error.message, true);
       showList();
