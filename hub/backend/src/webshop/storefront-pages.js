@@ -227,14 +227,12 @@ function navigation(groups, root) {
       ? `<li><details><summary>${escapeHtml(category.name)}</summary><ul><li><a href="${root}categorie/${escapeHtml(category.slug)}/">Alles in ${escapeHtml(category.name)}</a></li>${foldItems(children)}</ul></details></li>`
       : `<li>${link}</li>`;
   }).join('');
-  const allGroups = groups.map((group) => `<li class="has-sub"><span class="nav-heading" tabindex="0">${escapeHtml(group.name)}</span><ul class="nav-drop nav-fly">${flyItems(group.categories)}</ul></li>`).join('');
-  const search = `<li class="nav-all"><span class="nav-all-button" tabindex="0"><span class="nav-all-text">Product zoeken</span>${ICONS.down}</span><ul class="nav-drop">${allGroups}</ul></li>`;
   const extraPages = activeContent.pages.filter((page) => page.menu && page.slug !== 'over-ons');
   const wholesale = activeShop.wholesale ? `<li class="nav-about"><a href="${root}groothandel/">Groothandel</a></li>` : '';
   const about = `<li class="nav-about"><a href="${root}over-ons/">Over ons</a></li>${wholesale}${extraPages.map((page) => `<li class="nav-about"><a href="${root}pagina/${escapeHtml(page.slug)}/">${escapeHtml(page.title)}</a></li>`).join('')}`;
   const desktop = groups.map((group) => `<li class="nav-group"><span class="nav-heading" tabindex="0">${escapeHtml(group.name)}</span><ul class="nav-drop">${flyItems(group.categories)}</ul></li>`).join('');
   const mobile = groups.map((group) => `<li><details><summary>${escapeHtml(group.name)}</summary><ul>${foldItems(group.categories)}</ul></details></li>`).join('');
-  return `<nav class="shop-nav" aria-label="Productgroepen"><ul class="nav-bar">${search}${about}${desktop}<!--planner:${root}--></ul></nav>
+  return `<nav class="shop-nav" aria-label="Productgroepen"><ul class="nav-bar">${about}${desktop}<!--planner:${root}--></ul></nav>
 <details class="shop-menu"><summary>${ICONS.menu}<span>Alle productgroepen</span></summary><ul>${activeShop.staff ? `<li><a href="${root}app/">Naar het beheer</a></li>` : ''}${mobile}${activeShop.wholesale ? `<li><a href="${root}groothandel/">Groothandel</a></li>` : ''}${extraPages.map((page) => `<li><a href="${root}pagina/${escapeHtml(page.slug)}/">${escapeHtml(page.title)}</a></li>`).join('')}<!--planner:${root}--></ul></details>`;
 }
 

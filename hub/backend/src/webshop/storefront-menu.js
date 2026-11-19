@@ -27,7 +27,7 @@ function fitDropdown(list) {
  * @returns {void}
  */
 function onMenuEnter(event) {
-  const item = event.target.closest('.nav-group, .nav-all, .has-sub');
+  const item = event.target.closest('.nav-group, .has-sub');
   if (!item) return;
   const list = item.querySelector(':scope > .nav-drop');
   if (!list) return;
@@ -41,7 +41,7 @@ function onMenuEnter(event) {
  * @returns {void}
  */
 function onResize() {
-  for (const list of document.querySelectorAll('.nav-group:focus-within > .nav-drop, .nav-all:focus-within > .nav-drop, .has-sub:focus-within > .nav-drop')) fitDropdown(list);
+  for (const list of document.querySelectorAll('.nav-group:focus-within > .nav-drop, .has-sub:focus-within > .nav-drop')) fitDropdown(list);
 }
 
 window.addEventListener('resize', onResize);
