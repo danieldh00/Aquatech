@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.26.5',
+      date: '2026-11-19',
+      title: 'Strengere limieten op herstel- en bevestigingsmails',
+      items: [
+        { text: 'De webshop beperkt nu hoe vaak één e-mailadres een wachtwoordherstelmail kan krijgen en hoe vaak een account een nieuwe bevestigingsmail kan aanvragen.' },
+      ],
+    },
+    {
       version: '1.26.4',
       date: '2026-11-19',
       title: 'Nieuwe productkaarten in de webshop',

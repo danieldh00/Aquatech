@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.26.5
+
+- Wachtwoord vergeten: limiet van 5 aanvragen per uur per ontvangend adres, naast de limiet per bezoeker en de captcha; boven de limiet krijgt de bezoeker hetzelfde neutrale antwoord zonder mail.
+- Opnieuw een bevestigingsmail aanvragen (`POST /account/bevestigen`): limiet van 5 per uur per account en bezoeker.
+
 ## 1.26.4
 
 Alleen `webshop/storefront.css`: één kaartontwerp voor home en categorieën (de aparte `.browse`-kaartregels zijn samengevoegd). Foto met vaste verhouding die meegroeit, naam op twee regels, prijs en voorraad onder elkaar, aantal en knop onderaan op één lijn; container query op de kaart (`max-width: 200px`) maakt van de knop een icoon. Het artikelnummer en het aantal varianten staan niet meer op de kaart (zijn nog wel in de HTML voor het script).
