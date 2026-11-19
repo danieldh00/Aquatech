@@ -33,6 +33,7 @@
       { id: 'season', label: 'Seizoensherinneringen', pane: 'settings', form: 's-season', words: 'mail herinnering winterklaar onderhoud klantportaal' },
       { id: 'paymentreminders', label: 'Facturen: betalingsherinneringen', pane: 'settings', form: 's-payment-reminders', words: 'factuur herinnering aanmaning betaling vervallen te laat openstaand debiteuren mail automatisch' },
       { id: 'labels', label: 'Artikelen: etiketten', pane: 'settings', form: 's-labels', words: 'etiket sticker streepjescode barcode ean code 128 zebra labelprinter afdrukken' },
+      { id: 'kengetallen', label: 'Dashboard: kengetallen', pane: 'settings', form: 's-kpis', words: 'kpi kengetallen dashboard tegels omzet openstaand offertes bezetting voorraad werkorders webshop periode volgorde' },
       { id: 'bestelvoorstellen', label: 'Artikelen: bestelvoorstellen', pane: 'settings', form: 's-purchase-proposals', words: 'bestelvoorstel inkoop inkooporder minimumvoorraad automatisch concept leverancier bijbestellen' },
     ] },
     { title: 'Koppelingen', sections: [
@@ -63,7 +64,7 @@
   const ALIASES = { settings: 'modules' };
 
   /** Alle formulieren van het tabblad Instellingen: er is er telkens één zichtbaar. */
-  const SETTINGS_FORMS = ['s-modules', 's-outsourcing', 's-season', 's-payment-reminders', 's-labels', 's-purchase-proposals', 's-mail', 's-ai', 's-ai-connector', 's-access', 's-captcha', 's-security', 's-backup', 's-backup-drive', 's-vps', 's-restore', 's-debug'];
+  const SETTINGS_FORMS = ['s-modules', 's-outsourcing', 's-season', 's-payment-reminders', 's-labels', 's-purchase-proposals', 's-kpis', 's-mail', 's-ai', 's-ai-connector', 's-access', 's-captcha', 's-security', 's-backup', 's-backup-drive', 's-vps', 's-restore', 's-debug'];
 
   const OPEN_KEY = 'aquatech_beheer_groups';
 

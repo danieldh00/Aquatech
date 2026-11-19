@@ -462,6 +462,16 @@
           <div class="row"><button class="btn primary" type="submit">Opslaan</button></div>
           <div class="err" role="alert"></div>
         </form>
+        <form id="s-kpis" class="card-form settings">
+          <h3>Dashboard: kengetallen</h3>
+          <p class="muted small">Kies welke kengetallen beheerders op het dashboard zien en in welke volgorde. Een wijziging geldt meteen. Kengetallen van een module die uit staat kun je niet kiezen. Je ziet er alleen die bij jouw rechten horen.</p>
+          <ul id="s-kpis-list" class="kpi-settings" aria-label="Kengetallen"></ul>
+          <label class="field" id="s-kpis-period-field">Periode voor kengetallen over een tijdvak
+            <select name="period"></select>
+            <span class="hint">Geldt voor de kengetallen met het label <em>periode</em>, zoals gefactureerd of webshop-omzet.</span>
+          </label>
+          <div class="err" role="alert"></div>
+        </form>
         <form id="s-purchase-proposals" class="card-form settings">
           <h3>Automatische bestelvoorstellen</h3>
           <p class="muted small">Zakt een artikel onder de minimumvoorraad, dan zet AquaTech elk uur per voorkeursleverancier een concept-inkooporder klaar onder Inkooporders. Wat al onderweg is en wat op backorder staat telt mee. Er wordt nooit iets besteld zonder dat je het voorstel goedkeurt.</p>
@@ -1089,6 +1099,7 @@
   <script src="collapse-list.js"></script>
   <script src="drive-backup.js"></script>
   <script src="vps-draaiboek.js"></script>
+  <script src="dashboard-kpis.js"></script>
   <script src="backup-restore.js"></script>
   <script src="beheer.js"></script>
 </body>

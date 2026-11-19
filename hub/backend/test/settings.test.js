@@ -265,3 +265,27 @@ test('modules aan/uit via /api/config', async () => {
     server.close();
   }
 });
+
+test('kengetallen kiezen: instelling bewaren, module uit verbergt de KPI, volgorde en uitzetten werken op het dashboard', async () => {
+  const { server, base } = await start();
+  try {
+    const adminClient = await admin(base);
+    const catalog = (await adminClient.get('/app/api/admin/kpi-catalog')).body;
+    assert.ok(catalog.items.length >= 10);
+    assert.strictEqual(catalog.items.find((item) => item.key === 'bezetting').enabled, false, 'bezetting staat standaard uit');
+    const keys = async () => (await adminClient.get('/app/api/kpis')).body.kpis.map((tile) => tile.key);
+    assert.ok(!(await keys()).includes('bezetting'));
+    const saved = await adminClient.put('/app/api/admin/settings', { dashboardKpis: { items: [{ key: 'offertes', enabled: true }, { key: 'openstaand', enabled: true }, { key: 'vervallen', enabled: false }, { key: 'omzet', enabled: false }, { key: 'bezetting', enabled: true }], period: 'jaar' } });
+    assert.strictEqual(saved.status, 200);
+    assert.deepStrictEqual(await keys(), ['offertes', 'openstaand', 'bezetting']);
+    assert.strictEqual((await adminClient.get('/app/api/admin/kpi-catalog')).body.period, 'jaar');
+    await adminClient.put('/app/api/admin/settings', { modules: { planning: false } });
+    assert.deepStrictEqual(await keys(), ['offertes', 'openstaand'], 'module planning uit: geen bezetting');
+    assert.strictEqual((await adminClient.get('/app/api/admin/kpi-catalog')).body.items.find((item) => item.key === 'bezetting').available, false);
+    assert.strictEqual((await adminClient.put('/app/api/admin/settings', { dashboardKpis: 'kapot' })).status, 400, 'geen object = geweigerd');
+    assert.strictEqual((await adminClient.put('/app/api/admin/settings', { dashboardKpis: { items: [{ key: 'bestaat-niet' }], period: 'x' } })).status, 200);
+    assert.strictEqual((await adminClient.get('/app/api/admin/kpi-catalog')).body.period, 'maand', 'rommel in een object valt terug op de standaard');
+  } finally {
+    server.close();
+  }
+});
