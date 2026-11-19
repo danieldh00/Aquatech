@@ -1487,9 +1487,12 @@
     const stateElement = $('#m-graph-state');
     $('.err', formElement).textContent = '';
     stateElement.textContent = '';
+    stateElement.className = 'state';
     button.disabled = true;
+    let sessionId = '';
     try {
       const login = await api('mail/graph-setup', { method: 'POST', body: { from: formElement.from.value.trim() } });
+      sessionId = login.id;
       $('#m-graph-link').href = login.verificationUri;
       $('#m-graph-code').textContent = login.userCode;
       $('#m-graph-login').hidden = false;
@@ -1497,7 +1500,7 @@
       const deadline = Date.now() + login.expiresIn * 1000;
       while (Date.now() < deadline) {
         await new Promise((resolve) => { setTimeout(resolve, login.interval * 1000); });
-        const outcome = await api(`mail/graph-setup/${login.id}`);
+        const outcome = await api(`mail/graph-setup/${login.id}/poll`, { method: 'POST', body: {} });
         if (outcome.status === 'pending') continue;
         if (outcome.status === 'done') {
           $('#m-graph-login').hidden = true;
@@ -1512,7 +1515,9 @@
     } catch (error) {
       $('#m-graph-login').hidden = true;
       stateElement.textContent = '';
+      stateElement.className = 'state';
       $('.err', formElement).textContent = error.message;
+      if (sessionId) api(`mail/graph-setup/${sessionId}`, { method: 'DELETE' }).catch(() => {});
     } finally {
       button.disabled = false;
     }

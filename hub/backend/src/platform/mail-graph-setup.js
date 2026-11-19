@@ -15,6 +15,8 @@ const DEFAULT_SETUP_CLIENT = '04b07795-8ddb-461a-bbee-02f9e1bf7b46';
 const SCOPES = ['Application.ReadWrite.All', 'AppRoleAssignment.ReadWrite.All', 'Organization.Read.All'].map((scope) => `https://graph.microsoft.com/${scope}`).join(' ');
 const GRAPH_APP_ID = '00000003-0000-0000-c000-000000000000';
 const APP_NAME = 'AquaTech Hub mail';
+/** Markering waaraan we een door AquaTech aangemaakte app herkennen; een app met alleen dezelfde naam wordt niet aangeraakt. */
+const APP_TAG = 'aquatech-hub-mail';
 const SESSION_MS = 15 * 60 * 1000;
 const SECRET_MONTHS = 12;
 
@@ -29,7 +31,7 @@ const setupError = (message, status = 502) => Object.assign(new Error(message), 
 /**
  * Maakt de inrichting van Graph-mail.
  * @param {{ fetchImpl?: Function, now?: Function, clientId?: string }} [options] fetchImpl, now en het client-id van de inlog-app (tests).
- * @returns {{ start: Function, poll: Function, cancel: Function, provision: Function }} De functies.
+ * @returns {{ start: Function, poll: Function, cancel: Function, finish: Function, provision: Function }} De functies.
  */
 function createGraphSetup({ fetchImpl = fetch, now = Date.now, clientId = process.env.GRAPH_SETUP_CLIENT_ID || DEFAULT_SETUP_CLIENT } = {}) {
   /** Lopende inlogsessies: id → { tenantKey, userId, deviceCode, interval, nextPoll, expiresAt, from }. */
@@ -95,12 +97,16 @@ function createGraphSetup({ fetchImpl = fetch, now = Date.now, clientId = proces
     const role = graphPrincipal && (graphPrincipal.appRoles || []).find((appRole) => appRole.value === 'Mail.Send' && (appRole.allowedMemberTypes || []).includes('Application'));
     if (!role) throw setupError('De machtiging Mail.Send is niet gevonden in deze Microsoft-omgeving.');
 
-    const existing = await graph(token, 'GET', `/applications?$filter=displayName eq '${APP_NAME}'&$select=id,appId`);
+    const existing = await graph(token, 'GET', `/applications?$filter=${encodeURIComponent(`displayName eq '${APP_NAME}'`)}&$select=id,appId,tags`);
     expectOk(existing, 'het zoeken naar de app');
-    let application = existing.body.value && existing.body.value[0];
+    const found = existing.body.value || [];
+    if (found.length > 1 || (found.length === 1 && !(found[0].tags || []).includes(APP_TAG))) {
+      throw setupError(`In deze Microsoft-omgeving bestaat al een app met de naam "${APP_NAME}" die niet door AquaTech is aangemaakt (of er zijn er meerdere). Hernoem of verwijder die in Entra en probeer opnieuw, of gebruik het stappenplan.`, 409);
+    }
+    let application = found[0];
     if (!application) {
       const created = await graph(token, 'POST', '/applications', {
-        displayName: APP_NAME, signInAudience: 'AzureADMyOrg',
+        displayName: APP_NAME, signInAudience: 'AzureADMyOrg', tags: [APP_TAG],
         requiredResourceAccess: [{ resourceAppId: GRAPH_APP_ID, resourceAccess: [{ id: role.id, type: 'Role' }] }],
       });
       expectOk(created, 'het aanmaken van de app');
@@ -139,7 +145,19 @@ function createGraphSetup({ fetchImpl = fetch, now = Date.now, clientId = proces
     const id = crypto.randomBytes(16).toString('hex');
     const interval = Math.max(5, Number(body.interval) || 5);
     sessions.set(id, { tenantKey, userId, from, deviceCode: body.device_code, interval, nextPoll: 0, expiresAt: now() + Math.min(SESSION_MS, (Number(body.expires_in) || 900) * 1000) });
-    return { id, userCode: String(body.user_code), verificationUri: String(body.verification_uri || 'https://microsoft.com/devicelogin'), expiresIn: Math.round((sessions.get(id).expiresAt - now()) / 1000), interval };
+    return { id, userCode: String(body.user_code), verificationUri: /^https:\/\//.test(String(body.verification_uri || '')) ? String(body.verification_uri) : 'https://microsoft.com/devicelogin', expiresIn: Math.round((sessions.get(id).expiresAt - now()) / 1000), interval };
+  }
+
+  /**
+   * Richt alles in met het token van de sessie en bewaart de uitkomst in de sessie tot finish() (zo gaat een geheim dat
+   * al bij Microsoft bestaat niet verloren als het opslaan hier mislukt).
+   * @param {object} session De sessie met het token van de beheerder.
+   * @returns {Promise<{ status: string, result: object }>} Status done met de gegevens van de nieuwe app.
+   */
+  async function provisionFor(session) {
+    session.result = { ...(await provision(session.token)), from: session.from };
+    session.token = null;
+    return { status: 'done', result: session.result };
   }
 
   /**
@@ -151,6 +169,8 @@ function createGraphSetup({ fetchImpl = fetch, now = Date.now, clientId = proces
     const session = sessions.get(id);
     if (!session || session.tenantKey !== tenantKey || session.userId !== userId) return { status: 'expired', message: 'De inlogsessie bestaat niet meer. Start opnieuw.' };
     if (session.expiresAt <= now()) { sessions.delete(id); return { status: 'expired', message: 'De code is verlopen. Start opnieuw.' }; }
+    if (session.result) return { status: 'done', result: session.result };
+    if (session.token) return provisionFor(session);
     if (session.nextPoll > now()) return { status: 'pending' };
     session.nextPoll = now() + session.interval * 1000;
     const { status, body } = await call(`${LOGIN}/token`, {
@@ -166,9 +186,19 @@ function createGraphSetup({ fetchImpl = fetch, now = Date.now, clientId = proces
       if (code === 'expired_token') return { status: 'expired', message: 'De code is verlopen. Start opnieuw.' };
       return { status: 'denied', message: 'Microsoft weigerde de inlog (zie het stappenplan voor een handmatige inrichting).' };
     }
-    sessions.delete(id);
-    const result = await provision(body.access_token);
-    return { status: 'done', result: { ...result, from: session.from } };
+    // Het token blijft kort bij de sessie tot alles is ingesteld: mislukt een stap, dan kan dezelfde sessie opnieuw proberen.
+    session.token = body.access_token;
+    session.expiresAt = now() + SESSION_MS;
+    return provisionFor(session);
+  }
+
+  /**
+   * Sluit een geslaagde inrichting af (nadat de gegevens zijn opgeslagen): de sessie en het geheim verdwijnen uit het geheugen.
+   * @param {{ id: string, tenantKey: string, userId: string }} query De sessie en wie vraagt.
+   * @returns {void}
+   */
+  function finish(query) {
+    cancel(query);
   }
 
   /**
@@ -181,7 +211,7 @@ function createGraphSetup({ fetchImpl = fetch, now = Date.now, clientId = proces
     if (session && session.tenantKey === tenantKey && session.userId === userId) sessions.delete(id);
   }
 
-  return { start, poll, cancel, provision };
+  return { start, poll, cancel, finish, provision };
 }
 
 /**
@@ -212,7 +242,7 @@ function registerGraphSetupRoutes(app, { setup, settingsFor, requireAdmin, audit
     }
   });
 
-  app.get(`${BASE}/:id`, requireAdmin, pollLimiter, async (req, res) => {
+  app.post(`${BASE}/:id/poll`, requireAdmin, pollLimiter, async (req, res) => {
     try {
       const outcome = await setup.poll({ id: String(req.params.id), ...owner(req) });
       if (outcome.status !== 'done') return res.json({ status: outcome.status, message: outcome.message });
@@ -222,6 +252,7 @@ function registerGraphSetupRoutes(app, { setup, settingsFor, requireAdmin, audit
         mailServer: { ...current, mode: 'graph', graphTenantId: outcome.result.tenantId, graphClientId: outcome.result.clientId, graphSecretExpires: outcome.result.expiresAt.slice(0, 10), from: outcome.result.from || current.from },
         mailGraphSecret: outcome.result.secret,
       }, req.user?.id);
+      setup.finish({ id: String(req.params.id), ...owner(req) });
       audit(req, 'mail_graph_ingericht', { organization: outcome.result.organization, clientId: outcome.result.clientId });
       res.json({ status: 'done', tenantId: outcome.result.tenantId, clientId: outcome.result.clientId, expiresAt: outcome.result.expiresAt, organization: outcome.result.organization });
     } catch (error) {

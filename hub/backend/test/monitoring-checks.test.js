@@ -163,12 +163,12 @@ test('mail-secret: 30 dagen vooraf een waarschuwing, verlopen is een fout, zonde
   const dayAhead = (days) => new Date(NOW + days * 24 * HOUR).toISOString().slice(0, 10);
   assert.deepStrictEqual(await runCheck(build({ mode: 'smtp' }), 'mail-secret'), { skip: true });
   assert.deepStrictEqual(await runCheck(build({ mode: 'graph', graphSecretExpires: dayAhead(90) }), 'mail-secret'), { ok: true });
-  assert.deepStrictEqual(await runCheck(build({ mode: 'graph', graphSecretExpires: dayAhead(31) }), 'mail-secret'), { ok: true });
-  const soon = await runCheck(build({ mode: 'graph', graphSecretExpires: dayAhead(30) }), 'mail-secret');
+  assert.deepStrictEqual(await runCheck(build({ mode: 'graph', graphSecretExpires: dayAhead(32) }), 'mail-secret'), { ok: true });
+  const soon = await runCheck(build({ mode: 'graph', graphSecretExpires: dayAhead(31) }), 'mail-secret');
   assert.strictEqual(soon.severity, 'waarschuwing');
-  assert.match(soon.message, /verloopt over 30 dagen/);
+  assert.match(soon.message, /verloopt uiterlijk over 30 dagen/);
   assert.strictEqual((await runCheck(build({ mode: 'graph', graphSecretExpires: dayAhead(1) }), 'mail-secret')).severity, 'waarschuwing');
-  const expired = await runCheck(build({ mode: 'graph', graphSecretExpires: dayAhead(-2) }), 'mail-secret');
+  const expired = await runCheck(build({ mode: 'graph', graphSecretExpires: dayAhead(0) }), 'mail-secret');
   assert.strictEqual(expired.severity, 'fout');
   assert.match(expired.message, /is verlopen/);
   assert.match((await runCheck(build({ mode: 'graph' }), 'mail-secret')).message, /vervaldatum.*niet ingevuld/);

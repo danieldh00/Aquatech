@@ -14,7 +14,7 @@ const ROLE_ID = 'b633e1c5-b582-4048-a93e-9f11b44c7e96';
 
 /**
  * Nagebootst Microsoft voor de inrichting.
- * @param {{ pendingPolls?: number, existingApp?: boolean, denyAssignment?: boolean, tokenError?: string, slowDown?: boolean }} [plan] Wat Microsoft doet.
+ * @param {{ pendingPolls?: number, existingApp?: boolean, denyAssignment?: boolean, tokenError?: string, slowDown?: boolean, foreignApp?: boolean, failPassword?: boolean }} [plan] Wat Microsoft doet.
  * @returns {{ fetchImpl: Function, calls: object[] }} De fetch en de aanroepen.
  */
 function fakeMicrosoft(plan = {}) {
@@ -47,12 +47,13 @@ function fakeMicrosoft(plan = {}) {
     const method = init.method || 'GET';
     if (path.startsWith('/organization')) return reply(200, { value: [{ id: TENANT, displayName: 'Bedrijf BV' }] });
     if (method === 'GET' && path.includes(`appId eq '00000003`)) return reply(200, { value: [{ id: 'graph-sp', appRoles: [{ id: ROLE_ID, value: 'Mail.Send', allowedMemberTypes: ['Application'] }, { id: 'x', value: 'Mail.Read', allowedMemberTypes: ['Application'] }] }] });
-    if (method === 'GET' && path.startsWith('/applications?')) return reply(200, { value: plan.existingApp ? [{ id: 'app-object', appId: APP_ID }] : [] });
+    if (method === 'GET' && path.startsWith('/applications?')) return reply(200, { value: plan.foreignApp ? [{ id: 'andere', appId: 'x', tags: [] }] : plan.existingApp ? [{ id: 'app-object', appId: APP_ID, tags: ['aquatech-hub-mail'] }] : [] });
     if (method === 'POST' && path === '/applications') return reply(201, { id: 'app-object', appId: APP_ID });
     if (method === 'GET' && path.startsWith('/servicePrincipals?')) return reply(200, { value: plan.existingApp ? [{ id: 'app-sp' }] : [] });
     if (method === 'POST' && path === '/servicePrincipals') return reply(201, { id: 'app-sp' });
     if (path.endsWith('/appRoleAssignedTo')) return plan.denyAssignment ? reply(403, { error: { code: 'Authorization_RequestDenied' } }) : reply(201, {});
     if (path.endsWith('/sendMail')) return reply(202, {});
+    if (path.endsWith('/addPassword') && plan.failPassword && !plan.passwordTried) { plan.passwordTried = true; return reply(500, {}); }
     if (path.endsWith('/addPassword')) return reply(200, { secretText: 'Nieuw-Clientgeheim~42' });
     return reply(404, {});
   };
@@ -81,7 +82,9 @@ test('inrichting: wachten op inlog, dan app, service principal, machtiging Mail.
   assert.deepStrictEqual(created.requiredResourceAccess[0].resourceAccess, [{ id: ROLE_ID, type: 'Role' }]);
   const assigned = JSON.parse(microsoft.calls.find((call) => call.url.endsWith('/appRoleAssignedTo')).body);
   assert.deepStrictEqual(assigned, { principalId: 'app-sp', resourceId: 'graph-sp', appRoleId: ROLE_ID });
-  assert.strictEqual((await setup.poll({ id: login.id, ...owner })).status, 'expired', 'sessie is gebruikt');
+  assert.strictEqual((await setup.poll({ id: login.id, ...owner })).status, 'done', 'resultaat blijft tot finish');
+  setup.finish({ id: login.id, ...owner });
+  assert.strictEqual((await setup.poll({ id: login.id, ...owner })).status, 'expired', 'sessie is afgesloten');
 });
 
 test('inrichting: slow_down vertraagt, geweigerde of verlopen inlog en een onbereikbaar Microsoft geven een leesbare uitkomst', async () => {
@@ -117,8 +120,24 @@ test('inrichting: bestaande app krijgt alleen een nieuw geheim; andere gebruiker
   setup.cancel({ id: login.id, tenantKey: 't1', userId: 'u1' });
   assert.strictEqual((await setup.poll({ id: login.id, tenantKey: 't1', userId: 'u1' })).status, 'expired');
 
+  const foreign = createGraphSetup({ fetchImpl: fakeMicrosoft({ foreignApp: true }).fetchImpl });
+  await assert.rejects(foreign.provision('t'), (error) => error.status === 409 && /niet door AquaTech is aangemaakt/.test(error.message));
   const denied = createGraphSetup({ fetchImpl: fakeMicrosoft({ denyAssignment: true }).fetchImpl });
   await assert.rejects(denied.provision('t'), (error) => /weigerde het verlenen van de machtiging Mail\.Send \(Authorization_RequestDenied\).*Globale beheerder/.test(error.message));
+});
+
+test('inrichting: een mislukte stap houdt de sessie; opnieuw vragen herhaalt zonder opnieuw in te loggen', async () => {
+  const microsoft = fakeMicrosoft({ failPassword: true, existingApp: true });
+  const setup = createGraphSetup({ fetchImpl: microsoft.fetchImpl });
+  const owner = { tenantKey: 't1', userId: 'u1' };
+  const login = await setup.start(owner);
+  await assert.rejects(setup.poll({ id: login.id, ...owner }), /Microsoft gaf een fout bij het aanmaken van het clientgeheim/);
+  const retry = await setup.poll({ id: login.id, ...owner });
+  assert.strictEqual(retry.status, 'done');
+  assert.strictEqual(microsoft.calls.filter((call) => call.url.endsWith('/oauth2/v2.0/token')).length, 1, 'geen tweede inlog nodig');
+  assert.strictEqual((await setup.poll({ id: login.id, ...owner })).status, 'done', 'uitkomst blijft tot finish');
+  setup.finish({ id: login.id, ...owner });
+  assert.strictEqual((await setup.poll({ id: login.id, ...owner })).status, 'expired');
 });
 
 test('API: inrichten zet mailServer en het versleutelde geheim; alleen beheerder; geheim nooit in het antwoord', async () => {
@@ -138,8 +157,8 @@ test('API: inrichten zet mailServer en het versleutelde geheim; alleen beheerder
     const started = await baas.post('/app/api/admin/mail/graph-setup', { from: 'AquaTech <offerte@bedrijf.nl>' });
     assert.strictEqual(started.status, 200);
     assert.strictEqual(started.body.userCode, 'ABCD1234');
-    assert.strictEqual((await kees.get(`/app/api/admin/mail/graph-setup/${started.body.id}`)).status, 403);
-    const polled = await baas.get(`/app/api/admin/mail/graph-setup/${started.body.id}`);
+    assert.strictEqual((await kees.post(`/app/api/admin/mail/graph-setup/${started.body.id}/poll`, {})).status, 403);
+    const polled = await baas.post(`/app/api/admin/mail/graph-setup/${started.body.id}/poll`, {});
     assert.strictEqual(polled.body.status, 'done');
     assert.strictEqual(polled.body.clientId, APP_ID);
     assert.ok(!JSON.stringify(polled.body).includes('Nieuw-Clientgeheim'), 'geheim niet naar de browser');
@@ -152,7 +171,7 @@ test('API: inrichten zet mailServer en het versleutelde geheim; alleen beheerder
     assert.match(mail.config.graphSecretExpires, /^\d{4}-\d{2}-\d{2}$/, 'vervaldatum van het geheim bewaard');
     assert.ok(!JSON.stringify((await baas.get('/app/api/admin/settings')).body).includes('Nieuw-Clientgeheim'));
     assert.strictEqual((await baas.post('/app/api/admin/mail/test', { to: 'info@bedrijf.nl' })).status, 200, 'testmail met het nieuwe geheim');
-    assert.strictEqual((await baas.get(`/app/api/admin/mail/graph-setup/${started.body.id}`)).body.status, 'expired', 'sessie is gebruikt');
+    assert.strictEqual((await baas.post(`/app/api/admin/mail/graph-setup/${started.body.id}/poll`, {})).body.status, 'expired', 'sessie is afgesloten');
     assert.strictEqual((await baas.del(`/app/api/admin/mail/graph-setup/${started.body.id}`)).status, 200);
   } finally {
     server.close();
