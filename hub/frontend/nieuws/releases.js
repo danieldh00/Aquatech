@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.26.3',
+      date: '2026-11-19',
+      title: 'Offertes in bulk mailen',
+      items: [
+        { text: 'In het offerteoverzicht kun je meerdere offertes aanvinken en in één keer per e-mail versturen. Elke klant krijgt het standaardbericht met de link; vooraf zie je het aantal en offertes zonder e-mailadres worden overgeslagen.', for: ['offertes'] },
+      ],
+    },
+    {
       version: '1.26.2',
       date: '2026-11-19',
       title: 'Bulkacties in de factuurlijst',

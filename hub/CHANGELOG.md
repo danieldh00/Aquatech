@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.26.3
+
+`POST /api/quotes-bulk/send` ({ ids (max. 10), url }, recht `offertes`, 10 verzoeken per uur per gebruiker, mailserver vereist): per offerte dezelfde stappen als `POST /api/quotes/:id/send` (link maken, mail via `mailBody`, `markSent`, audit `offerte_verstuurd` met `via: 'bulk'`) met het standaardbericht in de documenttaal van de offerte, gericht aan `customer.email`. Bij een mailfout wordt een concept weer teruggezet (link ingetrokken). Beantwoorde, omgezette en afgesloten offertes, onbekende id's en offertes zonder geldig adres worden overgeslagen en met reden teruggemeld. Knop in de bulkbalk van de offertelijst met één bevestiging. Test: `test/quotes-bulk-send.test.js`. Bouwt voort op de bulkbalk uit de selectie-PR.
+
 ## 1.26.2
 
 Factuurlijst (`frontend/facturen/`): selectiekolom, bulkbalk en knop *Exporteer naar Excel* (selectie, of alle zichtbare facturen zonder selectie). *Versturen per e-mail* loopt per definitieve factuur over de bestaande routes `GET /api/invoices/:id/mail` (voorstel) en `POST /api/invoices/:id/send`, met één bevestiging vooraf; facturen zonder e-mailadres en fouten worden per factuur gemeld en overgeslagen, zonder mailserver stopt de ronde. Geen nieuwe API of migratie.
