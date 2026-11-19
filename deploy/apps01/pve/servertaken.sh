@@ -7,6 +7,7 @@
 #   bash servertaken.sh migraties        controleert de databaseversie; loopt hij achter, dan de app herstarten (migreren)
 #   bash servertaken.sh update           nu updaten naar de nieuwste versie in GHCR (met back-up en terugval)
 #   bash servertaken.sh schijf           toont wat de schijf vult en ruimt na bevestiging op (oude app-images, build-cache, journal)
+#                                        en werkt update.sh op de server bij (met UPDATE_SH_REF=<volledige commit>; zonder blijft hij ongemoeid)
 #   bash servertaken.sh help             deze uitleg
 #
 # Opties: --yes (of YES=1) = geen bevestigingsvraag (voor automatisering). `migraties` en `update` herstarten de app,
@@ -323,10 +324,38 @@ remote_disk_check() {
   (( old_count > 0 || reclaimable > 0 )) && return 10
   return 0
 }
+# Haalt update.sh uit GitHub op een vaste commit (UPDATE_SH_REF, 40 tekens; zonder verwijzing gebeurt er niets) en installeert hem in APP_DIR als hij
+# afwijkt. Eerst controleren (syntaxis, verwachte inhoud), de oude blijft als update.sh.bak-<datum>. Mislukt het, dan blijft de
+# huidige update.sh staan en gaat het opruimen gewoon door.
+refresh_update_script() {
+  local ref="${UPDATE_SH_REF:-}" base="${UPDATE_SH_BASE:-https://raw.githubusercontent.com/danieldh00/Aquatech}" tmp
+  # Alleen een vaste commit (geen master): een root-script op de server mag niet meeveranderen met een branch.
+  [[ -n "$ref" ]] || { echo "  update.sh niet bijgewerkt: geef UPDATE_SH_REF=<commit van 40 tekens> mee"; return 0; }
+  [[ "$ref" =~ ^[0-9a-f]{40}$ ]] || { echo "  update.sh niet bijgewerkt: ongeldige verwijzing '$ref' (een volledige commit is nodig)"; return 0; }
+  tmp="$(mktemp)"
+  if ! curl -fsSL -m 30 "$base/$ref/deploy/apps01/update.sh" -o "$tmp" 2>/dev/null; then echo "  update.sh niet bijgewerkt: ophalen mislukt"; rm -f "$tmp"; return 0; fi
+  if ! bash -n "$tmp" 2>/dev/null || ! grep -q '^VERSION_RE=' "$tmp" || ! grep -q 'org.opencontainers.image.version' "$tmp"; then
+    echo "  update.sh niet bijgewerkt: het opgehaalde bestand is niet zoals verwacht"; rm -f "$tmp"; return 0
+  fi
+  if cmp -s "$tmp" "$APP_DIR/update.sh"; then echo "  update.sh is al de nieuwste"; rm -f "$tmp"; return 0; fi
+  # Niet midden in een lopende update het bestand vervangen.
+  if [[ -f "$APP_DIR/update/status/maintenance.json" ]] || [[ "$(json_field "$APP_DIR/update/status/run.json" state)" == "bezig" ]]; then
+    echo "  update.sh niet bijgewerkt: er loopt een update (probeer het straks opnieuw)"; rm -f "$tmp"; return 0
+  fi
+  if [[ -f "$APP_DIR/update.sh" ]] && ! cp "$APP_DIR/update.sh" "$APP_DIR/update.sh.bak-$(date +%Y%m%d%H%M%S)" 2>/dev/null; then
+    echo "  update.sh niet bijgewerkt: back-up van de huidige mislukt (schijf vol?)"; rm -f "$tmp"; return 0
+  fi
+  install -m 755 "$tmp" "$APP_DIR/update.sh" || { echo "  update.sh niet bijgewerkt: installeren mislukt"; rm -f "$tmp"; return 0; }
+  echo "  update.sh bijgewerkt (oude als update.sh.bak-<datum> bewaard)"
+  # Alleen de laatste drie back-ups van update.sh bewaren.
+  { ls -1 "$APP_DIR"/update.sh.bak-* 2>/dev/null || true; } | sort | head -n -3 | xargs -r rm -f --
+  rm -f "$tmp"
+}
 # Ruimt veilig op: oude app-images (de draaiende versie en de twee nieuwste blijven), ongebruikte images, build-cache,
-# journal tot 200 MB en de apt-cache. Raakt geen volumes, geen back-ups en geen database.
+# journal tot 200 MB en de apt-cache, en werkt update.sh op de server bij (zodat uitrollen voortaan zelf opruimen). Raakt geen volumes, geen back-ups en geen database.
 remote_disk_run() {
   local before after tag
+  refresh_update_script
   before="$(df --output=avail -B1M / | tail -n1 | tr -d ' ')"
   for tag in $(disk_old_tags); do
     docker rmi "$IMAGE:$tag" >/dev/null 2>&1 && echo "  verwijderd: $IMAGE:$tag" || echo "  blijft staan (in gebruik): $IMAGE:$tag"
@@ -368,7 +397,7 @@ fi
 # =====================================================================================================================
 NAME="${APPS01_NAME:-apps01}"
 die() { echo "FOUT: $*" >&2; exit 1; }
-usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 ARGS=()
 for argument in "$@"; do
@@ -430,6 +459,7 @@ if [[ "$MODE" == "ssh" && "$SSH_TARGET" == *@* && "${SSH_TARGET%%@*}" != "root" 
 # Voert dit bestand op de server uit met een opdracht (het bestand gaat via stdin mee).
 remote() { # <opdracht> [argumenten...]
   local environment=(SERVERTAKEN_REMOTE=1 "APP_DIR=$APP_DIR" "LOG_SINCE=${LOG_SINCE:-24h}")
+  [[ -n "${UPDATE_SH_REF:-}" ]] && environment+=("UPDATE_SH_REF=$UPDATE_SH_REF")
   if [[ "$MODE" == "pct" ]]; then
     pct exec "$GUEST_ID" -- env "${environment[@]}" bash -s -- "$@" <"$0"
   else
@@ -470,6 +500,6 @@ case "$ACTION" in
   status) remote status ;;
   logs) remote logs "${ARGS[@]:1}" ;;
   migraties) two_step migraties "De app wordt na een back-up herstart en is daarbij ca. 1 minuut niet beschikbaar; bij het starten draaien de migraties." ;;
-  schijf) two_step schijf "Oude app-images, build-cache en oude journal worden verwijderd (de draaiende en de twee nieuwste versies blijven; volumes, back-ups en database blijven onaangeroerd). De app blijft gewoon draaien." ;;
+  schijf) two_step schijf "Oude app-images, build-cache en oude journal worden verwijderd en update.sh op de server wordt bijgewerkt (de draaiende en de twee nieuwste versies blijven; volumes, back-ups en database blijven onaangeroerd). De app blijft gewoon draaien." ;;
   update) two_step update "De app wordt na een back-up vervangen door de nieuwste versie (ca. 1-3 minuten onderhoudsmodus). Lukt het niet, dan zet update.sh de vorige versie terug." ;;
 esac
