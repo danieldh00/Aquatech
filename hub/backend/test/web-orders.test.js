@@ -214,6 +214,11 @@ test('openstaande taken (dashboard): bestellingen nieuw, oudste eerst, per omgev
   assert.strictEqual((await ordersTask(admin)).count, 5, 'verzonden en geannuleerde bestellingen zijn verwerkt');
   // Een online bestelling telt pas mee als hij betaald is.
   const online = orders[1];
+  /**
+   * Zet de bestelling op online betalen met de gegeven betaalstatus.
+   * @param {string} status De betaalstatus (open of betaald).
+   * @returns {void}
+   */
   const setPay = (status) => {
     const row = db.prepare('SELECT data FROM web_orders WHERE id = ?').get(online.id);
     const data = JSON.parse(row.data);
