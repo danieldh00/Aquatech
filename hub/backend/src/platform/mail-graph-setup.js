@@ -160,7 +160,7 @@ function createGraphSetup({ fetchImpl = fetch, now = Date.now, clientId = proces
     if (status !== 200) {
       const code = String(body && body.error || '');
       if (code === 'authorization_pending') return { status: 'pending' };
-      if (code === 'slow_down') { session.interval += 5; return { status: 'pending' }; }
+      if (code === 'slow_down') { session.interval += 5; session.nextPoll = now() + session.interval * 1000; return { status: 'pending' }; }
       sessions.delete(id);
       if (code === 'authorization_declined') return { status: 'denied', message: 'De inlog is geweigerd.' };
       if (code === 'expired_token') return { status: 'expired', message: 'De code is verlopen. Start opnieuw.' };

@@ -1,154 +1,162 @@
-// Mail via Microsoft Graph: verzenden, foutmeldingen, instellingen (geheim versleuteld) en de testmail in Beheer.
+// Automatische inrichting van Graph-mail: inloggen met een Microsoft-code, daarna app, machtiging en geheim aanmaken.
 const test = require('node:test');
 const assert = require('node:assert');
 const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
-const { createMailer, sanitizeMail, mailFailure } = require('../src/platform/mailer');
-const { createGraphSender, parseSender } = require('../src/platform/mail-graph');
+const { createGraphSetup } = require('../src/platform/mail-graph-setup');
 const { createLogin, listen } = require('./helpers/http-client');
 
-const SECRET = 'test-secret-graph-0123456789abcdef';
+const SECRET = 'test-secret-graph-setup-0123456789';
 const TENANT = '11111111-2222-3333-4444-555555555555';
-const CLIENT = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+const APP_ID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+const ROLE_ID = 'b633e1c5-b582-4048-a93e-9f11b44c7e96';
 
 /**
- * Nagebootst Microsoft: een token-adres en sendMail; `plan` kiest de uitkomst.
- * @param {{ token?: number, send?: number, sendBody?: object, tokenBody?: object }} plan Statuscodes en antwoorden.
- * @returns {{ fetchImpl: Function, calls: object[] }} De fetch en de vastgelegde aanroepen.
+ * Nagebootst Microsoft voor de inrichting.
+ * @param {{ pendingPolls?: number, existingApp?: boolean, denyAssignment?: boolean, tokenError?: string, slowDown?: boolean }} [plan] Wat Microsoft doet.
+ * @returns {{ fetchImpl: Function, calls: object[] }} De fetch en de aanroepen.
  */
 function fakeMicrosoft(plan = {}) {
   const calls = [];
+  let polls = 0;
+  /**
+   * Een nagebootst antwoord.
+   * @param {number} status De statuscode.
+   * @param {object} body Het JSON-antwoord.
+   * @returns {{ status: number, json: Function }} Het antwoord.
+   */
+  const reply = (status, body) => ({ status, json: async () => body });
   /**
    * De nagebootste fetch.
    * @param {string} url Het adres.
    * @param {object} init De opties.
-   * @returns {Promise<object>} Een antwoord met status en json().
+   * @returns {Promise<object>} Het antwoord.
    */
-  const fetchImpl = async (url, init) => {
-    calls.push({ url, init });
-    const isToken = url.includes('/oauth2/v2.0/token');
-    const status = isToken ? plan.token || 200 : plan.send || 202;
-    const body = isToken ? plan.tokenBody || (status === 200 ? { access_token: 'tok', expires_in: 3600 } : {}) : plan.sendBody || {};
-    return { status, json: async () => body };
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url, method: init.method || 'GET', body: init.body });
+    if (url.endsWith('/devicecode')) return reply(200, { device_code: 'dc-geheim', user_code: 'ABCD1234', verification_uri: 'https://microsoft.com/devicelogin', expires_in: 900, interval: 5 });
+    if (url.endsWith('/oauth2/v2.0/token')) {
+      polls += 1;
+      if (plan.tokenError) return reply(400, { error: plan.tokenError });
+      if (plan.slowDown && polls === 1) return reply(400, { error: 'slow_down' });
+      if (polls <= (plan.pendingPolls || 0)) return reply(400, { error: 'authorization_pending' });
+      return reply(200, { access_token: 'admin-token' });
+    }
+    const path = url.replace('https://graph.microsoft.com/v1.0', '');
+    const method = init.method || 'GET';
+    if (path.startsWith('/organization')) return reply(200, { value: [{ id: TENANT, displayName: 'Bedrijf BV' }] });
+    if (method === 'GET' && path.includes(`appId eq '00000003`)) return reply(200, { value: [{ id: 'graph-sp', appRoles: [{ id: ROLE_ID, value: 'Mail.Send', allowedMemberTypes: ['Application'] }, { id: 'x', value: 'Mail.Read', allowedMemberTypes: ['Application'] }] }] });
+    if (method === 'GET' && path.startsWith('/applications?')) return reply(200, { value: plan.existingApp ? [{ id: 'app-object', appId: APP_ID }] : [] });
+    if (method === 'POST' && path === '/applications') return reply(201, { id: 'app-object', appId: APP_ID });
+    if (method === 'GET' && path.startsWith('/servicePrincipals?')) return reply(200, { value: plan.existingApp ? [{ id: 'app-sp' }] : [] });
+    if (method === 'POST' && path === '/servicePrincipals') return reply(201, { id: 'app-sp' });
+    if (path.endsWith('/appRoleAssignedTo')) return plan.denyAssignment ? reply(403, { error: { code: 'Authorization_RequestDenied' } }) : reply(201, {});
+    if (path.endsWith('/sendMail')) return reply(202, {});
+    if (path.endsWith('/addPassword')) return reply(200, { secretText: 'Nieuw-Clientgeheim~42' });
+    return reply(404, {});
   };
   return { fetchImpl, calls };
 }
 
-test('sanitizeMail: soort graph met geldige id\'s, ongeldige waarden worden leeg', () => {
-  const ok = sanitizeMail({ mode: 'graph', graphTenantId: TENANT, graphClientId: CLIENT, from: 'a@b.nl', user: 'x' });
-  assert.strictEqual(ok.mode, 'graph');
-  assert.strictEqual(ok.graphTenantId, TENANT);
-  assert.strictEqual(ok.graphClientId, CLIENT);
-  assert.strictEqual(ok.user, '');
-  assert.strictEqual(sanitizeMail({ mode: 'graph', graphTenantId: 'x/../y', graphClientId: 'nee' }).graphTenantId, '');
-  assert.strictEqual(sanitizeMail({ mode: 'graph', graphTenantId: 'bedrijf.onmicrosoft.com' }).graphTenantId, 'bedrijf.onmicrosoft.com');
-  assert.strictEqual(sanitizeMail({ mode: 'graph', graphClientId: 'nee' }).graphClientId, '');
-  assert.strictEqual(sanitizeMail({ mode: 'graph', graphSecretExpires: '2027-05-31' }).graphSecretExpires, '2027-05-31');
-  assert.strictEqual(sanitizeMail({ mode: 'graph', graphSecretExpires: '31-05-2027' }).graphSecretExpires, '');
-  assert.strictEqual(sanitizeMail({ mode: 'graph', graphSecretExpires: '2027-13-45' }).graphSecretExpires, '');
+test('inrichting: wachten op inlog, dan app, service principal, machtiging Mail.Send en geheim', async () => {
+  const microsoft = fakeMicrosoft({ pendingPolls: 1 });
+  let time = 1_000_000;
+  const setup = createGraphSetup({ fetchImpl: microsoft.fetchImpl, now: () => time });
+  const owner = { tenantKey: 't1', userId: 'u1' };
+  const login = await setup.start({ ...owner, from: 'offerte@bedrijf.nl' });
+  assert.strictEqual(login.userCode, 'ABCD1234');
+  assert.ok(!JSON.stringify(login).includes('dc-geheim'), 'device code blijft op de server');
+  assert.deepStrictEqual(await setup.poll({ id: login.id, ...owner }), { status: 'pending' });
+  assert.deepStrictEqual(await setup.poll({ id: login.id, ...owner }), { status: 'pending' }, 'te snel vragen: wachten');
+  time += 6000;
+  const done = await setup.poll({ id: login.id, ...owner });
+  assert.strictEqual(done.status, 'done');
+  assert.strictEqual(done.result.tenantId, TENANT);
+  assert.strictEqual(done.result.clientId, APP_ID);
+  assert.strictEqual(done.result.secret, 'Nieuw-Clientgeheim~42');
+  assert.strictEqual(done.result.from, 'offerte@bedrijf.nl');
+  const created = JSON.parse(microsoft.calls.find((call) => call.method === 'POST' && call.url.endsWith('/applications')).body);
+  assert.strictEqual(created.signInAudience, 'AzureADMyOrg');
+  assert.deepStrictEqual(created.requiredResourceAccess[0].resourceAccess, [{ id: ROLE_ID, type: 'Role' }]);
+  const assigned = JSON.parse(microsoft.calls.find((call) => call.url.endsWith('/appRoleAssignedTo')).body);
+  assert.deepStrictEqual(assigned, { principalId: 'app-sp', resourceId: 'graph-sp', appRoleId: ROLE_ID });
+  assert.strictEqual((await setup.poll({ id: login.id, ...owner })).status, 'expired', 'sessie is gebruikt');
 });
 
-test('parseSender: naam en adres', () => {
-  assert.deepStrictEqual(parseSender('AquaTech Service <offerte@bedrijf.nl>'), { address: 'offerte@bedrijf.nl', name: 'AquaTech Service' });
-  assert.deepStrictEqual(parseSender('offerte@bedrijf.nl'), { address: 'offerte@bedrijf.nl', name: '' });
+test('inrichting: slow_down vertraagt, geweigerde of verlopen inlog en een onbereikbaar Microsoft geven een leesbare uitkomst', async () => {
+  let time = 1_000_000;
+  const slow = createGraphSetup({ fetchImpl: fakeMicrosoft({ slowDown: true, pendingPolls: 1 }).fetchImpl, now: () => time });
+  const owner = { tenantKey: 't1', userId: 'u1' };
+  const login = await slow.start(owner);
+  assert.deepStrictEqual(await slow.poll({ id: login.id, ...owner }), { status: 'pending' });
+  time += 6000;
+  assert.deepStrictEqual(await slow.poll({ id: login.id, ...owner }), { status: 'pending' }, 'interval is met 5 s verlengd');
+  const declined = createGraphSetup({ fetchImpl: fakeMicrosoft({ tokenError: 'authorization_declined' }).fetchImpl });
+  const first = await declined.start(owner);
+  assert.strictEqual((await declined.poll({ id: first.id, ...owner })).status, 'denied');
+  const expired = createGraphSetup({ fetchImpl: fakeMicrosoft({ tokenError: 'expired_token' }).fetchImpl });
+  const second = await expired.start(owner);
+  assert.strictEqual((await expired.poll({ id: second.id, ...owner })).status, 'expired');
+  const offline = createGraphSetup({ fetchImpl: async () => { throw new Error('netwerk'); } });
+  await assert.rejects(offline.start(owner), /Microsoft is niet bereikbaar/);
 });
 
-test('Graph: token + sendMail met ontvangers, bijlage en inline afbeelding; token wordt onthouden', async () => {
-  const { fetchImpl, calls } = fakeMicrosoft();
-  const sender = createGraphSender({ tenantId: TENANT, clientId: CLIENT, clientSecret: 'cs-uniek-1', from: 'AquaTech <offerte@bedrijf.nl>' }, { fetchImpl });
-  const payload = { to: ['klant@x.nl'], bcc: 'kopie@bedrijf.nl', replyTo: 'info@bedrijf.nl', subject: 'Offerte', html: '<p>Hoi</p>', attachments: [{ filename: 'o.pdf', content: Buffer.from('pdf'), contentType: 'application/pdf' }, { filename: 'a.png', content: Buffer.from('png'), contentType: 'image/png', cid: 'afbeelding1@aquatech' }] };
-  await sender.send(payload);
-  await sender.send(payload);
-  assert.strictEqual(calls.filter((call) => call.url.includes('/token')).length, 1, 'token onthouden');
-  const [tokenCall, sendCall] = calls;
-  assert.ok(tokenCall.url.startsWith(`https://login.microsoftonline.com/${TENANT}/oauth2/v2.0/token`));
-  assert.match(tokenCall.init.body, /grant_type=client_credentials/);
-  assert.strictEqual(sendCall.url, 'https://graph.microsoft.com/v1.0/users/offerte%40bedrijf.nl/sendMail');
-  assert.strictEqual(sendCall.init.headers.authorization, 'Bearer tok');
-  const body = JSON.parse(sendCall.init.body);
-  assert.strictEqual(body.saveToSentItems, true);
-  assert.strictEqual(body.message.body.contentType, 'HTML');
-  assert.deepStrictEqual(body.message.toRecipients, [{ emailAddress: { address: 'klant@x.nl' } }]);
-  assert.deepStrictEqual(body.message.from, { emailAddress: { address: 'offerte@bedrijf.nl', name: 'AquaTech' } });
-  assert.strictEqual(body.message.attachments[0].contentBytes, Buffer.from('pdf').toString('base64'));
-  assert.strictEqual(body.message.attachments[1].isInline, true);
-  assert.strictEqual(body.message.attachments[1].contentId, 'afbeelding1@aquatech');
+test('inrichting: bestaande app krijgt alleen een nieuw geheim; andere gebruiker of omgeving ziet de sessie niet; weigering leesbaar', async () => {
+  const existing = fakeMicrosoft({ existingApp: true });
+  const setup = createGraphSetup({ fetchImpl: existing.fetchImpl, now: () => 5_000_000 });
+  const result = await setup.provision('admin-token');
+  assert.strictEqual(result.clientId, APP_ID);
+  assert.ok(!existing.calls.some((call) => call.method === 'POST' && call.url.endsWith('/applications')), 'geen tweede app');
+  assert.ok(existing.calls.some((call) => call.url.endsWith('/addPassword')));
+
+  const login = await setup.start({ tenantKey: 't1', userId: 'u1' });
+  assert.strictEqual((await setup.poll({ id: login.id, tenantKey: 't2', userId: 'u1' })).status, 'expired');
+  assert.strictEqual((await setup.poll({ id: login.id, tenantKey: 't1', userId: 'u2' })).status, 'expired');
+  setup.cancel({ id: login.id, tenantKey: 't2', userId: 'u1' });
+  setup.cancel({ id: login.id, tenantKey: 't1', userId: 'u1' });
+  assert.strictEqual((await setup.poll({ id: login.id, tenantKey: 't1', userId: 'u1' })).status, 'expired');
+
+  const denied = createGraphSetup({ fetchImpl: fakeMicrosoft({ denyAssignment: true }).fetchImpl });
+  await assert.rejects(denied.provision('t'), (error) => /weigerde het verlenen van de machtiging Mail\.Send \(Authorization_RequestDenied\).*Globale beheerder/.test(error.message));
 });
 
-test('Graph: foutmeldingen per soort, nooit het clientgeheim', async () => {
-  /**
-   * Verstuurt met een nagebootste fout en geeft de melding.
-   * @param {object} plan De uitkomst van de nagebootste Microsoft.
-   * @param {string} secret Een uniek geheim (het token wordt per geheim onthouden).
-   * @returns {Promise<string>} De melding van mailFailure.
-   */
-  const failure = async (plan, secret) => {
-    const sender = createGraphSender({ tenantId: TENANT, clientId: CLIENT, clientSecret: secret, from: 'offerte@bedrijf.nl' }, { fetchImpl: fakeMicrosoft(plan).fetchImpl });
-    try { await sender.send({ to: ['k@x.nl'], subject: 's', text: 't' }); } catch (error) { return mailFailure(error); }
-    return '';
-  };
-  const auth = await failure({ token: 401, tokenBody: { error: 'invalid_client', error_description: 'AADSTS7000215: Invalid client secret provided. Trace ID: abc' } }, 'cs-uniek-2');
-  assert.match(auth, /weigert de aanmelding.*tenant-ID, client-ID en het clientgeheim.*AADSTS7000215: Invalid client secret provided\./);
-  assert.ok(!auth.includes('cs-uniek-2') && !auth.includes('Trace ID'));
-  assert.match(await failure({ send: 403, sendBody: { error: { code: 'ErrorAccessDenied', message: 'Access is denied.' } } }, 'cs-uniek-3'), /weigert de app toegang.*Mail\.Send.*Application Access Policy.*ErrorAccessDenied/);
-  assert.match(await failure({ send: 404, sendBody: { error: { code: 'ErrorInvalidUser', message: 'x' } } }, 'cs-uniek-4'), /mailbox is niet gevonden/);
-  assert.match(await failure({ send: 429 }, 'cs-uniek-5'), /beperkt het versturen/);
-  assert.match(await failure({ send: 500 }, 'cs-uniek-6'), /Microsoft Graph gaf een fout/);
-  const unreachable = createGraphSender({ tenantId: TENANT, clientId: CLIENT, clientSecret: 'cs-uniek-7', from: 'a@b.nl' }, { fetchImpl: async () => { throw Object.assign(new Error('fetch failed'), { name: 'TimeoutError' }); } });
-  await assert.rejects(unreachable.verify(), (error) => {
-    assert.match(mailFailure(error), /login\.microsoftonline\.com:443 is niet bereikbaar \(HTTPS\)/);
-    return true;
-  });
-  const big = createGraphSender({ tenantId: TENANT, clientId: CLIENT, clientSecret: 'cs-uniek-8', from: 'a@b.nl' }, { fetchImpl: fakeMicrosoft().fetchImpl });
-  await assert.rejects(big.send({ to: ['k@x.nl'], subject: 's', text: 't', attachments: [{ filename: 'g.bin', content: Buffer.alloc(4 * 1024 * 1024) }] }), (error) => /te groot/.test(mailFailure(error)));
-  // Twee bijlagen die elk apart klein genoeg lijken, maar samen (als base64) boven de grens van Graph komen.
-  const two = createGraphSender({ tenantId: TENANT, clientId: CLIENT, clientSecret: 'cs-uniek-9', from: 'a@b.nl' }, { fetchImpl: fakeMicrosoft().fetchImpl });
-  await assert.rejects(two.send({ to: ['k@x.nl'], subject: 's', text: 't', attachments: [{ filename: 'a.bin', content: Buffer.alloc(2 * 1024 * 1024) }, { filename: 'b.bin', content: Buffer.alloc(2 * 1024 * 1024) }] }), (error) => /het bericht met bijlagen is te groot/.test(mailFailure(error)));
-  assert.match(await failure({ send: 413 }, 'cs-uniek-10'), /te groot/);
-  const one = createGraphSender({ tenantId: TENANT, clientId: CLIENT, clientSecret: 'cs-uniek-11', from: 'a@b.nl' }, { fetchImpl: fakeMicrosoft().fetchImpl });
-  await one.send({ to: ['k@x.nl'], subject: 's', text: 't', attachments: [{ filename: 'a.bin', content: Buffer.alloc(2 * 1024 * 1024) }] });
-});
-
-test('API: Graph-instellingen met versleuteld geheim, configured, verify en testmail', async () => {
+test('API: inrichten zet mailServer en het versleutelde geheim; alleen beheerder; geheim nooit in het antwoord', async () => {
   const db = openDb();
   const store = createStore(db);
   const tid = store.ensureTenant().id;
   await store.createAccount(tid, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: 'Tuin-Plan-2026!', mustChangePassword: false });
   await store.createAccount(tid, { username: 'kees', displayName: 'Kees', role: 'installateur', password: 'Tuin-Plan-2026!', mustChangePassword: false });
   const microsoft = fakeMicrosoft();
-  const { server, base } = await listen(createApp({ env: {}, secret: SECRET, db, graphFetch: microsoft.fetchImpl }));
+  const graphSetup = createGraphSetup({ fetchImpl: microsoft.fetchImpl });
+  const { server, base } = await listen(createApp({ env: {}, secret: SECRET, db, graphFetch: microsoft.fetchImpl, graphSetup }));
   const as = createLogin(base, { password: 'Tuin-Plan-2026!' });
   try {
     const baas = await as('baas');
     const kees = await as('kees');
-    assert.strictEqual((await kees.put('/app/api/admin/mail', { config: { mode: 'graph' }, graphSecret: 'x'.repeat(20) })).status, 403);
-    let response = await baas.post('/app/api/admin/mail/test', { to: 'info@bedrijf.nl' });
-    assert.strictEqual(response.status, 409, 'nog niet ingesteld');
-    const put = await baas.put('/app/api/admin/mail', { config: { mode: 'graph', graphTenantId: TENANT, graphClientId: CLIENT, from: 'AquaTech <offerte@bedrijf.nl>' }, graphSecret: 'Geheim-Graph-Waarde~1' });
-    assert.strictEqual(put.status, 200);
-    assert.strictEqual(put.body.graphSecretSet, true);
-    assert.strictEqual(put.body.config.mode, 'graph');
-    assert.ok(!JSON.stringify(put.body).includes('Geheim-Graph-Waarde'));
-    assert.ok(!JSON.stringify((await baas.get('/app/api/admin/settings')).body).includes('Geheim-Graph-Waarde'));
-    assert.strictEqual((await baas.get('/app/api/admin/mail')).body.graphSecretSet, true);
-    response = await baas.post('/app/api/admin/mail/test', { to: 'info@bedrijf.nl' });
-    assert.strictEqual(response.status, 200);
-    const sendCall = microsoft.calls.find((call) => call.url.endsWith('/sendMail'));
-    assert.ok(sendCall, 'sendMail aangeroepen');
-    assert.strictEqual(JSON.parse(sendCall.init.body).message.toRecipients[0].emailAddress.address, 'info@bedrijf.nl');
+    assert.strictEqual((await kees.post('/app/api/admin/mail/graph-setup', {})).status, 403);
+    const started = await baas.post('/app/api/admin/mail/graph-setup', { from: 'AquaTech <offerte@bedrijf.nl>' });
+    assert.strictEqual(started.status, 200);
+    assert.strictEqual(started.body.userCode, 'ABCD1234');
+    assert.strictEqual((await kees.get(`/app/api/admin/mail/graph-setup/${started.body.id}`)).status, 403);
+    const polled = await baas.get(`/app/api/admin/mail/graph-setup/${started.body.id}`);
+    assert.strictEqual(polled.body.status, 'done');
+    assert.strictEqual(polled.body.clientId, APP_ID);
+    assert.ok(!JSON.stringify(polled.body).includes('Nieuw-Clientgeheim'), 'geheim niet naar de browser');
+    const mail = (await baas.get('/app/api/admin/mail')).body;
+    assert.strictEqual(mail.config.mode, 'graph');
+    assert.strictEqual(mail.config.graphTenantId, TENANT);
+    assert.strictEqual(mail.config.graphClientId, APP_ID);
+    assert.strictEqual(mail.config.from, 'AquaTech <offerte@bedrijf.nl>');
+    assert.strictEqual(mail.graphSecretSet, true);
+    assert.match(mail.config.graphSecretExpires, /^\d{4}-\d{2}-\d{2}$/, 'vervaldatum van het geheim bewaard');
+    assert.ok(!JSON.stringify((await baas.get('/app/api/admin/settings')).body).includes('Nieuw-Clientgeheim'));
+    assert.strictEqual((await baas.post('/app/api/admin/mail/test', { to: 'info@bedrijf.nl' })).status, 200, 'testmail met het nieuwe geheim');
+    assert.strictEqual((await baas.get(`/app/api/admin/mail/graph-setup/${started.body.id}`)).body.status, 'expired', 'sessie is gebruikt');
+    assert.strictEqual((await baas.del(`/app/api/admin/mail/graph-setup/${started.body.id}`)).status, 200);
   } finally {
     server.close();
   }
-  const settingsRow = db.prepare("SELECT value FROM settings WHERE key = 'mailGraphSecret'").get();
-  assert.ok(settingsRow && !settingsRow.value.includes('Geheim-Graph-Waarde'), 'geheim versleuteld opgeslagen');
-});
-
-test('createMailer: graph is pas ingesteld met tenant, client, afzender en geheim', () => {
-  const values = { mailServer: { mode: 'graph', graphTenantId: TENANT, graphClientId: CLIENT, from: 'a@b.nl' }, mailGraphSecret: '' };
-  const settings = { get: (key) => values[key] };
-  const mailer = createMailer(settings, { fetchImpl: fakeMicrosoft().fetchImpl });
-  assert.strictEqual(mailer.configured(), false);
-  values.mailGraphSecret = 'Geheim-Graph-Waarde~1';
-  assert.strictEqual(mailer.configured(), true);
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'mailGraphSecret'").get();
+  assert.ok(row && !row.value.includes('Nieuw-Clientgeheim'), 'geheim versleuteld opgeslagen');
 });
