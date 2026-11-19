@@ -342,8 +342,11 @@ refresh_update_script() {
   if [[ -f "$APP_DIR/update/status/maintenance.json" ]] || [[ "$(json_field "$APP_DIR/update/status/run.json" state)" == "bezig" ]]; then
     echo "  update.sh niet bijgewerkt: er loopt een update (probeer het straks opnieuw)"; rm -f "$tmp"; return 0
   fi
-  cp -a "$APP_DIR/update.sh" "$APP_DIR/update.sh.bak-$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
-  install -m 755 "$tmp" "$APP_DIR/update.sh" && echo "  update.sh bijgewerkt (oude als update.sh.bak-<datum> bewaard)"
+  if [[ -f "$APP_DIR/update.sh" ]] && ! cp "$APP_DIR/update.sh" "$APP_DIR/update.sh.bak-$(date +%Y%m%d%H%M%S)" 2>/dev/null; then
+    echo "  update.sh niet bijgewerkt: back-up van de huidige mislukt (schijf vol?)"; rm -f "$tmp"; return 0
+  fi
+  install -m 755 "$tmp" "$APP_DIR/update.sh" || { echo "  update.sh niet bijgewerkt: installeren mislukt"; rm -f "$tmp"; return 0; }
+  echo "  update.sh bijgewerkt (oude als update.sh.bak-<datum> bewaard)"
   # Alleen de laatste drie back-ups van update.sh bewaren.
   { ls -1 "$APP_DIR"/update.sh.bak-* 2>/dev/null || true; } | sort | head -n -3 | xargs -r rm -f --
   rm -f "$tmp"
