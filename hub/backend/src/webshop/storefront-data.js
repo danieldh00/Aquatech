@@ -557,14 +557,15 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
      * productpagina, daarna uit het geheugen.
      * @param {string} tenantId De omgeving.
      * @param {string[]} codes Artikelcodes (het artikel of zijn varianten).
+     * @param {{ fresh?: boolean }} [options] `fresh` slaat het geheugen over (Beheer wil direct zien wat net is opgeslagen).
      * @returns {Map<string, { override: ?{ min: number, max: number }, supplierLeadDays: ?number, expectedDate: string, itemRules: *, parentRules: * }>} Per artikelcode (een artikel zonder gegevens ontbreekt niet: de waarden zijn dan leeg).
      */
-    leadInfoOf(tenantId, codes) {
+    leadInfoOf(tenantId, codes, { fresh = false } = {}) {
       const wanted = [...new Set(codes.map(String))].slice(0, 500);
       if (!wanted.length) return new Map();
       const cacheKey = `${tenantId}|${wanted.join('|')}`;
       const hit = leadCache.get(cacheKey);
-      if (hit && hit.until > Date.now()) return hit.info;
+      if (!fresh && hit && hit.until > Date.now()) return hit.info;
       const rows = db.prepare(`SELECT i.code, i.lead_days_min, i.lead_days_max, i.delivery_rules, (SELECT p.delivery_rules FROM stock_items p WHERE p.tenant_id = i.tenant_id AND p.id = i.parent_id) AS parent_delivery_rules,
           (SELECT l.lead_days FROM item_suppliers l WHERE l.tenant_id = i.tenant_id AND l.item_id = i.id AND l.lead_days IS NOT NULL ORDER BY l.preferred DESC, l.lead_days LIMIT 1) AS supplier_lead_days,
           (SELECT MIN(p.expected_date) FROM purchase_order_lines l JOIN purchase_orders p ON p.tenant_id = l.tenant_id AND p.id = l.order_id

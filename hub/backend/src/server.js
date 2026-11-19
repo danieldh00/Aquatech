@@ -2881,7 +2881,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   };
   const webOrders = createWebOrderStore(database, { stock: stockStore, categoryDiscountsOf, deliveryRulesOf });
   app.use('/api/admin/delivery-rules', express.json({ limit: '32kb' }));
-  registerDeliveryPreviewRoutes(app, { db: database, requireRight, settingsFor, deliveryRulesOf, leadInfoOf: (tenantId, codes) => storefrontData.leadInfoOf(tenantId, codes) });
+  registerDeliveryPreviewRoutes(app, { db: database, requireRight, settingsFor, deliveryRulesOf, leadInfoOf: (tenantId, codes, options) => storefrontData.leadInfoOf(tenantId, codes, options) });
   registerDeliveryRuleRoutes(app, { settingsOf: (req) => settingsFor(req.tenantId), flatTreeOf: (tenantId) => flattenCategories(shopContentStore.publicContent(tenantId).tree), audit, requireJson });
   // Kortingen per productcategorie voor zakelijke klanten (Beheer > Webshop > Zakelijke kortingen, zie category-discounts.js).
   app.use('/api/admin/category-discounts', express.json({ limit: '32kb' }));

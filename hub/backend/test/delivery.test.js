@@ -384,13 +384,23 @@ test('levertijd zichtbaar: mail, bestelpagina, productpagina en artikeloverzicht
   const pickup = await until(() => world.sent.filter((message) => /Bevestiging van je bestelling/.test(message.subject) && true)[1]);
   assert.doesNotMatch(pickup.text, /Verwachte levertijd/);
   // Artikeloverzicht in Beheer: per methode aantallen en levertijd, op en niet op voorraad.
+  // Een afhaalbestelling toont geen levertijd op de bestelpagina, ook niet met een momentopname.
+  assert.strictEqual((await postCheckout(world.base, world.customer, { ...PERSON, shippingMethod: 'ophalen' })).status, 303);
+  const pickupId = (await world.admin.get('/app/api/admin/web-orders')).body.items.find((entry) => entry.id !== order.id).id;
+  const pickupPage = await world.customer.get(`/bestelling/${pickupId}/`);
+  assert.doesNotMatch(pickupPage.text, /Verwachte levertijd/);
+  // Het overzicht in Beheer toont direct wat net is opgeslagen (de shop onthoudt levertijden 30 seconden).
+  const before = (await world.admin.get(`/app/api/stock/items/${world.ids.VRIJ}/delivery-preview`)).body;
+  assert.ok(before.methods.every((method) => /^2-3 /.test(method.leadInStock)));
+  assert.strictEqual((await world.admin.put(`/app/api/stock/items/${world.ids.VRIJ}`, { leadDays: { min: 4, max: 6 } })).status, 200);
+  assert.ok((await world.admin.get(`/app/api/stock/items/${world.ids.VRIJ}/delivery-preview`)).body.methods.every((method) => /^4-6 /.test(method.leadInStock)), 'geen oude gegevens uit het geheugen');
   const preview = await world.admin.get(`/app/api/stock/items/${world.ids.LOS}/delivery-preview`);
   assert.strictEqual(preview.status, 200, JSON.stringify(preview.body));
   assert.strictEqual(preview.body.rulesSource, 'regels van de categorie');
   const dpd = preview.body.methods.find((method) => method.method === 'dpd');
   assert.deepStrictEqual([dpd.quantities, dpd.leadInStock, dpd.leadOutOfStock], ['tot 9 st', '1-2 dagen', 'op aanvraag']);
   assert.strictEqual(preview.body.methods.find((method) => method.method === 'pallet').quantities, 'vanaf 10 st');
-  const own = (await world.admin.get(`/app/api/stock/items/${world.ids.VRIJ}/delivery-preview`)).body;
+  const own = before;
   assert.strictEqual(own.rulesSource, 'geen beperkingen');
   assert.ok(own.methods.every((method) => /^2-3 (werk)?dagen$/.test(method.leadInStock)), 'het artikel overschrijft elke methode');
   assert.ok(own.methods.some((method) => method.method === 'ophalen'));

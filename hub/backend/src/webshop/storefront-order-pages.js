@@ -408,7 +408,7 @@ function deliveryBlock(order) {
   const tracking = order.shipping && order.shipping.tracking ? `<p>Volg je pakket: <a href="${escapeHtml(order.shipping.tracking.url)}" rel="noopener" target="_blank">${escapeHtml(order.shipping.tracking.code)}</a></p>` : '';
   const billing = order.deliverySame === false && order.billingAddress && order.billingAddress.street
     ? `<p><strong>Factuuradres</strong><br>${[order.customer.company, order.customer.name, order.billingAddress.street, `${order.billingAddress.postcode} ${order.billingAddress.city}`].filter(Boolean).map(escapeHtml).join('<br>')}</p>` : '';
-  const eta = DeliveryTimes.etaPhrase(order.shipping && order.shipping.eta);
+  const eta = order.shipping && order.shipping.method !== 'ophalen' ? DeliveryTimes.etaPhrase(order.shipping.eta) : '';
   const etaBlock = eta && !tracking && order.status === 'nieuw' ? `<p><strong>Verwachte levertijd</strong><br>${escapeHtml(eta[0].toUpperCase() + eta.slice(1))}<br><small class="muted">Een indicatie, geen toezegging: we zijn afhankelijk van externe partijen.</small></p>` : '';
   return `<p><strong>Afleveradres</strong><br>${address}</p>${billing}${etaBlock}${tracking}`;
 }

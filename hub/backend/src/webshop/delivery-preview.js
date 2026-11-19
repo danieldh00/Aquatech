@@ -75,7 +75,7 @@ function registerDeliveryPreviewRoutes(app, { db, requireRight, settingsFor, del
     res.setHeader('Cache-Control', 'no-store');
     const item = db.prepare('SELECT code, unit FROM stock_items WHERE tenant_id = ? AND id = ?').get(req.tenantId, String(req.params.id));
     if (!item) return res.status(404).json({ error: 'not_found', message: 'Artikel niet gevonden.' });
-    const info = leadInfoOf(req.tenantId, [item.code]).get(item.code) || null;
+    const info = leadInfoOf(req.tenantId, [item.code], { fresh: true }).get(item.code) || null;
     const itemRules = info ? DeliveryRules.sanitizeRules(info.itemRules) : [];
     const parentRules = info ? DeliveryRules.sanitizeRules(info.parentRules) : [];
     const categoryRules = deliveryRulesOf(req.tenantId).get(item.code) || [];
