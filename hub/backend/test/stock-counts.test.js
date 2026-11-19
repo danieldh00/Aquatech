@@ -2,6 +2,7 @@
 // hertellen, afsluiten met wachtwoord en alles-of-niets boeken, een jaartelling per jaar, idempotente ingaven, rechten en andere organisatie.
 const test = require('node:test');
 const assert = require('node:assert');
+const { createStockCounts } = require('../src/artikelen/stock-counts');
 const { createStore } = require('../src/platform/store');
 const { createLogin } = require('./helpers/http-client');
 const { setup, PW } = require('./helpers/webshop-world');
@@ -183,4 +184,25 @@ test('de leesroute van de tellers heeft een limiet', async () => {
   let status = 200;
   for (let attempt = 0; attempt < 620 && status === 200; attempt += 1) status = (await world.picker.get('/app/api/orderpick/counts/open')).status;
   assert.strictEqual(status, 429);
+});
+
+test('een botsing bij het afsluiten geeft 409 (item_missing of count_changed) en boekt niets', async () => {
+  const world = await countWorld();
+  const count = (await world.admin.post('/app/api/stock-counts', { kind: 'tussentijds', locations: ['A-2'] })).body.count;
+  const line = (await world.admin.get(`/app/api/stock-counts/${count.id}/lines`)).body.lines[0];
+  await countLine(world, count.id, line, 3, 'tel-botsing-0001');
+  const tenantId = world.db.prepare('SELECT tenant_id FROM stock_counts WHERE id = ?').get(count.id).tenant_id;
+  const user = { id: null, display_name: 'Test' };
+  // Het artikel verdwijnt tijdens het boeken: de opslag geeft een 409 en de transactie wordt teruggedraaid.
+  const missing = createStockCounts(world.db, { stock: { book: () => { throw Object.assign(new Error('weg'), { code: 'item_missing' }); }, stockValue: () => 0 } });
+  const refused = missing.close(tenantId, count.id, user, { open: 'nul' });
+  assert.strictEqual(refused.status, 409);
+  assert.strictEqual(refused.code, 'item_missing');
+  assert.strictEqual(world.db.prepare('SELECT status FROM stock_counts WHERE id = ?').get(count.id).status, 'tellen');
+  assert.strictEqual(world.db.prepare("SELECT COUNT(*) AS n FROM stock_movements WHERE source LIKE 'telling:%'").get().n, 0);
+  // Een tweede afsluiting na de eerste raakt het statusfilter niet meer: gewone 409 `closed`, nog steeds niets extra geboekt.
+  assert.strictEqual((await world.admin.post(`/app/api/stock-counts/${count.id}/close`, { password: PW, open: 'nul' })).status, 200);
+  const again = await world.admin.post(`/app/api/stock-counts/${count.id}/close`, { password: PW, open: 'nul' });
+  assert.strictEqual(again.status, 409);
+  assert.strictEqual(world.db.prepare("SELECT COUNT(*) AS n FROM stock_movements WHERE source LIKE 'telling:%'").get().n, 1);
 });
