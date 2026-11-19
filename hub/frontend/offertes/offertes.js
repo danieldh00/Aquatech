@@ -1594,12 +1594,15 @@
     $('#l-bulk-count').textContent = `${chosen.length} geselecteerd`;
     const closable = chosen.filter(isOpenQuote);
     $('#l-bulk-mail').hidden = !state.mail;
-    $('#l-bulk-mail').disabled = !closable.length;
-    $('#l-bulk-mail').textContent = `Versturen per e-mail (${closable.length})`;
+    $('#l-bulk-mail').disabled = !closable.length || closable.length > MAX_BULK_MAIL;
+    $('#l-bulk-mail').textContent = closable.length > MAX_BULK_MAIL ? `Versturen per e-mail (max. ${MAX_BULK_MAIL})` : `Versturen per e-mail (${closable.length})`;
     $('#l-bulk-close').disabled = !closable.length;
     $('#l-bulk-close').textContent = `Afsluiten als afgewezen (${closable.length})`;
     $('#l-export').textContent = chosen.length ? `Exporteer selectie (${chosen.length}) naar Excel` : 'Exporteer naar Excel';
   }
+
+  /** Hoeveel offertes in één keer gemaild mogen worden (gelijk aan de grens op de server). */
+  const MAX_BULK_MAIL = 10;
 
   /**
    * Mailt de geselecteerde open offertes met het standaardbericht naar het e-mailadres van de klant op de offerte; vooraf één bevestiging met het aantal.
@@ -1608,6 +1611,7 @@
   async function mailSelected() {
     const mailable = selectedQuotes().filter(isOpenQuote);
     if (!mailable.length) return;
+    if (mailable.length > MAX_BULK_MAIL) { toast(`Hoogstens ${MAX_BULK_MAIL} offertes per keer mailen; je hebt er ${mailable.length} gekozen.`, true); return; }
     if (!confirm(`${mailable.length} ${mailable.length === 1 ? 'offerte' : 'offertes'} nu per e-mail versturen aan de klant? Elke klant krijgt het standaardbericht met de link om de offerte te bekijken en akkoord te geven. Offertes zonder geldig e-mailadres worden overgeslagen.`)) return;
     const button = $('#l-bulk-mail');
     button.disabled = true;
