@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.27.0
+
+Alleen frontend (`frontend/artikelen/index.html` en `artikelen.css`): het formulier `#edit-form` blijft één formulier met dezelfde veldnamen, maar is verdeeld in `fieldset.item-group`-groepen in een raster (`.item-groups`); `#move-form` is een compacte rij (`.move-card`). Verkoopprijs blijft alleen-lezen bij prijsbepaling factor. Geen API- of databasewijziging.
+Daarnaast: een niet-gesloten `@media (max-width: 640px) {` in `artikelen.css` weggehaald, waardoor de stijl van de bulkbalk alleen op mobiel gold.
+
 ## 1.26.9
 
 - Orderpick: modus Tellen (counting-core.js en counting.js) op de bestaande blinde telroutes; ingaven idempotent via clientId.

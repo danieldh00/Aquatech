@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.27.0',
+      date: '2026-11-19',
+      title: 'Artikelscherm overzichtelijker',
+      items: [
+        { text: 'Het artikelscherm is opnieuw ingedeeld: Gegevens staan in groepen naast elkaar (Basis, Prijzen en prijsbepaling, Voorraad en locatie, Verpakking en staffel, Webshop) en Mutatie boeken is een compacte balk over de volle breedte.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.26.9',
       date: '2026-11-19',
       title: 'Voorraad tellen in de orderpick-app',
