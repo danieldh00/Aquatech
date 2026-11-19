@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.26.4
+
+Alleen `webshop/storefront.css`: één kaartontwerp voor home en categorieën (de aparte `.browse`-kaartregels zijn samengevoegd). Foto met vaste verhouding die meegroeit, naam op twee regels, prijs en voorraad onder elkaar, aantal en knop onderaan op één lijn; container query op de kaart (`max-width: 200px`) maakt van de knop een icoon. Het artikelnummer en het aantal varianten staan niet meer op de kaart (zijn nog wel in de HTML voor het script).
+
 ## 1.26.3
 
 `POST /api/quotes-bulk/send` ({ ids (max. 10), url }, recht `offertes`, 10 verzoeken per uur per gebruiker, mailserver vereist): per offerte dezelfde stappen als `POST /api/quotes/:id/send` (link maken, mail via `mailBody`, `markSent`, audit `offerte_verstuurd` met `via: 'bulk'`) met het standaardbericht in de documenttaal van de offerte, gericht aan `customer.email`. Bij een mailfout wordt een concept weer teruggezet (link ingetrokken). Beantwoorde, omgezette en afgesloten offertes, onbekende id's en offertes zonder geldig adres worden overgeslagen en met reden teruggemeld. Knop in de bulkbalk van de offertelijst met één bevestiging. Test: `test/quotes-bulk-send.test.js`. Bouwt voort op de bulkbalk uit de selectie-PR.

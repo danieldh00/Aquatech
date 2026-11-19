@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.26.4',
+      date: '2026-11-19',
+      title: 'Nieuwe productkaarten in de webshop',
+      items: [
+        { text: 'Productkaarten in de webshop zijn compacter en even hoog: geen grote witte vlakken meer, de keuzelijst voor uitvoeringen staat netjes onder de naam en de knop *In winkelwagen* past op elke kaart (op een telefoon als winkelwagenicoon).' },
+      ],
+    },
+    {
       version: '1.26.3',
       date: '2026-11-19',
       title: 'Offertes in bulk mailen',
