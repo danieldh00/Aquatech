@@ -214,12 +214,17 @@ test('servertaken.sh schijf: de draaiende en de twee nieuwste versies blijven, d
   const setup = install({ current: '1.14.1' });
   const servertaken = path.join(__dirname, '..', '..', '..', 'deploy', 'apps01', 'pve', 'servertaken.sh');
   const env = { ...process.env, PATH: `${path.join(setup.root, 'bin')}:${process.env.PATH}`, SERVERTAKEN_REMOTE: '1', APP_DIR: setup.appDir, FAKE_STATE: setup.state, FAKE_TAGS: '1.14.5 1.14.4 1.14.3 1.14.2 1.14.1 1.14.0 latest' };
+  // De opruimstappen buiten docker mogen het systeem van wie de test draait nooit raken: stubs die alleen loggen.
+  for (const name of ['journalctl', 'apt-get']) fs.writeFileSync(path.join(setup.root, 'bin', name), `#!/usr/bin/env bash\necho "${name} $*" >> "$FAKE_STATE/system-calls.log"\n`, { mode: 0o755 });
   const check = spawnSync('bash', [servertaken, 'schijf-check'], { env, encoding: 'utf8', timeout: 30000 });
   assert.strictEqual(check.status, 10, check.stdout + check.stderr);
   assert.match(check.stdout, /3 oude versie\(s\)/, 'draaiend (1.14.1) en twee nieuwste (1.14.5, 1.14.4) blijven: 1.14.3, 1.14.2 en 1.14.0 zijn op te ruimen');
   const run = spawnSync('bash', [servertaken, 'schijf-run'], { env, encoding: 'utf8', timeout: 30000 });
   assert.strictEqual(run.status, 0, run.stdout + run.stderr);
   assert.deepStrictEqual(removedTags(setup.state), ['1.14.0', '1.14.2', '1.14.3']);
+  const systemCalls = fs.readFileSync(path.join(setup.state, 'system-calls.log'), 'utf8');
+  assert.match(systemCalls, /journalctl --vacuum-size=200M/);
+  assert.match(systemCalls, /apt-get clean/);
   const few = spawnSync('bash', [servertaken, 'schijf-check'], { env: { ...env, FAKE_TAGS: '1.14.1 1.14.0' }, encoding: 'utf8', timeout: 30000 });
   assert.match(few.stdout, /0 oude versie\(s\)/, 'met een oude naast de draaiende gebeurt niets (die is de tweede van de twee nieuwste)');
 });
