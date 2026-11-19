@@ -605,14 +605,14 @@ function sitePhotoPng(kind = 'oplevering', seed = 1, imageWidth = 480, imageHeig
  * @returns {object} Aantallen per soort aangemaakte gegevens.
  */
 function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
-  const { db, quotes, quoteOrders, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, suppliers, packagings, purchaseOrders, itemImages, requests, invoices, sprinklers, seasonReminders, paymentReminders } = stores;
+  const { db, quotes, quoteOrders, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, stockCounts, suppliers, packagings, purchaseOrders, itemImages, requests, invoices, sprinklers, seasonReminders, paymentReminders } = stores;
   /**
    * Bereidt een SQL-opdracht voor.
    * @param {string} sql De SQL.
    * @returns {object} De voorbereide opdracht.
    */
   const prepare = (sql) => db.prepare(sql);
-  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, hours: 0, materialUsage: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0, stockItems: 0, stockMovements: 0, stockReservations: 0, suppliers: 0, purchaseOrders: 0, requests: 0, requestWorkOrders: 0, invoices: 0, debtors: 0, sprinklerParts: 0, seasonReminders: 0, businessCustomers: 0, convertedQuotes: 0 };
+  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, hours: 0, materialUsage: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0, stockItems: 0, stockMovements: 0, stockReservations: 0, stockCounts: 0, suppliers: 0, purchaseOrders: 0, requests: 0, requestWorkOrders: 0, invoices: 0, debtors: 0, sprinklerParts: 0, seasonReminders: 0, businessCustomers: 0, convertedQuotes: 0 };
   const seededWos = [];
   // Bewaking: één open waarschuwing en één opgelost incident, zodat het scherm in de testomgeving iets laat zien.
   const incidentTime = new Date().toISOString();
@@ -957,6 +957,26 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
         if (half.length) stock.issue(tenantId, seededWorkOrder.owner, seededWorkOrder.id, half.map(([code, qty]) => ({ code, qty })), 'Meegenomen naar de klus');
       }
       stock.onWorkOrderChange(tenantId, seededWorkOrder.id, seededWorkOrder.owner);
+    }
+    // Voorraadtelling: een afgesloten jaartelling van vorig jaar (alles geteld, een paar verschillen) en een lopende tussentijdse telling van één locatie.
+    if (stockCounts) {
+      const lastYear = Number(new Date().toISOString().slice(0, 4)) - 1;
+      const yearCount = stockCounts.start(tenantId, admin, { kind: 'jaar', referenceDate: `${lastYear}-12-31`, note: 'Jaartelling (testdata)' });
+      if (yearCount.count) {
+        stockCounts.lines(tenantId, yearCount.count.id, { limit: 2000 }).lines.forEach((line, lineIndex) => {
+          const counted = lineIndex % 7 === 3 ? Math.max(0, line.expectedQty - 1) : line.expectedQty;
+          stockCounts.record(tenantId, yearCount.count.id, line.id, { qty: counted, clientId: `testdata-${yearCount.count.id}-${lineIndex}` }, admin);
+        });
+        stockCounts.close(tenantId, yearCount.count.id, admin, { open: 'ongewijzigd', acceptRecounts: true });
+      }
+      const location = (stock.list(tenantId).find((item) => item.location) || {}).location;
+      const partialCount = location ? stockCounts.start(tenantId, admin, { kind: 'tussentijds', locations: [location], note: 'Locatietelling (testdata)' }) : null;
+      if (partialCount && partialCount.count) {
+        stockCounts.lines(tenantId, partialCount.count.id, { limit: 2000 }).lines.slice(0, 2).forEach((line, lineIndex) => {
+          stockCounts.record(tenantId, partialCount.count.id, line.id, { qty: line.expectedQty, clientId: `testdata-${partialCount.count.id}-${lineIndex}` }, admin);
+        });
+      }
+      counts.stockCounts = stockCounts.list(tenantId).length;
     }
     // Spreiden in de tijd: ontvangsten een maand terug, de rest rond de klus.
     prepare("UPDATE stock_movements SET created_at = ? WHERE tenant_id = ? AND kind = 'ontvangst'").run(testSet.day(30), tenantId);
