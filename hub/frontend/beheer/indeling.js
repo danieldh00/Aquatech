@@ -50,6 +50,7 @@
       { id: 'backup', label: 'Back-ups', pane: 'settings', form: 's-backup', words: 'kopie database herstellen versleuteld', needs: 'backups' },
       { id: 'restore', label: 'Terugzetten uit back-up', pane: 'settings', form: 's-restore', words: 'herstellen terugzetten verwijderd offerte bestelling orderregel klant artikel per record', needs: 'backups' },
       { id: 'backup-drive', label: 'Back-ups naar Google Drive', pane: 'settings', form: 's-backup-drive', words: 'google drive kopie buiten server offsite cloud upload oauth', needs: 'backups' },
+      { id: 'vps', label: 'Draaiboek VPS-verhuizing', pane: 'settings', form: 's-vps', words: 'vps verhuizen migratie server nieuwe host draaiboek tunnel cloudflare docker hoofdsleutel terugzetten', needs: 'updates' },
       { id: 'aikosten', label: 'AI-kosten', pane: 'aikosten', words: 'verbruik tokens kosten export per gebruiker' },
       { id: 'debug', label: 'Foutopsporing', pane: 'settings', form: 's-debug', words: 'debug debugmodus foutmelding fout foutcode details' },
       { id: 'updates', label: 'Updates', pane: 'updates', words: 'update versie bijwerken nieuwe versie releasenotes onderhoudsmodus installeren', needs: 'updates' },
@@ -62,7 +63,7 @@
   const ALIASES = { settings: 'modules' };
 
   /** Alle formulieren van het tabblad Instellingen: er is er telkens één zichtbaar. */
-  const SETTINGS_FORMS = ['s-modules', 's-outsourcing', 's-season', 's-payment-reminders', 's-labels', 's-purchase-proposals', 's-mail', 's-ai', 's-ai-connector', 's-access', 's-captcha', 's-security', 's-backup', 's-backup-drive', 's-restore', 's-debug'];
+  const SETTINGS_FORMS = ['s-modules', 's-outsourcing', 's-season', 's-payment-reminders', 's-labels', 's-purchase-proposals', 's-mail', 's-ai', 's-ai-connector', 's-access', 's-captcha', 's-security', 's-backup', 's-backup-drive', 's-vps', 's-restore', 's-debug'];
 
   const OPEN_KEY = 'aquatech_beheer_groups';
 

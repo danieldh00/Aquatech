@@ -230,6 +230,10 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
     probe.reset();
     assert.deepStrictEqual((await client.get('/app/api/visma/log')).body, { items: [], next: null });
     assert.ok(probe.stats.queries <= 2, probe.stats.sql.join('\n'));
+    // Kengetallen van het dashboard: één query per tegel (vier) plus de sessie.
+    probe.reset();
+    assert.strictEqual((await client.get('/app/api/kpis')).body.kpis.length, 4);
+    assert.ok(probe.stats.queries <= 5, probe.stats.sql.join('\n'));
   } finally {
     server.close();
   }

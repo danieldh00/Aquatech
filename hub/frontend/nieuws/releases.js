@@ -13,6 +13,38 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.24.4',
+      date: '2026-11-19',
+      title: 'Draaiboek voor de verhuizing naar een VPS',
+      items: [
+        { text: 'Beheer > Systeem heeft een afvinkbaar draaiboek voor de verhuizing naar een VPS: voorbereiden, inrichten, proefverhuizing, verhuisdag, controle en terugvallen.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.24.3',
+      date: '2026-11-19',
+      title: 'Kengetallen op het beheerdersdashboard',
+      items: [
+        { text: 'Het startscherm toont voor beheerders vier kengetallen: openstaand bedrag, vervallen facturen, open offertes en de bezetting van deze week.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.24.2',
+      date: '2026-11-19',
+      title: 'Betaallink in de factuurmail',
+      items: [
+        { text: 'De factuurmail bevat een link waarmee de klant de factuur direct online kan betalen (iDEAL en andere methodes via Mollie), ook zonder in te loggen. Na betaling staat de factuur automatisch op betaald.', for: ['facturen'] },
+      ],
+    },
+    {
+      version: '1.24.1',
+      date: '2026-11-19',
+      title: 'Mail versturen via Microsoft 365 (Graph)',
+      items: [
+        { text: 'Mail kan nu via Microsoft 365 (Graph) worden verstuurd in plaats van SMTP. Dat gaat over HTTPS, dus een geblokkeerde mailpoort bij de internetprovider is geen probleem meer. In Beheer > Instellingen > E-mail staat een stappenplan voor de app-registratie in Microsoft Entra, inclusief het beperken van de app tot één mailbox.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.24.0',
       date: '2026-11-19',
       title: 'Kleiner image en opgeschoonde documentatie',

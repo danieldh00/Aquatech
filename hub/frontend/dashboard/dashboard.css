@@ -225,3 +225,14 @@ h2 .h2-link:hover { text-decoration: underline; }
 .task-command { display: grid; gap: 6px; padding: 0 14px 12px; }
 .task-code { margin: 0; padding: 8px 10px; overflow-x: auto; font-size: 12px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--at-preview-bg); border: 1px solid var(--line); border-radius: 6px; }
 .task-more a { color: var(--primary); font-weight: 600; text-decoration: none; }
+
+/* Startscherm "Kengetallen" voor beheerders (dashboard/kpis.js) */
+.kpis { margin-bottom: 16px; }
+.kpis h2 { margin: 0 0 10px; font-size: 18px; text-transform: none; letter-spacing: 0; color: var(--primary-dark); }
+.kpi-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+.kpi { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; background: var(--panel); border: 1px solid var(--line); border-top: 4px solid var(--primary); border-radius: var(--radius); color: inherit; text-decoration: none; }
+.kpi:hover { border-color: var(--primary); }
+.kpi-title { font-size: 13px; font-weight: 600; color: var(--muted); }
+.kpi-value { font-size: 26px; font-weight: 700; line-height: 1.2; color: var(--primary-dark); overflow-wrap: anywhere; }
+.kpi-detail { font-size: 13px; color: var(--muted); }
+.kpi[data-kpi="vervallen"] { border-top-color: var(--at-danger); }
