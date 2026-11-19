@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.25.1
+
+Offertelijst (`frontend/offertes/`): selectiekolom met *alles selecteren* voor de zichtbare rijen, balk met bulkacties (*Afsluiten als afgewezen* voor concept en verzonden offertes die niet zijn omgezet, één bevestiging, per offerte `PUT /api/quotes/:id` met status; fouten per offerte worden gemeld en overgeslagen) en Excel-export van alleen de selectie. Geen nieuwe API of migratie; rechten en de vergrendeling bij een klantreactie blijven die van de bestaande route.
+
+## 1.25.0
+
+Doorlichtingspunt 34 (eerste stap): `frontend/beheer/beheer.js` (1729 regels) is verkleind door het e-mailformulier (`mail.js`, `window.BeheerMail`) en het verzendformulier (`verzending.js`, `window.BeheerVerzending`) in eigen bestanden te zetten, volgens het patroon van de andere Beheer-onderdelen. Geen gedragswijziging.
+
+## 1.24.9
+
+Doorlichtingspunt 35 (eerste stap): `mcp/mcp-tools.js` (1231 regels) is verkleind door de hulpfuncties en grenzen naar `mcp-tool-helpers.js`, de plantools (`plan_maken`, `plan_details`, `plan_omzetten`) naar `mcp-tools-plan.js` en `maak_rapport_excel` naar `mcp-tools-report.js` te verplaatsen. De volgorde van de tools en het gedrag zijn gelijk; de overige grote bestanden uit punt 35 volgen apart.
+
+## 1.24.8
+
+Navigatiebalk van de webshop verdeeld over de volle containerbreedte (Over ons links, Planner rechts, in lijn met de bovenste rij) en Planner gelijk aan Over ons qua lettergrootte en hoofdletters. Alleen `storefront.css`.
+
+## 1.24.7
+
+Globaal zoeken (`platform/global-search.js`, geen migratie): `GET /api/search?q=` (ingelogd, limiet 120 per minuut per gebruiker, `no-store`) zoekt per soort met hetzelfde recht als de module (`klanten`, `offertes` (eigen, of alle met `offertes.alle`), `werkorders`, `facturen`, `voorraad`), filtert altijd op de omgeving van de gebruiker, begrenst elke groep op 5 en geeft alleen titel, omschrijving en een `?id=`-link. Woorden (max. 5) zoeken zonder hoofdletters, `%`/`_` uit de invoer zijn onschadelijk, een exact gelijk nummer staat bovenaan. Frontend: zoekveld met resultatenpaneel in `shared/sidebar.js|.css` (pijltjestoetsen, Enter, Escape, Ctrl+K). Test: `test/global-search.test.js`.
+
 ## 1.24.6
 
 Doorlichtingspunt 13 (synchrone databasebrug afbouwen), eerste stap: `store.listCustomerPageAsync` voert de totaal- en paginaquery van het klantenoverzicht tegelijk uit via `db.async` (pool bij PostgreSQL). `GET /api/customers`, `GET /api/quote-customers` en `GET /api/workorder-customers` gebruiken die; de hoofdthread staat tijdens de zoekopdracht (LIKE over zes kolommen) niet meer stil. De synchrone `listCustomerPage` blijft voor de AI-koppeling (MCP). Beide delen één querybouwer (`customerPageQueries`).
