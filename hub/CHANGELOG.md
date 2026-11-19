@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.25.3
+
+Beheer > Systeem > Updates: het blok Servertaken (kaart met uitleg en commando) is verborgen zonder open taken, afgeronde taken staan in een inklapbare lijst `Afgeronde servertaken`. Vinkje en titel gebruiken een eigen rijklasse (`.ht-check`) in plaats van `.field.chk`, dat buiten een `.form-grid` gecentreerd stond. Geen backendwijziging.
+
+## 1.25.2
+
+Offerte-opvolging (`verkoop/quote-follow-up.js`, migratie 86 `quotes.followup_count|followup_at`): instelling `quoteFollowUp` {enabled, afterDays 2-60, maxReminders 1-2} (`liveOnly`, per omgeving). Elk uur (`app.locals.quoteFollowUpAll`) krijgt een verzonden offerte zonder antwoord, gemaild naar een geldig adres (`sent_to`) met een actieve link en niet verlopen een herinnering in de documenttaal van de offerte (`mail.followUp*` in `doc-text.js`). De herinnering wordt eerst vastgelegd (voorwaardelijke update, nooit dubbel) en teruggedraaid als de mail mislukt; audit `offerte_opvolging`. Beheer: formulier *Offerte-opvolging*. Test: `test/quote-follow-up.test.js`.
+
 ## 1.25.1
 
 Offertelijst (`frontend/offertes/`): selectiekolom met *alles selecteren* voor de zichtbare rijen, balk met bulkacties (*Afsluiten als afgewezen* voor concept en verzonden offertes die niet zijn omgezet, één bevestiging, per offerte `PUT /api/quotes/:id` met status; fouten per offerte worden gemeld en overgeslagen) en Excel-export van alleen de selectie. Geen nieuwe API of migratie; rechten en de vergrendeling bij een klantreactie blijven die van de bestaande route.
