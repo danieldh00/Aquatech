@@ -586,6 +586,7 @@ function registerInvoiceRoutes(app, ctx) {
         return res.status(409).json({ error: 'exists', message: `Voor deze werkorder bestaat al factuur ${existing[0].number || '(concept)'}.`, invoiceId: existing[0].id });
       }
       const { created, built } = createDraftFromWorkOrder(req, workOrder);
+      audit(req, 'factuur_aangemaakt', { invoiceId: created.id, workOrderId: workOrder.id });
       return res.status(201).json({ ...created, warnings: built.warnings });
     }
     if (body.data !== undefined && !validData(body.data)) return res.status(400).json({ error: 'invalid_invoice', message: 'Ongeldige factuur.' });
