@@ -356,3 +356,9 @@ dl.kv dd { margin: 0; }
 .ht-item p { margin: 2px 0 0 26px; }
 .ht-item.done strong { text-decoration: line-through; color: var(--muted); }
 .ht-code { margin: 0 0 8px; padding: 8px 10px; overflow-x: auto; font-size: 12px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--at-preview-bg); border: 1px solid var(--line); border-radius: 6px; }
+/* Draaiboek VPS-verhuizing (beheer/vps-draaiboek.js) */
+.vps-plan h4 { margin: 18px 0 6px; }
+.vps-steps { list-style: none; margin: 0; padding: 0; }
+.vps-steps li { padding: 6px 0; border-top: 1px solid var(--line); font-size: 0.9rem; }
+.vps-steps .chk { align-items: flex-start; margin: 0; }
+.vps-steps code { overflow-wrap: anywhere; }

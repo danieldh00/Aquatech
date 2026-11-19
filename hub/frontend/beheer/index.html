@@ -308,6 +308,64 @@
           <div id="d-events" class="muted small"></div>
           <div class="err" role="alert"></div>
         </form>
+        <form id="s-vps" class="card-form settings vps-plan" novalidate>
+          <h3>Draaiboek: verhuizen naar een VPS</h3>
+          <p class="muted small">Stap voor stap van de huidige server (<code>apps01</code>, een Proxmox-VM met Docker en een Cloudflare-tunnel) naar een VPS. Het geheim van een rustige verhuizing: de tunnel, het adres en de hoofdsleutel blijven gelijk, dus er verandert niets voor klanten en niets aan DNS. Vink af wat klaar is; de vinkjes onthoudt alleen deze browser. <strong id="v-progress"></strong></p>
+
+          <h4>1. Voorbereiding (dagen eerder, zonder risico)</h4>
+          <ul class="vps-steps">
+            <li><label class="chk"><input type="checkbox" data-step="kies"> <span><strong>VPS kiezen.</strong> Datacenter in de EU, minstens 2 vCPU en 6 GB geheugen, 80 GB schijf met back-up of snapshots, Debian 13. Het image wordt alleen voor <code>amd64</code> gebouwd: kies geen ARM-VPS, tenzij de release eerst ook <code>arm64</code> bouwt.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="avg"> <span><strong>Verwerkersovereenkomst</strong> met de VPS-aanbieder sluiten en schijfversleuteling of versleutelde opslag kiezen (AVG).</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="sleutel"> <span><strong>Hoofdsleutel veilig hebben.</strong> <code>/opt/apps/aquatech/secrets/master-key</code> staat ook in de wachtwoordkluis. Zonder die sleutel zijn de back-ups, de versleutelde instellingen en alle geheimen onleesbaar.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="backup-ok"> <span><strong>Back-up controleren.</strong> Er staat een recente back-up in Beheer &gt; Systeem &gt; Back-ups en een kopie op Google Drive (zie <em>Back-ups naar Google Drive</em>).</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="inventaris"> <span><strong>Inventaris.</strong> Wat mee moet uit <code>/opt/apps/aquatech</code>: <code>.env</code> (tunneltoken), <code>secrets/</code> (<code>master-key</code>, <code>database-url-local</code>, <code>postgres-password</code>), <code>compose.yml</code>, <code>compose.localdb.yml</code>, <code>update.sh</code> en de <code>aquatech-*</code> systemd-bestanden. De database gaat via een back-up mee, nooit door <code>pgdata/</code> te kopiëren.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="adressen"> <span><strong>Adressen noteren die aan de server hangen:</strong> het uitgaande IP-adres voor de Exchange-connector (mail), het redirect-adres van Google Drive (blijft gelijk zolang het webadres gelijk blijft), de Mollie-webhook (webadres) en eventuele IP-beperkingen bij Visma of AI-aanbieders.</span></label></li>
+          </ul>
+
+          <h4>2. De VPS inrichten (oude server blijft gewoon draaien)</h4>
+          <ul class="vps-steps">
+            <li><label class="chk"><input type="checkbox" data-step="basis"> <span><strong>Basis.</strong> Eigen beheerdersaccount met SSH-sleutel, root-login en wachtwoordlogin uit, firewall met alleen SSH open (poort 3300 nooit naar buiten: de tunnel verbindt uitgaand), automatische beveiligingsupdates, tijdzone <code>Europe/Amsterdam</code>.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="docker"> <span><strong>Docker</strong> met de compose-plugin installeren en <code>/opt/apps/aquatech</code> aanmaken (uid 1000 voor <code>data/</code> en <code>secrets/</code>, zoals op apps01).</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="bestanden"> <span><strong>Bestanden kopiëren</strong> uit de inventaris (<code>scp</code> of <code>rsync</code> vanaf apps01); <code>secrets/</code> met mode 400. Zet in <code>.env</code> dezelfde tunneltoken, maar <strong>start de tunnel nog niet</strong>: twee servers op dezelfde tunnel zouden verkeer verdelen.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="update-timer"> <span><strong>Updates inrichten:</strong> <code>deploy/apps01/setup-app-update.sh</code> (timer, status- en aanvraagmap, zodat <em>Nu updaten</em> hier ook werkt) en de back-uptimer <code>aquatech-pg-backup.timer</code>.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="ghcr"> <span><strong>Image kunnen ophalen.</strong> Nu is <code>ghcr.io/danieldh00/aquatech</code> openbaar. Wordt het image later privé, doe dan op de VPS eenmalig <code>docker login ghcr.io</code> met een token met alleen <em>read:packages</em>.</span></label></li>
+          </ul>
+
+          <h4>3. Proefverhuizing (oude server nog in bedrijf)</h4>
+          <ul class="vps-steps">
+            <li><label class="chk"><input type="checkbox" data-step="proef-restore"> <span><strong>Een recente back-up terugzetten op de VPS</strong> met <code>local-db.sh restore &lt;bestand&gt;</code> (de back-ups staan in <code>backups/postgres/</code>; ze zijn gecontroleerd te openen met de hoofdsleutel). Dit is ook je bewijs dat een back-up echt terug te zetten is.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="proef-start"> <span><strong>App starten en testen zonder tunnel:</strong> <code>ssh -L 3300:localhost:3300 &lt;vps&gt;</code> en dan <code>http://localhost:3300/api/health</code>. Log in, open een offerte, een werkorder en een webshopbestelling. Meet hoe lang het terugzetten duurde: dat is je stilstand op de verhuisdag.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="proef-stop"> <span><strong>Proefdata weer weghalen</strong> (app stoppen, database leegmaken) zodat er op de verhuisdag niets blijft hangen.</span></label></li>
+          </ul>
+
+          <h4>4. Verhuisdag (reken op de stilstand uit de proef, meestal 10-30 minuten)</h4>
+          <ul class="vps-steps">
+            <li><label class="chk"><input type="checkbox" data-step="plan-dag"> <span><strong>Kies een rustig moment</strong> (buiten kantoortijd, geen lopende betalingen) en meld de onderhoudsduur in Nieuws.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="oud-stop"> <span><strong>Oude server:</strong> app in onderhoudsmodus en stoppen, daarna <code>db-local.sh backup</code> voor de laatste, volledige back-up. Stop ook <code>cloudflared</code> op apps01.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="kopie"> <span><strong>Laatste back-up naar de VPS</strong> kopiëren (en controleren met een controlesom aan beide kanten).</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="nieuw-restore"> <span><strong>VPS:</strong> back-up terugzetten (<code>local-db.sh restore</code>), app starten.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="tunnel"> <span><strong>Tunnel starten op de VPS</strong> (<code>COMPOSE_PROFILES=tunnel</code> in <code>.env</code>, daarna <code>docker compose up -d</code>). Het webadres wijst nu naar de VPS; er is niets aan DNS veranderd.</span></label></li>
+          </ul>
+
+          <h4>5. Controle direct na de verhuizing</h4>
+          <ul class="vps-steps">
+            <li><label class="chk"><input type="checkbox" data-step="check-health"> <span><code>/api/health</code> geeft de verwachte versie; inloggen werkt; het dashboard en de webshop laden.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="check-flows"> <span>Een testofferte, een testbestelling (online betalen via Mollie, de webhook moet aankomen) en een pickronde in de orderpick-app.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="check-mail"> <span><strong>Mail:</strong> bij de Exchange-connector het nieuwe uitgaande IP-adres van de VPS invullen (Beheer &gt; Instellingen &gt; E-mail toont het huidige adres) en een testmail sturen.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="check-koppelingen"> <span>Google Drive-back-up (<em>Nu uploaden</em>), Visma (verbinding testen), AI-herkenning en de bewaking in Beheer &gt; Systeem &gt; Bewaking: geen open meldingen.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="check-timers"> <span><code>systemctl list-timers | grep aquatech</code> toont de update- en back-uptimer; in Beheer &gt; Systeem &gt; Updates staat de VPS op de laatste versie.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="check-cache"> <span>Cloudflare-cacheregel voor foto's en het adres van de tunnel ongewijzigd; <code>curl -sI</code> op een artikelfoto geeft bij de tweede aanroep <code>HIT</code>.</span></label></li>
+          </ul>
+
+          <h4>6. Terugvallen en opruimen</h4>
+          <ul class="vps-steps">
+            <li><label class="chk"><input type="checkbox" data-step="terugval"> <span><strong>Terugvallen kan 14 dagen:</strong> oude server laten staan (app uit). Gaat er iets mis: tunnel op de VPS stoppen, op apps01 de app en de tunnel weer starten. Wat na de verhuizing is ingevoerd staat dan alleen op de VPS: zet eerst een verse back-up van de VPS terug op apps01.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="eerste-back-up"> <span>Op de VPS de eerste nachtelijke back-up gecontroleerd en op Google Drive teruggevonden.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="opruimen"> <span><strong>Na 14 rustige dagen:</strong> apps01 uitzetten en verwijderen, inclusief <code>pgdata/</code>, <code>secrets/</code> en alle back-ups op die schijf (AVG); oude Supabase-project verwijderen als dat nog bestaat.</span></label></li>
+            <li><label class="chk"><input type="checkbox" data-step="privé"> <span><strong>Daarna pas de repository en het image privé zetten</strong> (apart besluit): registry-login op de VPS en op de runner regelen vóór de omzetting.</span></label></li>
+          </ul>
+          <div class="form-actions"><button type="button" class="btn" id="v-reset">Vinkjes wissen</button></div>
+        </form>
         <form id="s-restore" class="card-form settings" novalidate>
           <h3>Terugzetten uit een back-up</h3>
           <p class="muted small">Zet een verwijderd of verkeerd gewijzigd record terug zonder de rest van de database aan te raken. Je kiest een back-up en een soort record, ziet eerst precies wat er zou veranderen en kiest per veld wat terug mag. Een verwijderd record komt terug met zijn onderliggende rijen (uren, verpakkingen, enzovoort). Wachtwoorden, 2FA en de voorraadstand worden nooit teruggezet; bestellingen en inkooporders komen alleen terug als ze verwijderd zijn. Vlak voor het terugzetten maakt de app zelf een nieuwe back-up. Het terugzetten werkt op de omgeving waarin je nu zit.</p>
@@ -999,6 +1057,7 @@
   <script src="logboek.js"></script>
   <script src="collapse-list.js"></script>
   <script src="drive-backup.js"></script>
+  <script src="vps-draaiboek.js"></script>
   <script src="backup-restore.js"></script>
   <script src="beheer.js"></script>
 </body>
