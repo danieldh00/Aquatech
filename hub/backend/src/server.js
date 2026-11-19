@@ -20,6 +20,7 @@ const backups = require('./backup');
 const { createDriveBackup, sanitizeDriveBackup, DriveError, CALLBACK_PATH: DRIVE_CALLBACK_PATH } = require('./platform/drive-backup');
 const { createQuoteStore, registerQuoteRoutes, mailBody, Core: QuoteCore } = require('./verkoop/quotes');
 const { createCustomerStore, registerCustomerRoutes } = require('./verkoop/customers');
+const { createPersonData, registerPersonDataRoutes } = require('./verkoop/person-data');
 const { registerPlatformRoutes } = require('./platform/platform-routes');
 const { createGlobalSearch, registerSearchRoutes } = require('./platform/global-search');
 const { createMailer, mailFailure } = require('./platform/mailer');
@@ -2470,6 +2471,15 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // De uitnodiging gebruikt de wachtwoordlink van de webshop; shopAccounts wordt pas hieronder gemaakt.
     inviteReady: (customer) => shopAccounts.inviteProblem(customer),
     invite: (customer) => shopAccounts.invite(customer),
+  });
+  registerPersonDataRoutes(app, {
+    store, personData: createPersonData(database, store), requireRight, requireJson, audit,
+    tenantsOf: (req) => {
+      const tenantId = req.tenantId || tenant.id;
+      const home = homeOf(tenantId);
+      return home === tenantId ? [tenantId] : [home, tenantId];
+    },
+    organizationName: (req) => String(settingsFor(req.tenantId || tenant.id).get('quoteProfile').companyName || 'AquaTech'),
   });
 
   // Globaal zoeken (platform/global-search.js): klanten, offertes, werkorders, facturen en artikelen in één zoekveld.
