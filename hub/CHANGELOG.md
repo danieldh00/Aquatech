@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.26.2
+
+Factuurlijst (`frontend/facturen/`): selectiekolom, bulkbalk en knop *Exporteer naar Excel* (selectie, of alle zichtbare facturen zonder selectie). *Versturen per e-mail* loopt per definitieve factuur over de bestaande routes `GET /api/invoices/:id/mail` (voorstel) en `POST /api/invoices/:id/send`, met één bevestiging vooraf; facturen zonder e-mailadres en fouten worden per factuur gemeld en overgeslagen, zonder mailserver stopt de ronde. Geen nieuwe API of migratie.
+
+## 1.26.1
+
+Doorlichtingspunt 22. Instelling `invoicing.draftOnDone` (standaard aan, `InvoiceCore.sanitizeSettings`): bij de overgang van een werkorder naar `gereed` via `PUT /api/workorders/:id` maakt `draftOnDone` (verkoop/invoices.js, hergebruikt `createDraftFromWorkOrder`, de opbouw van `POST /api/invoices`) een conceptfactuur, alleen als de werkorder nog geen factuur heeft en er regels zijn; nooit definitief of verstuurd. Een tweede keer opslaan als Gereed maakt niets bij. Een fout houdt het opslaan van de werkorder niet tegen. Audit `factuur_concept_bij_gereed`. Test: `test/invoice-draft-on-done.test.js`.
+
 ## 1.26.0
 
 - Nieuw: `verkoop/person-data.js` met `GET /api/customers/:id/privacy-export` (Excel) en `POST /api/customers/:id/anonymize` (bevestiging met de naam, geweigerd bij openstaande bestellingen of werkorders), recht `beheer`, audit `klant_inzage_export` en `klant_geanonimiseerd`.
