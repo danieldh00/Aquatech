@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.26.9
+
+- Orderpick: modus Tellen (counting-core.js en counting.js) op de bestaande blinde telroutes; ingaven idempotent via clientId.
+
 ## 1.26.8
 
 Tabblad Telling in `frontend/artikelen/counts.js` (lijst, starten, voortgang per locatie, regels met filter en paginering, hertellen boven de drempel, annuleren, afsluiten met wachtwoord, Excel met samenvatting, regels en ingaven) op de bestaande routes `/api/stock-counts`.

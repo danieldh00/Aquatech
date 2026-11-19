@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.26.9',
+      date: '2026-11-19',
+      title: 'Voorraad tellen in de orderpick-app',
+      items: [
+        { text: 'Magazijnmedewerkers kunnen in de orderpick-app voorraad tellen: kies een locatie, scan of tik het artikel aan en vul het getelde aantal in. Je ziet niet hoeveel er volgens de administratie ligt.' },
+      ],
+    },
+    {
       version: '1.26.8',
       date: '2026-11-19',
       title: 'Voorraadtelling in Artikelen',
