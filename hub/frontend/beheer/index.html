@@ -774,6 +774,17 @@
         </div>
       </section>
       <section id="tab-updates" class="tabpane" hidden>
+        <section class="card" id="ht-card" aria-labelledby="ht-title">
+          <h3 id="ht-title">Servertaken</h3>
+          <p class="muted small">Dingen die op de Proxmox-host moeten gebeuren (bijvoorbeeld een serverscript opnieuw draaien). Eén commando voert alles uit wat nog open staat; taken die de server als gedaan meldt, worden vanzelf afgevinkt. Je kunt ook zelf afvinken.</p>
+          <ul class="ht-list" id="ht-list"></ul>
+          <div id="ht-command-box" hidden>
+            <p class="muted small">Plak dit op de Proxmox-host (als root):</p>
+            <pre class="ht-code" id="ht-command"></pre>
+            <div class="form-actions"><button class="btn" type="button" id="ht-copy">Kopieer commando</button></div>
+          </div>
+          <div id="ht-err" class="err" role="alert"></div>
+        </section>
         <p class="muted small">Installeer een nieuwe versie van de software wanneer het jou uitkomt. Tijdens de update staat de site ongeveer een minuut in onderhoudsmodus: bekijken kan, opslaan even niet. Start de nieuwe versie niet goed, dan gaat de server vanzelf terug naar de huidige versie.</p>
         <div id="up-none" class="card" hidden>
           <h3>Niet ingericht</h3>
@@ -996,6 +1007,7 @@
   <script src="updates.js"></script>
   <script src="bewaking.js"></script>
   <script src="logboek.js"></script>
+  <script src="collapse-list.js"></script>
   <script src="drive-backup.js"></script>
   <script src="backup-restore.js"></script>
   <script src="beheer.js"></script>

@@ -60,7 +60,8 @@ async function publicAddress(host, { lookup = dns.lookup } = {}) {
   const name = String(host || '').replace(/^\[|\]$/g, '');
   const addrs = net.isIP(name) ? [name] : (await lookup(name, { all: true, verbatim: true })).map((entry) => entry.address);
   if (!addrs.length || !addrs.every(isPublicAddress)) throw new PrivateHostError(name);
-  return addrs[0];
+  // IPv4 eerst: een container zonder IPv6-route loopt anders vast op het eerste (IPv6-)adres van een host.
+  return addrs.find((address) => net.isIPv4(address)) || addrs[0];
 }
 
 module.exports = { publicAddress, isPublicAddress, privateAllowed, PrivateHostError };

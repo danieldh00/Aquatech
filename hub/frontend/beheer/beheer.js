@@ -651,8 +651,8 @@
       $('#b-now').disabled = !enabled;
       list.innerHTML = !enabled ? 'Back-ups zijn op deze server niet beschikbaar.'
         : !items.length ? 'Nog geen back-ups.'
-          : `<ul class="timeline">${items.map((backup) => `<li><a href="../api/admin/backups/${encodeURIComponent(backup.name)}" download>${esc(backup.name)}</a> · ${esc(when(backup.createdAt))} · ${esc(size(backup.size))}${driveNames.has(backup.name) ? ' · op Drive' : ''}
-            <button class="btn small danger" data-backup-del="${esc(backup.name)}">Verwijderen</button></li>`).join('')}</ul>`;
+          : window.BeheerCollapse.render(items.map((backup) => `<li><a href="../api/admin/backups/${encodeURIComponent(backup.name)}" download>${esc(backup.name)}</a> · ${esc(when(backup.createdAt))} · ${esc(size(backup.size))}${driveNames.has(backup.name) ? ' · op Drive' : ''}
+            <button class="btn small danger" data-backup-del="${esc(backup.name)}">Verwijderen</button></li>`), { expanded: window.BeheerCollapse.isExpanded(list) });
       list.querySelectorAll('[data-backup-del]').forEach((button) => {
         /**
          * Verwijdert deze back-up na bevestiging.

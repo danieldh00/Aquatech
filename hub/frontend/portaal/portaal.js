@@ -142,10 +142,11 @@
     renderRequests(portal);
     renderWork(portal);
     renderQuotes(portal);
+    renderInvoices(portal);
     renderPlans(portal);
     renderContact(portal);
     if (window.PortalLocations) window.PortalLocations.render(portal);
-    if (!portal.quotes.length && !portal.workorders.length && !portal.plans.length && !(portal.requests || []).length && !(portal.reminders || []).length) {
+    if (!portal.quotes.length && !(portal.invoices || []).length && !portal.workorders.length && !portal.plans.length && !(portal.requests || []).length && !(portal.reminders || []).length) {
       message('Er staat nog niets voor u klaar. Zodra wij een offerte voor u hebben opgesteld of werkzaamheden hebben ingepland, ziet u die hier.');
     } else message('');
   }
@@ -517,6 +518,57 @@
     $('#s-quotes').hidden = !portal.quotes.length;
   }
 
+  const INVOICE_STATUS = { definitief: 'Open', betaald: 'Betaald' };
+
+  /**
+   * Tekent de tabel met facturen: PDF, status en (als online betalen aan staat) de knop Nu betalen.
+   * @param {object} portal gegevens uit api/portal
+   */
+  function renderInvoices(portal) {
+    const invoices = portal.invoices || [];
+    $('#invoices').innerHTML = `<thead><tr><th>Nummer</th><th>Datum</th><th>Vervaldatum</th><th>Status</th><th class="num">Totaal incl. btw</th><th></th></tr></thead>
+      <tbody>${invoices.map((invoice) => `
+        <tr><td><b>${esc(invoice.number)}</b></td><td>${esc(invoice.date)}</td><td>${esc(invoice.dueDate)}</td>
+          <td><span class="pill ${invoice.overdue ? 'afgewezen' : invoice.status === 'betaald' ? 'gereed' : 'open'}">${invoice.overdue ? 'Verlopen' : esc(INVOICE_STATUS[invoice.status] || invoice.status)}</span>${invoice.paidAt ? ` <span class="muted">${esc(when(invoice.paidAt))}</span>` : ''}</td>
+          <td class="num">${money(invoice.total)}</td>
+          <td class="actions"><a class="btn small" href="../api/portal/invoices/${encodeURIComponent(invoice.id)}/pdf" target="_blank" rel="noopener">PDF</a>
+            ${invoice.payable ? `<button class="btn small primary" type="button" data-pay="${esc(invoice.id)}">Nu betalen</button>` : ''}</td></tr>`).join('')}</tbody>`;
+    $('#s-invoices').hidden = !invoices.length;
+  }
+
+  /**
+   * Start de betaling van een factuur en stuurt de klant naar de betaalpagina van Mollie.
+   * @param {HTMLButtonElement} button de knop Nu betalen
+   * @returns {Promise<void>}
+   */
+  async function payInvoice(button) {
+    button.disabled = true;
+    try {
+      const out = await api(`../api/portal/invoices/${encodeURIComponent(button.dataset.pay)}/pay`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      if (out.paid) { toast('Deze factuur is al betaald.'); await load(); return; }
+      location.href = out.checkoutUrl;
+    } catch (error) {
+      toast(error.message, true);
+      button.disabled = false;
+    }
+  }
+
+  /**
+   * Na terugkeer van de betaalpagina (?betaald=<factuur>): de uitkomst bij Mollie laten opvragen en melden.
+   * @param {string} invoiceId id van de factuur
+   * @returns {Promise<void>}
+   */
+  async function afterPayment(invoiceId) {
+    history.replaceState(null, '', location.pathname + location.hash);
+    try {
+      const out = await api(`../api/portal/invoices/${encodeURIComponent(invoiceId)}/check`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      await load();
+      toast(out.status === 'betaald' ? 'Bedankt, uw betaling is ontvangen.' : 'Uw betaling is nog niet bevestigd. Is de betaling gelukt, dan ziet u de factuur hier zo als betaald.');
+    } catch (error) {
+      toast(error.message, true);
+    }
+  }
+
   /**
    * Tekent tegels met de (maximaal zes) eigen plannen.
    * @param {object} portal gegevens uit api/portal
@@ -689,6 +741,8 @@
       if (openButton) openDetail(openButton.dataset.open);
       const requestButton = event.target.closest('main [data-req]');
       if (requestButton) openRequest(requestButton.dataset.req);
+      const payButton = event.target.closest('main [data-pay]');
+      if (payButton) payInvoice(payButton);
       const seasonButton = event.target.closest('main [data-season]');
       if (seasonButton) requestSeasonService(seasonButton.dataset.season);
     });
@@ -728,6 +782,8 @@
     if (locationMatch && state.data && window.PortalLocations) window.PortalLocations.open(locationMatch[1]);
     if (location.hash === '#melden' && state.data && state.data.features.requests) openForm();
     // Vanuit de mail met een seizoensherinnering: ?herinnering=<sleutel>.
+    const paidInvoice = new URLSearchParams(location.search).get('betaald');
+    if (paidInvoice && state.data && /^[\w-]{8,64}$/.test(paidInvoice)) afterPayment(paidInvoice);
     const seasonKey = new URLSearchParams(location.search).get('herinnering');
     if (seasonKey && state.data) requestSeasonService(seasonKey);
   }

@@ -1511,7 +1511,26 @@ const MIGRATIONS = [
   `
   ALTER TABLE app_logs ADD COLUMN first_at TEXT;
   `,
-  // 84: automatische betalingsherinneringen en aanmaningen (verkoop/payment-reminders.js): per factuur welke stap is verstuurd (of bewust
+  // 84: online betalen van een factuur in het klantportaal (verkoop/invoice-payments.js): per poging één Mollie-betaling. Een factuur gaat pas op
+  // betaald na een opvraging bij Mollie zelf; status open|betaald|mislukt. Geen geheimen, alleen het Mollie-id en de betaalpagina.
+  `
+  CREATE TABLE invoice_payments (
+    id           TEXT PRIMARY KEY,
+    tenant_id    TEXT NOT NULL REFERENCES tenants(id),
+    invoice_id   TEXT NOT NULL,
+    mollie_id    TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'open',
+    amount       REAL NOT NULL,
+    checkout_url TEXT NOT NULL DEFAULT '',
+    method       TEXT NOT NULL DEFAULT '',
+    mode         TEXT NOT NULL DEFAULT '',
+    created_at   TEXT NOT NULL,
+    paid_at      TEXT
+  );
+  CREATE UNIQUE INDEX invoice_payments_mollie ON invoice_payments (tenant_id, mollie_id);
+  CREATE INDEX invoice_payments_invoice ON invoice_payments (tenant_id, invoice_id, created_at);
+  `,
+  // 85: automatische betalingsherinneringen en aanmaningen (verkoop/payment-reminders.js): per factuur welke stap is verstuurd (of bewust
   // overgeslagen) en per klant een schakelaar om ze uit te zetten (users.reminders_off, 1 = geen herinneringen voor deze klant).
   `
   ALTER TABLE users ADD COLUMN reminders_off INTEGER NOT NULL DEFAULT 0;

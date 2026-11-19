@@ -15,7 +15,10 @@
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-/opt/apps/aquatech}"
-RAW="https://raw.githubusercontent.com/danieldh00/Aquatech/master/deploy/apps01"
+# SETUP_REF = een vaste commit van 40 tekens (zo roept servertaken.sh dit script aan); zonder blijft het master.
+SETUP_REF="${SETUP_REF:-master}"
+[[ "$SETUP_REF" == "master" || "$SETUP_REF" =~ ^[0-9a-f]{40}$ ]] || { echo "FOUT: SETUP_REF moet master of een volledige commit zijn." >&2; exit 1; }
+RAW="https://raw.githubusercontent.com/danieldh00/Aquatech/$SETUP_REF/deploy/apps01"
 STAMP="$(date +%Y%m%d%H%M)"
 
 [[ $(id -u) -eq 0 ]] || exec sudo -E bash "$0" "$@"

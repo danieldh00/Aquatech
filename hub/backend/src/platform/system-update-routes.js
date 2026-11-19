@@ -9,7 +9,7 @@ const { createRateLimiter } = require('../beveiliging/rate-limit');
 // Tijdens de onderhoudsmodus blijven deze schrijfverzoeken werken: inloggen en uitloggen (alleen een sessieregel; zo kan
 // de beheerder de voortgang blijven volgen), en de webhook van Mollie (die vraagt de
 // betaalstand zelf op en is herhaalbaar; Mollie probeert het anders later opnieuw, maar dan blijft een betaling langer open).
-const MAINTENANCE_OPEN = [/^\/api\/auth\/(login|logout)$/, /^\/mollie\/webhook\//];
+const MAINTENANCE_OPEN = [/^\/api\/auth\/(login|logout)$/, /^\/mollie\/webhook\//, /^\/api\/public\/invoice-payment\/[^/]+\/webhook$/];
 const MAINTENANCE_MESSAGE = 'Er wordt een update geïnstalleerd. Opslaan kan even niet; probeer het over een minuut opnieuw.';
 
 /**
