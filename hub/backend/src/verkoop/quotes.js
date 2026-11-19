@@ -1020,6 +1020,73 @@ function registerQuoteRoutes(app, ctx) {
   });
 
   /**
+   * Zet een datum JJJJ-MM-DD om naar een leesbare datum in de taal van het document.
+   * @param {string} iso De datum.
+   * @param {string} language 'nl' of 'en'.
+   * @returns {string} Bijv. "19 november 2026".
+   */
+  const longDate = (iso, language) => (/^\d{4}-\d{2}-\d{2}$/.test(String(iso || ''))
+    ? new Date(`${iso}T12:00:00`).toLocaleDateString(DocText.localeOf(language), { day: 'numeric', month: 'long', year: 'numeric' }) : '');
+  const bulkSendLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10, keyFn: (req) => `quote-bulk-send:${req.user.tenant_id}|${req.user.id}` });
+  /** Hoeveel offertes in één keer verstuurd mogen worden. */
+  const MAX_BULK_SEND = 25;
+
+  // Meerdere offertes tegelijk mailen met het standaardbericht (zoals het venster Versturen het voorstelt), aan het e-mailadres van de klant op de offerte.
+  app.post('/api/quotes-bulk/send', requireJson, requireQuotes, bulkSendLimiter, async (req, res) => {
+    const ids = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids.map(String))] : [];
+    if (!ids.length || ids.length > MAX_BULK_SEND) return res.status(400).json({ error: 'invalid_ids', message: `Kies 1 tot ${MAX_BULK_SEND} offertes.` });
+    if (!validShareBase(req.body?.url)) return res.status(400).json({ error: 'invalid_url', message: 'Ongeldig adres voor de link.' });
+    const settings = settingsOf(req);
+    const mailer = mailerFor(settings);
+    if (!mailer.configured()) return res.status(409).json({ error: 'not_configured', message: 'Er is geen mailserver ingesteld (Beheer → Integraties → E-mail).' });
+    const profile = settings.get('quoteProfile');
+    const sent = [];
+    const skipped = [];
+    for (const id of ids) {
+      const current = quotes.get(req.user, id);
+      if (!current) { skipped.push({ id, reason: 'Niet gevonden.' }); continue; }
+      const label = current.number;
+      const email = String(current.data?.customer?.email || '').trim();
+      if (current.acceptance || current.order || !['concept', 'verzonden'].includes(current.status)) { skipped.push({ id, number: label, reason: 'Is al beantwoord, omgezet of afgesloten.' }); continue; }
+      if (!validEmail(email)) { skipped.push({ id, number: label, reason: 'Geen geldig e-mailadres bij de klant.' }); continue; }
+      const shared = quotes.share(req.user, id, req.body.url);
+      if (shared.error) { skipped.push({ id, number: label, reason: 'Niet gevonden.' }); continue; }
+      const quote = shared.quote;
+      const language = quote.data && quote.data.language;
+      /**
+       * Een vaste tekst in de documenttaal van de offerte.
+       * @param {string} key Sleutel uit DocText.
+       * @param {object} [values] Waarden voor {naam}.
+       * @returns {string} De tekst.
+       */
+      const translate = (key, values) => DocText.text(language, key, values);
+      const customer = quote.data.customer;
+      const title = quote.data.title;
+      const paragraphs = [
+        translate('mail.greeting', { name: customer.contact || customer.name || translate('mail.customer') }),
+        translate('mail.quoteBody', { number: quote.number, about: title ? translate('mail.quoteAboutLower', { title: title.toLowerCase() }) : '', date: longDate(quote.data.validUntil, language) }),
+        translate('mail.quoteQuestions'),
+        `${translate('mail.closing')}\n${profile.companyName || ''}`,
+      ];
+      try {
+        await mailer.send({
+          to: [email], replyTo: profile.email, bcc: copyTo(req.user),
+          subject: `${translate('quote.title')} ${quote.number}${title ? ` – ${title}` : ''}`.slice(0, 300),
+          ...mailBody(profile, paragraphs, { label: translate('mail.sendButton'), href: quote.share.url }, mailStyleOf(settings)),
+        });
+      } catch (error) {
+        console.warn(`Offerte ${quote.number} niet verstuurd: ${error.code || ''} ${error.message}`);
+        skipped.push({ id, number: quote.number, reason: mailFailure(error) });
+        continue;
+      }
+      quotes.markSent(quote.id, email);
+      audit(req, 'offerte_verstuurd', { quoteId: quote.id, number: quote.number, recipients: 1, via: 'bulk' });
+      sent.push({ id, number: quote.number });
+    }
+    res.json({ sent, skipped });
+  });
+
+  /**
    * Het token van de openbare link. Het komt in een kop mee (niet in de URL van
    * het verzoek, dus niet in logboeken van proxy's).
    * @param {object} req Het Express-verzoek.

@@ -1585,9 +1585,35 @@
     bar.hidden = !chosen.length;
     $('#l-bulk-count').textContent = `${chosen.length} geselecteerd`;
     const closable = chosen.filter((quote) => !quote.order && ['concept', 'verzonden'].includes(quote.status));
+    const mailable = chosen.filter((quote) => !quote.order && ['concept', 'verzonden'].includes(quote.status));
+    $('#l-bulk-mail').hidden = !state.mail;
+    $('#l-bulk-mail').disabled = !mailable.length;
+    $('#l-bulk-mail').textContent = `Versturen per e-mail (${mailable.length})`;
     $('#l-bulk-close').disabled = !closable.length;
     $('#l-bulk-close').textContent = `Afsluiten als afgewezen (${closable.length})`;
     $('#l-export').textContent = chosen.length ? `Exporteer selectie (${chosen.length}) naar Excel` : 'Exporteer naar Excel';
+  }
+
+  /**
+   * Mailt de geselecteerde open offertes met het standaardbericht naar het e-mailadres van de klant op de offerte; vooraf één bevestiging met het aantal.
+   * @returns {Promise<void>}
+   */
+  async function mailSelected() {
+    const mailable = selectedQuotes().filter((quote) => !quote.order && ['concept', 'verzonden'].includes(quote.status));
+    if (!mailable.length) return;
+    if (!confirm(`${mailable.length} ${mailable.length === 1 ? 'offerte' : 'offertes'} nu per e-mail versturen aan de klant? Elke klant krijgt het standaardbericht met de link om de offerte te bekijken en akkoord te geven. Offertes zonder geldig e-mailadres worden overgeslagen.`)) return;
+    const button = $('#l-bulk-mail');
+    button.disabled = true;
+    try {
+      const result = await api('quotes-bulk/send', { method: 'POST', body: { ids: mailable.map((quote) => quote.id), url: shareBase() } });
+      for (const entry of result.sent) state.selected.delete(entry.id);
+      await loadList();
+      const skipped = result.skipped.map((entry) => `${entry.number || 'offerte'}: ${entry.reason}`);
+      toast(`${result.sent.length} ${result.sent.length === 1 ? 'offerte' : 'offertes'} verstuurd${skipped.length ? `; overgeslagen: ${skipped.join('; ')}` : ''}`, skipped.length > 0);
+    } catch (error) {
+      toast(error.message, true);
+      renderBulkBar();
+    }
   }
 
   /**
@@ -1791,6 +1817,7 @@
     $('#l-new-empty').onclick = () => { createEmpty(); };
     $('#l-profile').onclick = openProfile;
     $('#l-export').onclick = exportListXlsx;
+    $('#l-bulk-mail').onclick = mailSelected;
     $('#l-bulk-close').onclick = closeSelected;
     /** Heft de selectie op. */
     $('#l-bulk-clear').onclick = () => { state.selected.clear(); renderList(); };
