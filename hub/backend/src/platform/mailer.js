@@ -155,7 +155,7 @@ function createMailer(settings, { createTransport = nodemailer.createTransport, 
         attachments: Array.isArray(attachments) && attachments.length ? attachments.slice(0, 5).map((attachment) => ({
           filename: String(attachment.filename || 'bijlage').replace(/[\r\n"\\/]/g, '').slice(0, 120), content: attachment.content, contentType: attachment.contentType,
         })).concat(inline.attachments) : (inline.attachments.length ? inline.attachments : undefined),
-        });
+      });
     } catch (error) {
       throw tagServer(error, server);
     }
