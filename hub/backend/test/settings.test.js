@@ -273,6 +273,10 @@ test('kengetallen kiezen: instelling bewaren, module uit verbergt de KPI, volgor
     const catalog = (await adminClient.get('/app/api/admin/kpi-catalog')).body;
     assert.ok(catalog.items.length >= 10);
     assert.strictEqual(catalog.items.find((item) => item.key === 'bezetting').enabled, false, 'bezetting staat standaard uit');
+    /**
+     * Haalt de sleutels van de tegels op het dashboard op.
+     * @returns {Promise<string[]>} De sleutels in volgorde.
+     */
     const keys = async () => (await adminClient.get('/app/api/kpis')).body.kpis.map((tile) => tile.key);
     assert.ok(!(await keys()).includes('bezetting'));
     const saved = await adminClient.put('/app/api/admin/settings', { dashboardKpis: { items: [{ key: 'offertes', enabled: true }, { key: 'openstaand', enabled: true }, { key: 'vervallen', enabled: false }, { key: 'omzet', enabled: false }, { key: 'bezetting', enabled: true }], period: 'jaar' } });
