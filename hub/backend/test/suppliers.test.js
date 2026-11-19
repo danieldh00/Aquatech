@@ -260,6 +260,10 @@ test('leveranciers: prioriteit, voorraadstatus en een backup in het bestelvoorst
     await kees.del(`/app/api/suppliers/${teruplast.id}`);
     const later = (await kees.post('/app/api/purchase-orders', { supplierId: backup.id, lines: [{ itemId: item.id, qty: 1 }] })).body;
     assert.strictEqual(later.lines[0].backup, undefined);
+    // Positieve controle: Fitwerk is nu de voorkeur, dus een ontvangst bij Fitwerk verandert wel de inkoopprijs van het artikel.
+    const placed4 = (await kees.post(`/app/api/purchase-orders/${later.id}/place`)).body;
+    await kees.post(`/app/api/purchase-orders/${later.id}/receive`, { lines: [{ lineId: placed4.lines[0].id, qty: 1 }] });
+    assert.strictEqual((await kees.get(`/app/api/stock/items/${item.id}`)).body.costPrice, 2.5);
   } finally {
     server.close();
   }
