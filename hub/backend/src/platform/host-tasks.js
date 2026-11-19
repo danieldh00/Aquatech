@@ -91,10 +91,10 @@ function sanitizeHostTasks(raw) {
 function createHostTasks({ statusDir = '', settings, tasks = HOST_TASKS, now = () => Date.now() }) {
   /**
    * Wat de host als gedaan heeft gemeld (id → tijdstip).
+   * @param {object|null} ledger Het gelezen host-tasks.json (of null).
    * @returns {Object<string, string>} Alleen bekende taken met een geldig tijdstip.
    */
-  const doneOnHost = () => {
-    const ledger = statusDir ? readLedger(statusDir, 'host-tasks.json') : null;
+  const doneOnHost = (ledger) => {
     const done = {};
     const source = ledger && ledger.done && typeof ledger.done === 'object' ? ledger.done : {};
     for (const task of tasks) {
@@ -109,7 +109,8 @@ function createHostTasks({ statusDir = '', settings, tasks = HOST_TASKS, now = (
    * @returns {{ command: string, checkedAt: string|null, pending: number, tasks: object[] }} De weergave.
    */
   function view() {
-    const host = doneOnHost();
+    const ledger = statusDir ? readLedger(statusDir, 'host-tasks.json') : null;
+    const host = doneOnHost(ledger);
     const manual = sanitizeHostTasks(settings.get('hostTasks')).checked;
     const list = tasks.map((task) => {
       const doneAt = host[task.id] || (manual[task.id] && manual[task.id].at) || null;
@@ -119,7 +120,6 @@ function createHostTasks({ statusDir = '', settings, tasks = HOST_TASKS, now = (
         doneByName: !host[task.id] && manual[task.id] ? manual[task.id].byName : '',
       };
     });
-    const ledger = statusDir ? readLedger(statusDir, 'host-tasks.json') : null;
     return { command: HOST_COMMAND, checkedAt: ledger ? cleanTime(ledger.checkedAt) : null, pending: list.filter((task) => !task.done).length, tasks: list };
   }
 
