@@ -165,6 +165,25 @@
       </section>
     </div>
 
+    <section id="e-tpl" class="card-form tpl-box" hidden>
+      <div class="lines-head">
+        <h3>Sjabloon</h3>
+      </div>
+      <div class="tpl-row">
+        <label class="field">Kies een sjabloon<select id="e-tpl-select"></select></label>
+        <div class="tpl-actions">
+          <button type="button" id="e-tpl-apply" class="btn small primary">Toepassen</button>
+          <button type="button" id="e-tpl-delete" class="btn small danger" hidden>Sjabloon verwijderen</button>
+        </div>
+      </div>
+      <p id="e-tpl-hint" class="muted small">De inleiding en voorwaarden van het sjabloon vervangen die van deze offerte; de standaardregels komen er onderaan bij.</p>
+      <form id="e-tpl-save" class="tpl-row" hidden>
+        <label class="field">Deze offerte bewaren als sjabloon<input id="e-tpl-name" maxlength="80" placeholder="Naam, bijv. Aanleg gazon"></label>
+        <div class="tpl-actions"><button type="submit" class="btn small">Opslaan als sjabloon</button></div>
+        <p class="muted small full">Bewaart de inleiding, voorwaarden en alle regels (zonder interne notities). Dezelfde naam vervangt het bestaande sjabloon.</p>
+      </form>
+    </section>
+
     <section class="card-form">
       <h3>Inleiding</h3>
       <textarea data-f="intro" rows="3" maxlength="4000"></textarea>
