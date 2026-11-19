@@ -104,6 +104,7 @@ const { createSystemUpdate } = require('./platform/system-update');
 const { registerBackupRestoreRoutes } = require('./platform/backup-restore-routes');
 const { createMonitor } = require('./platform/monitoring');
 const { registerMonitoringRoutes } = require('./platform/monitoring-routes');
+const { createGraphSetup, registerGraphSetupRoutes } = require('./platform/mail-graph-setup');
 const { registerAppLogRoutes } = require('./platform/app-log-routes');
 const { createMonitoringChecks } = require('./platform/monitoring-checks');
 const { registerSystemUpdateRoutes, maintenanceGuard } = require('./platform/system-update-routes');
@@ -349,10 +350,10 @@ function staticHeaders(version) {
 
 /**
  * Bouwt de Express-app met alle routes en opslag.
- * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, graphFetch (Microsoft Graph), mailerFor, shopFetch, vismaFetch, mollieFetch, addressFetch, viesFetch, captchaFetch (reCAPTCHA), googleFetch (Google Drive), shippingLabelProviders (koppelingen voor verzendlabels per vervoerder) en wanIp (tests vervangen hiermee de buitenwereld).
+ * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, graphFetch (Microsoft Graph, ook de automatische inrichting), graphSetup, mailerFor, shopFetch, vismaFetch, mollieFetch, addressFetch, viesFetch, captchaFetch (reCAPTCHA), googleFetch (Google Drive), shippingLabelProviders (koppelingen voor verzendlabels per vervoerder) en wanIp (tests vervangen hiermee de buitenwereld).
  * @returns {object} De app; app.locals bevat settings, onderhoud en synchronisatie.
  */
-function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, createOrderReader = createDefaultOrderReader, createItemTextWriter = createDefaultItemTextWriter, vault = createVault(), setupCode, backupDir = null, graphFetch, mailerFor = (settings) => createMailer(settings, graphFetch ? { fetchImpl: graphFetch } : {}), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, captchaFetch, googleFetch, shippingLabelProviders = {}, wanIp = createWanIp(), loginDelayMs = 1000, backupInChild = false }) {
+function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, createOrderReader = createDefaultOrderReader, createItemTextWriter = createDefaultItemTextWriter, vault = createVault(), setupCode, backupDir = null, graphFetch, graphSetup = createGraphSetup(graphFetch ? { fetchImpl: graphFetch } : {}), mailerFor = (settings) => createMailer(settings, graphFetch ? { fetchImpl: graphFetch } : {}), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, captchaFetch, googleFetch, shippingLabelProviders = {}, wanIp = createWanIp(), loginDelayMs = 1000, backupInChild = false }) {
   const version = readVersion();
   const database = db || openDb();
   const store = createStore(database);
@@ -1854,6 +1855,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
   app.locals.monitor = monitor;
   registerAppLogRoutes(app, { appLog, canPlatform: canUpdate, environmentIds: () => allEnvironmentIds() });
+  registerGraphSetupRoutes(app, { setup: graphSetup, settingsFor: (id) => settingsFor(id), requireAdmin, audit });
   registerMonitoringRoutes(app, { monitor, settingsFor: (id) => settingsFor(id), audit, requireJson, canPlatform: canUpdate, mainTenantId: tenant.id, mailerFor });
 
   // ---------- Beheer: back-ups ----------

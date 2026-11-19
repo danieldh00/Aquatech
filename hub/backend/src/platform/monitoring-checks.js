@@ -358,6 +358,27 @@ function createMonitoringChecks(deps = {}) {
 
   // ---------- Per omgeving ----------
 
+  if (settingsFor) {
+    checks.push({
+      key: 'mail-secret', scope: 'tenant', title: 'Clientgeheim Microsoft Graph', intervalMinutes: 360,
+      /**
+       * Waarschuwt 30 dagen voordat het clientgeheim van de Graph-mail verloopt en meldt een fout zodra het is verlopen.
+       * Zonder ingevulde vervaldatum meldt de controle dat er dan geen waarschuwing komt.
+       * @param {object} ctx De context van de monitor.
+       * @returns {object} Het resultaat.
+       */
+      run(ctx) {
+        const server = settingsFor(ctx.tenantId).get('mailServer') || {};
+        if (server.mode !== 'graph') return SKIP;
+        if (!server.graphSecretExpires) return problem('waarschuwing', 'De vervaldatum van het clientgeheim voor Microsoft Graph is niet ingevuld, dus je krijgt geen melding voordat het verloopt. Vul de datum in bij Beheer > Instellingen > E-mail.');
+        const days = Math.ceil((Date.parse(server.graphSecretExpires) + 24 * 60 * 60 * 1000 - ctx.now()) / (24 * 60 * 60 * 1000)) - 1;
+        if (days < 0) return problem('fout', `Het clientgeheim voor Microsoft Graph is verlopen op ${server.graphSecretExpires}: er kan geen mail meer worden verstuurd. Maak een nieuw geheim aan (Beheer > Instellingen > E-mail, Automatisch instellen).`);
+        if (days <= 30) return problem('waarschuwing', `Het clientgeheim voor Microsoft Graph verloopt over ${days} ${days === 1 ? 'dag' : 'dagen'} (${server.graphSecretExpires}). Vernieuw het op tijd in Beheer > Instellingen > E-mail, anders stopt het versturen van mail.`);
+        return OK;
+      },
+    });
+  }
+
   if (settingsFor && mailerFor) {
     checks.push({
       key: 'mail', scope: 'tenant', title: 'Mailserver', intervalMinutes: 15,

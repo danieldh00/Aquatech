@@ -1396,7 +1396,7 @@
     try {
       const result = await api('mail');
       const config = result.config;
-      for (const key of ['host', 'port', 'user', 'from', 'replyTo', 'graphTenantId', 'graphClientId']) formElement[key].value = config[key] ?? '';
+      for (const key of ['host', 'port', 'user', 'from', 'replyTo', 'graphTenantId', 'graphClientId', 'graphSecretExpires']) formElement[key].value = config[key] ?? '';
       formElement.mode.value = config.mode || 'smtp';
       formElement.secure.value = String(Boolean(config.secure));
       formElement.password.value = '';
@@ -1468,7 +1468,7 @@
     const connector = formElement.mode.value === 'connector';
     const graph = formElement.mode.value === 'graph';
     const body = {
-      config: { graphTenantId: formElement.graphTenantId.value.trim(), graphClientId: formElement.graphClientId.value.trim(), mode: formElement.mode.value, host: formElement.host.value.trim(), port: Number(formElement.port.value) || (connector ? 25 : 587), secure: formElement.secure.value === 'true', user: connector || graph ? '' : formElement.user.value.trim(), from: formElement.from.value.trim(), replyTo: formElement.replyTo.value.trim() },
+      config: { graphSecretExpires: formElement.graphSecretExpires.value, graphTenantId: formElement.graphTenantId.value.trim(), graphClientId: formElement.graphClientId.value.trim(), mode: formElement.mode.value, host: formElement.host.value.trim(), port: Number(formElement.port.value) || (connector ? 25 : 587), secure: formElement.secure.value === 'true', user: connector || graph ? '' : formElement.user.value.trim(), from: formElement.from.value.trim(), replyTo: formElement.replyTo.value.trim() },
     };
     if (!connector && !graph && formElement.password.value) body.password = formElement.password.value;
     if (graph && formElement.graphSecret.value) body.graphSecret = formElement.graphSecret.value;
@@ -1476,9 +1476,52 @@
     await loadMail();
   }
 
+  /**
+   * Start de automatische Graph-inrichting: toont de Microsoft-code en -link en vraagt dan elke paar seconden of de
+   * beheerder is ingelogd; daarna zijn tenant, client en geheim ingesteld.
+   * @returns {Promise<void>}
+   */
+  async function startGraphSetup() {
+    const formElement = $('#s-mail');
+    const button = $('#m-graph-auto');
+    const stateElement = $('#m-graph-state');
+    $('.err', formElement).textContent = '';
+    stateElement.textContent = '';
+    button.disabled = true;
+    try {
+      const login = await api('mail/graph-setup', { method: 'POST', body: { from: formElement.from.value.trim() } });
+      $('#m-graph-link').href = login.verificationUri;
+      $('#m-graph-code').textContent = login.userCode;
+      $('#m-graph-login').hidden = false;
+      stateElement.textContent = 'Wachten op je inlog bij Microsoft…';
+      const deadline = Date.now() + login.expiresIn * 1000;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => { setTimeout(resolve, login.interval * 1000); });
+        const outcome = await api(`mail/graph-setup/${login.id}`);
+        if (outcome.status === 'pending') continue;
+        if (outcome.status === 'done') {
+          $('#m-graph-login').hidden = true;
+          stateElement.textContent = `Ingesteld voor ${outcome.organization || 'je organisatie'}; het geheim is geldig tot ${new Date(outcome.expiresAt).toLocaleDateString('nl-NL')}. Beperk de app nu tot de afzender-mailbox (handleiding, stap 5) en stuur een testmail.`;
+          stateElement.className = 'state ok';
+          await loadMail();
+          return;
+        }
+        throw new Error(outcome.message || 'De inlog is niet gelukt.');
+      }
+      throw new Error('De code is verlopen. Start opnieuw.');
+    } catch (error) {
+      $('#m-graph-login').hidden = true;
+      stateElement.textContent = '';
+      $('.err', formElement).textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  }
+
   /** Koppelt het e-mailformulier en de knoppen. */
   function initMail() {
     const formElement = $('#s-mail');
+    $('#m-graph-auto').onclick = startGraphSetup;
     /** Past het formulier aan de gekozen soort aan. */
     formElement.mode.onchange = () => { mailMode(true); };
     /**

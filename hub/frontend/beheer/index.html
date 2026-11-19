@@ -201,8 +201,24 @@
               <label>Tenant-ID (map)<input name="graphTenantId" maxlength="100" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off" spellcheck="false"></label>
               <label>Client-ID (toepassing)<input name="graphClientId" maxlength="40" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off" spellcheck="false"></label>
             </div>
-            <label>Clientgeheim (waarde)<input name="graphSecret" type="password" maxlength="300" autocomplete="new-password" spellcheck="false"></label>
+            <div class="row">
+              <label>Clientgeheim (waarde)<input name="graphSecret" type="password" maxlength="300" autocomplete="new-password" spellcheck="false"></label>
+              <label>Geheim verloopt op<input name="graphSecretExpires" type="date"></label>
+            </div>
+            <span class="muted small">Vul de vervaldatum in: de app geeft een maand van tevoren een melding in Bewaking (en per mail als meldingen zijn ingesteld). Bij automatisch instellen wordt de datum zelf ingevuld.</span>
             <span class="muted small">De afzender hieronder moet het volledige e-mailadres zijn van een bestaande mailbox in je Microsoft 365-omgeving. Mail gaat via HTTPS (poort 443), dus een geblokkeerde SMTP-poort is geen probleem. Het geheim wordt versleuteld opgeslagen en nooit getoond.</span>
+            <div class="field" data-graph-auto>
+              <span class="label">Automatisch instellen</span>
+              <div class="row">
+                <button type="button" class="btn" id="m-graph-auto">Automatisch instellen via Microsoft-inlog</button>
+              </div>
+              <p class="muted small" id="m-graph-login" hidden>
+                Open <a id="m-graph-link" target="_blank" rel="noopener noreferrer">de Microsoft-inlogpagina</a> en voer deze code in: <code id="m-graph-code"></code>.
+                Log in als <b>Globale beheerder</b> van je Microsoft 365-omgeving en geef toestemming. Daarna maakt de app zelf de app-registratie, de machtiging en het geheim aan.
+              </p>
+              <p class="state" id="m-graph-state"></p>
+              <span class="muted small">De inlog wordt alleen hiervoor gebruikt en niet bewaard. Vul eerst de afzender in. Daarna beperk je de app tot die ene mailbox (zie stap 5 van de handleiding): zonder die stap mag de app in principe namens elke mailbox versturen. Lukt automatisch niet (bijvoorbeeld door beleid in je omgeving), gebruik dan de handleiding.</span>
+            </div>
             <details class="guide">
               <summary>Handleiding: app registreren in Microsoft Entra</summary>
               <ol>

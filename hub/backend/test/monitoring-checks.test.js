@@ -148,6 +148,32 @@ test('drive: opnieuw verbinden, mislukte upload, verouderd, ok en uit', async ()
   assert.deepStrictEqual(await runCheck(build({ ...base, lastOkAt: '2026-11-13T10:00:00Z' }), 'drive'), { ok: true });
 });
 
+test('mail-secret: 30 dagen vooraf een waarschuwing, verlopen is een fout, zonder datum een hint, geen Graph = overslaan', async () => {
+  /**
+   * Bouwt de controles met een Graph-instelling.
+   * @param {object} server De instelling mailServer.
+   * @returns {object[]} De controles.
+   */
+  const build = (server) => createMonitoringChecks({ settingsFor: () => settingsOf({ mailServer: server }), runtimeStats: false });
+  /**
+   * De datum (JJJJ-MM-DD) zoveel dagen na NOW.
+   * @param {number} days Het aantal dagen.
+   * @returns {string} De datum.
+   */
+  const dayAhead = (days) => new Date(NOW + days * 24 * HOUR).toISOString().slice(0, 10);
+  assert.deepStrictEqual(await runCheck(build({ mode: 'smtp' }), 'mail-secret'), { skip: true });
+  assert.deepStrictEqual(await runCheck(build({ mode: 'graph', graphSecretExpires: dayAhead(90) }), 'mail-secret'), { ok: true });
+  assert.deepStrictEqual(await runCheck(build({ mode: 'graph', graphSecretExpires: dayAhead(31) }), 'mail-secret'), { ok: true });
+  const soon = await runCheck(build({ mode: 'graph', graphSecretExpires: dayAhead(30) }), 'mail-secret');
+  assert.strictEqual(soon.severity, 'waarschuwing');
+  assert.match(soon.message, /verloopt over 30 dagen/);
+  assert.strictEqual((await runCheck(build({ mode: 'graph', graphSecretExpires: dayAhead(1) }), 'mail-secret')).severity, 'waarschuwing');
+  const expired = await runCheck(build({ mode: 'graph', graphSecretExpires: dayAhead(-2) }), 'mail-secret');
+  assert.strictEqual(expired.severity, 'fout');
+  assert.match(expired.message, /is verlopen/);
+  assert.match((await runCheck(build({ mode: 'graph' }), 'mail-secret')).message, /vervaldatum.*niet ingevuld/);
+});
+
 test('mail: verify wordt hoogstens eens per uur gedaan en een fout is een melding', async () => {
   let verifies = 0;
   let fail = false;
