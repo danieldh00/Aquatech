@@ -28,6 +28,11 @@ test('een 500 krijgt een request-id en een regel in het logboek met foutcode en 
   const { db, app, main, baas, close } = await setup();
   try {
     const prepare = db.prepare.bind(db);
+    /**
+     * Laat de query op het nieuws mislukken, de rest werkt gewoon.
+     * @param {string} sql De SQL.
+     * @returns {object} Het statement.
+     */
     db.prepare = (sql) => { if (/FROM news\b/.test(sql)) throw new Error('kapot voor de test met password=Geheim123'); return prepare(sql); };
     const response = await baas.get('/app/api/news');
     db.prepare = prepare;
