@@ -51,6 +51,7 @@ Algemene afspraken voor samenwerken met Claude in een project met een coördinat
 ## Code en PR's
 - Nooit rechtstreeks op de hoofdbranch; branch vers vanaf de hoofdbranch.
 - Kleine PR's, één onderwerp. Releasenotes-fragment per wijziging in de applicatiecode; versienummers en changelog nooit met de hand.
+- **Harde regel (Daniël 2026-11-19): code wordt nooit gemerged zonder geslaagde Claude-code-review én security-review.** Geen admin-merge, geen bypass van de ruleset, ook niet bij haast of een kleine wijziging. Een PR zonder groene review op de huidige head wacht (review opnieuw draaien, nooit omzeilen). Alleen wat de workflow zelf bewust overslaat (docs/tests-only; securityreview alleen bij beveiligingsrelevante code) valt buiten de regel.
 - Auto-merge pas als CI en de verplichte reviews groen zijn **en** de reviewopmerkingen op de huidige head gelezen en verwerkt zijn (een groene review kan nog open bevindingen hebben). Faalt een review op limieten, draai hem opnieuw.
 - Databasemigraties zijn positioneel: neem bij het mergen het eerstvolgende vrije nummer op de hoofdbranch en rebase vlak voor de merge. Er lopen vaak meerdere threads tegelijk.
 - Tests voor randgevallen; dezelfde database als productie in de tests.
