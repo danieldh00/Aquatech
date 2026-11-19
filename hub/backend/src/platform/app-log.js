@@ -218,7 +218,7 @@ function createAppLog({ db, mainTenantId, flushMs = 2000, batchSize = 50, perMin
    */
   function list(tenantId, { levels = [], source = '', search = '', from = '', to = '', before = '', includePlatform = false, limit = 50 } = {}) {
     const pageSize = Math.min(Math.max(Math.floor(Number(limit)) || 50, 1), 500);
-    const where = ['tenant_id = ?'];
+    const where = [];
     const args = [tenantId];
     if (!includePlatform) where.push("scope = 'tenant'");
     const wanted = levels.filter((level) => LEVELS.includes(level));
@@ -237,7 +237,7 @@ function createAppLog({ db, mainTenantId, flushMs = 2000, batchSize = 50, perMin
       args.push(cursorAt, cursorAt, cursorId);
     }
     const rows = db.prepare(`SELECT id, scope, created_at, level, source, request_id, error_code, message, data, duration_ms, repeat_count
-      FROM app_logs WHERE ${where.join(' AND ')} ORDER BY created_at DESC, id DESC LIMIT ?`).all(...args, pageSize);
+      FROM app_logs WHERE tenant_id = ?${where.map((part) => ` AND ${part}`).join('')} ORDER BY created_at DESC, id DESC LIMIT ?`).all(...args, pageSize);
     const items = rows.map((row) => ({
       id: row.id, scope: row.scope, at: row.created_at, level: row.level, source: row.source, requestId: row.request_id,
       errorCode: row.error_code, message: row.message, data: parseData(row.data), durationMs: Number(row.duration_ms) || 0, repeat: Number(row.repeat_count) || 1,
