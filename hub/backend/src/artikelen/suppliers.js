@@ -7,6 +7,10 @@
 //   een eigen inkoopprijs (leeg = de prijs van het artikel), de bestelhoeveelheid (bestellen in
 //   veelvouden, bijvoorbeeld een doos van 25) en welke leverancier de voorkeur heeft. Er is
 //   hoogstens één voorkeur per artikel; de eerste leverancier is de voorkeur zolang er geen is gekozen.
+// - De volgorde van de leveranciers is hun prioriteit (`rank`: 0 = voorkeur, 1 = backup 1, enzovoort) en elke
+//   leverancier heeft een voorraadstatus (`stock_status`: leeg = onbekend, `in_stock`, `out`). Is de voorkeur
+//   niet leverbaar, dan kiest het bestelvoorstel de eerste backup die dat wel is (met diens artikelnummer en prijs).
+//   De verkoopprijs blijft bij de voorkeursleverancier horen.
 // - Een hoofdartikel (met varianten) heeft zelf geen leverancier: die hoort bij de varianten.
 const crypto = require('crypto');
 const { transaction } = require('../database/db');
@@ -14,6 +18,7 @@ const { transaction } = require('../database/db');
 const MAX_SUPPLIERS_PER_ITEM = 20;
 const MAX_COST_PRICE = 1000000;
 const MAX_ORDER_QTY = 1000000;
+const STOCK_STATUSES = ['', 'in_stock', 'out'];
 const EMAIL_PATTERN = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 
 /**
@@ -74,7 +79,7 @@ function sanitizeSupplier(input, { partial = false } = {}) {
 
 /**
  * Controleert en schoont de leveranciersregels van één artikel.
- * @param {*} entries De invoer: [{ supplierId, supplierSku, costPrice, orderQty, leadDays, preferred }].
+ * @param {*} entries De invoer in volgorde van prioriteit: [{ supplierId, supplierSku, costPrice, orderQty, leadDays, stockStatus, preferred }].
  * @returns {{ value?: object[], error?: string, field?: string }} De schone regels, of een fout.
  */
 function sanitizeItemSuppliers(entries) {
@@ -105,7 +110,9 @@ function sanitizeItemSuppliers(entries) {
       leadDays = Number(entry.leadDays);
       if (!Number.isInteger(leadDays) || leadDays < 0 || leadDays > 365) return { error: 'De levertijd van de leverancier is een heel aantal dagen van 0 tot en met 365.', field: 'leadDays' };
     }
-    value.push({ supplierId, supplierSku: cleanText(entry.supplierSku, 80), costPrice, orderQty, leadDays, preferred: Boolean(entry.preferred) });
+    const stockStatus = entry.stockStatus === undefined || entry.stockStatus === null ? '' : String(entry.stockStatus);
+    if (!STOCK_STATUSES.includes(stockStatus)) return { error: 'De voorraadstatus van de leverancier is onbekend, leverbaar of niet leverbaar.', field: 'stockStatus' };
+    value.push({ supplierId, supplierSku: cleanText(entry.supplierSku, 80), costPrice, orderQty, leadDays, stockStatus, preferred: Boolean(entry.preferred) });
   }
   // Hoogstens één voorkeur: de eerste die is aangevinkt; zonder voorkeur is de eerste leverancier het.
   const firstPreferred = value.findIndex((entry) => entry.preferred);
@@ -252,7 +259,7 @@ function createSupplierStore(db) {
   }
 
   /**
-   * De leveranciers van één artikel (voorkeur eerst, dan op naam).
+   * De leveranciers van één artikel (op prioriteit: voorkeur eerst, dan de backups).
    * @param {string} tenantId Id van de omgeving.
    * @param {string} itemId Id van het artikel.
    * @returns {object[]|null} De regels, of null als het artikel niet bestaat.
@@ -260,13 +267,15 @@ function createSupplierStore(db) {
   function forItem(tenantId, itemId) {
     const item = prepare('SELECT id FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, String(itemId || ''));
     if (!item) return null;
-    const rows = prepare(`SELECT l.supplier_id, l.supplier_sku, l.cost_price, l.order_qty, l.lead_days, l.preferred, s.name AS supplier_name, s.archived AS supplier_archived
+    const rows = prepare(`SELECT l.supplier_id, l.supplier_sku, l.cost_price, l.order_qty, l.lead_days, l.preferred, l.rank, l.stock_status, s.name AS supplier_name, s.archived AS supplier_archived
       FROM item_suppliers l JOIN suppliers s ON s.tenant_id = l.tenant_id AND s.id = l.supplier_id
-      WHERE l.tenant_id = ? AND l.item_id = ?`).all(tenantId, item.id);
+      WHERE l.tenant_id = ? AND l.item_id = ?
+      ORDER BY l.rank, l.created_at, l.id`).all(tenantId, item.id);
     return rows.map((row) => ({
       supplierId: row.supplier_id, supplierName: row.supplier_name, supplierArchived: Boolean(Number(row.supplier_archived)), supplierSku: row.supplier_sku,
       costPrice: row.cost_price == null ? null : Number(row.cost_price), orderQty: Number(row.order_qty), leadDays: row.lead_days == null ? null : Number(row.lead_days), preferred: Boolean(Number(row.preferred)),
-    })).sort((left, right) => Number(right.preferred) - Number(left.preferred) || left.supplierName.localeCompare(right.supplierName, 'nl'));
+      rank: Number(row.rank), stockStatus: row.stock_status,
+    }));
   }
 
   /**
@@ -294,10 +303,12 @@ function createSupplierStore(db) {
       }
       prepare('DELETE FROM item_suppliers WHERE tenant_id = ? AND item_id = ?').run(tenantId, item.id);
       const timestamp = currentTimestamp();
-      for (const entry of checked.value) {
-        prepare('INSERT INTO item_suppliers (id, tenant_id, item_id, supplier_id, supplier_sku, cost_price, order_qty, lead_days, preferred, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-          .run(crypto.randomUUID(), tenantId, item.id, entry.supplierId, entry.supplierSku, entry.costPrice, entry.orderQty, entry.leadDays, entry.preferred ? 1 : 0, timestamp);
-      }
+      // De aangevinkte voorkeur gaat vooraan; de rest houdt de volgorde van de lijst (backup 1, backup 2, ...).
+      const ordered = [...checked.value.filter((entry) => entry.preferred), ...checked.value.filter((entry) => !entry.preferred)];
+      ordered.forEach((entry, rank) => {
+        prepare('INSERT INTO item_suppliers (id, tenant_id, item_id, supplier_id, supplier_sku, cost_price, order_qty, lead_days, stock_status, rank, preferred, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .run(crypto.randomUUID(), tenantId, item.id, entry.supplierId, entry.supplierSku, entry.costPrice, entry.orderQty, entry.leadDays, entry.stockStatus, rank, rank === 0 ? 1 : 0, timestamp);
+      });
       return { suppliers: forItem(tenantId, item.id) };
     });
   }
@@ -338,8 +349,8 @@ function createSupplierStore(db) {
         continue;
       }
       if (existing.length >= MAX_SUPPLIERS_PER_ITEM) continue;
-      prepare(`INSERT INTO item_suppliers (id, tenant_id, item_id, supplier_id, supplier_sku, cost_price, order_qty, preferred, created_at)
-        VALUES (?, ?, ?, ?, ?, NULL, 1, ?, ?)`).run(crypto.randomUUID(), tenantId, itemId, supplierId, cleanSku, existing.length ? 0 : 1, currentTimestamp());
+      prepare(`INSERT INTO item_suppliers (id, tenant_id, item_id, supplier_id, supplier_sku, cost_price, order_qty, rank, preferred, created_at)
+        VALUES (?, ?, ?, ?, ?, NULL, 1, ?, ?, ?)`).run(crypto.randomUUID(), tenantId, itemId, supplierId, cleanSku, existing.length, existing.length ? 0 : 1, currentTimestamp());
     }
   }
 
@@ -355,18 +366,38 @@ function createSupplierStore(db) {
   }
 
   /**
-   * De voorkeursleverancier van elk artikel dat er een heeft (voor het bestelvoorstel per leverancier).
+   * De leverancier waarbij het bestelvoorstel per artikel bestelt: de voorkeur, of de eerste backup die niet op
+   * "niet leverbaar" staat als de voorkeur dat wel is. Zijn alle leveranciers niet leverbaar, dan blijft het de voorkeur
+   * (met `allUnavailable`). Gearchiveerde leveranciers tellen niet mee.
    * @param {string} tenantId Id van de omgeving.
-   * @returns {Map<string, object>} Artikel-id naar { supplierId, supplierName, supplierSku, costPrice, orderQty }.
+   * @returns {Map<string, object>} Artikel-id naar { supplierId, supplierName, supplierSku, costPrice, orderQty, backup, allUnavailable, preferredSupplier }.
+   * Bij een backup staat in `preferredSupplier` de voorkeur ({ supplierId, supplierName, costPrice, orderQty }).
    */
   function preferredByItem(tenantId) {
-    const rows = prepare(`SELECT l.item_id, l.supplier_id, l.supplier_sku, l.cost_price, l.order_qty, s.name AS supplier_name
+    const rows = prepare(`SELECT l.item_id, l.supplier_id, l.supplier_sku, l.cost_price, l.order_qty, l.stock_status, s.name AS supplier_name
       FROM item_suppliers l JOIN suppliers s ON s.tenant_id = l.tenant_id AND s.id = l.supplier_id
-      WHERE l.tenant_id = ? AND l.preferred = 1 AND s.archived = 0`).all(tenantId);
-    return new Map(rows.map((row) => [row.item_id, {
-      supplierId: row.supplier_id, supplierName: row.supplier_name, supplierSku: row.supplier_sku,
-      costPrice: row.cost_price == null ? null : Number(row.cost_price), orderQty: Number(row.order_qty),
-    }]));
+      WHERE l.tenant_id = ? AND s.archived = 0 ORDER BY l.item_id, l.rank, l.created_at, l.id`).all(tenantId);
+    const byItem = new Map();
+    for (const row of rows) {
+      if (!byItem.has(row.item_id)) byItem.set(row.item_id, []);
+      byItem.get(row.item_id).push({
+        supplierId: row.supplier_id, supplierName: row.supplier_name, supplierSku: row.supplier_sku, unavailable: row.stock_status === 'out',
+        costPrice: row.cost_price == null ? null : Number(row.cost_price), orderQty: Number(row.order_qty),
+      });
+    }
+    const out = new Map();
+    for (const [itemId, candidates] of byItem) {
+      const main = candidates[0];
+      const chosen = candidates.find((candidate) => !candidate.unavailable);
+      const pick = chosen || main;
+      const { unavailable, ...fields } = pick;
+      const backup = pick !== main;
+      out.set(itemId, {
+        ...fields, backup, allUnavailable: !chosen,
+        preferredSupplier: backup ? { supplierId: main.supplierId, supplierName: main.supplierName, costPrice: main.costPrice, orderQty: main.orderQty } : null,
+      });
+    }
+    return out;
   }
 
   return { list, get, create, update, remove, forItem, setForItem, preferredByItem, rememberSkus, skusOf };

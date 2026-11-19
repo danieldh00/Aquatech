@@ -188,10 +188,63 @@ test('leveranciers: bestelvoorstel per leverancier met bestelhoeveelheid en eige
     assert.deepStrictEqual(proposal.suppliers.map((group) => [group.supplierName, group.count, group.total]), [['Import BV', 1, 90], ['Tuintechniek', 1, 37.5], ['', 1, 12]]);
     assert.strictEqual(proposal.total, 139.5);
 
-    // Een gearchiveerde voorkeursleverancier telt niet meer als leverancier van het voorstel.
+    // Een gearchiveerde voorkeursleverancier telt niet meer: het voorstel valt terug op de volgende actieve leverancier.
     await kees.del(`/app/api/suppliers/${tuin.id}`);
     const after = (await kees.get('/app/api/stock/reorder')).body.items.find((item) => item.code === 'PIJP');
-    assert.deepStrictEqual([after.supplierId, after.orderQty, after.costPrice], [null, 17, 2]);
+    assert.deepStrictEqual([after.supplierId, after.orderQty, after.costPrice], [import_.id, 17, 2]);
+  } finally {
+    server.close();
+  }
+});
+
+test('leveranciers: prioriteit, voorraadstatus en een backup in het bestelvoorstel en de inkooporder', async () => {
+  const { server, as } = await setup();
+  try {
+    const kees = await as('kees');
+    const teruplast = (await kees.post('/app/api/suppliers', { name: 'Teruplast' })).body;
+    const backup = (await kees.post('/app/api/suppliers', { name: 'Fitwerk BV' })).body;
+    const item = (await kees.post('/app/api/stock/items', { code: 'FIT-1', name: 'Fitting', minQty: 10, onHand: 0, costPrice: 2 })).body;
+    /**
+     * Zet de leveranciers van het artikel.
+     * @param {object[]} suppliersList De regels in volgorde van prioriteit.
+     * @returns {Promise<object>} Het antwoord.
+     */
+    const link = (suppliersList) => kees.put(`/app/api/stock/items/${item.id}/suppliers`, { suppliers: suppliersList });
+    const saved = await link([
+      { supplierId: backup.id, supplierSku: 'FW-9', costPrice: 2.5, stockStatus: 'in_stock' },
+      { supplierId: teruplast.id, supplierSku: 'TP-1', costPrice: 2, preferred: true, stockStatus: 'in_stock' }]);
+    assert.deepStrictEqual(saved.body.items.map((line) => [line.supplierName, line.rank, line.preferred, line.stockStatus]), [['Teruplast', 0, true, 'in_stock'], ['Fitwerk BV', 1, false, 'in_stock']]);
+    assert.strictEqual((await link([{ supplierId: teruplast.id, stockStatus: 'misschien' }])).body.field, 'stockStatus');
+
+    // Voorkeur leverbaar: het voorstel bestelt bij de voorkeur.
+    await link(saved.body.items);
+    let line = (await kees.get('/app/api/stock/reorder')).body.items.find((row) => row.code === 'FIT-1');
+    assert.deepStrictEqual([line.supplierName, line.supplierSku, line.costPrice, line.backup], ['Teruplast', 'TP-1', 2, null]);
+
+    // Voorkeur niet leverbaar: de backup, met diens artikelnummer, prijs en het prijsverschil.
+    await link(saved.body.items.map((row) => ({ ...row, stockStatus: row.supplierName === 'Teruplast' ? 'out' : row.stockStatus })));
+    line = (await kees.get('/app/api/stock/reorder')).body.items.find((row) => row.code === 'FIT-1');
+    assert.deepStrictEqual([line.supplierName, line.supplierSku, line.costPrice], ['Fitwerk BV', 'FW-9', 2.5]);
+    assert.deepStrictEqual([line.backup.preferredSupplierName, line.backup.extraPerUnit, line.backup.extraAmount], ['Teruplast', 0.5, line.orderQty * 0.5]);
+
+    // Alles niet leverbaar: toch de voorkeur, met een vlag.
+    await link(saved.body.items.map((row) => ({ ...row, stockStatus: 'out' })));
+    line = (await kees.get('/app/api/stock/reorder')).body.items.find((row) => row.code === 'FIT-1');
+    assert.deepStrictEqual([line.supplierName, line.allSuppliersUnavailable, line.backup], ['Teruplast', true, null]);
+
+    // Een inkooporder bij de backup toont het meerprijsverschil en wijzigt de inkoopprijs van het artikel niet.
+    const order = (await kees.post('/app/api/purchase-orders', { supplierId: backup.id, lines: [{ itemId: item.id, qty: 10 }] })).body;
+    assert.deepStrictEqual([order.lines[0].unitCost, order.lines[0].backup.extraPerUnit, order.lines[0].backup.extraAmount], [2.5, 0.5, 5]);
+    const placed = (await kees.post(`/app/api/purchase-orders/${order.id}/place`)).body;
+    const received = await kees.post(`/app/api/purchase-orders/${order.id}/receive`, { lines: [{ lineId: placed.lines[0].id, qty: 10 }] });
+    assert.strictEqual(received.status, 200, JSON.stringify(received.body));
+    assert.strictEqual((await kees.get(`/app/api/stock/items/${item.id}`)).body.costPrice, 2);
+    // Bij de voorkeur zelf verandert de inkoopprijs wel mee.
+    const preferredOrder = (await kees.post('/app/api/purchase-orders', { supplierId: teruplast.id, lines: [{ itemId: item.id, qty: 5, unitCost: 2.2 }] })).body;
+    assert.strictEqual(preferredOrder.lines[0].backup, undefined);
+    const placed2 = (await kees.post(`/app/api/purchase-orders/${preferredOrder.id}/place`)).body;
+    await kees.post(`/app/api/purchase-orders/${preferredOrder.id}/receive`, { lines: [{ lineId: placed2.lines[0].id, qty: 5 }] });
+    assert.strictEqual((await kees.get(`/app/api/stock/items/${item.id}`)).body.costPrice, 2.2);
   } finally {
     server.close();
   }

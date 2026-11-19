@@ -1970,7 +1970,8 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * "bestellen tot" (leeg of lager dan het minimum = 2× minimum), naar boven
    * afgerond op hele eenheden. Heeft het artikel een voorkeursleverancier, dan wordt het aantal naar boven
    * afgerond op een veelvoud van zijn bestelhoeveelheid (de verpakking), geldt de inkoopprijs van die
-   * leverancier (als die is ingevuld) en staan leverancier en artikelnummer bij de regel.
+   * leverancier (als die is ingevuld) en staan leverancier en artikelnummer bij de regel. Is de voorkeursleverancier niet
+   * leverbaar, dan bestelt het voorstel bij de eerste backup (`backup` met het prijsverschil per eenheid en in totaal).
    * @param {string} tenantId Id van de omgeving.
    * Wat al onderweg is (inkooporders die nog niet zijn ontvangen) telt mee als voorraad, zodat niets dubbel wordt besteld.
    * @param {{ preferred?: Map<string, object>, incoming?: Map<string, number> }} [options] preferred = voorkeursleverancier per artikel-id (suppliers.preferredByItem), incoming = aantal onderweg per artikel-id (purchaseOrders.incomingByItem).
@@ -1987,13 +1988,20 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       const orderQty = round3(Math.ceil(round3(round3(target - item.available - onTheWay) / pack)) * pack);
       const unitCost = supplier && supplier.costPrice != null ? supplier.costPrice : item.costPrice;
       const amount = unitCost == null ? null : Math.round(orderQty * unitCost * 100) / 100;
+      // Bestelt het voorstel bij een backup (de voorkeur is niet leverbaar), dan staat het prijsverschil per eenheid met de voorkeur erbij.
+      let backup = null;
+      if (supplier && supplier.backup && supplier.preferredSupplier) {
+        const preferredCost = supplier.preferredSupplier.costPrice != null ? supplier.preferredSupplier.costPrice : item.costPrice;
+        const extraPerUnit = unitCost == null || preferredCost == null ? null : Math.round((unitCost - preferredCost) * 10000) / 10000;
+        backup = { preferredSupplierId: supplier.preferredSupplier.supplierId, preferredSupplierName: supplier.preferredSupplier.supplierName, extraPerUnit, extraAmount: extraPerUnit == null ? null : Math.round(extraPerUnit * orderQty * 100) / 100 };
+      }
       if (amount != null) total = Math.round(((total || 0) + amount) * 100) / 100;
       const key = supplier ? supplier.supplierId : '';
       const group = groups.get(key) || { supplierId: supplier ? supplier.supplierId : null, supplierName: supplier ? supplier.supplierName : '', count: 0, total: null };
       group.count += 1;
       if (amount != null) group.total = Math.round(((group.total || 0) + amount) * 100) / 100;
       groups.set(key, group);
-      return { ...item, costPrice: unitCost, target, incoming: onTheWay, orderQty, amount, supplierId: supplier ? supplier.supplierId : null, supplierName: supplier ? supplier.supplierName : '', supplierSku: supplier ? supplier.supplierSku : '' };
+      return { ...item, costPrice: unitCost, target, incoming: onTheWay, orderQty, amount, supplierId: supplier ? supplier.supplierId : null, supplierName: supplier ? supplier.supplierName : '', supplierSku: supplier ? supplier.supplierSku : '', backup, allSuppliersUnavailable: Boolean(supplier && supplier.allUnavailable) };
     });
     const suppliers = [...groups.values()].sort((left, right) => (left.supplierId ? 0 : 1) - (right.supplierId ? 0 : 1) || left.supplierName.localeCompare(right.supplierName, 'nl'));
     return { items, total, suppliers };

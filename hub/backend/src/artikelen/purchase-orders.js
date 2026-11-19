@@ -219,8 +219,37 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
    * @param {string} orderId Id van de order.
    * @returns {object[]} De regels.
    */
-  const linesOf = (tenantId, orderId) => prepare(`SELECT ${LINE_COLS} FROM purchase_order_lines WHERE tenant_id = ? AND order_id = ? ORDER BY position, id`)
-    .all(tenantId, orderId).map(lineOf);
+  const linesOf = (tenantId, orderId) => linesWithPreferred(tenantId, orderId).map(lineOf);
+
+  /**
+   * De rijen van een order, elk met de voorkeursleverancier van het artikel (een query; voor het meerprijsverschil bij een backup).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} orderId Id van de order.
+   * @returns {object[]} De regelrijen met pref_supplier_id, pref_supplier_name, pref_cost en item_cost.
+   */
+  const linesWithPreferred = (tenantId, orderId) => prepare(`SELECT ${LINE_COLS.split(', ').map((column) => `l.${column}`).join(', ')},
+      (SELECT p.supplier_id FROM item_suppliers p WHERE p.tenant_id = l.tenant_id AND p.item_id = l.item_id AND p.preferred = 1 LIMIT 1) AS pref_supplier_id,
+      (SELECT ps.name FROM item_suppliers p JOIN suppliers ps ON ps.tenant_id = p.tenant_id AND ps.id = p.supplier_id WHERE p.tenant_id = l.tenant_id AND p.item_id = l.item_id AND p.preferred = 1 LIMIT 1) AS pref_supplier_name,
+      (SELECT p.cost_price FROM item_suppliers p WHERE p.tenant_id = l.tenant_id AND p.item_id = l.item_id AND p.preferred = 1 LIMIT 1) AS pref_cost,
+      (SELECT i.cost_price FROM stock_items i WHERE i.tenant_id = l.tenant_id AND i.id = l.item_id) AS item_cost
+    FROM purchase_order_lines l WHERE l.tenant_id = ? AND l.order_id = ? ORDER BY l.position, l.id`).all(tenantId, orderId);
+
+  /**
+   * Welke artikelen een voorkeursleverancier hebben die niet de gegeven leverancier is (die levert dan als backup).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} supplierId De leverancier van de order.
+   * @param {string[]} itemIds De artikelen om te controleren.
+   * @returns {Map<string, object>} Artikel-id naar { supplierName, costPrice } van de voorkeur; alleen de artikelen waarvoor de leverancier een backup is.
+   */
+  function backupItemIds(tenantId, supplierId, itemIds) {
+    const out = new Map();
+    const ids = [...new Set(itemIds)];
+    if (!ids.length) return out;
+    const rows = prepare(`SELECT l.item_id, l.supplier_id, l.cost_price, s.name AS supplier_name FROM item_suppliers l JOIN suppliers s ON s.tenant_id = l.tenant_id AND s.id = l.supplier_id
+      WHERE l.tenant_id = ? AND l.preferred = 1 AND l.item_id IN (${placeholders(ids.length)})`).all(tenantId, ...ids);
+    for (const row of rows) if (row.supplier_id !== supplierId) out.set(row.item_id, { supplierName: row.supplier_name, costPrice: row.cost_price == null ? null : Number(row.cost_price) });
+    return out;
+  }
 
   /**
    * De volledige order met regels en totaal.
@@ -229,7 +258,16 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
    * @returns {object} De order.
    */
   const fullOrder = (row, tenantId) => {
-    const lines = linesOf(tenantId, row.id);
+    const rows = linesWithPreferred(tenantId, row.id);
+    const lines = rows.map(lineOf);
+    // Levert de leverancier van deze order een artikel als backup, dan staat bij de regel het meerprijsverschil met de voorkeur.
+    rows.forEach((lineRow, index) => {
+      const line = lines[index];
+      if (!lineRow.pref_supplier_id || lineRow.pref_supplier_id === row.supplier_id) return;
+      const preferredCost = lineRow.pref_cost != null ? Number(lineRow.pref_cost) : lineRow.item_cost == null ? null : Number(lineRow.item_cost);
+      const extraPerUnit = line.unitCost == null || preferredCost == null ? null : Math.round((line.unitCost - preferredCost) * 10000) / 10000;
+      line.backup = { preferredSupplierName: lineRow.pref_supplier_name, extraPerUnit, extraAmount: extraPerUnit == null ? null : round2(extraPerUnit * line.qty) };
+    });
     return { ...orderOf(row), lines, total: totalOf(lines), openQty: round3(lines.reduce((sum, line) => sum + line.openQty, 0)) };
   };
 
@@ -456,12 +494,14 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
       checked.push({ line, qty: round3(qty) });
     }
     const now = currentTimestamp();
+    // De inkoopprijs van een backupleverancier verandert de inkoop- en verkoopprijs van het artikel niet (die horen bij de voorkeur); de FIFO-laag houdt wel de echte prijs.
+    const backupItems = backupItemIds(tenantId, row.supplier_id, checked.map(({ line }) => line.item_id));
     for (const { line, qty } of checked) {
       stock.book(tenantId, line.item_id, qty, {
         kind: 'ontvangst', source: `inkoop:${row.number}`, note: `Inkooporder ${row.number}`, user, at: now,
         unitCost: line.unit_cost == null ? undefined : Number(line.unit_cost),
       });
-      if (line.unit_cost != null) stock.receiptCost(tenantId, line.item_id, Number(line.unit_cost), { user, note: `Inkooporder ${row.number}` });
+      if (line.unit_cost != null && !backupItems.has(line.item_id)) stock.receiptCost(tenantId, line.item_id, Number(line.unit_cost), { user, note: `Inkooporder ${row.number}` });
       prepare('UPDATE purchase_order_lines SET received_qty = received_qty + ? WHERE tenant_id = ? AND id = ?').run(qty, tenantId, line.id);
     }
     const after = linesOf(tenantId, row.id);
