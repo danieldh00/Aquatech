@@ -134,8 +134,8 @@
    */
   async function loadLines(append) {
     const params = new URLSearchParams({ filter: $('#ct-filter').value, limit: String(PAGE), offset: String(append ? state.lines.length : 0) });
-    const location = $('#ct-location').value;
-    if (location) params.set('location', location);
+    // Eerste optie = alle locaties; een andere optie (ook "Geen locatie" met lege waarde) filtert op die locatie.
+    if ($('#ct-location').selectedIndex > 0) params.set('location', $('#ct-location').value);
     const result = await context.api(`stock-counts/${encodeURIComponent(state.current.id)}/lines?${params}`);
     state.lines = append ? state.lines.concat(result.lines) : result.lines;
     state.total = result.total;
