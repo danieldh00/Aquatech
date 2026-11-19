@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.21.5',
+      date: '2026-11-19',
+      title: 'Afbeeldingen uit de oude webshop overnemen werkt ook met AVIF',
+      items: [
+        { text: '*Afbeeldingen en miniaturen* neemt nu ook de foto\'s over die de oude webshop als AVIF aanbiedt (dat waren alle foto\'s). Je browser zet ze om naar JPEG en maakt meteen de miniatuur. Een eerdere poging die alles als mislukt toonde, kun je gewoon opnieuw starten.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.21.4',
       date: '2026-11-18',
       title: 'Startpagina van de webshop laadt veel lichter',

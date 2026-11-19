@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.21.5
+
+- `artikelen/item-images.js`: `storeImage` herkent AVIF/HEIC (ftyp-merk) en geeft `unsupported_format` (415) in plaats van de misleidende melding over 8000 pixels; het overnemen meldt zulke artikelen met `convert: true` en `itemId`.
+- Nieuwe route `GET /api/stock/items/:id/shop-image` (recht `voorraad`, tenant-gebonden, importlimiet): bytes van de afbeelding van het gekoppelde webshopproduct van dat artikel, via `download` (netguard, geen adres uit het verzoek). Antwoord `application/octet-stream` met sandbox-CSP, `no-store`.
+- Browser (`artikelen/item-images.js`): `convertFailed` haalt de bytes op, zet ze met `createImageBitmap` en canvas om naar JPEG (max 1200 px) plus WebP-miniatuur en bewaart ze per artikel; een browser die AVIF niet kan lezen krijgt een duidelijke melding per artikel.
+
 ## 1.21.4
 
 - `webshop/assets/`: WebP-varianten van `hero-tuin`, `banner-druppelslang`, `banner-pomp` en `zakelijk-achtergrond` (met `-klein` voor smalle schermen), gemaakt met `tools/shop-webp.py`; de JPEG's blijven staan (terugval en bestaande verwijzingen in Beheer).
