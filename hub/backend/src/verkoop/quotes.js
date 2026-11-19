@@ -1069,7 +1069,7 @@ function registerQuoteRoutes(app, ctx) {
    * @param {object} settings De instellingen van de tenant.
    * @returns {{ config: object, passwordSet: boolean }} De instellingen en of er een wachtwoord is.
    */
-  const mailView = (settings) => ({ config: settings.get('mailServer'), passwordSet: Boolean(settings.get('mailPassword')) });
+  const mailView = (settings) => ({ config: settings.get('mailServer'), passwordSet: Boolean(settings.get('mailPassword')), graphSecretSet: Boolean(settings.get('mailGraphSecret')) });
   app.get(['/api/quote-mail', '/api/admin/mail'], requireAdmin, (req, res) => res.json(mailView(settingsOf(req))));
 
   app.put(['/api/quote-mail', '/api/admin/mail'], requireJson, requireAdmin, (req, res) => {
@@ -1077,6 +1077,7 @@ function registerQuoteRoutes(app, ctx) {
     const patch = {};
     if (validData(req.body?.config)) patch.mailServer = { ...settings.get('mailServer'), ...req.body.config };
     if (typeof req.body?.password === 'string') patch.mailPassword = req.body.password;
+    if (typeof req.body?.graphSecret === 'string') patch.mailGraphSecret = req.body.graphSecret;
     try {
       const changed = settings.update(patch, req.user?.id);
       if (changed.length) audit(req, 'instellingen_gewijzigd', { fields: changed });
@@ -1093,7 +1094,7 @@ function registerQuoteRoutes(app, ctx) {
     const to = req.body?.to;
     if (!validEmail(to)) return res.status(400).json({ error: 'invalid_to', message: 'Vul een geldig e-mailadres in.' });
     const mailer = mailerFor(settings);
-    if (!mailer.configured()) return res.status(409).json({ error: 'not_configured', message: 'Vul eerst de mailserver en het afzenderadres in.' });
+    if (!mailer.configured()) return res.status(409).json({ error: 'not_configured', message: 'Vul eerst de mailgegevens en het afzenderadres in.' });
     try {
       await mailer.send({ to, subject: 'Testbericht van de mailinstellingen', ...mailBody(settings.get('quoteProfile'), ['Dit is een testbericht. De mailserver is goed ingesteld.'], null, mailStyleOf(settings)) });
     } catch (error) {

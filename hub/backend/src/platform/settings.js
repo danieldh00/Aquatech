@@ -125,6 +125,8 @@ const FIELDS = {
   // wachtwoord staat apart en versleuteld.
   mailServer: { type: 'object', default: {}, sanitize: sanitizeMail, liveOnly: true },
   mailPassword: { type: 'secret', default: '', min: 1, liveOnly: true },
+  // Clientgeheim van de Entra-app voor mail via Microsoft Graph (mailServer.mode 'graph').
+  mailGraphSecret: { type: 'secret', default: '', min: 8, max: 300, liveOnly: true },
   // Webshopkoppeling (shop.js): webadres, ophaalwijze, btw en handmatige
   // koppeling; de sleutels van de WooCommerce REST API staan apart en versleuteld.
   shopSource: { type: 'object', default: {}, sanitize: sanitizeShop, liveOnly: true },

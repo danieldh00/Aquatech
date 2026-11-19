@@ -348,10 +348,10 @@ function staticHeaders(version) {
 
 /**
  * Bouwt de Express-app met alle routes en opslag.
- * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, mailerFor, shopFetch, vismaFetch, mollieFetch, addressFetch, viesFetch, captchaFetch (reCAPTCHA), googleFetch (Google Drive), shippingLabelProviders (koppelingen voor verzendlabels per vervoerder) en wanIp (tests vervangen hiermee de buitenwereld).
+ * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, graphFetch (Microsoft Graph), mailerFor, shopFetch, vismaFetch, mollieFetch, addressFetch, viesFetch, captchaFetch (reCAPTCHA), googleFetch (Google Drive), shippingLabelProviders (koppelingen voor verzendlabels per vervoerder) en wanIp (tests vervangen hiermee de buitenwereld).
  * @returns {object} De app; app.locals bevat settings, onderhoud en synchronisatie.
  */
-function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, createOrderReader = createDefaultOrderReader, createItemTextWriter = createDefaultItemTextWriter, vault = createVault(), setupCode, backupDir = null, mailerFor = (settings) => createMailer(settings), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, captchaFetch, googleFetch, shippingLabelProviders = {}, wanIp = createWanIp(), loginDelayMs = 1000, backupInChild = false }) {
+function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, createOrderReader = createDefaultOrderReader, createItemTextWriter = createDefaultItemTextWriter, vault = createVault(), setupCode, backupDir = null, graphFetch, mailerFor = (settings) => createMailer(settings, graphFetch ? { fetchImpl: graphFetch } : {}), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, captchaFetch, googleFetch, shippingLabelProviders = {}, wanIp = createWanIp(), loginDelayMs = 1000, backupInChild = false }) {
   const version = readVersion();
   const database = db || openDb();
   const store = createStore(database);

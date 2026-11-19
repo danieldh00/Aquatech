@@ -171,10 +171,10 @@
         </form>
 
         <form id="s-mail" class="card-form settings">
-          <h3>E-mail (SMTP)</h3>
-          <p class="muted small">Hiermee verstuurt de app offertes, afspraaklinks en bevestigingen. Het wachtwoord wordt versleuteld opgeslagen en nooit getoond. Zonder mailserver opent versturen het eigen mailprogramma.</p>
+          <h3>E-mail</h3>
+          <p class="muted small">Hiermee verstuurt de app offertes, afspraaklinks en bevestigingen, via SMTP of Microsoft Graph. Wachtwoord en geheim worden versleuteld opgeslagen en nooit getoond. Zonder mailserver opent versturen het eigen mailprogramma.</p>
           <div class="row">
-            <label>Soort<select name="mode"><option value="smtp">SMTP met inlog</option><option value="connector">Exchange Online-connector (op IP)</option></select></label>
+            <label>Soort<select name="mode"><option value="smtp">SMTP met inlog</option><option value="connector">Exchange Online-connector (op IP)</option><option value="graph">Microsoft 365 via Graph (HTTPS, geen poorten)</option></select></label>
           </div>
           <div class="field" data-connector hidden>
             <span class="label">WAN-IP van deze server</span>
@@ -196,7 +196,28 @@
               </ol>
             </details>
           </div>
-          <div class="row">
+          <div class="field" data-graph hidden>
+            <div class="row">
+              <label>Tenant-ID (map)<input name="graphTenantId" maxlength="100" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off" spellcheck="false"></label>
+              <label>Client-ID (toepassing)<input name="graphClientId" maxlength="40" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off" spellcheck="false"></label>
+            </div>
+            <label>Clientgeheim (waarde)<input name="graphSecret" type="password" maxlength="300" autocomplete="new-password" spellcheck="false"></label>
+            <span class="muted small">De afzender hieronder moet het volledige e-mailadres zijn van een bestaande mailbox in je Microsoft 365-omgeving. Mail gaat via HTTPS (poort 443), dus een geblokkeerde SMTP-poort is geen probleem. Het geheim wordt versleuteld opgeslagen en nooit getoond.</span>
+            <details class="guide">
+              <summary>Handleiding: app registreren in Microsoft Entra</summary>
+              <ol>
+                <li>Open <b>entra.microsoft.com</b> → <b>Toepassingen</b> → <b>App-registraties</b> → <b>Nieuwe registratie</b>. Naam bijvoorbeeld <i>AquaTech mail</i>, ondersteunde accounttypen: <b>Alleen deze organisatiemap</b>. Geen omleidings-URI nodig.</li>
+                <li>Kopieer op de overzichtspagina de <b>Toepassings-id (client)</b> en de <b>Map-id (tenant)</b> naar de velden hierboven.</li>
+                <li><b>Certificaten en geheimen</b> → <b>Nieuw clientgeheim</b>. Kopieer direct de <b>waarde</b> (niet de geheim-id) naar het veld Clientgeheim. Een geheim verloopt (maximaal 24 maanden): zet een herinnering en vervang het op tijd.</li>
+                <li><b>API-machtigingen</b> → <b>Een machtiging toevoegen</b> → <b>Microsoft Graph</b> → <b>Toepassingsmachtigingen</b> → <b>Mail.Send</b>. Kies daarna <b>Beheerderstoestemming verlenen</b> (een globale of toepassingsbeheerder).</li>
+                <li><b>Beperk de app tot één mailbox</b> (sterk aanbevolen: Mail.Send als toepassing mag anders namens elke mailbox versturen). Maak in Exchange Online PowerShell een mailbeveiligde groep met alleen de afzender-mailbox en een beleid:
+                  <pre>New-ApplicationAccessPolicy -AppId &lt;client-ID&gt; -PolicyScopeGroupId offerte@jouwdomein.nl -AccessRight RestrictAccess -Description "AquaTech mail"</pre>
+                  Controleer met <code>Test-ApplicationAccessPolicy -Identity offerte@jouwdomein.nl -AppId &lt;client-ID&gt;</code>. Het beleid werkt na enkele minuten tot een uur.</li>
+                <li>Vul de afzender in (bijvoorbeeld <code>AquaTech Service &lt;offerte@jouwdomein.nl&gt;</code>), sla op en stuur een testmail. Meldt Microsoft toegang geweigerd, wacht dan even of controleer de toestemming en het beleid.</li>
+              </ol>
+            </details>
+          </div>
+          <div class="row" data-smtp>
             <label>SMTP-server<input name="host" maxlength="200" placeholder="smtp.voorbeeld.nl" autocomplete="off" spellcheck="false"></label>
             <label>Poort<input name="port" type="number" min="1" max="65535" placeholder="587"></label>
             <label>Beveiliging<select name="secure"><option value="false">STARTTLS</option><option value="true">SSL/TLS (465)</option></select></label>
