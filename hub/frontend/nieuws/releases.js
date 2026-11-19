@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.26.7',
+      date: '2026-11-19',
+      title: 'Voorraadtelling (jaartelling) voorbereid',
+      items: [
+        { text: 'De voorraadtelling voor de boekhouding is voorbereid: een telling bevriest de lijst op een peildatum, tellers tellen blind per locatie en afsluiten boekt de verschillen. De schermen volgen.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.26.6',
       date: '2026-11-19',
       title: 'Verkoopprijs volgt de factor automatisch',
