@@ -73,3 +73,9 @@ td .fail { color: var(--danger, #c62828); }
   #vi-parts tr, #vi-log tr { padding: 8px 0; border-bottom: 1px solid var(--line); }
   #vi-parts td, #vi-log td { padding: 2px 0; border: 0; white-space: normal; }
 }
+
+/* Bulkacties in het factuuroverzicht. */
+.bulk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--at-border, #d5dbe6); border-radius: 8px; background: var(--at-surface-alt, #f3f6fb); }
+.bulk-bar[hidden] { display: none; }
+.grid .c-select { width: 32px; text-align: center; }
+.grid tr.picked td { background: var(--at-surface-alt, #f3f6fb); }
