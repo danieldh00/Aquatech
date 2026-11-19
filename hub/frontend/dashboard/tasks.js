@@ -37,9 +37,8 @@
     const container = document.getElementById('tasks');
     if (!container || !me || !me.user || location.protocol === 'file:') return;
     try {
-      const res = await fetch('api/tasks', { cache: 'no-store' });
-      if (!res.ok) return;
-      const tasks = (await res.json()).tasks || [];
+      const data = window.AquatechCommon ? await window.AquatechCommon.getJson('api/tasks') : await (await fetch('api/tasks', { cache: 'no-store' })).json();
+      const tasks = (data && data.tasks) || [];
       if (tasks.length) render(container, tasks);
       else container.hidden = true;
     } catch (error) { /* geen verbinding: het blok blijft weg */ }

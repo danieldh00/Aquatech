@@ -75,6 +75,7 @@
           </div>
         </div>`;
       wireMenu(container.querySelector('.user-menu'));
+      setupBell(container, me, base);
     } else {
       container.innerHTML = `<span class="role">Gast</span><a href="${esc(base)}login">Inloggen</a>`;
     }
@@ -141,6 +142,76 @@
     toggle.onclick = (event) => { event.stopPropagation(); setOpen(popup.hidden); };
     document.addEventListener('click', (event) => { if (!menu.contains(event.target)) setOpen(false); });
     document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !popup.hidden) { setOpen(false); toggle.focus(); } });
+  }
+
+  /**
+   * Zet het meldingenbelletje met teller links van het gebruikersmenu (alleen voor wie taken kan hebben).
+   * De melding komt uit api/tasks (zelfde bron als het blok Openstaande taken); een klik gaat direct naar het scherm.
+   * @param {HTMLElement} container Het element #account.
+   * @param {object} me Antwoord van api/me.
+   * @param {string} base Relatief pad naar de app-root.
+   * @returns {void}
+   */
+  function setupBell(container, me, base) {
+    const common = window.AquatechCommon;
+    const rights = me.rights || [];
+    if (!common || !(rights.includes('beheer') || rights.includes('voorraad'))) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'bell-menu';
+    wrap.innerHTML = `<button type="button" class="bell-btn" aria-haspopup="true" aria-expanded="false" title="Openstaande taken" aria-label="Openstaande taken">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 8H4c0-1 2-2 2-8zM10 21h4"/></svg>
+        <span class="bell-count" hidden></span>
+      </button>
+      <div class="bell-pop" role="menu" hidden></div>`;
+    container.insertBefore(wrap, container.querySelector('.user-menu'));
+    const toggle = wrap.querySelector('.bell-btn');
+    const popup = wrap.querySelector('.bell-pop');
+    const badge = wrap.querySelector('.bell-count');
+    /**
+     * Tekent de teller en de lijst met taken.
+     * @param {object[]} tasks Taken uit api/tasks.
+     * @returns {void}
+     */
+    const draw = (tasks) => {
+      const total = tasks.reduce((sum, task) => sum + task.count, 0);
+      badge.hidden = total === 0;
+      badge.textContent = total > 99 ? '99+' : String(total);
+      toggle.title = total ? `${total} openstaande ${total === 1 ? 'taak' : 'taken'}` : 'Geen openstaande taken';
+      popup.innerHTML = tasks.length
+        ? tasks.map((task) => {
+          const href = task.count === 1 && task.items && task.items[0] ? task.items[0].href : task.href;
+          return `<a role="menuitem" href="${esc(base)}${esc(href)}"><span>${esc(task.title)}</span><span class="bell-num">${esc(task.count)}</span></a>`;
+        }).join('')
+        : '<p class="bell-empty">Niets te doen. 🎉</p>';
+    };
+    /**
+     * Haalt de taken op en tekent ze.
+     * @param {boolean} fresh true = opnieuw bij de server vragen.
+     * @returns {Promise<void>}
+     */
+    const refresh = async (fresh) => {
+      const data = await common.getJson('api/tasks', { fresh });
+      if (data) draw(data.tasks || []);
+    };
+    /**
+     * Opent of sluit het venster (bij openen eerst verversen).
+     * @param {boolean} open true = openen.
+     * @returns {void}
+     */
+    const setOpen = (open) => {
+      popup.hidden = !open;
+      toggle.setAttribute('aria-expanded', String(open));
+      if (open) refresh(true);
+    };
+    /**
+     * Klik op het belletje: venster open of dicht.
+     * @param {MouseEvent} event De klik.
+     */
+    toggle.onclick = (event) => { event.stopPropagation(); setOpen(popup.hidden); };
+    document.addEventListener('click', (event) => { if (!wrap.contains(event.target)) { popup.hidden = true; toggle.setAttribute('aria-expanded', 'false'); } });
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !popup.hidden) { setOpen(false); toggle.focus(); } });
+    refresh(false);
+    setInterval(() => { if (document.visibilityState === 'visible') refresh(true); }, 3 * 60 * 1000);
   }
 
   /**
