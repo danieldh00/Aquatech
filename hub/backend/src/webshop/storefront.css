@@ -659,3 +659,30 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
   .product-detail .product-order { flex-direction: row; }
   .product-details { padding: 4px 18px 18px; }
 }
+
+/* Winkelwagenpagina, nieuw ontwerp: regels als nette kaart, hoge aantalvelden en een duidelijke knop "Naar afrekenen". Alles hangt onder .cart-page, zodat bestellingen, retouren en groothandel ongewijzigd blijven. */
+.shop-main .cart-page { max-width: 1040px; }
+.cart-page h1 { font-size: 2.1rem; font-weight: 800; letter-spacing: -0.02em; }
+.cart-page .tablewrap { background: var(--at-white); border: 1px solid var(--at-line); border-radius: 20px; overflow: hidden; }
+.cart-page .cart-table th { padding: 14px 18px; background: var(--at-band); color: var(--at-muted); font-size: 0.85rem; font-weight: 700; }
+.cart-page .cart-table td { padding: 18px; vertical-align: middle; }
+.cart-page .cart-table tbody tr:last-child td { border-bottom: 0; }
+.cart-page .cart-table tfoot th, .cart-page .cart-table tfoot td { padding: 10px 18px; }
+.cart-page .cart-table tr.total th, .cart-page .cart-table tr.total td { font-size: 1.3rem; border-top: 1px solid var(--at-line); }
+.cart-page .cart-qty input { width: 84px; height: 48px; padding: 0 12px; border: 1.5px solid var(--at-line); border-radius: 12px; font-weight: 700; box-sizing: border-box; }
+.cart-page .cart-table form[action] .button.secondary, .cart-page .cart-qty .button.secondary { height: 48px; padding: 0 16px; border-radius: 12px; }
+.cart-page .shipping-hint { padding: 16px 20px; border-radius: 16px; }
+.cart-page .cart-actions { margin-top: 24px; gap: 16px; }
+.cart-page .cart-actions .button { display: inline-flex; align-items: center; justify-content: center; height: 54px; padding: 0 28px; border-radius: 12px; font-size: 1rem; }
+.cart-page .cart-actions .button:not(.secondary) { min-width: 240px; background: var(--at-shop-green-dark); font-size: 1.1rem; font-weight: 800; }
+.cart-page .cart-actions .button:not(.secondary):hover { filter: brightness(0.92); }
+.cart-page .trust-strip { margin-top: 28px; border-radius: 16px; padding: 18px 20px; }
+@media (max-width: 640px) {
+  .cart-page h1 { font-size: 1.7rem; }
+  .cart-page .tablewrap { background: transparent; border: 0; border-radius: 0; overflow: visible; }
+  .cart-page .cart-table tbody tr { padding: 16px; border-radius: 16px; }
+  .cart-page .cart-table tbody td { padding: 0; }
+  .cart-page .cart-table tfoot { padding: 12px 16px; background: var(--at-white); border: 1px solid var(--at-line); border-radius: 16px; }
+  .cart-page .cart-actions { flex-direction: column-reverse; align-items: stretch; }
+  .cart-page .cart-actions .button:not(.secondary) { min-width: 0; }
+}

@@ -131,7 +131,7 @@ function cartPage(cart, groups = [], notice = '', fromPlan = null, { shipping = 
   </tr>`).join('');
   const missing = cart.missing.length ? `<div class="form-error" role="alert"><p>Niet meer te koop: ${cart.missing.map(escapeHtml).join(', ')}.</p>${cart.missing.map((code) => `<form class="inline" method="post" action="./"><input type="hidden" name="action" value="remove"><input type="hidden" name="code" value="${escapeHtml(code)}"><button class="button secondary" type="submit">Verwijder ${escapeHtml(code)}</button></form>`).join('')}</div>` : '';
   const full = notice ? `<div class="form-error" role="alert"><p>${escapeHtml(notice)}</p></div>` : '';
-  const body = `<section class="cart"><h1>Winkelwagen</h1>
+  const body = `<section class="cart cart-page"><h1>Winkelwagen</h1>
 ${planInfo}${reordered ? `<div class="form-info" role="status"><p>${reordered.added > 0 ? `De artikelen van je eerdere bestelling staan in je winkelwagen (${reordered.added}). Controleer de aantallen en prijzen.` : 'Er kon niets uit je eerdere bestelling in de winkelwagen.'}${reordered.notOrderable.length ? ` Niet meer te bestellen: ${reordered.notOrderable.map(escapeHtml).join(', ')}.` : ''}</p></div>` : ''}${quoteSent ? '<div class="form-info" role="status"><p>Je offerteaanvraag is ontvangen. We controleren de prijzen en sturen je de offerte. Je winkelwagen blijft bewaard.</p></div>' : ''}${full}${missing}
 <div class="tablewrap"><table class="cart-table"><thead><tr><th>Artikel</th><th class="num">Prijs${cart.pricesExcl ? ' excl. btw' : ''}</th><th>Aantal</th><th class="num">Totaal${cart.pricesExcl ? ' excl. btw' : ''}</th><th></th></tr></thead>
 <tbody>${rows}</tbody><tfoot>${totalRows(cart.totals, cart.pricesExcl)}</tfoot></table></div>
