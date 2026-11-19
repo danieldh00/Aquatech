@@ -273,19 +273,23 @@ test('herstelmail en bevestigingsmail: per adres en per account begrensd, zonder
   assert.strictEqual((await postForm(base, visitor, '/registreren/', { displayName: 'Els', email: 'els@voorbeeld.nl', password: PW, password2: PW, website: '' })).status, 303);
   await new Promise((resolve) => setTimeout(resolve, 50));
   sent.length = 0;
-  // Zes aanvragen voor hetzelfde adres: altijd hetzelfde antwoord, nooit meer dan drie mails.
-  for (let round = 0; round < 6; round += 1) {
+  // De limiet van drie tokens per account zou het aantal mails al afkappen: wis de tokens na elke poging, zodat alleen de nieuwe limieten overblijven.
+  // Zeven aanvragen voor hetzelfde adres (steeds een andere bezoeker): altijd hetzelfde antwoord, maar precies vijf mails.
+  for (let round = 0; round < 7; round += 1) {
     const out = await postForm(base, createClient(base), '/wachtwoord-vergeten/', { email: 'els@voorbeeld.nl' });
     assert.strictEqual(out.status, 200);
     assert.match(out.text, /Als er een account met dit e-mailadres is/);
+    db.prepare('DELETE FROM account_tokens WHERE tenant_id = ?').run(main);
   }
-  assert.ok(sent.length <= 3, `te veel herstelmails: ${sent.length}`);
-  // Opnieuw bevestigen aanvragen: ook na de limiet gewoon een redirect, nooit een fout.
+  assert.strictEqual(sent.filter((message) => message.subject === 'Nieuw wachtwoord kiezen').length, 5);
+  // Opnieuw bevestigen aanvragen: zeven pogingen van hetzelfde account, steeds een redirect, maar precies vijf mails.
+  sent.length = 0;
   for (let round = 0; round < 7; round += 1) {
     const out = await postForm(base, visitor, '/account/bevestigen/', {});
     assert.strictEqual(out.status, 303);
+    db.prepare('DELETE FROM account_tokens WHERE tenant_id = ?').run(main);
   }
-  assert.ok(sent.length <= 6, `te veel mails in totaal: ${sent.length}`);
+  assert.strictEqual(sent.filter((message) => message.subject === 'Bevestig je e-mailadres').length, 5);
 });
 
 test('knop naar het beheer in de shopkop: alleen voor medewerkers en beheerders, niet voor klanten of bezoekers', async () => {
