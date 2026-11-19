@@ -13,6 +13,44 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.22.7',
+      date: '2026-11-19',
+      title: 'Google-verificatie voor de webshop',
+      items: [],
+    },
+    {
+      version: '1.22.6',
+      date: '2026-11-19',
+      title: 'Nieuw ontwerp voor de winkelwagen van de webshop',
+      items: [
+        { text: 'De winkelwagen in de webshop is overzichtelijker: de regels staan in een nette kaart, het totaal valt beter op en de knop "Naar afrekenen" is groot en makkelijk te raken, ook op mobiel.' },
+      ],
+    },
+    {
+      version: '1.22.5',
+      date: '2026-11-19',
+      title: 'Orderpick: wisselen tussen Picken en Ontvangen werkt weer',
+      items: [
+        { text: 'Van Ontvangen terug naar Picken laat nu alleen het pickscherm zien, in plaats van beide schermen onder elkaar.', for: ['orderpick'] },
+      ],
+    },
+    {
+      version: '1.22.4',
+      date: '2026-11-19',
+      title: 'Nieuw ontwerp voor de productpagina van de webshop',
+      items: [
+        { text: 'De productpagina in de webshop is overzichtelijker: grotere foto, duidelijke prijs en voorraad en een hoge winkelwagenknop die ook op mobiel makkelijk te raken is.' },
+      ],
+    },
+    {
+      version: '1.22.3',
+      date: '2026-11-19',
+      title: 'Stappenplan voor Google Drive-back-ups',
+      items: [
+        { text: 'Beheer > Systeem > Back-ups naar Google Drive heeft bovenaan een stappenplan om de Google-app in te stellen, en de velden staan netjes op één lijn.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.22.2',
       date: '2026-11-19',
       title: 'Nieuw ontwerp voor de categoriepagina van de webshop',
