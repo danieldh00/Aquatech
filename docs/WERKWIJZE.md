@@ -28,7 +28,12 @@ Algemene afspraken voor samenwerken met Claude in een project met een coördinat
 - Eén thread per taak. De coördinator praat met de gebruiker, threads voeren uit.
 - Een opdracht aan een thread is een gestructureerde brief: **Doel, Wat, Waar** (bestanden/paden), **Regels**, **Klaar als**, **Werkwijze**. Gericht en klein; geen brede verkenning.
 - Een thread stopt na de merge. Vervolgvragen gaan naar de nog open thread, geen nieuwe.
-- Overlap tussen threads vermijden: raken twee taken dezelfde bestanden, doe ze achter elkaar. Grote bestanden alleen opsplitsen als er geen ander werk loopt.
+- **Harde regel: merge-conflicten voorkomen.**
+  - Maximaal 3 codethreads tegelijk, elk in een eigen deel van de code, en nooit twee tegelijk in hetzelfde bestand.
+  - Een thread die een migratie of een gedeeld kernbestand raakt, werkt alleen (geen andere codethreads ernaast).
+  - Nieuwe codevragen wachten in de wachtrij tot er ruimte is; uitzoekvragen zonder code mogen parallel.
+  - Rebase vlak voor de merge; migraties zijn positioneel (zie *Code en PR's*).
+  - Grote bestanden splits je pas als er niets anders loopt.
 - Updates bundelen: niet bij elke stap een bericht, wel bij een resultaat, blokkade of vraag.
 - Groot item: eerst een korte opzet (spec), dan pas bouwen.
 - Bundel kleine taken in één thread.
