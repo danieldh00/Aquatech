@@ -268,6 +268,11 @@ function createPaymentReminderRunner(reminders, { invoices, sender, settingsFor,
     const mailer = mailerFor(settings);
     if (!mailer.configured()) return result;
     const profile = settings.get('quoteProfile') || {};
+    // Zonder IBAN zou de mail een lege zin bevatten: niet versturen, de stappen blijven openstaan tot het profiel compleet is.
+    if (!String(profile.iban || '').trim()) {
+      console.warn(`Betalingsherinneringen staan aan, maar er is geen IBAN in het bedrijfsprofiel (omgeving ${tenantId}): niets verstuurd.`);
+      return result;
+    }
     const newestDue = Core.addDays(today, -activeSteps[0].days);
     const oldestDue = Core.addDays(today, -config.stopAfterDays);
     const lastStepKey = activeSteps[activeSteps.length - 1].key;

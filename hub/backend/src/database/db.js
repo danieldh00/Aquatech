@@ -1527,6 +1527,7 @@ const MIGRATIONS = [
     days_overdue INTEGER NOT NULL DEFAULT 0,
     UNIQUE (tenant_id, invoice_id, step_key)
   );
+  CREATE INDEX invoices_due ON invoices (tenant_id, status, due_date, id);
   `,
 ];
 

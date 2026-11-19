@@ -26,9 +26,10 @@ test('instelling: standaard uit, dagen oplopend met minstens een week ertussen, 
 /**
  * Bouwt een omgeving met een nagebootste mailer en facturen.
  * @param {object} config De instelling paymentReminders.
+ * @param {{ iban?: string }} [profile] Het IBAN in het bedrijfsprofiel.
  * @returns {Promise<object>} db, store, tenantId, invoices, reminders, runner, sent en make(options).
  */
-async function setup(config) {
+async function setup(config, { iban = 'NL00 BANK 0123 4567 89' } = {}) {
   const db = openDb();
   const store = createStore(db);
   const tenantId = store.ensureTenant().id;
@@ -38,7 +39,7 @@ async function setup(config) {
   const sent = [];
   const conf = Core.sanitizeSettings({});
   const values = {
-    quoteProfile: { iban: 'NL00 BANK 0123 4567 89', companyName: 'AquaTech Service' }, paymentReminders: sanitizePaymentReminders(config),
+    quoteProfile: { iban, companyName: 'AquaTech Service' }, paymentReminders: sanitizePaymentReminders(config),
   };
   const settings = { get: (key) => values[key] };
   const sender = {
@@ -181,4 +182,18 @@ test('API: herinneringen op de factuur en in de lijst; zonder recht 403, andere 
   } finally {
     server.close();
   }
+});
+
+test('zonder IBAN in het bedrijfsprofiel gaat er niets uit en blijft de stap openstaan', async () => {
+  const env = await setup(ON, { iban: '' });
+  const invoice = env.make({ overdueDays: 8 });
+  const warn = console.warn;
+  console.warn = Function.prototype;
+  try {
+    assert.deepStrictEqual(await env.runner.runEnvironment(env.tenantId, TODAY), { sent: 0, skipped: 0, failed: 0 });
+  } finally {
+    console.warn = warn;
+  }
+  assert.strictEqual(env.sent.length, 0);
+  assert.deepStrictEqual(env.reminders.forInvoice(env.tenantId, invoice.id), []);
 });
