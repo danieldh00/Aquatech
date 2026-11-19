@@ -7,7 +7,7 @@
   const KIND_NAMES = { jaar: 'Jaartelling', tussentijds: 'Tussentijds' };
   const STATUS_NAMES = { tellen: 'Loopt', afgesloten: 'Afgesloten', geannuleerd: 'Geannuleerd' };
   const LINE_STATUS_NAMES = { open: 'Niet geteld', geteld: 'Geteld', hertellen: 'Hertellen' };
-  const state = { counts: [], current: null, lines: [], total: 0 };
+  const state = { counts: [], current: null, lines: [], total: 0, run: 0 };
 
   /**
    * Zoekt het eerste element dat bij de selector past.
@@ -27,7 +27,7 @@
   }
 
   /**
-   * Laadt de tellingen en tekent de lijst; een openstaande telling wordt meteen geopend.
+   * Laadt de tellingen en tekent de lijst.
    * @returns {Promise<void>}
    */
   async function load() {
@@ -133,10 +133,12 @@
    * @returns {Promise<void>}
    */
   async function loadLines(append) {
+    const run = ++state.run;
     const params = new URLSearchParams({ filter: $('#ct-filter').value, limit: String(PAGE), offset: String(append ? state.lines.length : 0) });
     // Eerste optie = alle locaties; een andere optie (ook "Geen locatie" met lege waarde) filtert op die locatie.
     if ($('#ct-location').selectedIndex > 0) params.set('location', $('#ct-location').value);
     const result = await context.api(`stock-counts/${encodeURIComponent(state.current.id)}/lines?${params}`);
+    if (run !== state.run) return; // een nieuwer verzoek (ander filter of locatie) is al onderweg
     state.lines = append ? state.lines.concat(result.lines) : result.lines;
     state.total = result.total;
     renderLines();
