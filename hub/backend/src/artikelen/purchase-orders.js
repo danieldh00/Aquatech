@@ -223,13 +223,74 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
     .all(tenantId, orderId).map(lineOf);
 
   /**
+   * De rijen van een order, elk met de voorkeursleverancier van het artikel (een query; alleen voor het meerprijsverschil bij een backup in fullOrder; de index item_suppliers_pair dekt tenant + artikel).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} orderId Id van de order.
+   * @param {string} [supplierId] De leverancier van de order (voor order_linked).
+   * @returns {object[]} De regelrijen met pref_supplier_id, pref_supplier_name, pref_cost en item_cost.
+   */
+  const linesWithPreferred = (tenantId, orderId, supplierId) => {
+    const preferredLink = `FROM item_suppliers p JOIN suppliers ps ON ps.tenant_id = p.tenant_id AND ps.id = p.supplier_id
+        WHERE p.tenant_id = l.tenant_id AND p.item_id = l.item_id AND ps.archived = 0 ORDER BY p.rank, p.created_at, p.id LIMIT 1`;
+    return prepare(`SELECT ${LINE_COLS.split(', ').map((column) => `l.${column}`).join(', ')},
+      (SELECT p.supplier_id ${preferredLink}) AS pref_supplier_id,
+      (SELECT ps.name ${preferredLink}) AS pref_supplier_name,
+      (SELECT p.cost_price ${preferredLink}) AS pref_cost,
+      (SELECT 1 FROM item_suppliers own WHERE own.tenant_id = l.tenant_id AND own.item_id = l.item_id AND own.supplier_id = ?) AS order_linked,
+      (SELECT i.cost_price FROM stock_items i WHERE i.tenant_id = l.tenant_id AND i.id = l.item_id) AS item_cost
+    FROM purchase_order_lines l WHERE l.tenant_id = ? AND l.order_id = ? ORDER BY l.position, l.id`).all(supplierId || '', tenantId, orderId);
+  };
+
+  // Keuze voorkeur boven backup: "de voorkeur" is de eerste actieve leverancier op prioriteit, ongeacht haar voorraadstatus.
+  // De voorraadstatus bepaalt alleen bij wie het bestelvoorstel bestelt (suppliers.preferredByItem); de verkoopprijs, de prijsfactor
+  // en de inkoopprijs van het artikel horen altijd bij de voorkeur. Een order bij een andere gekoppelde leverancier is daarom altijd
+  // een backup-order: de meerprijs wordt getoond en de artikelprijzen blijven ongewijzigd.
+  /**
+   * Bij welke artikelen de gegeven leverancier als backup levert: het artikel heeft de leverancier als koppeling, maar de
+   * voorkeur (de eerste actieve leverancier op prioriteit, ongeacht de voorraadstatus: de verkoopprijs en de prijsfactor horen bij de voorkeur) een ander is.
+   * Een leverancier zonder koppeling (handmatige order) is geen backup: daar gedraagt de order zich zoals altijd.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} supplierId De leverancier van de order.
+   * @param {string[]} itemIds De artikelen om te controleren.
+   * @returns {Map<string, object>} Artikel-id naar { supplierName, costPrice } van de voorkeur; alleen artikelen waarvoor de leverancier een backup is.
+   */
+  function backupItemIds(tenantId, supplierId, itemIds) {
+    const out = new Map();
+    const ids = [...new Set(itemIds)];
+    if (!ids.length) return out;
+    const rows = prepare(`SELECT l.item_id, l.supplier_id, l.cost_price, s.name AS supplier_name, s.archived FROM item_suppliers l JOIN suppliers s ON s.tenant_id = l.tenant_id AND s.id = l.supplier_id
+      WHERE l.tenant_id = ? AND l.item_id IN (${placeholders(ids.length)}) ORDER BY l.item_id, l.rank, l.created_at, l.id`).all(tenantId, ...ids);
+    const byItem = new Map();
+    for (const row of rows) {
+      if (!byItem.has(row.item_id)) byItem.set(row.item_id, []);
+      byItem.get(row.item_id).push(row);
+    }
+    for (const [itemId, links] of byItem) {
+      const preferred = links.find((link) => !Number(link.archived));
+      if (preferred && preferred.supplier_id !== supplierId && links.some((link) => link.supplier_id === supplierId)) {
+        out.set(itemId, { supplierName: preferred.supplier_name, costPrice: preferred.cost_price == null ? null : Number(preferred.cost_price) });
+      }
+    }
+    return out;
+  }
+
+  /**
    * De volledige order met regels en totaal.
    * @param {object} row De orderrij.
    * @param {string} tenantId Id van de omgeving.
    * @returns {object} De order.
    */
   const fullOrder = (row, tenantId) => {
-    const lines = linesOf(tenantId, row.id);
+    const rows = linesWithPreferred(tenantId, row.id, row.supplier_id);
+    const lines = rows.map(lineOf);
+    // Levert de leverancier van deze order een artikel als backup, dan staat bij de regel het meerprijsverschil met de voorkeur.
+    rows.forEach((lineRow, index) => {
+      const line = lines[index];
+      if (!lineRow.pref_supplier_id || !lineRow.order_linked || lineRow.pref_supplier_id === row.supplier_id) return;
+      const preferredCost = lineRow.pref_cost != null ? Number(lineRow.pref_cost) : lineRow.item_cost == null ? null : Number(lineRow.item_cost);
+      const extraPerUnit = line.unitCost == null || preferredCost == null ? null : Math.round((line.unitCost - preferredCost) * 10000) / 10000;
+      line.backup = { preferredSupplierName: lineRow.pref_supplier_name, extraPerUnit, extraAmount: extraPerUnit == null ? null : round2(extraPerUnit * line.qty) };
+    });
     return { ...orderOf(row), lines, total: totalOf(lines), openQty: round3(lines.reduce((sum, line) => sum + line.openQty, 0)) };
   };
 
@@ -456,12 +517,14 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
       checked.push({ line, qty: round3(qty) });
     }
     const now = currentTimestamp();
+    // De inkoopprijs van een backupleverancier verandert de inkoop- en verkoopprijs van het artikel niet (die horen bij de voorkeur); de FIFO-laag houdt wel de echte prijs.
+    const backupItems = backupItemIds(tenantId, row.supplier_id, checked.map(({ line }) => line.item_id));
     for (const { line, qty } of checked) {
       stock.book(tenantId, line.item_id, qty, {
         kind: 'ontvangst', source: `inkoop:${row.number}`, note: `Inkooporder ${row.number}`, user, at: now,
         unitCost: line.unit_cost == null ? undefined : Number(line.unit_cost),
       });
-      if (line.unit_cost != null) stock.receiptCost(tenantId, line.item_id, Number(line.unit_cost), { user, note: `Inkooporder ${row.number}` });
+      if (line.unit_cost != null && !backupItems.has(line.item_id)) stock.receiptCost(tenantId, line.item_id, Number(line.unit_cost), { user, note: `Inkooporder ${row.number}` });
       prepare('UPDATE purchase_order_lines SET received_qty = received_qty + ? WHERE tenant_id = ? AND id = ?').run(qty, tenantId, line.id);
     }
     const after = linesOf(tenantId, row.id);

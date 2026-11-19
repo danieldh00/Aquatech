@@ -1363,6 +1363,15 @@ const PG_MIGRATIONS = [
   );
   CREATE INDEX stock_count_entries_line ON stock_count_entries (tenant_id, count_id, line_id, counted_at);
   `,
+  // 88: prioriteit en voorraadstatus per leverancier van een artikel (zie artikelen/suppliers.js).
+  `
+  ALTER TABLE item_suppliers ADD COLUMN rank BIGINT NOT NULL DEFAULT 0;
+  ALTER TABLE item_suppliers ADD COLUMN stock_status ${TEXT_TYPE} NOT NULL DEFAULT '';
+  UPDATE item_suppliers SET rank = ordered.position FROM (
+    SELECT id, ROW_NUMBER() OVER (PARTITION BY tenant_id, item_id ORDER BY preferred DESC, created_at, id) - 1 AS position FROM item_suppliers
+  ) ordered WHERE item_suppliers.id = ordered.id;
+  UPDATE item_suppliers SET preferred = CASE WHEN rank = 0 THEN 1 ELSE 0 END;
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };
