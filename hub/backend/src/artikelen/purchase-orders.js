@@ -819,6 +819,41 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
   }
 
   /**
+   * Zet bij de regels van meerdere orders tegelijk de backup-melding (`backup`) als de leverancier van de order voor dat artikel
+   * een backup is (zelfde definitie als backupItemIds: de voorkeur is de eerste actieve leverancier op prioriteit). Twee queries
+   * voor alle orders samen. De melding bevat ook of de voorkeur op niet leverbaar staat (`preferredUnavailable`).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {Array<{ supplierId: string, lines: object[] }>} orders De orders met hun regels (uit lineOf); de regels krijgen `backup`.
+   * @returns {void}
+   */
+  function annotateBackups(tenantId, orders) {
+    const ids = [...new Set(orders.flatMap((order) => order.lines.map((line) => line.itemId)))];
+    if (!ids.length) return;
+    const rows = prepare(`SELECT l.item_id, l.supplier_id, l.cost_price, l.stock_status, s.name AS supplier_name, s.archived, i.cost_price AS item_cost
+      FROM item_suppliers l JOIN suppliers s ON s.tenant_id = l.tenant_id AND s.id = l.supplier_id
+      JOIN stock_items i ON i.tenant_id = l.tenant_id AND i.id = l.item_id
+      WHERE l.tenant_id = ? AND l.item_id IN (${placeholders(ids.length)}) ORDER BY l.item_id, l.rank, l.created_at, l.id`).all(tenantId, ...ids);
+    const byItem = new Map();
+    for (const row of rows) {
+      if (!byItem.has(row.item_id)) byItem.set(row.item_id, []);
+      byItem.get(row.item_id).push(row);
+    }
+    for (const order of orders) {
+      for (const line of order.lines) {
+        const links = byItem.get(line.itemId) || [];
+        const preferred = links.find((link) => !Number(link.archived));
+        if (!preferred || preferred.supplier_id === order.supplierId || !links.some((link) => link.supplier_id === order.supplierId)) continue;
+        const preferredCost = preferred.cost_price != null ? Number(preferred.cost_price) : preferred.item_cost == null ? null : Number(preferred.item_cost);
+        const extraPerUnit = line.unitCost == null || preferredCost == null ? null : Math.round((line.unitCost - preferredCost) * 10000) / 10000;
+        line.backup = {
+          preferredSupplierName: preferred.supplier_name, preferredUnavailable: preferred.stock_status === 'out',
+          extraPerUnit, extraAmount: extraPerUnit == null ? null : round2(extraPerUnit * line.qty),
+        };
+      }
+    }
+  }
+
+  /**
    * Het overzicht van de automatische voorstellen: de voorstel-orders met regels, de afgewezen artikelen en hoeveel
    * artikelen onder het minimum geen voorkeursleverancier hebben (die komen nooit in een voorstel).
    * @param {string} tenantId Id van de omgeving.
@@ -831,6 +866,7 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
       const orderLines = lines.get(row.id);
       return { ...orderOf(row), lines: orderLines, total: totalOf(orderLines), openQty: round3(orderLines.reduce((sum, line) => sum + line.openQty, 0)) };
     });
+    annotateBackups(tenantId, orders);
     const dismissed = prepare(`SELECT d.item_id, d.dismissed_at, i.code, i.name FROM purchase_proposal_dismissals d
       JOIN stock_items i ON i.tenant_id = d.tenant_id AND i.id = d.item_id WHERE d.tenant_id = ? ORDER BY i.code`).all(tenantId)
       .map((row) => ({ itemId: row.item_id, code: row.code, name: row.name, dismissedAt: row.dismissed_at }));

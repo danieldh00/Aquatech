@@ -332,3 +332,35 @@ test('voorstellen: rondes tegelijk maken geen dubbele orders', async () => {
     server.close();
   }
 });
+
+test('voorstellen: bij een niet-leverbare voorkeur bestelt het voorstel bij de backup en toont de regel de melding', async () => {
+  const { server, as } = await setup();
+  try {
+    const kees = await as('kees');
+    const { supplier, pipe } = await seed(kees);
+    const backup = (await kees.post('/app/api/suppliers', { name: 'Fitwerk BV' })).body;
+    /**
+     * Zet de voorkeur en de backup met de voorraadstatus van de voorkeur.
+     * @param {string} preferredStatus De voorraadstatus van de voorkeur.
+     * @returns {Promise<object>} Het antwoord.
+     */
+    const link = (preferredStatus) => kees.put(`/app/api/stock/items/${pipe.id}/suppliers`, { suppliers: [
+      { supplierId: supplier.id, supplierSku: 'TT-PIJP', costPrice: 1.5, orderQty: 25, stockStatus: preferredStatus },
+      { supplierId: backup.id, supplierSku: 'FW-PIJP', costPrice: 2, orderQty: 1, stockStatus: 'in_stock' }] });
+    // Voorkeur leverbaar: het voorstel staat bij de voorkeur, zonder melding.
+    await link('in_stock');
+    await refresh(kees);
+    let order = (await proposals(kees)).orders[0];
+    assert.deepStrictEqual([order.supplierName, order.lines[0].backup], ['Tuintechniek', undefined]);
+    // Voorkeur niet leverbaar: het voorstel verhuist naar de backup, met melding en meerprijs.
+    await link('out');
+    await refresh(kees);
+    const orders = (await proposals(kees)).orders;
+    assert.deepStrictEqual(orders.map((row) => row.supplierName), ['Fitwerk BV']);
+    order = orders[0];
+    assert.deepStrictEqual([order.lines[0].supplierSku, order.lines[0].backup.preferredSupplierName, order.lines[0].backup.preferredUnavailable, order.lines[0].backup.extraPerUnit],
+      ['FW-PIJP', 'Tuintechniek', true, 0.5]);
+  } finally {
+    server.close();
+  }
+});

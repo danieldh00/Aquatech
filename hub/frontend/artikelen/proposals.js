@@ -34,6 +34,19 @@
   }
 
   /**
+   * De melding bij een regel die bij een backupleverancier wordt besteld, met het meerprijsverschil.
+   * @param {object} line De regel (backup: { preferredSupplierName, preferredUnavailable, extraAmount }).
+   * @returns {string} HTML met de melding, of leeg.
+   */
+  function backupHtml(line) {
+    if (!line.backup) return '';
+    const { esc, eur } = context;
+    const reason = line.backup.preferredUnavailable ? `${line.backup.preferredSupplierName} is niet leverbaar` : `voorkeur: ${line.backup.preferredSupplierName}`;
+    const extra = line.backup.extraAmount == null || line.backup.extraAmount === 0 ? '' : `, ${line.backup.extraAmount > 0 ? '+' : '−'}${eur(Math.abs(line.backup.extraAmount))} t.o.v. de voorkeur`;
+    return `<span class="sub"><span class="pill">Backup</span> ${esc(reason)}${esc(extra)}</span>`;
+  }
+
+  /**
    * Eén regel van een voorstel.
    * @param {object} order De order.
    * @param {object} line De regel.
@@ -45,7 +58,7 @@
     const price = line.unitCost == null ? '<span class="muted">geen inkoopprijs</span>' : `× ${esc(eur(line.unitCost))}`;
     const sku = line.supplierSku ? ` · ${esc(line.supplierSku)}` : '';
     return `<li class="pp-line">
-      <span class="pp-name">${esc(line.name || line.code)}<span class="sub"><span class="code">${esc(line.code)}</span>${sku}</span></span>
+      <span class="pp-name">${esc(line.name || line.code)}<span class="sub"><span class="code">${esc(line.code)}</span>${sku}</span>${backupHtml(line)}</span>
       <span class="pp-amount">${amount == null ? '' : esc(eur(amount))}</span>
       <span class="pp-qty"><b>${esc(nl(line.qty))}</b> ${esc(line.unit)} ${price}</span>
       <button class="linkbtn pp-drop" type="button" data-dismiss-line="${esc(line.itemId)}" data-order="${esc(order.id)}">Niet bestellen</button>
