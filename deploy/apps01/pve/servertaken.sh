@@ -382,6 +382,7 @@ HOST_TASK_IDS=(
   001-app-update-opnieuw-inrichten
   002-hersteltest-back-up-inrichten
   003-hersteltest-script-bijwerken
+  004-pg-back-up-script-herstellen
 )
 HOST_TASKS_LEDGER="host-tasks.json"
 # Functienaam van een taak (streepjes worden underscores).
@@ -462,6 +463,19 @@ hosttask_002_hersteltest_back_up_inrichten() {
 # Taak 003: het hostscript restore-test.sh vernieuwen (een app-update raakt dat niet). Zelfde inrichting als taak 002, veilig herhaalbaar.
 hosttask_003_hersteltest_script_bijwerken() {
   hosttask_002_hersteltest_back_up_inrichten
+}
+
+# Taak 004: pg-backup.sh en restore-test.sh vernieuwen en direct een back-up maken (de oude controle keurde elke grotere back-up af).
+hosttask_004_pg_back_up_script_herstellen() {
+  local dir
+  dir="$(mktemp -d)"
+  fetch_task_file "$dir/pg-backup.sh" deploy/apps01/localdb/pg-backup.sh || { rm -rf "$dir"; return 1; }
+  [[ -d "$APP_DIR/backups" ]] || mkdir -p "$APP_DIR/backups"
+  install -m 755 "$dir/pg-backup.sh" "$APP_DIR/pg-backup.sh"
+  rm -rf "$dir"
+  hosttask_002_hersteltest_back_up_inrichten || return 1
+  (cd "$APP_DIR" && bash ./pg-backup.sh) || { echo "FOUT: de back-up mislukte; zie bovenstaande melding." >&2; return 1; }
+  echo "pg-backup.sh vernieuwd en een back-up gemaakt."
 }
 
 # Toont wat er openstaat. Uitgangscode 10 = er is iets te doen (two_step vraagt dan om bevestiging).

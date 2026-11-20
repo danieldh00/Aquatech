@@ -47,9 +47,14 @@ log "Back-up maken: $FINAL"
 docker exec "$CONTAINER" pg_dump -U postgres -d aquatech -n aquatech -Fc --no-owner --no-acl | encrypt > "$TMP"
 [[ -s "$TMP" ]] || die "Back-up is leeg."
 
-# Controle: ontsleutelen en de inhoudsopgave van de dump lezen; er moeten tabellen in staan.
-if ! decrypt < "$TMP" | docker exec -i "$CONTAINER" pg_restore -l | grep ' TABLE ' >/dev/null; then
-  die "Back-up gecontroleerd en afgekeurd (niet te ontsleutelen of geen tabellen); niet bewaard."
+# Controle: helemaal ontsleutelen (hele bestand, dus ook een afgekapte of beschadigde back-up valt op) en de
+# inhoudsopgave van de dump lezen; er moeten tabellen in staan. pg_restore -l stopt zodra hij de inhoudsopgave
+# heeft; openssl krijgt dan een gesloten pijp ("error writing output file"). Dat telt hier niet als fout (en
+# pipefail zou dat wel doen), daarom wordt de uitvoer eerst in een variabele opgevangen.
+decrypt < "$TMP" >/dev/null 2>&1 || die "Back-up gecontroleerd en afgekeurd (niet te ontsleutelen); niet bewaard."
+contents="$( { decrypt < "$TMP" 2>/dev/null || true; } | docker exec -i "$CONTAINER" pg_restore -l 2>/dev/null || true )"
+if ! grep -q ' TABLE ' <<<"$contents"; then
+  die "Back-up gecontroleerd en afgekeurd (geen tabellen in de dump); niet bewaard."
 fi
 mv -f "$TMP" "$FINAL"
 log "Back-up klaar ($(stat -c %s "$FINAL") bytes)"
