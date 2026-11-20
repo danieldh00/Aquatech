@@ -1393,6 +1393,55 @@ const PG_MIGRATIONS = [
   ALTER TABLE web_returns ADD CONSTRAINT web_returns_status_check CHECK (status IN ('aangevraagd', 'goedgekeurd', 'afgewezen', 'ingetrokken', 'afgerond')) NOT VALID;
   ALTER TABLE purchase_orders ADD CONSTRAINT purchase_orders_status_check CHECK (status IN ('concept', 'besteld', 'deels_ontvangen', 'ontvangen', 'geannuleerd')) NOT VALID;
   `,
+  // 91: geldbedragen, prijzen en hoeveelheden van DOUBLE PRECISION naar NUMERIC (exacte decimalen, geen afrondingsfouten bij sommen). Bedragen 2 decimalen, prijzen en hoeveelheden 4, factoren en percentages 4. De databaselaag leest NUMERIC al als getal (pgdb-worker, pg-pool).
+  `
+  ALTER TABLE invoices ALTER COLUMN subtotal TYPE NUMERIC(14,2) USING round(subtotal::numeric, 2);
+  ALTER TABLE invoices ALTER COLUMN vat_total TYPE NUMERIC(14,2) USING round(vat_total::numeric, 2);
+  ALTER TABLE invoices ALTER COLUMN total TYPE NUMERIC(14,2) USING round(total::numeric, 2);
+  ALTER TABLE quotes ALTER COLUMN total_excl TYPE NUMERIC(14,2) USING round(total_excl::numeric, 2);
+  ALTER TABLE quotes ALTER COLUMN total_incl TYPE NUMERIC(14,2) USING round(total_incl::numeric, 2);
+  ALTER TABLE web_orders ALTER COLUMN total TYPE NUMERIC(14,2) USING round(total::numeric, 2);
+  ALTER TABLE invoice_payments ALTER COLUMN amount TYPE NUMERIC(14,2) USING round(amount::numeric, 2);
+  ALTER TABLE web_sale_lines ALTER COLUMN revenue TYPE NUMERIC(14,2) USING round(revenue::numeric, 2);
+  ALTER TABLE work_order_offers ALTER COLUMN fee TYPE NUMERIC(14,2) USING round(fee::numeric, 2);
+  ALTER TABLE item_packagings ALTER COLUMN sale_price TYPE NUMERIC(14,4) USING round(sale_price::numeric, 4);
+  ALTER TABLE item_packagings ALTER COLUMN business_price TYPE NUMERIC(14,4) USING round(business_price::numeric, 4);
+  ALTER TABLE item_suppliers ALTER COLUMN cost_price TYPE NUMERIC(14,4) USING round(cost_price::numeric, 4);
+  ALTER TABLE purchase_order_lines ALTER COLUMN unit_cost TYPE NUMERIC(14,4) USING round(unit_cost::numeric, 4);
+  ALTER TABLE shop_products ALTER COLUMN price TYPE NUMERIC(14,4) USING round(price::numeric, 4);
+  ALTER TABLE stock_cost_entries ALTER COLUMN unit_cost TYPE NUMERIC(14,4) USING round(unit_cost::numeric, 4);
+  ALTER TABLE stock_cost_prices ALTER COLUMN price TYPE NUMERIC(14,4) USING round(price::numeric, 4);
+  ALTER TABLE stock_count_lines ALTER COLUMN unit_cost TYPE NUMERIC(14,4) USING round(unit_cost::numeric, 4);
+  ALTER TABLE stock_items ALTER COLUMN cost_price TYPE NUMERIC(14,4) USING round(cost_price::numeric, 4);
+  ALTER TABLE stock_items ALTER COLUMN sale_price TYPE NUMERIC(14,4) USING round(sale_price::numeric, 4);
+  ALTER TABLE stock_items ALTER COLUMN business_price TYPE NUMERIC(14,4) USING round(business_price::numeric, 4);
+  ALTER TABLE stock_items ALTER COLUMN shop_price_seen TYPE NUMERIC(14,4) USING round(shop_price_seen::numeric, 4);
+  ALTER TABLE stock_layers ALTER COLUMN unit_cost TYPE NUMERIC(14,4) USING round(unit_cost::numeric, 4);
+  ALTER TABLE item_suppliers ALTER COLUMN order_qty TYPE NUMERIC(14,4) USING round(order_qty::numeric, 4);
+  ALTER TABLE purchase_order_lines ALTER COLUMN qty TYPE NUMERIC(14,4) USING round(qty::numeric, 4);
+  ALTER TABLE purchase_order_lines ALTER COLUMN received_qty TYPE NUMERIC(14,4) USING round(received_qty::numeric, 4);
+  ALTER TABLE stock_cost_entries ALTER COLUMN qty TYPE NUMERIC(14,4) USING round(qty::numeric, 4);
+  ALTER TABLE stock_count_entries ALTER COLUMN qty TYPE NUMERIC(14,4) USING round(qty::numeric, 4);
+  ALTER TABLE stock_count_lines ALTER COLUMN counted_qty TYPE NUMERIC(14,4) USING round(counted_qty::numeric, 4);
+  ALTER TABLE stock_count_lines ALTER COLUMN difference TYPE NUMERIC(14,4) USING round(difference::numeric, 4);
+  ALTER TABLE stock_count_lines ALTER COLUMN expected_at_count TYPE NUMERIC(14,4) USING round(expected_at_count::numeric, 4);
+  ALTER TABLE stock_count_lines ALTER COLUMN expected_qty TYPE NUMERIC(14,4) USING round(expected_qty::numeric, 4);
+  ALTER TABLE stock_count_lines ALTER COLUMN moved_since TYPE NUMERIC(14,4) USING round(moved_since::numeric, 4);
+  ALTER TABLE stock_items ALTER COLUMN min_qty TYPE NUMERIC(14,4) USING round(min_qty::numeric, 4);
+  ALTER TABLE stock_items ALTER COLUMN on_hand TYPE NUMERIC(14,4) USING round(on_hand::numeric, 4);
+  ALTER TABLE stock_items ALTER COLUMN reorder_qty TYPE NUMERIC(14,4) USING round(reorder_qty::numeric, 4);
+  ALTER TABLE stock_items ALTER COLUMN shop_stock_seen TYPE NUMERIC(14,4) USING round(shop_stock_seen::numeric, 4);
+  ALTER TABLE stock_layers ALTER COLUMN qty TYPE NUMERIC(14,4) USING round(qty::numeric, 4);
+  ALTER TABLE stock_layers ALTER COLUMN remaining TYPE NUMERIC(14,4) USING round(remaining::numeric, 4);
+  ALTER TABLE stock_movements ALTER COLUMN balance TYPE NUMERIC(14,4) USING round(balance::numeric, 4);
+  ALTER TABLE stock_movements ALTER COLUMN qty TYPE NUMERIC(14,4) USING round(qty::numeric, 4);
+  ALTER TABLE stock_reservations ALTER COLUMN qty TYPE NUMERIC(14,4) USING round(qty::numeric, 4);
+  ALTER TABLE web_sale_lines ALTER COLUMN qty TYPE NUMERIC(14,4) USING round(qty::numeric, 4);
+  ALTER TABLE work_order_materials ALTER COLUMN qty TYPE NUMERIC(14,4) USING round(qty::numeric, 4);
+  ALTER TABLE stock_items ALTER COLUMN price_factor TYPE NUMERIC(10,4) USING round(price_factor::numeric, 4);
+  ALTER TABLE users ALTER COLUMN wholesale_discount TYPE NUMERIC(10,4) USING round(wholesale_discount::numeric, 4);
+  ALTER TABLE stock_items ALTER COLUMN unit_content TYPE NUMERIC(10,4) USING round(unit_content::numeric, 4);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };
