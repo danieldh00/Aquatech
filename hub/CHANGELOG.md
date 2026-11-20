@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.29.7
+
+- Lijstroutes `GET /api/quotes`, `/api/invoices` en `/api/debtors` lezen via `db.async` (pool) met `listAsync`; de query-opbouw is gedeeld met de synchrone `list`, uitkomst ongewijzigd.
+
 ## 1.29.6
 
 - `storefront-analytics.js`: `showConsentSettings` zet de schakelaar Analytisch vooraf aan bij een bezoeker zonder eerdere keuze (besluit Daniël 2026-11-20); een eerdere keuze blijft zoals die was. De banner (Accepteren en Weigeren even groot) en het laden na toestemming zijn ongewijzigd.

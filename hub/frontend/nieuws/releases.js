@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.29.7',
+      date: '2026-11-20',
+      title: 'Offerte-, factuur- en debiteurenlijsten laden sneller bij drukte',
+      items: [],
+    },
+    {
       version: '1.29.6',
       date: '2026-11-20',
       title: 'Analytisch staat vooraf aan in de cookie-instellingen',
