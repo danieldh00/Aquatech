@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.30.8',
+      date: '2026-11-20',
+      title: 'Update-controle zonder 429 voor beheerders',
+      items: [
+        { text: 'Een handmatige update-controle in Beheer > Systeem > Updates kan nu altijd, praktisch zonder melding over te veel verzoeken.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.30.7',
       date: '2026-11-20',
       title: 'Dagelijkse database-back-up werkt weer',

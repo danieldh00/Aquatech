@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.30.8
+
+`POST /api/admin/system-update/check`: limiet per gebruiker van 6 naar 60 per 10 minuten. De route zit achter inloggen en `canUpdate`; een lopende controle wordt hergebruikt (`requestCheck`), dus dubbel klikken geeft 202 zonder tweede aanvraag of auditregel. Starten, intrekken en automatisch aan/uit houden hun limieten.
+
 ## 1.30.7
 
 `pg-backup.sh`, `restore-test.sh` en `local-db.sh restore` lazen de inhoudsopgave met `openssl … | pg_restore -l | grep` onder `pipefail`. `pg_restore -l` stopt na de inhoudsopgave, waarna openssl "error writing output file" gaf en de hele controle faalde zodra de dump groter was dan de pijpbuffer: elke back-up werd afgekeurd en niet bewaard. De controle ontsleutelt nu eerst het hele bestand en vangt de uitvoer van `pg_restore -l` daarna in een variabele op. Servertaak `004-pg-back-up-script-herstellen` installeert de scripts op apps01 en maakt een back-up. Regressietest in `restore-test-script.test.js` (grote dump, `pg_restore -l` stopt vroeg).
