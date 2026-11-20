@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.29.5',
+      date: '2026-11-20',
+      title: 'Microsoft Clarity beter te vinden in Beheer',
+      items: [
+        { text: 'Zoeken in Beheer op "clarity", "heatmap" of "cookiebanner" brengt je nu bij Webshop, waar de Clarity-instelling onder Google Analytics staat.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.29.4',
       date: '2026-11-20',
       title: 'Cookiebanner volgens de AVG en Microsoft Clarity in de webshop',

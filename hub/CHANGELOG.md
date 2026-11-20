@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.29.5
+
+- Beheer: zoekwoorden voor Microsoft Clarity en de cookiebanner toegevoegd aan de sectie Webshop (`indeling.js`).
+
 ## 1.29.4
 
 - Webshop: toestemmingsbalk herbouwd (`webshop/storefront-analytics.js`, `storefront.css`): titel, Accepteren/Weigeren (zelfde grootte) en *Instellingen* met een venster per categorie (Noodzakelijk altijd aan, Analytisch standaard uit). De balk verschijnt zodra Google Analytics of Clarity actief is; zonder beide staat er niets in de pagina.
