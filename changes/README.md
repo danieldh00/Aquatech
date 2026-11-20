@@ -1,6 +1,6 @@
 # Releasenotes per wijziging
 
-Een PR verhoogt het versienummer niet en past `CHANGELOG.md` en `frontend/nieuws/releases.js` niet aan.
+Een PR verhoogt het versienummer niet en past `CHANGELOG.md` en `frontend/nieuws/releases.js` niet aan (uitzondering: een vergeten doelgroep `for: [...]` toevoegen aan een bestaand punt in `releases.js`).
 Voeg in plaats daarvan één bestand toe: `changes/<korte-naam>.md`. Na het mergen geeft `release.yml`
 de wijziging het volgende versienummer (patch + 1; na x.y.9 komt x.(y+1).0), zet de notes in
 `CHANGELOG.md` en `releases.js`, verwijdert het bestand en bouwt het image.

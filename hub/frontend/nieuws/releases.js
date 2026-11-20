@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.29.3',
+      date: '2026-11-20',
+      title: 'Nieuwspunt over Uitbesteden alleen voor beheerders',
+      items: [],
+    },
+    {
       version: '1.29.2',
       date: '2026-11-20',
       title: 'Ontvangst in de zijbalk opent direct Ontvangen',
@@ -40,7 +46,7 @@
       date: '2026-11-20',
       title: 'Kleine uitlijnfouten op mobiel hersteld',
       items: [
-        { text: 'Op een telefoon loopt de pagina AI-kosten (Beheer) en de tabbladbalk van Uitbesteden niet meer buiten het scherm, en lange productnamen in de webshop worden niet meer afgekapt midden in een woord.' },
+        { text: 'Op een telefoon loopt de pagina AI-kosten (Beheer) en de tabbladbalk van Uitbesteden niet meer buiten het scherm, en lange productnamen in de webshop worden niet meer afgekapt midden in een woord.', for: ['beheer', 'uitbesteden'] },
       ],
     },
     {
