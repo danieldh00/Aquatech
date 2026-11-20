@@ -65,6 +65,13 @@ async function loadPage() {
     AquatechOffline: { headers: () => ({}), prefetch: async () => {}, on() {}, pending: async () => [] },
   };
   sandbox.window = sandbox;
+  const windowListeners = {};
+  /**
+   * Bewaart een luisteraar op het venster (zoals hashchange).
+   * @param {string} type Soort gebeurtenis.
+   * @param {Function} handler De luisteraar.
+   */
+  sandbox.addEventListener = (type, handler) => { (windowListeners[type] = windowListeners[type] || []).push(handler); };
   vm.createContext(sandbox);
   for (const file of ['orderpick-core.js', 'orderpick.js', 'receiving-core.js', 'receiving.js', 'counting-core.js', 'counting.js']) {
     vm.runInContext(fs.readFileSync(path.join(DIR, file), 'utf8'), sandbox, { filename: file });
@@ -84,7 +91,15 @@ async function loadPage() {
    * @returns {string[]} De zichtbare schermen.
    */
   const visible = () => SECTIONS.filter((selector) => !document.querySelector(selector).hidden);
-  return { clickMode, visible, sandbox };
+  /**
+   * Zet de hash zoals een klik op een zijbalklink op dezelfde pagina doet en roept de luisteraars aan.
+   * @param {string} hash De nieuwe hash, bijvoorbeeld '#ontvangst'.
+   */
+  const navigateHash = (hash) => {
+    sandbox.location.hash = hash;
+    for (const handler of windowListeners.hashchange || []) handler();
+  };
+  return { clickMode, navigateHash, visible, sandbox };
 }
 
 test('wisselen tussen Picken, Ontvangen en Tellen toont steeds precies één scherm', async () => {
@@ -104,4 +119,15 @@ test('wisselen tussen Picken, Ontvangen en Tellen toont steeds precies één sch
     await new Promise((resolve) => setTimeout(resolve, 5));
     assert.deepStrictEqual(visible(), ['#op-list'], `ronde ${round}: picken`);
   }
+});
+
+test('een zijbalklink naar #ontvangst of #tellen op dezelfde pagina opent dat tabblad', async () => {
+  const { navigateHash, visible } = await loadPage();
+  assert.deepStrictEqual(visible(), ['#op-list']);
+  navigateHash('#ontvangst');
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.deepStrictEqual(visible(), ['#rc-list']);
+  navigateHash('#tellen');
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.deepStrictEqual(visible(), ['#ct-list']);
 });
