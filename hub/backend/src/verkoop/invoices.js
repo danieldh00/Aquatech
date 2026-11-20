@@ -31,6 +31,7 @@ const { respondShopError } = require('../webshop/woocommerce');
 const { withCause } = require('../platform/error-report');
 const { requireVerifiedAddress } = require('../platform/address-lookup');
 const { withoutInternal } = require('./quotes');
+const { createRateLimiter } = require('../beveiliging/rate-limit');
 
 const Core = require(path.join(FRONTEND_DIR, 'facturen', 'invoice-core.js'));
 
@@ -638,7 +639,9 @@ function registerInvoiceRoutes(app, ctx) {
   });
 
   // Versturen per e-mail met de PDF als bijlage.
-  app.post('/api/invoices/:id/send', requireJson, requireInvoices, async (req, res) => {
+  /** Hoeveel losse mails per uur een gebruiker via deze route mag versturen (de bulkroute heeft een eigen limiet). */
+  const invoiceSendLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, keyFn: (req) => `invoiceSendLimiter:${req.user.tenant_id}|${req.user.id}` });
+  app.post('/api/invoices/:id/send', requireJson, requireInvoices, invoiceSendLimiter, async (req, res) => {
     if (!sender) return notFound(res);
     const body = req.body || {};
     const to = String(body.to || '').split(/[,;\s]+/).filter(Boolean);
