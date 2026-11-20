@@ -60,6 +60,12 @@ const HOST_TASKS = [
     description: 'Toont de 25 grootste tabellen en de ongebruikte indexen van de productiedatabase en bewaart dat in update/status/db-stats.txt. Er wordt niets gewijzigd en er verschijnen geen gegevens, alleen namen en groottes. Plak de uitvoer in de thread: hij bepaalt of de zware kolomomzettingen (tijdstippen) veilig zijn.',
     addedAt: '2026-11-20',
   },
+  {
+    id: '007-hersteltest-drive-app-controle',
+    title: 'Hersteltest Google Drive met app-controle inrichten',
+    description: 'Installeert restore-test-drive.sh, restore-app-check.sh en een path-unit op apps01 (en vernieuwt de lokale hersteltest). De hersteltest van de Google Drive-back-up zet de gedownloade back-up daarna ook terug in een wegwerpdatabase en start er een wegwerp-app op (hoogstens 512 MB, intern netwerk zonder uitgang, geen mail of koppelingen) die inlogt en gegevens ophaalt.',
+    addedAt: '2026-11-20',
+  },
 ];
 
 const MAX_FILE_BYTES = 64 * 1024;

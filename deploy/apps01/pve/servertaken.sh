@@ -385,6 +385,7 @@ HOST_TASK_IDS=(
   004-pg-back-up-script-herstellen
   005-hersteltest-app-controle
   006-database-grootte-en-indexgebruik
+  007-hersteltest-drive-app-controle
 )
 HOST_TASKS_LEDGER="host-tasks.json"
 # Functienaam van een taak (streepjes worden underscores).
@@ -446,20 +447,24 @@ hosttask_001_app_update_opnieuw_inrichten() {
 hosttask_002_hersteltest_back_up_inrichten() {
   local dir file
   dir="$(mktemp -d)"
-  fetch_task_file "$dir/restore-test.sh" deploy/apps01/restore-test.sh || { rm -rf "$dir"; return 1; }
-  for file in aquatech-restore-test.service aquatech-restore-test.timer aquatech-restore-test.path; do
+  for file in restore-test.sh restore-app-check.sh restore-test-drive.sh; do
+    fetch_task_file "$dir/$file" "deploy/apps01/$file" || { rm -rf "$dir"; return 1; }
+  done
+  for file in aquatech-restore-test.service aquatech-restore-test.timer aquatech-restore-test.path aquatech-restore-test-drive.service aquatech-restore-test-drive.path; do
     curl -fsSL -m 60 "${TASKS_BASE:-https://raw.githubusercontent.com/danieldh00/Aquatech}/$TASKS_REF/deploy/apps01/systemd/$file" -o "$dir/$file" \
       || { echo "FOUT: ophalen van $file mislukt." >&2; rm -rf "$dir"; return 1; }
   done
   [[ -d "$APP_DIR/update/request" ]] || { echo "FOUT: update/request ontbreekt; draai eerst taak 001." >&2; rm -rf "$dir"; return 1; }
-  install -m 755 "$dir/restore-test.sh" "$APP_DIR/restore-test.sh"
-  for file in aquatech-restore-test.service aquatech-restore-test.timer aquatech-restore-test.path; do
+  for file in restore-test.sh restore-app-check.sh restore-test-drive.sh; do
+    install -m 755 "$dir/$file" "$APP_DIR/$file"
+  done
+  for file in aquatech-restore-test.service aquatech-restore-test.timer aquatech-restore-test.path aquatech-restore-test-drive.service aquatech-restore-test-drive.path; do
     install -m 644 "$dir/$file" "${SYSTEMD_DIR:-/etc/systemd/system}/$file"
   done
   rm -rf "$dir"
   systemctl daemon-reload
-  systemctl enable --now aquatech-restore-test.timer aquatech-restore-test.path >/dev/null
-  echo "Hersteltest ingericht: timer $(systemctl is-active aquatech-restore-test.timer), path $(systemctl is-active aquatech-restore-test.path)."
+  systemctl enable --now aquatech-restore-test.timer aquatech-restore-test.path aquatech-restore-test-drive.path >/dev/null
+  echo "Hersteltest ingericht: timer $(systemctl is-active aquatech-restore-test.timer), path $(systemctl is-active aquatech-restore-test.path), Drive-controle $(systemctl is-active aquatech-restore-test-drive.path)."
 }
 
 # Taak 003: het hostscript restore-test.sh vernieuwen (een app-update raakt dat niet). Zelfde inrichting als taak 002, veilig herhaalbaar.
@@ -482,6 +487,11 @@ hosttask_004_pg_back_up_script_herstellen() {
 
 # Taak 005: restore-test.sh vernieuwen (de hersteltest start nu ook een wegwerp-app op de teruggezette database).
 hosttask_005_hersteltest_app_controle() {
+  hosttask_002_hersteltest_back_up_inrichten
+}
+
+# Taak 007: de app-controle van de Drive-hersteltest inrichten (restore-test-drive.sh + restore-app-check.sh + path-unit); vernieuwt ook de lokale hersteltest.
+hosttask_007_hersteltest_drive_app_controle() {
   hosttask_002_hersteltest_back_up_inrichten
 }
 
