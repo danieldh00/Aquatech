@@ -306,6 +306,8 @@ a.shop-action.shop-admin:hover { background: var(--at-shop-navy); }
 .about-lead { font-size: 1.15rem; max-width: 36em; }
 .about-story { display: grid; grid-template-columns: 2fr 1fr; gap: 28px; align-items: start; margin: 8px 0 24px; }
 .about-story h2 { margin-top: 0.3em; }
+.about-story .cms-page { max-width: none; margin: 0; }
+.about-story .cms-page > :first-child { margin-top: 0; }
 .about-story p { font-size: 1.05rem; line-height: 1.6; margin: 0; }
 .about-facts { margin: 0; padding: 18px 22px; background: var(--at-shop-green-soft); border-left: 4px solid var(--at-shop-green); border-radius: 8px; display: grid; gap: 10px; }
 .about-facts dt { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--at-shop-green-dark); font-weight: 700; }

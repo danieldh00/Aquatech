@@ -183,6 +183,8 @@ test('vaste pagina: concept, publiceren, menu, voet en Over ons overschrijven', 
   await admin.post('/app/api/admin/shop-content/pages/over-ons/publish', {});
   const about = (await anonymous.get('/over-ons/')).text;
   assert.match(about, /Ons eigen verhaal/);
+  assert.match(about, /class="about-hero"/, "eigen tekst staat in de nieuwe opmaak");
+  assert.match(about, /class="about-cta"/);
   assert.doesNotMatch(about, /Waarom Aquatechshop/);
   assert.doesNotMatch((await anonymous.get('/')).text, /pagina\/over-ons/, 'Over ons staat al in het menu');
   await admin.post('/app/api/admin/shop-content/pages/over-ons/revert', {}).then((out) => assert.strictEqual(out.status, 409));
