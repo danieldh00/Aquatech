@@ -7,7 +7,7 @@
 // versleuteld: id's (UUID's), tenant_id's, wachtwoord-hashes, sessie-hashes en versleutelde geheimen (vault, met de
 // tenant in de AAD) gaan ongewijzigd mee. De hoofdsleutel blijft dus nodig.
 const crypto = require('crypto');
-const { listTables, tableColumns, schemaVersion } = require('./db');
+const { listTables, tableColumns, schemaVersion, deferForeignKeys } = require('./db');
 
 const BATCH = 200;
 // Tabellen met grote rijen (foto's) in kleinere porties, zodat het geheugen klein blijft.
@@ -149,10 +149,11 @@ function* exportLines(db) {
  * van een nieuwer schema dan dat van de database wordt geweigerd.
  * @param {object} db De (lege, gemigreerde) doeldatabase.
  * @param {AsyncIterable<string>|Iterable<string>} lines De regels van de export (zonder het einde van de regel).
+ * @param {{ deferForeignKeys?: boolean }} [options] deferForeignKeys: foreign keys pas bij COMMIT controleren (nodig bij een echt schema met verwijzingen; een tijdelijk schema heeft die niet).
  * @returns {Promise<{ tables: Object<string, number> }>} Aantal ingelezen rijen per tabel.
  * @throws {Error} Bij een onbekend formaat, een nieuwer schema of een beschadigde regel.
  */
-async function importLines(db, lines) {
+async function importLines(db, lines, options = {}) {
   let header = null;
   const counts = {};
   let insert = null;
@@ -160,6 +161,7 @@ async function importLines(db, lines) {
   let positions = [];
   db.exec('BEGIN');
   try {
+    if (options.deferForeignKeys) deferForeignKeys(db);
     const tables = describe(db);
     for await (const line of lines) {
       if (!line) continue;

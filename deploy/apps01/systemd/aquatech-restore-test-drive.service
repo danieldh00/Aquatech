@@ -1,0 +1,12 @@
+# App-controle van de hersteltest van de Google Drive-back-up (restore-test-drive.sh). Gestart door aquatech-restore-test-drive.path.
+[Unit]
+Description=Aquatech: wegwerp-app op de teruggezette Google Drive-back-up controleren
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/apps/aquatech/restore-test-drive.sh
+TimeoutStartSec=45min
+Nice=10
+IOSchedulingClass=idle
