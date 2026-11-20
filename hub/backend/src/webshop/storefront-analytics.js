@@ -5,6 +5,8 @@
 // De pagina geeft meet-ID, klantgroep en de gebeurtenissen van de pagina mee als data-attributen op <body> (shop-analytics.js);
 // kliks (select_item, add_to_cart, remove_from_cart) en het verzenden van het afrekenformulier meet dit script zelf.
 // Zonder cookies of opslag in de browser vraagt de balk op elke pagina opnieuw.
+// Let op (besluit Daniël 2026-11-20): in het instellingenvenster staat Analytisch vooraf aan zolang er geen eerdere keuze is; er wordt pas iets
+// geladen na een klik. Een vooraf aangevinkt vakje is volgens de AVG (Planet49) geen geldige toestemming: opnieuw beoordelen vóór go-live.
 
 /** Sleutel in localStorage voor de keuze van de bezoeker (JSON met versie, keuze en datum). */
 const CONSENT_KEY = 'aquatech_shop_consent';
