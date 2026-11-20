@@ -102,12 +102,12 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
   const find = (tenantId, id, cols = LIST_COLS) => prepare(`SELECT ${cols} FROM invoices WHERE tenant_id = ? AND id = ?`).get(tenantId, String(id));
 
   /**
-   * Facturen van een tenant, nieuwste eerst (hooguit LIST_LIMIT).
+   * Bouwt de query voor de factuurlijst, nieuwste eerst (hooguit LIST_LIMIT).
    * @param {string} tenantId Id van de tenant.
    * @param {object} [filters] status, from en to (factuurdatum), workOrderId, customerId (alleen facturen van die klant), kinds ('factuur'/'credit') en statuses (meerdere statussen).
-   * @returns {object[]} De facturen zonder inhoud.
+   * @returns {{ sql: string, args: Array }} De query en de parameters.
    */
-  function list(tenantId, { status = '', from = '', to = '', workOrderId = '', customerId = '', kinds = null, statuses = null } = {}) {
+  function listQuery(tenantId, { status = '', from = '', to = '', workOrderId = '', customerId = '', kinds = null, statuses = null } = {}) {
     const args = [tenantId];
     let sql = `SELECT ${LIST_COLS} FROM invoices WHERE tenant_id = ?`;
     if (Core.STATUSES[status]) { sql += ' AND status = ?'; args.push(status); }
@@ -117,7 +117,30 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
     if (customerId) { sql += ' AND customer_id = ?'; args.push(String(customerId)); }
     if (Array.isArray(kinds) && kinds.length) { sql += ` AND kind IN (${marks(kinds.length)})`; args.push(...kinds); }
     if (Array.isArray(statuses) && statuses.length) { sql += ` AND status IN (${marks(statuses.length)})`; args.push(...statuses); }
-    return prepare(`${sql} ORDER BY invoice_date DESC, created_at DESC LIMIT ${LIST_LIMIT}`).all(...args).map(toInvoice);
+    return { sql: `${sql} ORDER BY invoice_date DESC, created_at DESC LIMIT ${LIST_LIMIT}`, args };
+  }
+
+  /**
+   * Facturen van een tenant, nieuwste eerst (hooguit LIST_LIMIT).
+   * @param {string} tenantId Id van de tenant.
+   * @param {object} [filters] Zie listQuery.
+   * @returns {object[]} De facturen zonder inhoud.
+   */
+  function list(tenantId, filters = {}) {
+    const query = listQuery(tenantId, filters);
+    return prepare(query.sql).all(...query.args).map(toInvoice);
+  }
+
+  /**
+   * Zelfde als list, maar via db.async: een trage lijstquery houdt de hoofdthread niet vast (zonder pool synchroon).
+   * @param {string} tenantId Id van de tenant.
+   * @param {object} [filters] Zie listQuery.
+   * @returns {Promise<object[]>} De facturen zonder inhoud.
+   */
+  async function listAsync(tenantId, filters = {}) {
+    if (!db.async) return list(tenantId, filters);
+    const query = listQuery(tenantId, filters);
+    return (await db.async.all(query.sql, ...query.args)).map(toInvoice);
   }
 
   /**
@@ -408,7 +431,7 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
     return row ? { id: row.id, number: row.number, status: row.status, customerId: row.customer_id || null, data: JSON.parse(row.data) } : null;
   }
 
-  return { list, get, create, update, finalize, onFinalized, setPaid, credit, remove, exportList, markExported, nextNumber, workOrder, quote, byShopOrders, markSent };
+  return { list, listAsync, get, create, update, finalize, onFinalized, setPaid, credit, remove, exportList, markExported, nextNumber, workOrder, quote, byShopOrders, markSent };
 }
 
 /**
@@ -462,8 +485,8 @@ function registerInvoiceRoutes(app, ctx) {
    */
   const validData = (data) => data && typeof data === 'object' && !Array.isArray(data);
 
-  app.get('/api/invoices', requireInvoices, (req, res) => {
-    const items = invoices.list(tenantOf(req), { status: String(req.query.status || ''), from: String(req.query.from || ''), to: String(req.query.to || ''), workOrderId: String(req.query.workOrderId || '') });
+  app.get('/api/invoices', requireInvoices, async (req, res) => {
+    const items = await invoices.listAsync(tenantOf(req), { status: String(req.query.status || ''), from: String(req.query.from || ''), to: String(req.query.to || ''), workOrderId: String(req.query.workOrderId || '') });
     // Laatste verstuurde betalingsherinnering erbij (alleen voor facturen over de vervaldatum, één query).
     const overdueIds = items.filter((invoice) => invoice.overdue).map((invoice) => invoice.id);
     const latest = ctx.paymentReminders && overdueIds.length ? ctx.paymentReminders.latestByInvoice(tenantOf(req), overdueIds) : new Map();
