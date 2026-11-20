@@ -6,14 +6,14 @@
 //
 // Grootte: PG_POOL_SIZE (standaard 5, 0 = geen pool: db.async gebruikt dan de synchrone verbinding). De Session pooler
 // van Supabase telt elke verbinding mee voor zijn Pool Size.
-const { Pool, types } = require('pg');
+const { Pool } = require('pg');
+const { registerTypeParsers } = require('./pg-types');
 const { scopeKey } = require('./tenant-scope');
 const { refuseTransaction } = require('./async-db');
 const { recordQuery } = require('./query-stats');
 
-// BIGINT (ook COUNT(*)) en NUMERIC als gewoon getal, zoals in de werkthread.
-types.setTypeParser(20, (text) => Number(text));
-types.setTypeParser(1700, (text) => Number(text));
+// Dezelfde typeparsers als in de werkthread (pg-types.js).
+registerTypeParsers();
 
 /** Aantal verbindingen per pool (PG_POOL_SIZE, standaard 5, hoogstens 50; 0 = geen pool). */
 const POOL_SIZE = Math.min(50, Math.max(0, Math.floor(Number(process.env.PG_POOL_SIZE ?? 5)) || 0));

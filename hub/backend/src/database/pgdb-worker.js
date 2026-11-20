@@ -2,11 +2,11 @@
 // de queries uit die de hoofdthread synchroon aanbiedt. Na elk antwoord zet
 // de thread de vlag in het gedeelde geheugen en wekt de hoofdthread.
 const { workerData } = require('worker_threads');
-const { Client, types } = require('pg');
+const { Client } = require('pg');
+const { registerTypeParsers } = require('./pg-types');
 
-// BIGINT (ook COUNT(*)) en NUMERIC als gewoon getal.
-types.setTypeParser(20, (text) => Number(text));
-types.setTypeParser(1700, (text) => Number(text));
+// BIGINT, NUMERIC, tijdstippen, jsonb en boolean als de app ze kent (pg-types.js).
+registerTypeParsers();
 
 const { port, signal, config } = workerData;
 const flag = new Int32Array(signal);
