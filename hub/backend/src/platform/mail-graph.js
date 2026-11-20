@@ -81,6 +81,8 @@ function replyOf(body) {
  */
 function createGraphSender({ tenantId, clientId, clientSecret, from }, { fetchImpl = fetch, now = Date.now } = {}) {
   const sender = parseSender(from);
+  /** Sleutel van het onthouden token: een hash van tenant, app en geheim. */
+  const cacheKey = crypto.createHash('sha256').update(`${tenantId}\n${clientId}\n${clientSecret}`).digest('hex');
 
   /**
    * Een verzoek met time-out; netwerkfouten worden leesbare fouten.
@@ -108,7 +110,7 @@ function createGraphSender({ tenantId, clientId, clientSecret, from }, { fetchIm
    * @throws {Error} Met code EGRAPH_AUTH als Microsoft de gegevens weigert.
    */
   async function token({ fresh = false } = {}) {
-    const key = crypto.createHash('sha256').update(`${tenantId}\n${clientId}\n${clientSecret}`).digest('hex');
+    const key = cacheKey;
     const cached = tokenCache.get(key);
     if (!fresh && cached && cached.until > now() + 60000) return cached.value;
     if (fresh) tokenCache.delete(key);
@@ -127,7 +129,7 @@ function createGraphSender({ tenantId, clientId, clientSecret, from }, { fetchIm
    * @returns {Promise<{ cached: boolean }>} cached is true als het token uit het geheugen komt.
    */
   async function tokenState() {
-    const key = crypto.createHash('sha256').update(`${tenantId}\n${clientId}\n${clientSecret}`).digest('hex');
+    const key = cacheKey;
     const known = tokenCache.get(key);
     return { cached: Boolean(known && known.until > now() + 60000) };
   }

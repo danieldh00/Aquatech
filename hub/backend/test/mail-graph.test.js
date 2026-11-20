@@ -92,7 +92,7 @@ test('Graph: foutmeldingen per soort, nooit het clientgeheim', async () => {
   assert.match(auth, /weigert de aanmelding.*tenant-ID, client-ID en het clientgeheim.*AADSTS7000215: Invalid client secret provided\./);
   assert.ok(!auth.includes('cs-uniek-2') && !auth.includes('Trace ID'));
   assert.match(await failure({ send: 403, sendBody: { error: { code: 'ErrorAccessDenied', message: 'Access is denied.' } } }, 'cs-uniek-3'), /weigert de app toegang.*afzender: offerte@bedrijf\.nl.*15 minuten.*Application Access Policy.*ErrorAccessDenied/);
-  assert.match(await failure({ send: 404, sendBody: { error: { code: 'ErrorInvalidUser', message: 'x' } } }, 'cs-uniek-4'), /mailbox is niet gevonden/);
+  assert.match(await failure({ send: 404, sendBody: { error: { code: 'ErrorInvalidUser', message: 'x' } } }, 'cs-uniek-4'), /mailbox is niet gevonden.*afzender: offerte@bedrijf\.nl.*hoofdadres/);
   assert.match(await failure({ send: 429 }, 'cs-uniek-5'), /beperkt het versturen/);
   assert.match(await failure({ send: 500 }, 'cs-uniek-6'), /Microsoft Graph gaf een fout/);
   const unreachable = createGraphSender({ tenantId: TENANT, clientId: CLIENT, clientSecret: 'cs-uniek-7', from: 'a@b.nl' }, { fetchImpl: async () => { throw Object.assign(new Error('fetch failed'), { name: 'TimeoutError' }); } });
