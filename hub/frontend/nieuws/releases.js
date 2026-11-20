@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.31.5',
+      date: '2026-11-20',
+      title: 'Database: vlaggen mogen alleen 0 of 1 zijn',
+      items: [],
+    },
+    {
       version: '1.31.4',
       date: '2026-11-20',
       title: 'Database: typeparsers voor de volgende kolomtypen',
