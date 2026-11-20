@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.28.5',
+      date: '2026-11-20',
+      title: 'Offertes-script opgesplitst',
+      items: [],
+    },
+    {
       version: '1.28.4',
       date: '2026-11-20',
       title: 'Werkorders-scherm opgesplitst in meerdere bestanden',

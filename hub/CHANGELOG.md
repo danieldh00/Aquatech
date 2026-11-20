@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.28.5
+
+Het frontendbestand `offertes/offertes.js` is zonder gedragswijziging opgesplitst in `offertes-share.js`, `offertes-customers.js`, `offertes-export.js`, `offertes-bulk.js` en `offertes-templates.js` (fabrieken op `window.Offertes`).
+
 ## 1.28.4
 
 - Het script van de werkorderspagina is verdeeld over eigen bestanden (gedeelde hulpfuncties, afspraak met de klant, afdrukken en exporteren) zonder wijziging in gedrag.
