@@ -667,7 +667,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.locals.appLog = appLog;
   app.use(appLog.middleware);
   const slowLog = createSlowLog({
-    thresholdMs: Number(env.SLOW_REQUEST_MS) || 1000, stallMs: Number(env.SLOW_STALL_MS) || 1000,
+    thresholdMs: Number(env.SLOW_REQUEST_MS) || 1000,
+    // Taken die van nature lang duren (upload naar Drive, back-up, volledige webshopsynchronisatie) melden pas bij een echt lange duur.
+    taskThresholdMs: { 'back-up naar Google Drive': 90000, 'back-up': 90000, webshopsynchronisatie: 300000, 'webshopbestellingen ophalen': 30000, 'doorsturen naar Visma': 30000, bewaking: 25000 },
+    stallMs: Number(env.SLOW_STALL_MS) || 1000,
     // Onder `node --test` (of met SLOW_LOG_QUIET=1) blijft het logboek in het geheugen, maar komt er niets op de console.
     ...(env.SLOW_LOG_QUIET === '1' || (process.env.NODE_TEST_CONTEXT && env.SLOW_LOG_QUIET !== '0') ? { write: () => {} } : {}),
     /**

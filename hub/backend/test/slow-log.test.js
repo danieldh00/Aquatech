@@ -274,3 +274,12 @@ test('middleware: ignoreRequest laat een bewust trage mislukte login buiten het 
   slowOther.res.emit('finish');
   assert.strictEqual(log.entries().length, 1);
 });
+
+test('taskThresholdMs: een taak met eigen drempel wordt pas gelogd boven die drempel', () => {
+  const { log, advance } = fakeLog({ taskThresholdMs: { upload: 1000 } });
+  log.trackTask('upload', () => advance(500));
+  log.trackTask('andere', () => advance(500));
+  assert.deepStrictEqual(log.entries().map((entry) => entry.task), ['andere']);
+  log.trackTask('upload', () => advance(1500));
+  assert.deepStrictEqual(log.entries().map((entry) => entry.task), ['andere', 'upload']);
+});

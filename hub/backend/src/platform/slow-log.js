@@ -41,13 +41,13 @@ const round = (value) => Math.round(value * 10) / 10;
 /**
  * Maakt het logboek voor trage verzoeken, taken en stilstand.
  * @param {{ thresholdMs?: number, stallMs?: number, capacity?: number, write?: Function, now?: Function, onRecord?: Function, onTaskError?: Function }} [options]
- *   thresholdMs: vanaf hoeveel ms een verzoek of taak wordt vastgelegd; stallMs: vanaf hoeveel ms stilstand van de
+ *   thresholdMs: vanaf hoeveel ms een verzoek of taak wordt vastgelegd; taskThresholdMs: eigen drempel per taaknaam (een taak die hoort lang te duren, zoals een upload); stallMs: vanaf hoeveel ms stilstand van de
  *   hoofdthread; capacity: aantal regels in het geheugen; write: schrijft een regel (standaard console.warn); now: klok in ms;
  *   onRecord(regel): krijgt elke vastgelegde regel (voor het centrale logboek); onTaskError(naam, fout): een taak die faalt;
  *   ignoreRequest(verzoek, antwoord): geeft true voor een verzoek dat bewust traag is en niet gelogd hoeft te worden.
  * @returns {object} `middleware`, `trackTask`, `startStallWatch`, `entries`, `record`, `thresholdMs`.
  */
-function createSlowLog({ thresholdMs = 1000, stallMs = 1000, capacity = 500, write = (line) => console.warn(line), now = () => performance.now(), onRecord = null, onTaskError = null, ignoreRequest = null } = {}) {
+function createSlowLog({ thresholdMs = 1000, taskThresholdMs = {}, stallMs = 1000, capacity = 500, write = (line) => console.warn(line), now = () => performance.now(), onRecord = null, onTaskError = null, ignoreRequest = null } = {}) {
   const entries = [];
   const activeRequests = new Map();
   const activeTasks = new Map();
@@ -141,7 +141,7 @@ function createSlowLog({ thresholdMs = 1000, stallMs = 1000, capacity = 500, wri
     const done = () => {
       activeTasks.delete(id);
       const durationMs = now() - startedAt;
-      if (durationMs >= thresholdMs) {
+      if (durationMs >= (Number(taskThresholdMs[name]) || thresholdMs)) {
         record({ kind: 'taak', task: name, durationMs: round(durationMs), queries: stats.queries, dbMs: round(stats.dbMs), externalCalls: stats.externalCalls, externalMs: round(stats.externalMs) });
       }
     };
