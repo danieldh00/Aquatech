@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.31.7',
+      date: '2026-11-20',
+      title: 'Zijbalk houdt maximaal één groep open',
+      items: [
+        { text: 'In de zijbalk staat nog maar één groep tegelijk open: klap je een groep open, dan klapt de vorige dicht. Dat houdt het menu compact.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.31.6',
       date: '2026-11-20',
       title: 'Servertaak voor databasegroottes en indexgebruik',
