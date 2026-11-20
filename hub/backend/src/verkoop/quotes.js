@@ -130,7 +130,7 @@ function validSignature(dataUrl) {
  * Maakt de opslag voor offertes, met de openbare link en het akkoord van de klant.
  * @param {object} db De database.
  * @param {{ vault?: object }} [options] De kluis voor het versleutelde linktoken.
- * @returns {object} list, get, create, update, respond, decide, share, unshare, markSent, followUpDue, claimFollowUp, releaseFollowUp, restoreDraft, byToken, markViewed, publicView, shareLink, remove, purge, acceptedNumber en nextNumber.
+ * @returns {object} list, listAsync, get, create, update, respond, decide, share, unshare, markSent, followUpDue, claimFollowUp, releaseFollowUp, restoreDraft, byToken, markViewed, publicView, shareLink, remove, purge, acceptedNumber en nextNumber.
  */
 function createQuoteStore(db, { vault = createVault() } = {}) {
   /**
@@ -240,12 +240,11 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
   }
 
   /**
-   * Offertes van een tenant, laatst gewijzigd eerst.
-   * @param {string} tenantId Id van de tenant.
-   * @param {object} [filters] ownerId, planId en customerId (alleen de offertes van dat klantaccount, zonder concepten).
-   * @returns {object[]} De offertes zonder inhoud.
+   * Bouwt de query voor de offertelijst van een tenant, laatst gewijzigd eerst.
+   * @param {{ tenantId: string, ownerId?: string|null, planId?: string|null, customerId?: string|null }} filters Tenant en filters (customerId: alleen de offertes van dat klantaccount, zonder concepten).
+   * @returns {{ sql: string, args: Array, customerId: string|null }} De query, de parameters en het klantfilter.
    */
-  function list(tenantId, { ownerId = null, planId = null, customerId = null } = {}) {
+  function listQuery({ tenantId, ownerId = null, planId = null, customerId = null }) {
     const args = [tenantId];
     let sql = `SELECT q.id, q.number, q.status, q.title, q.customer, q.plan_id, q.total_excl, q.total_incl, q.created_at, q.updated_at,
         ${jsonField(db, 'q.data', 'validUntil')} AS valid_until, q.owner_id, u.username AS owner_username, u.display_name AS owner_name,
@@ -255,12 +254,42 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
     if (ownerId) { sql += ' AND q.owner_id = ?'; args.push(ownerId); }
     if (customerId) { sql += " AND q.customer_id = ? AND q.status <> 'concept'"; args.push(customerId); }
     if (planId) { sql += ' AND q.plan_id = ?'; args.push(String(planId)); }
-    return prepare(`${sql} ORDER BY q.updated_at DESC`).all(...args).map((quoteRow) => {
-      const quote = toQuote(quoteRow, false);
-      // Een klant ziet niet dat de offerte intern is omgezet in een bestelling.
-      if (customerId) delete quote.order;
-      return quote;
-    });
+    return { sql: `${sql} ORDER BY q.updated_at DESC`, args, customerId };
+  }
+
+  /**
+   * Zet de rijen van de lijstquery om naar offertes (een klant ziet niet dat de offerte intern is omgezet in een bestelling).
+   * @param {object[]} rows De rijen van listQuery.
+   * @param {string|null} customerId Het klantaccount als de lijst voor een klant is.
+   * @returns {object[]} De offertes zonder inhoud.
+   */
+  const quotesFromRows = (rows, customerId) => rows.map((quoteRow) => {
+    const quote = toQuote(quoteRow, false);
+    if (customerId) delete quote.order;
+    return quote;
+  });
+
+  /**
+   * Lijst met offertes zonder inhoud, nieuwste wijziging eerst.
+   * @param {string} tenantId Id van de tenant.
+   * @param {object} [filters] ownerId, planId en customerId (alleen de offertes van dat klantaccount, zonder concepten).
+   * @returns {object[]} De offertes zonder inhoud.
+   */
+  function list(tenantId, filters = {}) {
+    const query = listQuery({ tenantId, ...filters });
+    return quotesFromRows(prepare(query.sql).all(...query.args), query.customerId);
+  }
+
+  /**
+   * Zelfde als list, maar via db.async: een trage lijstquery houdt de hoofdthread niet vast (zonder pool synchroon).
+   * @param {string} tenantId Id van de tenant.
+   * @param {object} [filters] Zie list.
+   * @returns {Promise<object[]>} De offertes zonder inhoud.
+   */
+  async function listAsync(tenantId, filters = {}) {
+    if (!db.async) return list(tenantId, filters);
+    const query = listQuery({ tenantId, ...filters });
+    return quotesFromRows(await db.async.all(query.sql, ...query.args), query.customerId);
   }
 
   /**
@@ -653,7 +682,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
     return prepare('DELETE FROM quotes WHERE tenant_id = ? AND id = ?').run(tenantId, String(id)).changes > 0;
   }
 
-  return { list, get, create, update, respond, decide, share, unshare, markSent, followUpDue, claimFollowUp, releaseFollowUp, restoreDraft, byToken, markViewed, publicView, shareLink, remove, purge, acceptedNumber, isConverted, nextNumber };
+  return { list, listAsync, get, create, update, respond, decide, share, unshare, markSent, followUpDue, claimFollowUp, releaseFollowUp, restoreDraft, byToken, markViewed, publicView, shareLink, remove, purge, acceptedNumber, isConverted, nextNumber };
 }
 
 /**
@@ -909,15 +938,15 @@ function registerQuoteRoutes(app, ctx) {
 
   // Eigen offertes; beheerders en installateurs zien met ?all=1 die van
   // iedereen, een klant alleen de offertes voor zijn account.
-  app.get('/api/quotes', (req, res) => {
+  app.get('/api/quotes', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     const user = identify(req);
     if (!user) return res.json({ items: [] });
     if (!Roles.can(user, 'offertes')) {
-      return res.json({ items: Roles.can(user, 'offertes.klant') ? quotes.list(user.tenant_id, { customerId: user.id }) : [] });
+      return res.json({ items: Roles.can(user, 'offertes.klant') ? await quotes.listAsync(user.tenant_id, { customerId: user.id }) : [] });
     }
     const all = req.query.all === '1' && Roles.can(user, 'offertes.alle');
-    res.json({ items: quotes.list(user.tenant_id, { ownerId: all ? null : user.id, planId: req.query.plan || null }) });
+    res.json({ items: await quotes.listAsync(user.tenant_id, { ownerId: all ? null : user.id, planId: req.query.plan || null }) });
   });
 
   app.get('/api/quotes/:id', (req, res) => {

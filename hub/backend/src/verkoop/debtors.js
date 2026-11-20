@@ -142,12 +142,12 @@ function createDebtorStore(db) {
   }
 
   /**
-   * Overzicht van de debiteuren met per debiteur het aantal facturen en het openstaande bedrag (één query).
+   * Bouwt de query voor het debiteurenoverzicht (per debiteur het aantal facturen en het openstaande bedrag, één query).
    * @param {string} tenantId De omgeving.
    * @param {{ search?: string }} [options] Zoektekst op naam, e-mail of debiteurnummer.
-   * @returns {object[]} Debiteuren met invoiceCount, openTotal en lastInvoice, hoogste nummer eerst.
+   * @returns {{ sql: string, args: Array }} De query en de parameters.
    */
-  function list(tenantId, { search = '' } = {}) {
+  function listQuery(tenantId, { search = '' } = {}) {
     const args = [tenantId, tenantId];
     let sql = `SELECT d.id, d.number, d.name, d.contact, d.address, d.email, d.phone, d.vat_number, d.customer_id, d.shop_customer_id, d.source,
         d.created_at, d.updated_at, COALESCE(i.n, 0) AS invoice_count, COALESCE(i.open, 0) AS open_total, i.last_date
@@ -160,9 +160,39 @@ function createDebtorStore(db) {
       sql += ' AND (lower(d.name) LIKE ? OR lower(d.email) LIKE ? OR CAST(d.number AS TEXT) = ?)';
       args.push(`%${searchText}%`, `%${searchText}%`, searchText);
     }
-    return prepare(`${sql} ORDER BY d.number DESC LIMIT ${LIST_LIMIT}`).all(...args).map((row) => ({
-      ...toDebtor(row), invoiceCount: Number(row.invoice_count), openTotal: Math.round(Number(row.open_total) * 100) / 100, lastInvoice: row.last_date || null,
-    }));
+    return { sql: `${sql} ORDER BY d.number DESC LIMIT ${LIST_LIMIT}`, args };
+  }
+
+  /**
+   * Zet de rijen van het overzicht om naar debiteuren.
+   * @param {object[]} rows De rijen van listQuery.
+   * @returns {object[]} Debiteuren met invoiceCount, openTotal en lastInvoice.
+   */
+  const debtorsFromRows = (rows) => rows.map((row) => ({
+    ...toDebtor(row), invoiceCount: Number(row.invoice_count), openTotal: Math.round(Number(row.open_total) * 100) / 100, lastInvoice: row.last_date || null,
+  }));
+
+  /**
+   * Overzicht van de debiteuren, hoogste nummer eerst.
+   * @param {string} tenantId De omgeving.
+   * @param {{ search?: string }} [options] Zoektekst op naam, e-mail of debiteurnummer.
+   * @returns {object[]} Debiteuren met invoiceCount, openTotal en lastInvoice.
+   */
+  function list(tenantId, options = {}) {
+    const query = listQuery(tenantId, options);
+    return debtorsFromRows(prepare(query.sql).all(...query.args));
+  }
+
+  /**
+   * Zelfde als list, maar via db.async (zonder pool synchroon).
+   * @param {string} tenantId De omgeving.
+   * @param {{ search?: string }} [options] Zie list.
+   * @returns {Promise<object[]>} Debiteuren met invoiceCount, openTotal en lastInvoice.
+   */
+  async function listAsync(tenantId, options = {}) {
+    if (!db.async) return list(tenantId, options);
+    const query = listQuery(tenantId, options);
+    return debtorsFromRows(await db.async.all(query.sql, ...query.args));
   }
 
   /**
@@ -198,7 +228,7 @@ function createDebtorStore(db) {
     return { debtor: get(tenantId, existing.id) };
   }
 
-  return { ensure, get, list, numbers, update, nextNumber };
+  return { ensure, get, list, listAsync, numbers, update, nextNumber };
 }
 
 /**
@@ -222,8 +252,8 @@ function registerDebtorRoutes(app, { debtors, requireRight, requireJson, audit, 
    */
   const notFound = (res) => res.status(404).json({ error: 'not_found', message: 'Debiteur niet gevonden.' });
 
-  app.get('/api/debtors', requireInvoices, (req, res) => {
-    res.json({ items: debtors.list(tenantOf(req), { search: String(req.query.q || '') }), sources: SOURCES });
+  app.get('/api/debtors', requireInvoices, async (req, res) => {
+    res.json({ items: await debtors.listAsync(tenantOf(req), { search: String(req.query.q || '') }), sources: SOURCES });
   });
   app.get('/api/debtors/:id', requireInvoices, (req, res) => {
     const debtor = debtors.get(tenantOf(req), req.params.id);
