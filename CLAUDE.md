@@ -62,7 +62,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `backend/tools/release-notes.js`) elk bestand het volgende versienummer (patch + 1, na x.y.9 de volgende minor, `bump: minor`
   in de kop kan; major alleen op Daniëls woord), werkt de drie bestanden bij, verwijdert het fragment en commit naar master
   met `[skip ci]`. De PR-check `version-must-increase` (`version.yml`) faalt bij een eigen versie-/releases.js-/CHANGELOG-wijziging
-  of een ontbrekend fragment; alleen docs/CI zonder effect: label `geen-releasenotes`. Het versienummer in een PR staat dus
+  of een ontbrekend fragment; alleen docs/CI zonder effect: label `geen-releasenotes`. Enige uitzondering: een vergeten doelgroep (`for: [...]`) toevoegen aan een bestaand punt in `releases.js` mag in een PR (`audienceOnlyChange`); bestaande doelgroepen, tekst, versies en nieuwe punten blijven geweigerd. Het versienummer in een PR staat dus
   altijd op het oude; tests die de versie nodig hebben lezen `package.json`. Voor de push naar de beschermde master is
   het secret `RELEASE_PUSH_TOKEN` nodig (beheerder-PAT) met Repository admin als bypass in de ruleset.
   Wijzigingen buiten `hub/` (zoals deze `CLAUDE.md`) hebben

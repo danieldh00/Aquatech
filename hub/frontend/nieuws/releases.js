@@ -40,7 +40,7 @@
       date: '2026-11-20',
       title: 'Kleine uitlijnfouten op mobiel hersteld',
       items: [
-        { text: 'Op een telefoon loopt de pagina AI-kosten (Beheer) en de tabbladbalk van Uitbesteden niet meer buiten het scherm, en lange productnamen in de webshop worden niet meer afgekapt midden in een woord.' },
+        { text: 'Op een telefoon loopt de pagina AI-kosten (Beheer) en de tabbladbalk van Uitbesteden niet meer buiten het scherm, en lange productnamen in de webshop worden niet meer afgekapt midden in een woord.', for: ['beheer', 'uitbesteden'] },
       ],
     },
     {

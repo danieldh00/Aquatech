@@ -39,7 +39,7 @@ Docker is niet beschikbaar in de cloud-sandbox. Er is geen aparte linter; `codes
 - Algemene werkwijze: `docs/WERKWIJZE.md` (projectonafhankelijk); AquaTech-context: `docs/AQUATECH-CONTEXT.md`. **Wie de werkwijze verandert, werkt `docs/WERKWIJZE.md` bij in dezelfde PR** (de kopie in de projectbestanden, `werkwijze/WERKWIJZE.md`, wordt door de coördinator gelijkgehouden).
 - Nooit rechtstreeks op `master`. Branch vers vanaf `origin/master` (`feature/<naam>` of `claude/<naam>`), kleine PR's, één onderwerp per PR.
 - Volgorde: wijzigen → `npm test` → `changes/<naam>.md` (als `hub/` wijzigt) → `README.md` bijwerken bij features/setup → push → PR → CI groen + verplichte **Claude code review** en **Claude security review** → bevindingen oplossen vóór auto-merge.
-- **Versie, `CHANGELOG.md` en `frontend/nieuws/releases.js` nooit zelf aanraken**; `release.yml` doet dat na de merge. Alleen docs/CI zonder effect: PR-label `geen-releasenotes`.
+- **Versie, `CHANGELOG.md` en `frontend/nieuws/releases.js` nooit zelf aanraken**; `release.yml` doet dat na de merge. Alleen docs/CI zonder effect: PR-label `geen-releasenotes`. Enige uitzondering: een vergeten doelgroep (`for: [...]`) toevoegen aan een bestaand punt in `releases.js` mag in een PR (`audienceOnlyChange`); bestaande doelgroepen, tekst, versies en nieuwe punten blijven geweigerd.
 - Geen backwards-compatibiliteit nodig tijdens de ontwikkeling.
 - Geen modelnamen/-ID's in commits, PR's, code of docs. Geen secrets in repo of chat.
 
