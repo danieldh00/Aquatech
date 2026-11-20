@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.28.4',
+      date: '2026-11-20',
+      title: 'Werkorders-scherm opgesplitst in meerdere bestanden',
+      items: [],
+    },
+    {
       version: '1.28.3',
       date: '2026-11-20',
       title: 'Tenantfilter op gastaccount bij ingediende tekening',

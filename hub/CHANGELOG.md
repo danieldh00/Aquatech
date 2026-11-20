@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.28.4
+
+- Het script van de werkorderspagina is verdeeld over eigen bestanden (gedeelde hulpfuncties, afspraak met de klant, afdrukken en exporteren) zonder wijziging in gedrag.
+
 ## 1.28.3
 
 Intern: de update van e-mail en telefoon van het gastaccount bij een ingediende tekening filtert nu ook op `tenant_id`; twee uitzonderingen uit `tenant-filter-baseline.json` zijn daarmee vervallen.
