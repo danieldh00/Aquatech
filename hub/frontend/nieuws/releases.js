@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.28.0',
+      date: '2026-11-20',
+      title: 'Gegevenslaag opgesplitst',
+      items: [],
+    },
+    {
       version: '1.27.9',
       date: '2026-11-20',
       title: 'Mail via Microsoft Graph versturen na automatisch instellen',

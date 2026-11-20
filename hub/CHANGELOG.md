@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.28.0
+
+- De gegevenslaag (store.js) is opgesplitst in kleinere bestanden (wachtwoorden, planoverzicht, voorkeuren, historie en plannen), zonder gedragswijziging.
+
 ## 1.27.9
 
 - `mail-graph.js`: een onthouden token bevat de machtigingen van het moment van opvragen. Bij 401/403 op `sendMail` met een onthouden token wordt één keer een vers token opgehaald en opnieuw verstuurd (geen herhaling bij een vers token). `EGRAPH_DENIED` en `EGRAPH_MAILBOX` dragen het afzenderadres (geen geheim) mee.
