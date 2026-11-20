@@ -1455,6 +1455,31 @@ const PG_MIGRATIONS = [
   ALTER TABLE oauth_grants ADD CONSTRAINT oauth_grants_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE NOT VALID;
   ALTER TABLE news ADD CONSTRAINT news_author_id_fkey FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE SET NULL DEFERRABLE INITIALLY IMMEDIATE NOT VALID;
   `,
+  // 93: vlaggen (BIGINT 0/1) krijgen een CHECK zodat er nooit iets anders in komt (NOT VALID: bestaande rijen worden niet gecontroleerd, nieuwe en gewijzigde wel). Echte boolean-kolommen zijn bewust niet gekozen: de code schrijft en vergelijkt overal met 0/1.
+  `
+  ALTER TABLE item_packagings ADD CONSTRAINT item_packagings_active_flag CHECK (active IN (0, 1)) NOT VALID;
+  ALTER TABLE item_suppliers ADD CONSTRAINT item_suppliers_preferred_flag CHECK (preferred IN (0, 1)) NOT VALID;
+  ALTER TABLE item_text_drafts ADD CONSTRAINT item_text_drafts_edited_flag CHECK (edited IN (0, 1)) NOT VALID;
+  ALTER TABLE news ADD CONSTRAINT news_pinned_flag CHECK (pinned IN (0, 1)) NOT VALID;
+  ALTER TABLE service_requests ADD CONSTRAINT service_requests_urgent_flag CHECK (urgent IN (0, 1)) NOT VALID;
+  ALTER TABLE shop_products ADD CONSTRAINT shop_products_in_stock_flag CHECK (in_stock IN (0, 1)) NOT VALID;
+  ALTER TABLE stock_items ADD CONSTRAINT stock_items_archived_flag CHECK (archived IN (0, 1)) NOT VALID;
+  ALTER TABLE stock_items ADD CONSTRAINT stock_items_archived_by_parent_flag CHECK (archived_by_parent IN (0, 1)) NOT VALID;
+  ALTER TABLE stock_items ADD CONSTRAINT stock_items_has_variants_flag CHECK (has_variants IN (0, 1)) NOT VALID;
+  ALTER TABLE stock_items ADD CONSTRAINT stock_items_shop_dirty_flag CHECK (shop_dirty IN (0, 1)) NOT VALID;
+  ALTER TABLE stock_items ADD CONSTRAINT stock_items_shop_sync_flag CHECK (shop_sync IN (0, 1)) NOT VALID;
+  ALTER TABLE stock_items ADD CONSTRAINT stock_items_stock_managed_flag CHECK (stock_managed IN (0, 1)) NOT VALID;
+  ALTER TABLE suppliers ADD CONSTRAINT suppliers_archived_flag CHECK (archived IN (0, 1)) NOT VALID;
+  ALTER TABLE tenants ADD CONSTRAINT tenants_disabled_flag CHECK (disabled IN (0, 1)) NOT VALID;
+  ALTER TABLE users ADD CONSTRAINT users_disabled_flag CHECK (disabled IN (0, 1)) NOT VALID;
+  ALTER TABLE users ADD CONSTRAINT users_must_change_password_flag CHECK (must_change_password IN (0, 1)) NOT VALID;
+  ALTER TABLE users ADD CONSTRAINT users_platform_admin_flag CHECK (platform_admin IN (0, 1)) NOT VALID;
+  ALTER TABLE users ADD CONSTRAINT users_reminders_off_flag CHECK (reminders_off IN (0, 1)) NOT VALID;
+  ALTER TABLE users ADD CONSTRAINT users_wholesale_flag CHECK (wholesale IN (0, 1)) NOT VALID;
+  ALTER TABLE visma_log ADD CONSTRAINT visma_log_ok_flag CHECK (ok IN (0, 1)) NOT VALID;
+  ALTER TABLE work_order_photos ADD CONSTRAINT work_order_photos_customer_visible_flag CHECK (customer_visible IN (0, 1)) NOT VALID;
+  ALTER TABLE invoices ADD CONSTRAINT invoices_stock_booked_flag CHECK (stock_booked IN (0, 1)) NOT VALID;
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };
