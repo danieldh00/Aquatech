@@ -52,7 +52,7 @@ async function start() {
   const kees = createClient(base, { followRedirects: false });
   await kees.post('/app/api/auth/login', { username: 'kees', password: PW });
   return {
-    app, base, baas, kees, google, dir,
+    app, base, baas, kees, google, dir, releaseDownload: null,
     /**
      * Koppelt Google Drive (volledige OAuth-ronde) en zet de kopie aan.
      * @returns {Promise<void>}
@@ -88,7 +88,7 @@ async function start() {
      * Stopt de server, de nagebootste Google en ruimt de map op.
      * @returns {Promise<void>}
      */
-    async cleanup() { server.close(); await google.close(); fs.rmSync(dir, { recursive: true, force: true }); },
+    async cleanup() { if (this.releaseDownload) this.releaseDownload(); server.close(); await google.close(); fs.rmSync(dir, { recursive: true, force: true }); },
   };
 }
 
