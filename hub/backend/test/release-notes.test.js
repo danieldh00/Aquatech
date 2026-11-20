@@ -114,3 +114,19 @@ test('evaluatePullRequest: fragment verplicht, versie en releases.js verboden, l
 test('de bestanden in changes/ van de repository kloppen', () => {
   assert.deepStrictEqual(tool.checkFragments(), []);
 });
+
+test('checkFragments: een nieuwspunt over uitbesteden of beheer zonder doelgroep wordt geweigerd', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'fragmenten-'));
+  /**
+   * Schrijft een bestand met één nieuwspunt in de tijdelijke map.
+   * @param {string} name Bestandsnaam.
+   * @param {string} point Het nieuwspunt als regel met streepje.
+   */
+  const write = (name, point) => fs.writeFileSync(path.join(directory, name), `---\ntitel: Test\n---\n\n## Nieuws\n${point}\n\n## Changelog\nTechnisch.\n`);
+  write('goed.md', '- [beheer, uitbesteden] De tabbladbalk van Uitbesteden past op een telefoon.');
+  assert.deepStrictEqual(tool.checkFragments(directory), []);
+  write('fout.md', '- De tabbladbalk van Uitbesteden past op een telefoon.');
+  const problems = tool.checkFragments(directory);
+  assert.strictEqual(problems.length, 1);
+  assert.match(problems[0], /fout\.md.*doelgroep/);
+});

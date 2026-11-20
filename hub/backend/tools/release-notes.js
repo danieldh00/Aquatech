@@ -167,6 +167,9 @@ function applyFragments(options = {}) {
   return versions;
 }
 
+/** Termen die alleen medewerkers aangaan; een nieuwspunt erover zonder rechten ziet ook een klant (zie test/news.test.js). */
+const STAFF_TERMS = /Beheer → Rollen|Uitbesteden|Planner/;
+
 /**
  * Controleert alle bestanden in `changes/` zonder iets te wijzigen.
  * @param {string} [directory] Map met de bestanden.
@@ -176,7 +179,10 @@ function checkFragments(directory = CHANGES_DIR) {
   const problems = [];
   for (const name of listFragments(directory)) {
     try {
-      parseFragment(fs.readFileSync(path.join(directory, name), 'utf8'));
+      const fragment = parseFragment(fs.readFileSync(path.join(directory, name), 'utf8'));
+      for (const item of fragment.items) {
+        if (!item.rights.length && STAFF_TERMS.test(item.text)) problems.push(`changes/${name}: een punt over beheer, planning of uitbesteden hoort een doelgroep te hebben, zoals [beheer]: ${item.text.slice(0, 60)}`);
+      }
     } catch (error) {
       problems.push(`changes/${name}: ${error.message}`);
     }
