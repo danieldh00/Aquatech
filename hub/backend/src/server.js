@@ -125,6 +125,7 @@ const { createRestoreTest } = require('./platform/restore-test');
 const { registerRestoreTestRoutes } = require('./platform/restore-test-routes');
 const { createDriveRestoreTest } = require('./platform/drive-restore-test');
 const { registerDriveRestoreTestRoutes } = require('./platform/drive-restore-test-routes');
+const { createDriveRestoreSource } = require('./platform/drive-restore-source');
 const { createIdempotency, ifBaseOf } = require('./beveiliging/idempotency');
 const { createOAuthGrants } = require('./mcp/oauth-grants');
 const { registerOAuthRoutes } = require('./mcp/oauth-server');
@@ -1815,7 +1816,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.locals.driveRestoreTest = driveRestoreTest;
 
   // Terugzetten uit een back-up (volledig of per record/veld): platform/backup-restore.js.
-  registerBackupRestoreRoutes(app, { backupDir, vault, database, store, audit, runBackup, requireJson, loginGuard, twoFactor, lineDeps: () => ({ QuoteCore: require(path.join(FRONTEND_DIR, 'offertes', 'quote-core.js')), totalsOf: webOrdersModule.totalsOf, stockLinesOf: webOrdersModule.stockLinesOf, stock: stockStore }) });
+  registerBackupRestoreRoutes(app, { backupDir, driveSource: backupDir ? createDriveRestoreSource({ driveBackup, backupDir }) : null, vault, database, store, audit, runBackup, requireJson, loginGuard, twoFactor, lineDeps: () => ({ QuoteCore: require(path.join(FRONTEND_DIR, 'offertes', 'quote-core.js')), totalsOf: webOrdersModule.totalsOf, stockLinesOf: webOrdersModule.stockLinesOf, stock: stockStore }) });
 
   app.get('/api/admin/backups/:name', (req, res) => {
     const name = req.params.name;

@@ -70,14 +70,22 @@
   /** Laadt de keuzelijsten (back-ups en soorten) één keer per paginabezoek, en elke keer de lijst met back-ups opnieuw. */
   async function load() {
     try {
-      const [kinds, backups] = await Promise.all([loaded ? null : call('/kinds'), fetch('../api/admin/backups', { cache: 'no-store' }).then((response) => response.json())]);
+      const [kinds, backups, drive] = await Promise.all([
+        loaded ? null : call('/kinds'),
+        fetch('../api/admin/backups', { cache: 'no-store' }).then((response) => response.json()),
+        // Google Drive is een tweede bron; ontbreekt of faalt die, dan blijven de lokale back-ups gewoon werken.
+        fetch('../api/admin/backups/drive?remote=1', { cache: 'no-store' }).then((response) => (response.ok ? response.json() : null)).catch(() => null),
+      ]);
       if (kinds) {
         byId('r-kind').innerHTML = kinds.kinds.map((entry) => `<option value="${esc(entry.kind)}">${esc(entry.label)}</option>`).join('');
         loaded = true;
       }
       const selected = byId('r-backup').value;
-      byId('r-backup').innerHTML = backups.items.length
-        ? backups.items.map((item) => `<option value="${esc(item.name)}">${esc(when(item.createdAt))} · ${esc(item.name)}</option>`).join('')
+      const local = backups.items.map((item) => `<option value="${esc(item.name)}">${esc(when(item.createdAt))} · ${esc(item.name)}</option>`).join('');
+      const remote = drive && Array.isArray(drive.remote) ? drive.remote : [];
+      const onDrive = remote.map((item) => `<option value="${esc(`drive:${item.name}`)}">${esc(when(item.createdTime))} · ${esc(item.name)}</option>`).join('');
+      byId('r-backup').innerHTML = local || onDrive
+        ? `${local ? `<optgroup label="Op de server">${local}</optgroup>` : ''}${onDrive ? `<optgroup label="Op Google Drive (wordt eerst opgehaald)">${onDrive}</optgroup>` : ''}`
         : '<option value="">Geen back-ups</option>';
       if (selected) byId('r-backup').value = selected;
     } catch (error) {

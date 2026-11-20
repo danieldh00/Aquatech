@@ -5,16 +5,18 @@ const { createRateLimiter } = require('../beveiliging/rate-limit');
 const { verifyPassword } = require('./store');
 const restore = require('./backup-restore');
 const lineRestore = require('./backup-restore-lines');
+const { DriveError } = require('./drive-backup');
+const { isDriveName } = require('./drive-restore-source');
 
 const BASE = '/api/admin/backups/restore';
 
 /**
  * Koppelt de routes voor terugzetten aan de app.
  * @param {object} app De Express-app.
- * @param {{ backupDir: ?string, vault: object, database: object, store: object, audit: Function, runBackup: Function, requireJson: Function, loginGuard: object, twoFactor: object, lineDeps: Function }} deps De back-upmap, de kluis, de actieve database, de store, het auditlog, de back-upfunctie, de JSON-controle, de inlogbewaking, de tweestapscontrole en een functie die de hulpmiddelen voor het terugzetten van regels geeft (rekenkern offertes, totalen, voorraad).
+ * @param {{ backupDir: ?string, driveSource: ?object, vault: object, database: object, store: object, audit: Function, runBackup: Function, requireJson: Function, loginGuard: object, twoFactor: object, lineDeps: Function }} deps De back-upmap, de kluis, de actieve database, de store, het auditlog, de back-upfunctie, de JSON-controle, de inlogbewaking, de tweestapscontrole en een functie die de hulpmiddelen voor het terugzetten van regels geeft (rekenkern offertes, totalen, voorraad).
  * @returns {void}
  */
-function registerBackupRestoreRoutes(app, { backupDir, vault, database, store, audit, runBackup, requireJson, loginGuard, twoFactor, lineDeps }) {
+function registerBackupRestoreRoutes(app, { backupDir, driveSource, vault, database, store, audit, runBackup, requireJson, loginGuard, twoFactor, lineDeps }) {
   const openLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 30, keyFn: (req) => `restore-open:${req.user ? req.user.id : ''}` });
   const applyLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 5, keyFn: (req) => `restore-apply:${req.user ? req.user.id : ''}` });
   let applying = false;
@@ -27,13 +29,26 @@ function registerBackupRestoreRoutes(app, { backupDir, vault, database, store, a
    * @returns {Promise<*>} Wat de functie teruggeeft.
    */
   async function withBackup(req, name, callback) {
-    const opened = await restore.openBackup({ dir: backupDir, name: String(name || ''), vault, current: database });
-    try {
-      const customerRoleKeys = store.roles.keysOfKind(req.tenantId, 'klant');
-      return await callback({ backup: opened.db, current: database, context: { tenantId: req.tenantId, customerRoleKeys } });
-    } finally {
-      opened.close();
+    /**
+     * Opent de back-up uit de gegeven map en voert de functie uit.
+     * @param {string} dir De map met de back-up.
+     * @param {string} file De bestandsnaam.
+     * @returns {Promise<*>} Wat de functie teruggeeft.
+     */
+    const run = async (dir, file) => {
+      const opened = await restore.openBackup({ dir, name: file, vault, current: database });
+      try {
+        const customerRoleKeys = store.roles.keysOfKind(req.tenantId, 'klant');
+        return await callback({ backup: opened.db, current: database, context: { tenantId: req.tenantId, customerRoleKeys } });
+      } finally {
+        opened.close();
+      }
+    };
+    if (isDriveName(name)) {
+      if (!driveSource) throw Object.assign(new Error('Terugzetten vanaf Google Drive is niet beschikbaar.'), { status: 501 });
+      return driveSource.use(String(name), ({ dir, name: file }) => run(dir, file));
     }
+    return run(backupDir, String(name || ''));
   }
   /**
    * Zet een fout om in een antwoord: bewust leesbare fouten (met status) tonen hun melding, de rest wordt een interne fout.
@@ -43,6 +58,7 @@ function registerBackupRestoreRoutes(app, { backupDir, vault, database, store, a
    * @returns {void}
    */
   function fail(res, error, next) {
+    if (error instanceof DriveError) return res.status(error.status).json({ error: error.code, message: error.message });
     if (error && error.status && error.status < 500) return res.status(error.status).json({ error: 'restore_failed', message: error.message });
     return next(error);
   }
