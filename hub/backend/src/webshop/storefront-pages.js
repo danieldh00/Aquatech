@@ -282,14 +282,17 @@ function listEventsOf(listName, products, search = {}) {
  * meting (instellingen uit of geen ID) is het resultaat leeg en staat er niets van deze diensten in de pagina.
  * @param {string} root Relatief pad naar de shop-startpagina.
  * @param {object[]} events De gebeurtenissen van de pagina (zie shop-analytics.js).
+ * @param {boolean} [privatePage] Of de pagina persoonsgegevens kan tonen (geen canonicalPath): dan wordt alle tekst voor Clarity gemaskeerd.
  * @returns {string} De attributen met een spatie ervoor, of een lege tekst.
  */
-function analyticsAttributes(root, events) {
+function analyticsAttributes(root, events, privatePage = false) {
   if (!activeShop.analytics && !activeShop.clarity) return '';
   const group = activeShop.wholesale ? 'groothandel' : activeShop.business ? 'zakelijk' : 'particulier';
   const json = activeShop.analytics ? Analytics.eventsJson(events) : '';
   const tools = `${activeShop.analytics ? ` data-shop-analytics="${escapeHtml(activeShop.analytics)}"` : ''}${activeShop.clarity ? ` data-shop-clarity="${escapeHtml(activeShop.clarity)}"` : ''}`;
-  return `${tools} data-customer-group="${group}" data-privacy-url="${escapeHtml(root)}pagina/privacyverklaring/"${activeShop.staff ? ' data-internal="1"' : ''}${json ? ` data-shop-events="${escapeHtml(json)}"` : ''}`;
+  // Pagina's zonder canonicalPath (account, bestelling, afrekenen, retour, winkelwagen, zoeken) kunnen persoonsgegevens als tekst tonen: die gaan niet naar Clarity.
+  const mask = privatePage ? ' data-clarity-mask="True"' : '';
+  return `${tools}${mask} data-customer-group="${group}" data-privacy-url="${escapeHtml(root)}pagina/privacyverklaring/"${activeShop.staff ? ' data-internal="1"' : ''}${json ? ` data-shop-events="${escapeHtml(json)}"` : ''}`;
 }
 
 /**
@@ -318,7 +321,7 @@ ${seoHead({ title, description, canonicalPath, ogImage, ogType, jsonLd, root })}
 <link rel="stylesheet" href="${assetUrl(root, 'brand.css')}">
 <link rel="stylesheet" href="${assetUrl(root, 'winkel.css')}">
 ${nav.includes('nav-fly') ? `<script src="${assetUrl(root, 'menu.js')}" defer></script>\n` : ''}${variantScript ? `<script src="${assetUrl(root, 'varianten.js')}" defer></script>\n` : ''}${[].concat(script || [], 'zoeksuggesties.js', activeShop.analytics || activeShop.clarity ? 'analytiek.js' : [], activeShop.captcha ? 'captcha.js' : []).map((name) => `<script src="${assetUrl(root, name)}" defer></script>\n`).join('')}</head>
-<body${analyticsAttributes(root, events)}>
+<body${analyticsAttributes(root, events, canonicalPath == null)}>
 ${site.notice.enabled && site.notice.text ? `<div class="shop-notice kleur-${escapeHtml(site.notice.color || 'purple')}">${escapeHtml(site.notice.text)}</div>` : ''}
 <header class="shop-head">
   <div class="shop-bar">

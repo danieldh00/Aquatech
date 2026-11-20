@@ -599,6 +599,9 @@ test('webshop: Clarity staat standaard aan voor het project van AquaTech, komt m
   assert.match(csp, /script-src 'self' https:\/\/www\.clarity\.ms https:\/\/scripts\.clarity\.ms/);
   assert.match(csp, /connect-src 'self' https:\/\/\*\.clarity\.ms https:\/\/c\.bing\.com/);
   assert.ok(!/google/.test(csp));
+  assert.ok(!/<body[^>]*data-clarity-mask/.test(home.text), 'een openbare pagina wordt niet helemaal gemaskeerd');
+  const cart = await shopper.get('/winkelwagen/');
+  assert.match(cart.text, /<body[^>]*data-clarity-mask="True"/, 'een pagina zonder canonical (winkelwagen) maskeert alle tekst');
   const saved = await world.admin.put('/app/api/admin/settings', { shopClarity: { enabled: true, projectId: ' ABCDE12345 ', onzin: 1 } });
   assert.deepStrictEqual(saved.body.settings.shopClarity.value, { enabled: true, projectId: 'abcde12345' });
   assert.strictEqual((await world.admin.put('/app/api/admin/settings', { shopClarity: { enabled: true, projectId: 'niet geldig!' } })).body.settings.shopClarity.value.projectId, '');

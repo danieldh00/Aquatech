@@ -163,6 +163,7 @@ function clearCookiesWhere(win, doc, matches) {
  */
 function createClarity({ window: win, document: doc, projectId }) {
   let loaded = false;
+  let watching = false;
 
   /**
    * Zet de wachtrij van Clarity klaar (zoals het standaardscript doet) en laadt het script één keer.
@@ -187,6 +188,16 @@ function createClarity({ window: win, document: doc, projectId }) {
     for (const element of doc.querySelectorAll('input, textarea, select, form')) element.setAttribute('data-clarity-mask', 'True');
   }
 
+  /**
+   * Maskeert ook velden die later in de pagina komen (bijvoorbeeld het adres van de postcodezoeker of een bijgewerkt formulier).
+   * @returns {void}
+   */
+  function watchNewInputs() {
+    if (watching || typeof win.MutationObserver !== 'function' || !doc.body) return;
+    watching = true;
+    new win.MutationObserver(maskInputs).observe(doc.body, { childList: true, subtree: true });
+  }
+
   return {
     /**
      * De bezoeker staat meten toe: Clarity laden (alleen analytische opslag, nooit advertenties) en de velden maskeren.
@@ -194,6 +205,7 @@ function createClarity({ window: win, document: doc, projectId }) {
      */
     grant() {
       maskInputs();
+      watchNewInputs();
       load();
       win.clarity('consentv2', { ad_Storage: 'denied', analytics_Storage: 'granted' });
     },
