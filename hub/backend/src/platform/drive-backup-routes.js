@@ -4,6 +4,7 @@
 // vóór /api/admin/backups/:name worden geregistreerd.
 const { sanitizeDriveBackup, DriveError, CALLBACK_PATH: DRIVE_CALLBACK_PATH } = require('./drive-backup');
 const { SettingsError } = require('./settings');
+const { createRateLimiter } = require('../beveiliging/rate-limit');
 
 /**
  * Registreert de Drive-routes onder /api/admin/backups/drive.
@@ -12,6 +13,9 @@ const { SettingsError } = require('./settings');
  * @returns {void}
  */
 function registerDriveBackupRoutes(app, { driveBackup, settings, audit, requireJson, mainTenantId }) {
+  // Een ruime limiet per gebruiker voor alle Drive-routes (het scherm doet er hooguit een paar per minuut).
+  const driveLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 120, keyFn: (req) => `backup-drive:${req.user ? req.user.id : ''}` });
+  app.use('/api/admin/backups/drive', driveLimiter);
   /**
    * Antwoordt op een fout van de Drive-koppeling met een leesbare melding; een andere fout gaat door naar de foutafhandeling.
    * @param {object} res Het antwoord.
