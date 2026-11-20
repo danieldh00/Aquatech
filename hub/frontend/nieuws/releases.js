@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.28.7',
+      date: '2026-11-20',
+      title: 'Eigen Over ons-tekst uit Beheer in de nieuwe opmaak',
+      items: [
+        { text: 'Een eigen tekst voor Over ons uit Beheer staat nu ook in het nieuwe ontwerp van de webshop.' },
+      ],
+    },
+    {
       version: '1.28.6',
       date: '2026-11-20',
       title: 'Nieuw ontwerp voor de pagina Over ons in de webshop',

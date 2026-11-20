@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.28.7
+
+`contentPage` toont de pagina `over-ons` met dezelfde kop (`aboutHero`), bedrijfsgegevens (`aboutFacts`) en afsluiting (`aboutCta`) als de standaardpagina; de eigen tekst staat in de verhaalkolom. Alleen HTML en CSS, geen migratie.
+
 ## 1.28.6
 
 Standaardpagina Over ons (`aboutPage`) herontworpen: kop met intro, verhaal naast bedrijfsgegevens (telefoon, e-mail, adres en KvK uit de bedrijfsinstellingen), twee onderscheidende punten, waarden en een afsluitend blok met knoppen. De bestaande teksten zijn overgenomen; nieuw zijn de ondertitel in de kop, de zin in het afsluitende blok en de knoppen daarin; een eigen pagina uit Beheer gaat nog steeds voor. Alleen CSS en HTML, geen migratie.
