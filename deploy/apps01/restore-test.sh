@@ -161,7 +161,7 @@ BACKUP_FILE="$(newest_dump)"
 if [[ -z "$BACKUP_FILE" ]]; then
   if [[ -f "$APP_DIR/pg-backup.sh" && ! -L "$APP_DIR/pg-backup.sh" ]]; then
     log "Geen dump gevonden; pg-backup.sh maakt er een"
-    BACKUP_LOG="$(bash "$APP_DIR/pg-backup.sh" 2>&1 | tail -n 3 | tr '\n' ' ')" || true
+    BACKUP_LOG="$(timeout 900 bash "$APP_DIR/pg-backup.sh" 2>&1 | tail -n 3 | tr '\n' ' ')" || true
     BACKUP_FILE="$(newest_dump)"
     [[ -n "$BACKUP_FILE" ]] || finish mislukt "Er was geen dump in backups/postgres en pg-backup.sh kon er geen maken: ${BACKUP_LOG:-geen uitvoer}"
   elif [[ ! -d "$BACKUP_DIR" ]]; then
