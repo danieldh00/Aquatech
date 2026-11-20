@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.30.5
+
+- `platform/drive-restore-test.js` (+ routes `/api/admin/restore-test-drive`, instelling `driveRestoreTest`, bewakingscontrole `hersteltest-drive`): Drive-back-up ophalen als stroom (`driveBackup.download`), `openBackup` in een tijdelijk schema, vergelijken met de actieve database, altijd opruimen; planning via de uurlijkse onderhoudsronde.
+- Beheer: `hersteltest.js` is nu een fabriek voor beide schermen.
+- `restore-test.sh`: minimaal 1 s wachttijd bij het wachten op een lopende back-up, duidelijker melding bij een afgebroken `pg-backup.sh`.
+- Servertaak `003-hersteltest-script-bijwerken`: een app-update vernieuwt het hostscript `restore-test.sh` niet; deze taak installeert de nieuwste versie (hergebruikt taak 002).
+
 ## 1.30.4
 
 - `createSlowLog({ taskThresholdMs })`: eigen drempel per taaknaam (server.js: Drive-back-up en back-up 90 s, webshopsynchronisatie 5 min, bestellingen ophalen en Visma 30 s, bewaking 25 s); overige taken blijven op `SLOW_REQUEST_MS`.
