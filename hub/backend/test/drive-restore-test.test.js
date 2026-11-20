@@ -52,7 +52,7 @@ async function start() {
   const kees = createClient(base, { followRedirects: false });
   await kees.post('/app/api/auth/login', { username: 'kees', password: PW });
   return {
-    app, baas, kees, google, dir,
+    app, base, baas, kees, google, dir,
     /**
      * Koppelt Google Drive (volledige OAuth-ronde) en zet de kopie aan.
      * @returns {Promise<void>}
@@ -163,7 +163,7 @@ test('API: rechten, validatie, niet gekoppeld, één tegelijk en auditlog', asyn
   try {
     assert.strictEqual((await world.kees.get(TEST)).status, 403);
     assert.strictEqual((await world.kees.post(`${TEST}/run`, {})).status, 403);
-    assert.strictEqual((await createClient(world.baas.base || 'http://x').get(TEST).catch(() => ({ status: 401 }))).status, 401);
+    assert.strictEqual((await createClient(world.base).get(TEST)).status, 401);
 
     const view = await world.baas.get(TEST);
     assert.strictEqual(view.body.configured, false);
@@ -187,12 +187,9 @@ test('API: rechten, validatie, niet gekoppeld, één tegelijk en auditlog', asyn
     // De instelling houdt de runs vast.
     await world.baas.put(TEST, { enabled: true, day: 1, time: '05:00' });
     assert.strictEqual((await world.baas.get(TEST)).body.runs.length, 1);
-    const log = await world.baas.get('/app/api/admin/audit?limit=50').catch(() => null);
-    if (log && log.status === 200) {
-      const actions = JSON.stringify(log.body);
-      assert.match(actions, /hersteltest_drive_ingesteld/);
-      assert.match(actions, /hersteltest_drive_aangevraagd/);
-    }
+    const actions = (await world.baas.get('/app/api/admin/audit')).body.items.map((entry) => entry.action);
+    assert.ok(actions.includes('hersteltest_drive_ingesteld'));
+    assert.ok(actions.includes('hersteltest_drive_aangevraagd'));
   } finally { await world.cleanup(); }
 });
 

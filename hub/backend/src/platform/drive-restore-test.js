@@ -163,7 +163,7 @@ function createDriveRestoreTest({ settings, driveBackup, backupDir, vault, datab
 
   /**
    * Haalt de nieuwste Drive-back-up op, leest hem in een tijdelijk schema en vergelijkt hem met de actieve database.
-   * @param {object} root0 trigger ('schema' of 'handmatig').
+   * @param {{ trigger: string }} options trigger: 'schema' of 'handmatig'.
    * @returns {Promise<object>} De bewaarde run (nooit een gooiende fout: een mislukking wordt een run met state mislukt).
    */
   async function execute({ trigger }) {
@@ -202,8 +202,11 @@ function createDriveRestoreTest({ settings, driveBackup, backupDir, vault, datab
   function run({ trigger = 'handmatig' } = {}) {
     if (!configured()) return { error: 'not_configured', status: 409, message: 'Google Drive is niet gekoppeld.' };
     if (running && now() - Date.parse(running.startedAt) < RUNNING_MAX_MS) return { error: 'busy', status: 409, message: 'Er loopt al een hersteltest van Google Drive.' };
-    running = { state: 'bezig', trigger, startedAt: new Date(now()).toISOString() };
-    const done = execute({ trigger }).finally(() => { running = null; });
+    const mine = { state: 'bezig', trigger, startedAt: new Date(now()).toISOString() };
+    running = mine;
+    const done = execute({ trigger })
+      .catch((error) => { log.warn(`Hersteltest Google Drive: ${error.message}`); return null; })
+      .finally(() => { if (running === mine) running = null; });
     return { started: true, done };
   }
 
