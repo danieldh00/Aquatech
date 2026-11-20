@@ -60,6 +60,8 @@
 
   /** De groep die nu openstaat (hoogstens één); undefined zolang de zijbalk nog niet getekend is. */
   let openKey;
+  /** Wordt true zodra de gebruiker zelf een groep open- of dichtklapt; daarna bepaalt de render de open groep niet meer. */
+  let userChose = false;
 
   /**
    * Leest de groep die de gebruiker zelf opengeklapt had (per browser onthouden, hoogstens één).
@@ -143,7 +145,7 @@
       return `<a class="at-nav-item" href="${esc(module.href)}" title="${esc(title)}"${currentAttribute}>${label}</a>`;
     };
     // Accordeon: hoogstens één groep open. Bij het laden staat dat de groep met de huidige pagina, anders de laatst gekozen.
-    if (openKey === undefined) {
+    if (!userChose) {
       const activeGroup = tools.navSections(items).find((section) => section.title && section.items.some((module) => module.id === active));
       openKey = activeGroup ? activeGroup.key : readOpenGroup();
     }
@@ -206,6 +208,7 @@
         group.classList.toggle('open', open);
         head.setAttribute('aria-expanded', String(open));
         openKey = open ? group.dataset.group : '';
+        userChose = true;
         // De groep met de huidige pagina staat bij elk bezoek weer open; de keuze telt alleen op pagina's zonder groep.
         if (!nav.querySelector('.at-nav-sec.has-active')) store.set(OPEN_GROUPS, openKey);
       });
