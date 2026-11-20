@@ -58,8 +58,8 @@ request_read() {
 }
 
 cleanup() {
-  # Onderbroken voordat het terugzetten begon (time-out, kill): ook dan pas over enkele uren opnieuw proberen.
-  [[ "${PREPARED:-0}" == 1 ]] || { [[ -n "${STARTED_AT:-}" ]] && date +%s > "$RETRY_FILE"; }
+  # Alles behalve een afgeronde run (time-out, kill, onverwachte fout): over enkele uren opnieuw proberen.
+  [[ "${FINISHED:-0}" == 1 ]] || { [[ -n "${STARTED_AT:-}" ]] && date +%s > "$RETRY_FILE"; }
   docker rm -f -v "$TEST_CONTAINER" >/dev/null 2>&1 || true
   [[ -n "$WORK_DIR" ]] && rm -rf "$WORK_DIR"
 }
@@ -137,6 +137,7 @@ publish() { # <run-json> <afgerond: 0|1>
 
 # Rondt af met een uitslag en stopt.
 finish() { # <state> <melding>
+  FINISHED=1
   STATE="$1"; MESSAGE="$2"
   # Alleen een run die tot het terugzetten kwam telt als gedaan; een mislukte voorbereiding wordt over enkele uren herhaald.
   if (( PREPARED == 1 )); then date +%s > "$LAST_FILE"; rm -f "$RETRY_FILE"; else date +%s > "$RETRY_FILE"; fi
