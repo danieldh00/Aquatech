@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.30.7',
+      date: '2026-11-20',
+      title: 'Dagelijkse database-back-up werkt weer',
+      items: [
+        { text: 'De dagelijkse back-up van de database wordt niet langer ten onrechte afgekeurd. Een servertaak in Beheer > Systeem > Updates installeert de reparatie en maakt meteen een back-up.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.30.6',
       date: '2026-11-20',
       title: 'Terugzetten vanaf Google Drive',

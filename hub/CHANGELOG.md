@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.30.7
+
+`pg-backup.sh`, `restore-test.sh` en `local-db.sh restore` lazen de inhoudsopgave met `openssl … | pg_restore -l | grep` onder `pipefail`. `pg_restore -l` stopt na de inhoudsopgave, waarna openssl "error writing output file" gaf en de hele controle faalde zodra de dump groter was dan de pijpbuffer: elke back-up werd afgekeurd en niet bewaard. De controle ontsleutelt nu eerst het hele bestand en vangt de uitvoer van `pg_restore -l` daarna in een variabele op. Servertaak `004-pg-back-up-script-herstellen` installeert de scripts op apps01 en maakt een back-up. Regressietest in `restore-test-script.test.js` (grote dump, `pg_restore -l` stopt vroeg).
+
 ## 1.30.6
 
 - `platform/drive-restore-source.js`: back-up van Drive als bron (`drive:<naam>` in het veld `backup` van de restore-routes), tijdelijke kopie in `.drive-restore-cache-*` (15 minuten, opruimen per minuut en bij de start), `DriveError` als leesbare fout in `backup-restore-routes.js`.
