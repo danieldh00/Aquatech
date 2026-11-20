@@ -99,10 +99,6 @@
     },
     {
       "file": "platform/plan-store.js",
-      "sql": "UPDATE users SET email = ?, phone = ? WHERE id = ?"
-    },
-    {
-      "file": "platform/plan-store.js",
       "sql": "UPDATE plans SET title = ?, customer = ?, address = ?, data = ?, updated_at = ? WHERE id = ?"
     },
     {
@@ -244,10 +240,6 @@
     {
       "file": "platform/store.js",
       "sql": "SELECT ${}, (SELECT COUNT(*) FROM users u WHERE u.tenant_id = t.id AND u.kind = 'account') AS user_count, (SELECT COUNT(*) FROM users u WHERE u.tenant_id = t.id AND u.kind = 'account' AND u.role = 'beheerder' AND u.disabled = 0) AS admin_count, (SELECT COUNT(*) FROM plans p WHERE p.tenant_id = t.id AND p.deleted_at IS NULL) AS plan_count, (SELECT MAX(h.updated_at) FROM history h WHERE h.tenant_id = t.id) AS last_activity FROM tenants t ORDER BY lower(t.name), t.created_at"
-    },
-    {
-      "file": "platform/store.js",
-      "sql": "UPDATE users SET email = ?, phone = ? WHERE id = ?"
     },
     {
       "file": "platform/store.js",
