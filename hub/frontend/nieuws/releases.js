@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.29.6',
+      date: '2026-11-20',
+      title: 'Analytisch staat vooraf aan in de cookie-instellingen',
+      items: [
+        { text: 'Het vakje Analytisch in de cookie-instellingen van de webshop staat vooraf aan zolang een bezoeker nog niets koos. Er wordt niets geladen voordat de bezoeker zelf op een knop drukt.' },
+      ],
+    },
+    {
       version: '1.29.5',
       date: '2026-11-20',
       title: 'Microsoft Clarity beter te vinden in Beheer',

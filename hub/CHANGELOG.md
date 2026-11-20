@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.29.6
+
+- `storefront-analytics.js`: `showConsentSettings` zet de schakelaar Analytisch vooraf aan bij een bezoeker zonder eerdere keuze (besluit Daniël 2026-11-20); een eerdere keuze blijft zoals die was. De banner (Accepteren en Weigeren even groot) en het laden na toestemming zijn ongewijzigd.
+
 ## 1.29.5
 
 - Beheer: zoekwoorden voor Microsoft Clarity en de cookiebanner toegevoegd aan de sectie Webshop (`indeling.js`).
