@@ -11,7 +11,7 @@ async function createGoogleFake() {
   const sessions = new Map();
   const calls = [];
   const revoked = [];
-  const fake = { files, calls, revoked, failUploads: null, holdUploads: null, tokenRevoked: false, nextRefreshToken: 'refresh-1' };
+  const fake = { files, calls, revoked, failUploads: null, failDownloads: null, createdNow: false, holdUploads: null, tokenRevoked: false, nextRefreshToken: 'refresh-1' };
   let counter = 0;
   let accessCounter = 0;
 
@@ -64,7 +64,7 @@ async function createGoogleFake() {
       if (!meta) return send(res, 404, {});
       if (fake.holdUploads) await fake.holdUploads;
       counter += 1;
-      const file = { id: `id${counter}`, name: meta.name, parents: meta.parents, size: String(body.length), body, createdTime: new Date(Date.UTC(2026, 10, 13, 0, 0, counter)).toISOString(), seq: counter };
+      const file = { id: `id${counter}`, name: meta.name, parents: meta.parents, size: String(body.length), body, createdTime: fake.createdNow ? new Date().toISOString() : new Date(Date.UTC(2026, 10, 13, 0, 0, counter)).toISOString(), seq: counter };
       files.set(file.id, file);
       return send(res, 200, { id: file.id, size: file.size });
     }
@@ -93,6 +93,11 @@ async function createGoogleFake() {
       const file = files.get(decodeURIComponent(one[1]));
       if (!file) return send(res, 404, { error: { status: 'NOT_FOUND' } });
       if (req.method === 'DELETE') { files.delete(file.id); res.writeHead(204); return res.end(); }
+      if (url.searchParams.get('alt') === 'media') {
+        if (fake.failDownloads) return send(res, fake.failDownloads.status, { error: { status: 'INTERNAL' } });
+        res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': file.body.length });
+        return res.end(file.body);
+      }
       return send(res, 200, { id: file.id, trashed: Boolean(file.trashed) });
     }
     if (url.pathname === '/upload/drive/v3/files' && req.method === 'POST') {

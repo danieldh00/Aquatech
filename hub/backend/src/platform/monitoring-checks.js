@@ -18,6 +18,7 @@
 //   listBackups(dir)            backup.js listBackups: [{ name, size, createdAt }] nieuwste eerst → check back-up
 //   systemUpdate                platform/system-update.js: { configured, view() } → check update
 //   restoreTest                 platform/restore-test.js: { view() } → check hersteltest
+//   driveRestoreTest            platform/drive-restore-test.js: { view() } → check hersteltest-drive
 //   driveBackup                 platform/drive-backup.js: { status() } → check drive (platform: één koppeling per
 //                               installatie, met de instellingen van de hoofdtenant)
 //   errorCounter                platform/error-report.js errorCounter: { count(sinceMs) } → check serverfouten
@@ -175,7 +176,7 @@ function createRuntimeStats() {
  */
 function createMonitoringChecks(deps = {}) {
   const {
-    db, settingsFor, dataDir, backupDir, listBackups, systemUpdate, driveBackup, restoreTest, errorCounter,
+    db, settingsFor, dataDir, backupDir, listBackups, systemUpdate, driveBackup, restoreTest, driveRestoreTest, errorCounter,
     mailerFor, mollie, visma, shop, statfs = fs.statfsSync,
   } = deps;
   const runtimeStats = deps.runtimeStats === false ? null : (deps.runtimeStats || createRuntimeStats());
@@ -378,6 +379,29 @@ function createMonitoringChecks(deps = {}) {
         if (latest.state === 'waarschuwing') return problem('waarschuwing', `De hersteltest slaagde met opmerkingen: ${latest.message || 'zie Beheer > Systeem > Hersteltest.'}`);
         const age = hoursSince(ctx.now(), latest.finishedAt || latest.startedAt);
         if (age > RESTORE_TEST_MAX_HOURS) return problem('waarschuwing', `De laatste hersteltest is ${formatHours(age)} geleden (verwacht: wekelijks). Controleer de timer op de server.`);
+        return OK;
+      },
+    });
+  }
+
+  if (driveRestoreTest && typeof driveRestoreTest.view === 'function') {
+    checks.push({
+      key: 'hersteltest-drive', scope: 'platform', title: 'Hersteltest van de Google Drive-back-up', intervalMinutes: 60,
+      /**
+       * Leest de uitslag van de hersteltest van Google Drive: mislukt = fout, opmerkingen = waarschuwing, en meer dan 9 dagen
+       * geen test terwijl hij aan staat = waarschuwing.
+       * @param {object} ctx De context van de monitor.
+       * @returns {Promise<object>} Het resultaat.
+       */
+      async run(ctx) {
+        const view = driveRestoreTest.view();
+        if (!view || !view.configured || !view.policy || !view.policy.enabled) return SKIP;
+        const latest = view.latest;
+        if (!latest) return SKIP;
+        if (latest.state === 'mislukt') return problem('fout', `De hersteltest van de Google Drive-back-up is mislukt: ${latest.message || 'zie Beheer > Systeem > Hersteltest Google Drive.'}`);
+        if (latest.state === 'waarschuwing') return problem('waarschuwing', `De hersteltest van de Google Drive-back-up slaagde met opmerkingen: ${latest.message || 'zie Beheer > Systeem > Hersteltest Google Drive.'}`);
+        const age = hoursSince(ctx.now(), latest.finishedAt || latest.startedAt);
+        if (age > RESTORE_TEST_MAX_HOURS) return problem('waarschuwing', `De laatste hersteltest van Google Drive is ${formatHours(age)} geleden (verwacht: wekelijks).`);
         return OK;
       },
     });

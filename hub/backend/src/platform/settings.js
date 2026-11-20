@@ -15,6 +15,7 @@ const { sanitizePaymentReminders } = require('../verkoop/payment-reminders');
 const { sanitizeQuoteFollowUp } = require('../verkoop/quote-follow-up');
 const { sanitizeVisma, sanitizeVismaApp } = require('../verkoop/visma');
 const { sanitizeDriveBackup, sanitizeDriveState } = require('./drive-backup');
+const { sanitizeDriveRestoreTest } = require('./drive-restore-test');
 const { sanitizeLabelTemplates } = require('../artikelen/labels');
 const { sanitizeQuoteTemplates } = require('../verkoop/quote-templates');
 const { sanitizeCategoryDiscounts } = require('../webshop/category-discounts');
@@ -121,6 +122,8 @@ const FIELDS = {
   backupDriveClientSecret: { type: 'secret', default: '', min: 8, internal: true, liveOnly: true },
   backupDriveRefreshToken: { type: 'secret', default: '', min: 1, max: 4000, internal: true, liveOnly: true },
   backupDriveState: { type: 'object', default: {}, sanitize: sanitizeDriveState, internal: true, liveOnly: true },
+  // Hersteltest van de Drive-back-up (platform/drive-restore-test.js): beleid + laatste runs; alleen via /api/admin/restore-test-drive.
+  driveRestoreTest: { type: 'object', default: {}, sanitize: sanitizeDriveRestoreTest, internal: true, liveOnly: true },
   // Bewaking (platform/monitoring.js, Beheer > Systeem > Bewaking; alleen via /api/admin/monitoring): ontvangers, webhook,
   // heartbeat-adres (alleen de hoofdtenant), herinneringen, herstelmelding, gedempte controles en drempels van de platformcontroles.
   monitoring: { type: 'object', default: {}, sanitize: sanitizeMonitoring, internal: true, liveOnly: true },

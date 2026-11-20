@@ -162,13 +162,15 @@ if [[ -z "$BACKUP_FILE" ]]; then
   if [[ -f "$APP_DIR/pg-backup.sh" && ! -L "$APP_DIR/pg-backup.sh" ]]; then
     log "Geen dump gevonden; pg-backup.sh maakt er een"
     BACKUP_LOG="$(timeout 900 bash "$APP_DIR/pg-backup.sh" 2>&1 | tail -n 3 | tr '\n' ' ')" || true
+    [[ -n "$BACKUP_LOG" ]] || BACKUP_LOG="geen uitvoer (mogelijk na 15 minuten afgebroken)"
+    poll="${LOCK_POLL_SEC:-10}"; [[ "$poll" =~ ^[0-9]+$ && "$poll" -ge 1 ]] || poll=10
     BACKUP_FILE="$(newest_dump)"
     # Draait de dagelijkse back-up net (pg-backup.sh sloeg dan over): wacht hoogstens 5 minuten tot die klaar is.
     waited=0
     while [[ -z "$BACKUP_FILE" ]] && (( waited < 300 )) && ! flock -n "$BACKUP_DIR/.lock" true 2>/dev/null; do
-      sleep "${LOCK_POLL_SEC:-10}"; waited=$((waited + ${LOCK_POLL_SEC:-10})); BACKUP_FILE="$(newest_dump)"
+      sleep "$poll"; waited=$((waited + poll)); BACKUP_FILE="$(newest_dump)"
     done
-    [[ -n "$BACKUP_FILE" ]] || finish mislukt "Er was geen dump in backups/postgres en pg-backup.sh kon er geen maken: ${BACKUP_LOG:-geen uitvoer}"
+    [[ -n "$BACKUP_FILE" ]] || finish mislukt "Er was geen dump in backups/postgres en pg-backup.sh kon er geen maken: ${BACKUP_LOG}"
   elif [[ ! -d "$BACKUP_DIR" ]]; then
     finish mislukt "De map backups/postgres bestaat niet op de server; de dagelijkse PostgreSQL-back-up (aquatech-pg-backup.timer) is niet ingericht."
   else

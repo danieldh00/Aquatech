@@ -14,6 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { Readable } = require('stream');
+const { pipeline } = require('stream/promises');
 
 const GOOGLE = {
   authorize: 'https://accounts.google.com/o/oauth2/v2/auth',
@@ -29,6 +30,8 @@ const BACKUP_FILE = /^aquatech-\d{8}-\d{6}\.db\.enc$/;
 const DEFAULT_FOLDER = 'AquaTech back-ups';
 const TIMEOUT_MS = 30000;
 const UPLOAD_TIMEOUT_MS = 30 * 60 * 1000;
+const DOWNLOAD_TIMEOUT_MS = 30 * 60 * 1000;
+const MAX_DOWNLOAD_BYTES = 4 * 1024 * 1024 * 1024;
 const STATE_TTL_MS = 15 * 60 * 1000;
 const RETRY_AFTER_MS = 15 * 60 * 1000;
 const STALE_AFTER_MS = 36 * 3600 * 1000;
@@ -513,6 +516,38 @@ function createDriveBackup({ settings, backupDir, listBackups, fetchImpl = fetch
   }
 
   /**
+   * Haalt één back-up van Drive op en schrijft hem als stroom naar een map (niets in het geheugen). De bestandsnaam moet een
+   * back-upnaam zijn en op Drive in de map van de app staan.
+   * @param {string} name Bestandsnaam van de back-up (aquatech-<datum>-<tijd>.db.enc).
+   * @param {string} directory Bestaande map waarin het bestand komt (onder dezelfde naam, alleen voor de eigenaar leesbaar).
+   * @returns {Promise<{ path: string, size: number, createdTime: string }>} Het bestand en zijn grootte.
+   * @throws {DriveError} Bij een ongeldige naam, een bestand dat niet (meer) op Drive staat, een weigering of een onvolledige download.
+   */
+  async function download(name, directory) {
+    if (!BACKUP_FILE.test(String(name))) throw new DriveError('invalid_name', 'Dit is geen geldige back-upnaam.', 400);
+    const entry = (await remote()).find((item) => item.name === name);
+    if (!entry) throw new DriveError('not_found', 'Deze back-up staat niet (meer) op Google Drive.', 404);
+    const expected = Number(entry.size) || 0;
+    if (expected > MAX_DOWNLOAD_BYTES) throw new DriveError('too_large', 'Deze back-up is te groot om op te halen.', 413);
+    const response = await api(`${hosts.api}/files/${encodeURIComponent(entry.id)}?alt=media`, {}, DOWNLOAD_TIMEOUT_MS);
+    if (!response.ok) throw await failure(response, 'ophalen van de back-up');
+    if (!response.body) throw new DriveError('google_error', 'Google gaf geen bestand terug.', 502);
+    const target = path.join(directory, name);
+    try {
+      await pipeline(Readable.fromWeb(response.body), fs.createWriteStream(target, { mode: 0o600 }));
+    } catch (error) {
+      fs.rmSync(target, { force: true });
+      throw new DriveError('unreachable', 'Het ophalen van de back-up van Google Drive is afgebroken. Probeer het later opnieuw.', 502, error);
+    }
+    const size = fs.statSync(target).size;
+    if (expected && size !== expected) {
+      fs.rmSync(target, { force: true });
+      throw new DriveError('incomplete', 'De back-up van Google Drive is niet volledig opgehaald.', 502);
+    }
+    return { path: target, size, createdTime: String(entry.createdTime || '') };
+  }
+
+  /**
    * Het overzicht voor Beheer: instelling (zonder geheimen), stand, waarschuwingen en de lokale back-ups met of ze op Drive staan.
    * @returns {object} enabled, configured, connected, account, folderName, keepCount, redirectUri, running, lastOkAt, lastFailAt, needsReconnect, stale, events en items.
    */
@@ -539,7 +574,7 @@ function createDriveBackup({ settings, backupDir, listBackups, fetchImpl = fetch
     };
   }
 
-  return { status, authorizeUrl, finishConnect, disconnect, sync, test, remote, connected, registration, DriveError };
+  return { status, authorizeUrl, finishConnect, disconnect, sync, test, remote, download, connected, registration, DriveError };
 }
 
 module.exports = { createDriveBackup, sanitizeDriveBackup, sanitizeDriveState, DriveError, CALLBACK_PATH, GOOGLE, SCOPE };
