@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.29.2
+
+`orderpick/receiving.js` en `counting.js` luisteren naar `hashchange`: een klik op de zijbalklink `orderpick/#ontvangst` (of `#tellen`) op dezelfde pagina laadt niet opnieuw en toonde daardoor Picken. Het scherm volgt nu de hash.
+
+## 1.29.1
+
+`td.actions` in de factuurtabel van het portaal erfde `display: flex` van `.card .actions` en viel daardoor uit de tabellay-out; nu `display: table-cell` met verticale uitlijning in het midden.
+Het Contact-blok is uit het portaal verwijderd (de API geeft `contact` nog mee).
+
+## 1.29.0
+
+Nieuwe Playwright-layoutcheck in `tests/layout/` (workflow `layout.yml`, draait alleen bij wijzigingen in frontend of webshop-CSS): doorloopt alle app- en shoppagina's voor beheerder, installateur, planner, picker, klant en de shop (bezoeker, klant, medewerker) op 1440 en 375 px op testdata en meldt horizontale overflow, elementen buiten hun container, overlap, tabelcellen die uit hun rij vallen of scheef staan, afgekapte tekst en kaarten van ongelijke hoogte. Lokaal: `TEST_DATABASE_URL=… node tests/layout/layout-check.js`.
+
+## 1.28.9
+
+Gevonden door de nieuwe layoutcheck: `#tab-aikosten` velden `max-width: 100%`; `.tabs` op smal scherm `minmax(0, 1fr)` met afbreekbare tekst; `.product-name` `overflow-wrap: anywhere`. Zie `tests/layout/`.
+
 ## 1.28.8
 
 `webshop/storefront.css` en `storefront-pages.js` (`productCard`): vaste fotohoogte (190 px, 130 px op een telefoon) op een zacht vlak, voorraadlabel als pil op de foto (het `stock`-element staat nu direct na de fotolink in de kaart, het script `varianten.js` vindt het nog via `data-variant-stock`), een vaste rij van 52 px voor de variantkeuze (kaarten zonder variant tonen daar `Artikelnr.`), raster `minmax(250px, 1fr)`, teal rand en schaduw bij hover. Het winkelwagenicoon op smalle kaarten (container query) is een witte masker-SVG.

@@ -13,6 +13,37 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.29.2',
+      date: '2026-11-20',
+      title: 'Ontvangst in de zijbalk opent direct Ontvangen',
+      items: [
+        { text: 'Vanuit de zijbalk opent Ontvangst nu direct het tabblad Ontvangen, ook als je al op de Orderpick-pagina staat.', for: ['orderpick'] },
+      ],
+    },
+    {
+      version: '1.29.1',
+      date: '2026-11-20',
+      title: 'PDF-knop in Mijn portaal netjes op de rij',
+      items: [
+        { text: 'In Mijn portaal staat de PDF-knop van een factuur weer op één lijn met de rest van de rij.', for: ['portaal'] },
+        { text: 'Het blok Contact onderaan Mijn portaal is weggehaald.', for: ['portaal'] },
+      ],
+    },
+    {
+      version: '1.29.0',
+      date: '2026-11-20',
+      title: 'Automatische controle op uitlijning van alle schermen',
+      items: [],
+    },
+    {
+      version: '1.28.9',
+      date: '2026-11-20',
+      title: 'Kleine uitlijnfouten op mobiel hersteld',
+      items: [
+        { text: 'Op een telefoon loopt de pagina AI-kosten (Beheer) en de tabbladbalk van Uitbesteden niet meer buiten het scherm, en lange productnamen in de webshop worden niet meer afgekapt midden in een woord.' },
+      ],
+    },
+    {
       version: '1.28.8',
       date: '2026-11-20',
       title: 'Mooiere productkaarten in de webshop',
