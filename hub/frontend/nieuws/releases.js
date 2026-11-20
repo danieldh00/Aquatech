@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.30.9',
+      date: '2026-11-20',
+      title: 'Hersteltest controleert nu ook de app zelf',
+      items: [
+        { text: 'De wekelijkse hersteltest van de back-up start nu ook een tijdelijke kopie van de app op de teruggezette gegevens, logt daarin in en haalt een paar gegevens op. Pas als dat lukt is de back-up bewezen bruikbaar. Na het uitrollen: servertaak 005 uitvoeren in Beheer > Systeem > Updates.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.30.8',
       date: '2026-11-20',
       title: 'Update-controle zonder 429 voor beheerders',

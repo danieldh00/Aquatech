@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.30.9
+
+`restore-test.sh` zet de wegwerpdatabase en de wegwerp-app op een intern Docker-netwerk zonder uitgang (`docker network create --internal`), start het image van de draaiende app (512 MB, alleen-lezen, tmpfs-datamap, hoofdsleutel alleen-lezen, `CAPTCHA_DISABLED=1`) en draait een controlescript in die container: status (geen eerste start), wegwerpwachtwoord op een actieve beheerder in de wegwerpdatabase, inloggen via de echte route, `api/me`, `api/plans`, `api/quotes`, `api/admin/users`. De uitkomsten komen als extra regels in de bestaande sanity-lijst; een mislukte regel maakt de test `mislukt`. Container en netwerk worden altijd opgeruimd. Servertaak `005-hersteltest-app-controle` installeert het script. Tests: nagebootste docker in `restore-test-script.test.js` (geslaagd, inloggen mislukt, app start niet, app niet gezond); het controlescript is daarnaast met de echte app tegen een teruggezette database geprobeerd.
+
 ## 1.30.8
 
 `POST /api/admin/system-update/check`: limiet per gebruiker van 6 naar 60 per 10 minuten. De route zit achter inloggen en `canUpdate`; een lopende controle wordt hergebruikt (`requestCheck`), dus dubbel klikken geeft 202 zonder tweede aanvraag of auditregel. Starten, intrekken en automatisch aan/uit houden hun limieten.
