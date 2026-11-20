@@ -240,8 +240,9 @@ function mailFailure(error) {
   // Geen code en geen antwoord: geen fout van de mailserver maar van de app (bijv. bij het opbouwen van de mail).
   if (!code && !reply) return 'Versturen mislukt door een interne fout; de oorzaak staat in het serverlog.';
   if (code === 'EGRAPH_AUTH') return withReply('Microsoft weigert de aanmelding van de app. Controleer tenant-ID, client-ID en het clientgeheim (een geheim verloopt; maak zo nodig een nieuw geheim aan in Entra).');
-  if (code === 'EGRAPH_DENIED') return withReply('Microsoft weigert de app toegang tot de mailbox. Controleer of de machtiging Mail.Send (toepassing) is verleend met beheerderstoestemming en of een Application Access Policy deze mailbox toestaat.');
-  if (code === 'EGRAPH_MAILBOX') return withReply('de afzender-mailbox is niet gevonden of heeft geen Exchange Online-mailbox. Gebruik het volledige e-mailadres van een bestaande mailbox als afzender.');
+  const mailbox = error && error.mailbox ? ` (afzender: ${String(error.mailbox).slice(0, 100)})` : '';
+  if (code === 'EGRAPH_DENIED') return withReply(`Microsoft weigert de app toegang tot de mailbox${mailbox}. Een net verleende machtiging Mail.Send kan tot ongeveer 15 minuten duren: probeer het dan later opnieuw. Controleer anders of Mail.Send (toepassing) is verleend met beheerderstoestemming en of een Application Access Policy deze mailbox toestaat.`);
+  if (code === 'EGRAPH_MAILBOX') return withReply(`de afzender-mailbox is niet gevonden of heeft geen Exchange Online-mailbox${mailbox}. Gebruik het hoofdadres (UPN of primair e-mailadres) van een bestaande mailbox als afzender, geen alias.`);
   if (code === 'EGRAPH_THROTTLED') return withReply('Microsoft beperkt het versturen even (te veel berichten). Probeer het later opnieuw.');
   if (code === 'EGRAPH_SIZE') return 'Versturen mislukt: het bericht met bijlagen is te groot voor verzenden via Microsoft Graph (hoogstens ongeveer 2,5 MB aan bijlagen in totaal).';
   if (code === 'EGRAPH_ERROR') return withReply('Microsoft Graph gaf een fout.');
