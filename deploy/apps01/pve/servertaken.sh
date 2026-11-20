@@ -381,6 +381,7 @@ remote_disk_run() {
 HOST_TASK_IDS=(
   001-app-update-opnieuw-inrichten
   002-hersteltest-back-up-inrichten
+  003-hersteltest-script-bijwerken
 )
 HOST_TASKS_LEDGER="host-tasks.json"
 # Functienaam van een taak (streepjes worden underscores).
@@ -456,6 +457,11 @@ hosttask_002_hersteltest_back_up_inrichten() {
   systemctl daemon-reload
   systemctl enable --now aquatech-restore-test.timer aquatech-restore-test.path >/dev/null
   echo "Hersteltest ingericht: timer $(systemctl is-active aquatech-restore-test.timer), path $(systemctl is-active aquatech-restore-test.path)."
+}
+
+# Taak 003: het hostscript restore-test.sh vernieuwen (een app-update raakt dat niet). Zelfde inrichting als taak 002, veilig herhaalbaar.
+hosttask_003_hersteltest_script_bijwerken() {
+  hosttask_002_hersteltest_back_up_inrichten
 }
 
 # Toont wat er openstaat. Uitgangscode 10 = er is iets te doen (two_step vraagt dan om bevestiging).

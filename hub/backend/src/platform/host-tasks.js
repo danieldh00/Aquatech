@@ -36,6 +36,12 @@ const HOST_TASKS = [
     description: 'Installeert restore-test.sh met een timer en een path-unit op apps01. Daarna zet de server elke week de nieuwste back-up terug in een wegwerpcontainer (768 MB, zonder netwerk) en toont Beheer > Systeem > Hersteltest de uitslag.',
     addedAt: '2026-11-20',
   },
+  {
+    id: '003-hersteltest-script-bijwerken',
+    title: 'Hersteltest-script bijwerken',
+    description: 'Installeert de nieuwste restore-test.sh op apps01 (maakt zelf een back-up als backups/postgres leeg is en meldt precies wat er mis is). Een app-update vernieuwt dit hostscript niet; zonder deze taak blijft de oude melding "Er is geen back-up gevonden" komen.',
+    addedAt: '2026-11-20',
+  },
 ];
 
 const MAX_FILE_BYTES = 64 * 1024;

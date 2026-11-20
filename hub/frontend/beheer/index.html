@@ -1013,6 +1013,57 @@
         </div>
         <div id="rt-err" class="err" role="alert"></div>
       </section>
+      <section id="tab-hersteltest-drive" class="tabpane" hidden>
+        <p class="muted small">Een kopie op Google Drive is pas veilig als je hem kunt terugzetten. Elke week haalt de app de nieuwste back-up van Google Drive op, ontsleutelt hem, leest hem in een tijdelijk schema naast de database en vergelijkt tabellen, schemaversie en rijtellingen met de actieve database. Daarna wordt alles weer opgeruimd; er wordt niets in de echte gegevens gewijzigd. Dit staat los van de hersteltest van de lokale back-up. Gaat het mis, dan meldt de bewaking dat.</p>
+        <div id="rtd-none" class="card" hidden>
+          <h3>Niet ingericht</h3>
+          <p class="muted small">Google Drive is niet gekoppeld. Koppel Drive bij <em>Back-ups naar Google Drive</em>; daarna kun je de hersteltest hier aanzetten.</p>
+        </div>
+        <div id="rtd-main" hidden>
+          <div class="card-grid">
+            <section class="card" aria-labelledby="rtd-last-title">
+              <h3 id="rtd-last-title">Laatste uitslag</h3>
+              <p><span class="mon-badge" id="rtd-badge">–</span> <span id="rtd-last-text" class="muted small"></span></p>
+              <dl class="up-facts">
+                <dt>Back-up</dt><dd id="rtd-backup">–</dd>
+                <dt>Tabellen</dt><dd id="rtd-tables">–</dd>
+                <dt>Schemaversie</dt><dd id="rtd-version">–</dd>
+                <dt>Rijtellingen</dt><dd id="rtd-rows">–</dd>
+                <dt>Duur</dt><dd id="rtd-duration">–</dd>
+              </dl>
+              <div id="rtd-details"></div>
+              <p class="muted small" id="rtd-state" role="status" aria-live="polite"></p>
+              <div class="form-actions">
+                <button class="btn primary" type="button" id="rtd-run">Nu testen</button>
+                <button class="btn" type="button" id="rtd-export">Exporteren naar Excel</button>
+              </div>
+            </section>
+            <section class="card" aria-labelledby="rtd-settings-title">
+              <h3 id="rtd-settings-title">Planning</h3>
+              <form id="rtd-form" class="form-grid" novalidate>
+                <label class="chk full"><input type="checkbox" id="rtd-enabled"> Wekelijkse hersteltest aan</label>
+                <label class="field">Dag
+                  <select id="rtd-day">
+                    <option value="1">Maandag</option><option value="2">Dinsdag</option><option value="3">Woensdag</option><option value="4">Donderdag</option>
+                    <option value="5">Vrijdag</option><option value="6">Zaterdag</option><option value="0">Zondag</option>
+                  </select>
+                </label>
+                <label class="field">Tijd
+                  <input type="time" id="rtd-time" required>
+                  <span class="hint">Server-tijd (Europe/Amsterdam). De lokale hersteltest draait standaard zondag 03:30; kies een ander moment.</span>
+                </label>
+                <p class="muted small full" id="rtd-next"></p>
+                <div class="form-actions full"><button class="btn primary" type="submit" id="rtd-save">Opslaan</button></div>
+              </form>
+            </section>
+          </div>
+          <section class="card" aria-labelledby="rtd-history-title">
+            <h3 id="rtd-history-title">Historie</h3>
+            <div class="tablewrap"><table class="grid"><thead><tr><th>Gestart</th><th>Uitslag</th><th>Start</th><th>Back-up</th><th>Duur</th><th>Opmerking</th></tr></thead><tbody id="rtd-history"></tbody></table></div>
+          </section>
+        </div>
+        <div id="rtd-err" class="err" role="alert"></div>
+      </section>
       <section id="tab-bewaking" class="tabpane" hidden>
         <p class="muted small">De app controleert zichzelf en de koppelingen van deze omgeving. Gaat er iets mis, dan krijg je een mail (en eventueel een bericht via een webhook); is het weer in orde, dan hoor je dat ook. Alles staat hier en in de database, dus het verhuist mee met een back-up.</p>
         <div class="card mon-summary" id="mon-summary">

@@ -123,6 +123,8 @@ const { registerRoleRoutes } = require('./platform/roles-routes');
 const { registerSystemUpdateRoutes, maintenanceGuard } = require('./platform/system-update-routes');
 const { createRestoreTest } = require('./platform/restore-test');
 const { registerRestoreTestRoutes } = require('./platform/restore-test-routes');
+const { createDriveRestoreTest } = require('./platform/drive-restore-test');
+const { registerDriveRestoreTestRoutes } = require('./platform/drive-restore-test-routes');
 const { createIdempotency, ifBaseOf } = require('./beveiliging/idempotency');
 const { createOAuthGrants } = require('./mcp/oauth-grants');
 const { registerOAuthRoutes } = require('./mcp/oauth-server');
@@ -1807,6 +1809,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // ----- Back-ups naar Google Drive (platform/drive-backup-routes.js; vóór /:name) -----
   registerDriveBackupRoutes(app, { driveBackup, settings, audit, requireJson, mainTenantId: tenant.id });
+  // Hersteltest van de Google Drive-back-up: draait in de app zelf (platform/drive-restore-test.js), los van de lokale test.
+  const driveRestoreTest = createDriveRestoreTest({ settings, driveBackup, backupDir, vault, database });
+  registerDriveRestoreTestRoutes(app, { driveRestoreTest, audit, mainTenantId: tenant.id, canUpdate });
+  app.locals.driveRestoreTest = driveRestoreTest;
 
   // Terugzetten uit een back-up (volledig of per record/veld): platform/backup-restore.js.
   registerBackupRestoreRoutes(app, { backupDir, vault, database, store, audit, runBackup, requireJson, loginGuard, twoFactor, lineDeps: () => ({ QuoteCore: require(path.join(FRONTEND_DIR, 'offertes', 'quote-core.js')), totalsOf: webOrdersModule.totalsOf, stockLinesOf: webOrdersModule.stockLinesOf, stock: stockStore }) });
@@ -3180,7 +3186,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // De controles van de bewaking; elke ontbrekende afhankelijkheid slaat zijn controle over.
   createMonitoringChecks({
     db: database, settingsFor: (id) => settingsFor(id), dataDir: env.DATA_DIR || (backupDir ? path.dirname(backupDir) : ''), backupDir,
-    listBackups: backups.listBackups, systemUpdate, driveBackup, restoreTest, errorCounter, mailerFor,
+    listBackups: backups.listBackups, systemUpdate, driveBackup, restoreTest, driveRestoreTest, errorCounter, mailerFor,
     mollie: createMollie(mollieFetch ? { fetchImpl: mollieFetch } : {}), visma, shop: shopStore,
   }).forEach((check) => monitor.register(check));
   /**
@@ -3276,7 +3282,9 @@ if (require.main === module) {
       .catch((err) => console.error('Back-up mislukt:', err.message))
       .then(() => slowLog.trackTask('back-up naar Google Drive', () => app.locals.driveBackupSync()))
       .then((out) => { if (out && out.uploaded.length) console.log(`Back-ups naar Google Drive: ${out.uploaded.join(', ')}`); })
-      .catch((err) => console.error('Back-up naar Google Drive mislukt:', err.message));
+      .catch((err) => console.error('Back-up naar Google Drive mislukt:', err.message))
+      .then(() => slowLog.trackTask('hersteltest Google Drive', () => app.locals.driveRestoreTest.tick()))
+      .catch((err) => console.error('Hersteltest Google Drive mislukt:', err.message));
   };
   runMaintenance();
   setInterval(runMaintenance, 60 * 60 * 1000).unref();
