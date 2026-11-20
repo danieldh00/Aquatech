@@ -23,7 +23,7 @@ function showChosenVariant(row) {
   if (orderCode) {
     orderCode.value = option.dataset.code;
     const inStock = option.dataset.stock === 'in';
-    for (const control of row.querySelectorAll('.card-order input[name="qty"], .card-order button')) control.disabled = !inStock;
+    for (const control of row.querySelectorAll('.card-order input[name="qty"], .card-order button:not(.qty-step)')) control.disabled = !inStock;
   }
 }
 

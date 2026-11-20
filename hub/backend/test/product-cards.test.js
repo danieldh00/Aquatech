@@ -83,6 +83,19 @@ test('bestellen uit: de kaart toont een uitgeschakelde knop en geen formulier', 
   }
 });
 
+test('de aantalknoppen: script wordt geserveerd en geladen, zonder script blijft het een invoerveld', async () => {
+  const { anonymous } = await setup(true);
+  const slug = (await anonymous.get('/')).text.match(/href="categorie\/(overig-[0-9a-f]{6})\//)[1];
+  const home = await anonymous.get(`/categorie/${slug}/`);
+  assert.match(home.text, /<script src="\.\.\/\.\.\/assets\/kaartaantal\.js\?v=[^"]+" defer><\/script>/);
+  assert.match(home.text, /<input[^>]*name="qty"/);
+  assert.ok(!home.text.includes('qty-step'), 'knoppen komen alleen uit het script');
+  assert.ok(!(await anonymous.get('/over-ons/')).text.includes('kaartaantal'), 'pagina zonder kaarten laadt het script niet');
+  const script = await anonymous.get('/assets/kaartaantal.js');
+  assert.strictEqual(script.status, 200);
+  assert.match(script.type, /javascript/);
+});
+
 test('de stijl: kaart in het raster, geen paginabrede regel meer', async () => {
   const { anonymous } = await setup(true);
   const css = (await anonymous.get('/assets/winkel.css')).text;

@@ -747,3 +747,14 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
   .product-card .product-price strong { font-size: 1.15rem; }
   .product-card .card-order input { width: 46px; }
 }
+
+/* Aantalknoppen op de productkaart (door kaartaantal.js; zonder script blijft het een invoerveld) */
+.product-card .qty-group { display: flex; flex: none; align-items: stretch; height: 42px; border: 1.5px solid var(--at-line); border-radius: 10px; overflow: hidden; background: var(--at-white); }
+.product-card .qty-group input { width: 34px; height: 100%; border: 0; border-radius: 0; padding: 0; text-align: center; -moz-appearance: textfield; appearance: textfield; }
+.product-card .qty-group input::-webkit-outer-spin-button,
+.product-card .qty-group input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.product-card .qty-step { width: 28px; padding: 0; border: 0; border-radius: 0; background: color-mix(in srgb, var(--at-shop-navy) 6%, var(--at-white)); color: var(--at-shop-navy); font-size: 1.1rem; font-weight: 600; line-height: 1; cursor: pointer; }
+.product-card .qty-step:hover:not(:disabled) { background: color-mix(in srgb, var(--at-shop-navy) 14%, var(--at-white)); }
+.product-card .qty-step:disabled { opacity: .4; cursor: default; }
+@media (max-width: 600px) { .product-card .qty-step { width: 24px; } .product-card .qty-group input { width: 30px; } }
+@container (max-width: 215px) { .product-card .qty-step { width: 22px; } }

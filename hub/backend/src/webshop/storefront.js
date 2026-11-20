@@ -55,6 +55,7 @@ const ASSETS = {
   'winkel.css': { file: path.join(__dirname, 'storefront.css'), type: 'text/css; charset=utf-8' },
   'zoeksuggesties.js': { file: path.join(__dirname, 'storefront-suggest.js'), type: 'text/javascript; charset=utf-8' },
   'menu.js': { file: path.join(__dirname, 'storefront-menu.js'), type: 'text/javascript; charset=utf-8' },
+  'kaartaantal.js': { file: path.join(__dirname, 'storefront-card-qty.js'), type: 'text/javascript; charset=utf-8' },
   'varianten.js': { file: path.join(__dirname, 'storefront-variants.js'), type: 'text/javascript; charset=utf-8' },
   'adres.js': { file: path.join(SHARED_DIR, 'address-lookup.js'), type: 'text/javascript; charset=utf-8' },
   'afrekenen.js': { file: path.join(__dirname, 'storefront-checkout.js'), type: 'text/javascript; charset=utf-8' },
