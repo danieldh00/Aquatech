@@ -14,7 +14,11 @@ const { openDb, openDatabase } = require('./database/db');
 const { createSlowLog, timedFetch, normalizePath } = require('./platform/slow-log');
 const { createStore, withRequestCache, preferencesOf, fingerprintOf } = require('./platform/store');
 const { withScope, limitTo, bindStream, asSystem } = require('./database/tenant-scope');
-const { createSettings, SettingsError, FIELDS } = require('./platform/settings');
+const { createSettings } = require('./platform/settings');
+const { registerAccountRoutes } = require('./platform/account-routes');
+const { registerSettingsRoutes } = require('./platform/settings-routes');
+const { registerAiUsageRoutes } = require('./platform/ai-usage-routes');
+const { registerThemeRoutes } = require('./platform/theme-routes');
 const { createVault, loadOrCreateMasterKey } = require('./beveiliging/vault');
 const backups = require('./backup');
 const { createDriveBackup } = require('./platform/drive-backup');
@@ -1395,66 +1399,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     return !tenantRow || tenantRow.slug === 'default' || !multitenancyOn() ? '' : tenantRow.slug;
   };
 
-  // ---------- Eigen wachtwoord wijzigen ----------
-  // Met het huidige wachtwoord ter controle; daarna is de gebruiker op alle
-  // andere toestellen uitgelogd en krijgt dit toestel een nieuwe sessie.
-  app.post('/api/account/password', requireJson, wrap(async (req, res) => {
-    const session = auth.session(req);
-    if (session?.via !== 'user') return res.status(400).json({ error: 'no_account', message: 'Log in met je eigen account om je wachtwoord te wijzigen.' });
-    if (identify(req)?.impersonation) return res.status(409).json({ error: 'impersonating', message: 'Ga eerst terug naar je eigen account.' });
-    const key = `wachtwoord:${session.user.id}`;
-    if (lockedOut(key)) return res.status(429).json({ error: 'locked', message: 'Te veel mislukte pogingen. Probeer het over een kwartier opnieuw.' });
-    const out = await store.changeOwnPassword(session.user.id, String(req.body?.currentPassword ?? '').slice(0, 1024), String(req.body?.newPassword ?? '').slice(0, 1024));
-    if (out.error) {
-      if (out.wrong) failed(key);
-      return res.status(out.status || 400).json({ error: out.wrong ? 'wrong_password' : 'invalid_password', message: out.error });
-    }
-    failures.delete(key);
-    auth.setCookie(req, res, out.user.id);
-    audit(req, 'wachtwoord_gewijzigd', { door: 'gebruiker' }, out.user.id, out.user.tenant_id);
-    res.json({ ok: true, user: store.publicUser(out.user) });
-  }));
-
-  // ---------- Mijn profiel ----------
-  // Naam, e-mail, telefoon en persoonlijke voorkeuren van het eigen account
-  // (niet met de toegangscode, niet tijdens een impersonatie).
-  /**
-   * Het eigen account voor Mijn profiel; stuurt zelf een fout als dat er niet is.
-   * @param {object} req Het verzoek.
-   * @param {object} res Het antwoord.
-   * @returns {object|null} De gebruiker, of null (antwoord al verstuurd).
-   */
-  function profileOwner(req, res) {
-    const session = auth.session(req);
-    if (session?.via !== 'user') { res.status(400).json({ error: 'no_account', message: 'Log in met je eigen account om je profiel te bekijken.' }); return null; }
-    if (identify(req)?.impersonation) { res.status(409).json({ error: 'impersonating', message: 'Ga eerst terug naar je eigen account.' }); return null; }
-    return session.user;
-  }
-  /**
-   * Het profiel voor de API.
-   * @param {object} user De gebruiker.
-   * @returns {{ user: object, preferences: object }} Gegevens en voorkeuren.
-   */
-  const profileOf = (user) => ({ user: store.publicUser(user), preferences: preferencesOf(user) });
-
-  app.get('/api/account/profile', (req, res) => {
-    res.setHeader('Cache-Control', 'no-store');
-    const owner = profileOwner(req, res);
-    // s.user is in dit verzoek net uit de database gelezen.
-    if (owner) res.json(profileOf(owner));
-  });
-
-  app.put('/api/account/profile', requireJson, (req, res) => {
-    const owner = profileOwner(req, res);
-    if (!owner) return;
-    const input = {};
-    for (const field of ['displayName', 'email', 'phone', 'preferences']) if (req.body?.[field] !== undefined) input[field] = req.body[field];
-    const out = store.updateProfile(owner.id, input);
-    if (out.error) return res.status(400).json({ error: 'invalid_profile', field: out.field, message: out.error });
-    // Welke velden, nooit de waarden (persoonsgegevens horen niet in het logboek).
-    if (out.changed.length) audit(req, 'profiel_gewijzigd', { velden: out.changed }, owner.id, owner.tenant_id);
-    res.json(profileOf(out.user));
-  });
+  registerAccountRoutes(app, { store, auth, identify, audit, requireJson, wrap, lockedOut, failed, failures });
 
   app.get('/api/me', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -1883,114 +1828,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.json(store.listAudit(req.tenantId, { limit, offset, action }));
   });
 
-  // ---------- Beheer: instellingen (van de actieve omgeving) ----------
-  app.get('/api/admin/settings', (req, res) => {
-    // aiFromLive: testomgeving zonder eigen sleutel gebruikt die van live.
-    const aiFrom = aiTenantOf(req.tenantId);
-    const settings = settingsFor(req.tenantId).view();
-    if (req.tenantId !== tenant.id) { delete settings.storefront; delete settings.shopPlanner; delete settings.shopOrdering; delete settings.shopShipping; delete settings.shopPayment; delete settings.shopAnalytics; delete settings.shopSeo; delete settings.mollieApiKey; }
-    res.json({ settings, via: auth.session(req)?.via || null,
-      // De eigen webshop (winkel/) toont alleen de hoofdtenant: de schakelaar hoort alleen daar.
-      storefrontAllowed: req.tenantId === tenant.id,
-      aiFromLive: aiFrom !== req.tenantId && Boolean(settingsFor(aiFrom).get('anthropicApiKey')) });
-  });
+  registerSettingsRoutes(app, { tenant, auth, audit, requireJson, settingsFor, aiTenantOf, currentAnalyzer, moduleFlagsOf, ModuleTools });
 
-  app.put('/api/admin/settings', requireJson, (req, res) => {
-    const settings = settingsFor(req.tenantId);
-    const patch = req.body && typeof req.body === 'object' ? req.body : {};
-    // De toegangscode geldt alleen voor de hoofdtenant.
-    const via = req.tenantId === tenant.id ? auth.session(req)?.via : null;
-    const oldCode = settings.get('accessCode');
-    // Wie met de toegangscode is ingelogd, zou zichzelf buitensluiten door die
-    // leeg te maken; met een beheerdersaccount kan het wel.
-    const resets = Array.isArray(patch.reset) ? patch.reset : [];
-    // Instellingen van een module die uit staat zijn verborgen en worden niet gewijzigd (een patch die de module tegelijk aanzet telt mee).
-    const patchedFlags = patch.modules && typeof patch.modules === 'object' && !Array.isArray(patch.modules)
-      ? Object.fromEntries(Object.entries(patch.modules).map(([id, on]) => [id, Boolean(on)])) : {};
-    const lockedKeys = ModuleTools.lockedSettings({ ...moduleFlagsOf(req.tenantId), ...patchedFlags });
-    const lockedField = [...Object.keys(patch), ...resets].find((key) => lockedKeys.has(key));
-    if (lockedField) return res.status(409).json({ error: 'module_off', field: lockedField, message: 'Deze instelling hoort bij een module die uit staat. Zet de module eerst aan in Beheer > Modules aan/uit.' });
-    const platformField = [...Object.keys(patch), ...resets].find((key) => FIELDS[key]?.platform || FIELDS[key]?.internal);
-    if (platformField) {
-      return res.status(400).json({ error: 'invalid_setting', field: platformField,
-        message: FIELDS[platformField].internal ? 'Deze instelling wijzig je in de module zelf.' : (platformField === 'theme' ? 'Kleuren wijzig je in Beheer > Kleuren.' : 'Deze instelling wijzig je in Hoofdbeheer.') });
-    }
-    if (req.tenantId !== tenant.id && ['storefront', 'shopPlanner', 'shopOrdering', 'shopShipping', 'shopPayment', 'shopAnalytics', 'shopSeo', 'mollieApiKey'].some((key) => [...Object.keys(patch), ...resets].includes(key))) {
-      return res.status(400).json({ error: 'invalid_setting', field: 'storefront', message: 'De eigen webshop geldt alleen voor de hoofdtenant.' });
-    }
-    const codeAfter = patch.accessCode !== undefined ? String(patch.accessCode).trim()
-      : resets.includes('accessCode') ? settings.get('accessCode', true) : oldCode;
-    if (via === 'code' && !codeAfter) {
-      return res.status(400).json({ error: 'invalid_setting', field: 'accessCode', message: 'Je bent ingelogd met de toegangscode; leegmaken sluit je buiten. Maak eerst een beheerdersaccount aan (tabblad Gebruikers) en log daarmee in.' });
-    }
-    let changed;
-    try {
-      changed = settings.update(patch, req.user?.id);
-    } catch (err) {
-      if (err instanceof SettingsError) return res.status(400).json({ error: 'invalid_setting', field: err.field, message: err.message });
-      throw err;
-    }
-    // Nieuwe toegangscode: andere toestellen zijn uitgelogd, deze beheerder niet.
-    if (via === 'code' && settings.get('accessCode') && settings.get('accessCode') !== oldCode) auth.setCookie(req, res);
-    if (changed.length) {
-      console.log(`Instellingen gewijzigd door ${req.user?.display_name || 'beheerder'}: ${changed.join(', ')}`);
-      audit(req, 'instellingen_gewijzigd', { fields: changed });
-    }
-    const responseSettings = settings.view();
-    if (req.tenantId !== tenant.id) { delete responseSettings.storefront; delete responseSettings.shopPlanner; delete responseSettings.shopOrdering; delete responseSettings.shopShipping; delete responseSettings.shopPayment; delete responseSettings.shopAnalytics; delete responseSettings.shopSeo; delete responseSettings.mollieApiKey; }
-    res.json({ settings: responseSettings, changed });
-  });
-
-  // Sleutel testen zonder kosten: vraagt alleen het model op.
-  app.post('/api/admin/settings/test-ai', async (req, res, next) => {
-    const aiClient = currentAnalyzer(req.tenantId);
-    if (!aiClient.check) return res.status(501).json({ error: 'not_supported', message: 'Testen is niet beschikbaar.' });
-    try {
-      res.json(await aiClient.check());
-    } catch (err) {
-      if (err instanceof AnalyzeError) return res.status(err.status === 502 ? 400 : err.status).json({ error: err.code, message: err.message });
-      next(err);
-    }
-  });
-
-  // ---------- Beheer: AI-kosten (zie ai-usage.js) ----------
-  // Een beheerder ziet de actieve omgeving; een hoofdbeheerder kan ook alle
-  // organisaties samen (?scope=all) of één andere omgeving (?tenant=id) zien.
-  /**
-   * De omgevingen waarvan de AI-kosten worden gevraagd; stuurt bij een fout zelf het antwoord.
-   * @param {object} req Het verzoek.
-   * @param {object} res Het antwoord.
-   * @returns {string[]|null|undefined} Ids, null = alle, undefined = antwoord al verstuurd.
-   */
-  function aiUsageScope(req, res) {
-    const all = req.query.scope === 'all';
-    const other = typeof req.query.tenant === 'string' && req.query.tenant && req.query.tenant !== req.tenantId;
-    if (!all && !other) return [req.tenantId];
-    if (!req.user?.platform_admin) {
-      res.status(403).json({ error: 'forbidden', message: 'Alleen een hoofdbeheerder ziet de AI-kosten van andere organisaties.' });
-      return undefined;
-    }
-    if (all) return null;
-    if (!store.getTenant(req.query.tenant)) {
-      res.status(404).json({ error: 'not_found', message: 'Organisatie niet gevonden.' });
-      return undefined;
-    }
-    return [req.query.tenant];
-  }
-
-  app.get('/api/admin/ai-usage', (req, res) => {
-    const scope = aiUsageScope(req, res);
-    if (scope === undefined) return;
-    const aiSettings = settingsFor(aiTenantOf(req.tenantId));
-    res.json({ ...aiUsage.summary(scope, req.query), scope: scope ? 'tenant' : 'all', platformAdmin: Boolean(req.user?.platform_admin),
-      model: aiSettings.get('aiModel'), eurCentsPerUsd: aiSettings.get('aiEurCentsPerUsd'), retentionDays: settingsFor(req.tenantId).get('auditRetentionDays') });
-  });
-
-  app.get('/api/admin/ai-usage/requests', (req, res) => {
-    const scope = aiUsageScope(req, res);
-    if (scope === undefined) return;
-    res.json(aiUsage.list(scope, req.query, { limit: req.query.limit, offset: req.query.offset }));
-  });
+  registerAiUsageRoutes(app, { store, aiUsage, settingsFor, aiTenantOf });
 
   // Onzichtbare captcha: controleert of Google een geheime sleutel kent (met een nepToken, er wordt niets bewaard). Zonder `secret` in de
   // aanvraag geldt het opgeslagen geheim van deze omgeving. Begrensd, want elke aanroep gaat naar Google.
@@ -3008,64 +2848,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   }
 
 
-  // Kleurthema (Beheer > Kleuren): elke organisatie stelt het eigen thema in; het thema van de
-  // hoofdtenant is de standaard voor organisaties zonder eigen thema. Een testomgeving volgt
-  // zijn live-tenant, dus daar werkt dit op de live-tenant. Leeg = huisstijl van AquaTech Service.
-  /**
-   * Of het account van de aanvrager in een live-omgeving woont: een testaccount (alleen in een testomgeving) wijzigt het live-thema niet.
-   * @param {object} req Het verzoek.
-   * @returns {boolean} True voor een account van een live-tenant (ook als het in een testomgeving kijkt).
-   */
-  function accountIsLive(req) {
-    const own = store.getTenant(req.user.home_tenant_id || req.user.tenant_id);
-    return Boolean(own && own.environment === 'live');
-  }
-
-  /**
-   * Beschrijft het thema van de organisatie van de aanvrager voor het scherm Kleuren.
-   * @param {object} req Het verzoek.
-   * @returns {{ defaults: object, mainTenantId: string, tenantId: string, tenantName: string, theme: object, inherited: object, canEdit: boolean }} Of de aanvrager mag wijzigen (`canEdit`), het thema van deze organisatie (`theme`, leeg = geen eigen thema) en het standaardthema (`inherited`) waar zij anders op terugvalt.
-   */
-  function themeView(req) {
-    const homeId = homeOf(req.tenantId);
-    const homeRow = store.getTenant(homeId);
-    return { defaults: Theme.DEFAULTS, mainTenantId: tenant.id, tenantId: homeId, tenantName: homeRow ? homeRow.name : '',
-      theme: settingsFor(homeId).get('theme'), inherited: settings.get('theme'),
-      canEdit: accountIsLive(req) && (homeId !== tenant.id || !multitenancyOn() || Boolean(req.user.platform_admin)) };
-  }
-
-  app.get('/api/admin/theme', (req, res) => { res.json(themeView(req)); });
-
-  app.put('/api/admin/theme', requireJson, (req, res) => {
-    const targetId = homeOf(req.tenantId);
-    const tenantRow = store.getTenant(targetId);
-    if (!tenantRow || tenantRow.environment !== 'live') return res.status(404).json({ error: 'not_found', message: 'Organisatie niet gevonden.' });
-    if (!accountIsLive(req)) return res.status(403).json({ error: 'forbidden', message: 'Een testaccount wijzigt het thema van de live-omgeving niet.' });
-    // Het thema van de hoofdtenant is de standaard voor alle andere organisaties: met meer organisaties alleen voor een hoofdbeheerder.
-    if (targetId === tenant.id && multitenancyOn() && !req.user.platform_admin) {
-      return res.status(403).json({ error: 'forbidden', message: 'Het standaardthema voor alle organisaties wijzigt alleen een hoofdbeheerder.' });
-    }
-    const raw = req.body?.colors;
-    const target = settingsFor(targetId);
-    if (raw == null || (typeof raw === 'object' && !Object.keys(raw).length)) {
-      target.update({ reset: ['theme'] }, req.user.id);
-    } else {
-      if (typeof raw !== 'object' || Array.isArray(raw)) return res.status(400).json({ error: 'invalid_theme', message: 'Ongeldige kleuren.' });
-      for (const [field, color] of Object.entries(raw)) {
-        if (!Theme.FIELDS[field]) return res.status(400).json({ error: 'invalid_theme', field, message: `Onbekende kleur: ${field}` });
-        if (!Theme.hex(color)) return res.status(400).json({ error: 'invalid_theme', field, message: `${Theme.FIELDS[field].label}: geef een kleur als #rrggbb.` });
-      }
-      const problem = Theme.problems(raw)[0];
-      if (problem) return res.status(400).json({ error: 'invalid_theme', field: problem.field, message: problem.message });
-      const colors = Theme.resolve(raw);
-      if (targetId === tenant.id && Theme.isDefault(colors)) target.update({ reset: ['theme'] }, req.user.id);
-      else target.update({ theme: colors }, req.user.id);
-    }
-    const theme = target.get('theme');
-    console.log(`Kleurthema van ${tenantRow.name} gewijzigd door ${req.user.display_name}: ${Object.keys(theme).length ? Object.values(theme).join(' ') : 'standaard'}`);
-    audit(req, 'thema_gewijzigd', { tenantId: targetId, theme }, undefined, targetId);
-    res.json({ tenantId: targetId, theme });
-  });
+  registerThemeRoutes(app, { store, tenant, settings, settingsFor, multitenancyOn, homeOf, audit, requireJson });
 
   // ---------- Visma eAccounting: koppeling en app-registratie per omgeving (Facturen → Visma) ----------
   registerVismaRoutes(app, {
