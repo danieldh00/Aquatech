@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.31.1',
+      date: '2026-11-20',
+      title: 'Database: geldbedragen en hoeveelheden exact opgeslagen',
+      items: [],
+    },
+    {
       version: '1.31.0',
       date: '2026-11-20',
       title: 'Database: extra indexen en controles op statussen',

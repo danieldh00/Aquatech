@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.31.1
+
+Migratie 91 (database-doorlichting 2026-11-20): 46 kolommen van `DOUBLE PRECISION` naar `NUMERIC`: bedragen en betalingen `NUMERIC(14,2)` (facturen, offertes, bestellingen, betalingen, omzetregels, uitbestedingsvergoeding), prijzen en kostprijzen `NUMERIC(14,4)`, hoeveelheden en standen `NUMERIC(14,4)`, prijsfactor, groothandelskorting en inhoud per eenheid `NUMERIC(10,4)`. Bestaande waarden worden bij de omzetting afgerond op het aantal decimalen. De databaselaag las NUMERIC al als getal (`pgdb-worker.js`, `pg-pool.js`), dus de code is ongewijzigd; de volledige testsuite is groen.
+
 ## 1.31.0
 
 Migratie 90 (database-doorlichting 2026-11-20): indexen op `work_orders(owner_id)`, `audit(user_id)`, `stock_cost_entries(item_id)`, `stock_count_entries(line_id)`, `support_grants`/`impersonations(tenant_id)`, functionele indexen op `lower(email)` van `web_orders` en `stock_alerts`; `stock_items_dirty` is nu een gedeeltelijke index (`WHERE shop_dirty = 1`); CHECK-constraints (NOT VALID, bestaande rijen blijven ongemoeid) op de status van `web_orders`, `web_returns` en `purchase_orders`.
