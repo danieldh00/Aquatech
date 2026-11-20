@@ -155,8 +155,22 @@ log "Hersteltest gestart ($TRIGGER)"
 [[ "$(docker inspect -f '{{.State.Health.Status}}' "$PG_CONTAINER" 2>/dev/null || true)" == "healthy" ]] \
   || finish mislukt "De productie-database draait niet (healthy); vergelijken is niet mogelijk."
 
-BACKUP_FILE="$(ls -1t "$BACKUP_DIR"/aquatech-*.dump.enc 2>/dev/null | head -n1 || true)"
-[[ -n "$BACKUP_FILE" && -f "$BACKUP_FILE" && ! -L "$BACKUP_FILE" ]] || finish mislukt "Er is geen back-up gevonden in backups/postgres."
+# Nieuwste dump; ontbreekt die, dan maakt pg-backup.sh er één (zelfde dagelijkse back-up) en zoeken we opnieuw.
+newest_dump() { ls -1t "$BACKUP_DIR"/aquatech-*.dump.enc 2>/dev/null | head -n1 || true; }
+BACKUP_FILE="$(newest_dump)"
+if [[ -z "$BACKUP_FILE" ]]; then
+  if [[ -f "$APP_DIR/pg-backup.sh" && ! -L "$APP_DIR/pg-backup.sh" ]]; then
+    log "Geen dump gevonden; pg-backup.sh maakt er een"
+    BACKUP_LOG="$(bash "$APP_DIR/pg-backup.sh" 2>&1 | tail -n 3 | tr '\n' ' ')" || true
+    BACKUP_FILE="$(newest_dump)"
+    [[ -n "$BACKUP_FILE" ]] || finish mislukt "Er was geen dump in backups/postgres en pg-backup.sh kon er geen maken: ${BACKUP_LOG:-geen uitvoer}"
+  elif [[ ! -d "$BACKUP_DIR" ]]; then
+    finish mislukt "De map backups/postgres bestaat niet op de server; de dagelijkse PostgreSQL-back-up (aquatech-pg-backup.timer) is niet ingericht."
+  else
+    finish mislukt "De map backups/postgres bevat geen aquatech-*.dump.enc en pg-backup.sh ontbreekt; de dagelijkse PostgreSQL-back-up is niet ingericht."
+  fi
+fi
+[[ -f "$BACKUP_FILE" && ! -L "$BACKUP_FILE" ]] || finish mislukt "De nieuwste back-up is geen gewoon bestand (symlink?)."
 BACKUP_NAME="$(basename "$BACKUP_FILE")"
 BACKUP_BYTES="$(stat -c %s "$BACKUP_FILE")"
 BACKUP_AT="$(date -u -d "@$(stat -c %Y "$BACKUP_FILE")" +%Y-%m-%dT%H:%M:%SZ)"

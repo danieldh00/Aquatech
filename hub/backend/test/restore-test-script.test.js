@@ -184,11 +184,20 @@ test('planning: uit, nog niet aan de beurt en handmatig starten', () => {
   assert.strictEqual(readStatus(env.statusDir).runs[0].trigger, 'handmatig');
 });
 
+/** Een ontbrekende dump: pg-backup.sh wordt aangeroepen en de melding noemt de oorzaak als dat niets oplevert. */
+test('zonder dump probeert het script er een te laten maken', () => {
+  const env = install({ policy: dueNow() });
+  fs.rmSync(path.join(env.appDir, 'backups', 'postgres', 'aquatech-20261120-023000.dump.enc'));
+  fs.writeFileSync(path.join(env.appDir, 'pg-backup.sh'), 'echo "FOUT: container draait niet" >&2\nexit 1\n');
+  assert.strictEqual(env.run().status, 1);
+  assert.match(readStatus(env.statusDir).runs[0].message, /pg-backup\.sh kon er geen maken.*container draait niet/);
+});
+
 test('zonder back-up of met een symlink als aanvraag: veilig falen', () => {
   const env = install({ policy: dueNow() });
   fs.rmSync(path.join(env.appDir, 'backups', 'postgres', 'aquatech-20261120-023000.dump.enc'));
   assert.strictEqual(env.run().status, 1);
-  assert.match(readStatus(env.statusDir).runs[0].message, /geen back-up/);
+  assert.match(readStatus(env.statusDir).runs[0].message, /geen aquatech-\*\.dump\.enc/);
   assert.ok(fs.existsSync(path.join(env.statusDir, '.restore-test-retry')), 'mislukte voorbereiding: later opnieuw');
   assert.ok(!fs.existsSync(path.join(env.statusDir, '.restore-test-last')), 'telt niet als gedaan');
   env.run();
