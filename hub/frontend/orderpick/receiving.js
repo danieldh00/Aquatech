@@ -421,6 +421,10 @@
       if (mode.dataset.mode === 'receive' && $('#rc-list').hidden) showList();
       else if (mode.dataset.mode === 'pick' && $('#op-list').hidden) toPicking();
     });
+    // De zijbalk wijst naar #ontvangst op dezelfde pagina: een klik laadt niet opnieuw, dus het scherm volgt de hash.
+    window.addEventListener('hashchange', () => {
+      if (location.hash === '#ontvangst' && $('#rc-list').hidden) showList();
+    });
     $('#rc-refresh').addEventListener('click', () => loadList().catch((error) => toast(error.message, true)));
     $('#rc-orders').addEventListener('click', (event) => {
       const row = event.target.closest('[data-id]');
