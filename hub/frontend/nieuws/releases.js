@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.28.6',
+      date: '2026-11-20',
+      title: 'Nieuw ontwerp voor de pagina Over ons in de webshop',
+      items: [
+        { text: 'De pagina Over ons in de webshop heeft een nieuw ontwerp met bedrijfsgegevens en een contactblok.' },
+      ],
+    },
+    {
       version: '1.28.5',
       date: '2026-11-20',
       title: 'Offertes-script opgesplitst',
