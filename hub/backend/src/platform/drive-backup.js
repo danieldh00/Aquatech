@@ -13,9 +13,8 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { Readable } = require('stream');
+const { Readable, Transform } = require('stream');
 const { pipeline } = require('stream/promises');
-const { Transform } = require('stream');
 
 const GOOGLE = {
   authorize: 'https://accounts.google.com/o/oauth2/v2/auth',
