@@ -42,7 +42,7 @@ function formatPrice(amount) {
 /** De inhoud (blokken en pagina's uit Beheer) waarmee de pagina's die nu worden opgebouwd, worden getekend. */
 let activeContent = { site: DEFAULT_SITE, pages: [] };
 /** Of bestellen aan staat, hoeveel regels er in de winkelwagen van de bezoeker zitten en of hij een groothandelsklant is, met het kopje Groothandel (voor de pagina's die nu worden opgebouwd). */
-let activeShop = { indexing: false, ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '', analytics: '', captcha: '' };
+let activeShop = { indexing: false, ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '', analytics: '', clarity: '', captcha: '' };
 
 /**
  * De velden die een formulier nodig heeft voor de onzichtbare captcha: het verborgen veld waar het script een token in zet en de
@@ -64,7 +64,7 @@ function captchaFields(action) {
  * @param {{ ordering: boolean, cartCount: number, business?: boolean, wholesale?: boolean, baseUrl?: string }} [shop] Het volledige webadres van de shop (met slash achteraan; leeg = geen canonical-link en OpenGraph), of bestellen aan staat, het aantal regels in de winkelwagen, of de bezoeker een zakelijke klant is (prijzen excl. btw) en of hij groothandelsklant is (kopje Groothandel).
  * @returns {*} Wat `render` teruggeeft.
  */
-function renderWith(content, render, shop = { indexing: false, ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '', analytics: '', captcha: '' }) {
+function renderWith(content, render, shop = { indexing: false, ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '', analytics: '', clarity: '', captcha: '' }) {
   const previous = activeContent;
   const previousShop = activeShop;
   activeContent = content;
@@ -277,18 +277,22 @@ function listEventsOf(listName, products, search = {}) {
 }
 
 /**
- * De attributen op <body> waarmee `analytiek.js` Google Analytics na toestemming laadt: het meet-ID, de klantgroep, het
- * pad naar de privacyverklaring en de gebeurtenissen van de pagina. Zonder actief meet-ID (instelling uit of geen ID) is
- * het resultaat leeg en staat er niets van Google Analytics in de pagina.
+ * De attributen op <body> waarmee `analytiek.js` na toestemming de metingen laadt: het meet-ID van Google Analytics en/of het
+ * project-ID van Clarity, de klantgroep, het pad naar de privacyverklaring en de gebeurtenissen van de pagina. Zonder actieve
+ * meting (instellingen uit of geen ID) is het resultaat leeg en staat er niets van deze diensten in de pagina.
  * @param {string} root Relatief pad naar de shop-startpagina.
  * @param {object[]} events De gebeurtenissen van de pagina (zie shop-analytics.js).
+ * @param {boolean} [privatePage] Of de pagina persoonsgegevens kan tonen (geen canonicalPath): dan wordt alle tekst voor Clarity gemaskeerd.
  * @returns {string} De attributen met een spatie ervoor, of een lege tekst.
  */
-function analyticsAttributes(root, events) {
-  if (!activeShop.analytics) return '';
+function analyticsAttributes(root, events, privatePage = false) {
+  if (!activeShop.analytics && !activeShop.clarity) return '';
   const group = activeShop.wholesale ? 'groothandel' : activeShop.business ? 'zakelijk' : 'particulier';
-  const json = Analytics.eventsJson(events);
-  return ` data-shop-analytics="${escapeHtml(activeShop.analytics)}" data-customer-group="${group}" data-privacy-url="${escapeHtml(root)}pagina/privacyverklaring/"${activeShop.staff ? ' data-internal="1"' : ''}${json ? ` data-shop-events="${escapeHtml(json)}"` : ''}`;
+  const json = activeShop.analytics ? Analytics.eventsJson(events) : '';
+  const tools = `${activeShop.analytics ? ` data-shop-analytics="${escapeHtml(activeShop.analytics)}"` : ''}${activeShop.clarity ? ` data-shop-clarity="${escapeHtml(activeShop.clarity)}"` : ''}`;
+  // Pagina's zonder canonicalPath (account, bestelling, afrekenen, retour, winkelwagen, zoeken) kunnen persoonsgegevens als tekst tonen: die gaan niet naar Clarity.
+  const mask = privatePage ? ' data-clarity-mask="True"' : '';
+  return `${tools}${mask} data-customer-group="${group}" data-privacy-url="${escapeHtml(root)}pagina/privacyverklaring/"${activeShop.staff ? ' data-internal="1"' : ''}${json ? ` data-shop-events="${escapeHtml(json)}"` : ''}`;
 }
 
 /**
@@ -316,8 +320,8 @@ function layout({ root, title, description, body, groups, query = '', wide = fal
 ${seoHead({ title, description, canonicalPath, ogImage, ogType, jsonLd, root })}${refresh ? `<meta http-equiv="refresh" content="0;url=${escapeHtml(refresh)}">\n` : ''}<link rel="icon" type="image/png" href="${assetUrl(root, 'favicon.png')}">
 <link rel="stylesheet" href="${assetUrl(root, 'brand.css')}">
 <link rel="stylesheet" href="${assetUrl(root, 'winkel.css')}">
-${nav.includes('nav-fly') ? `<script src="${assetUrl(root, 'menu.js')}" defer></script>\n` : ''}${variantScript ? `<script src="${assetUrl(root, 'varianten.js')}" defer></script>\n` : ''}${[].concat(script || [], 'zoeksuggesties.js', activeShop.analytics ? 'analytiek.js' : [], activeShop.captcha ? 'captcha.js' : []).map((name) => `<script src="${assetUrl(root, name)}" defer></script>\n`).join('')}</head>
-<body${analyticsAttributes(root, events)}>
+${nav.includes('nav-fly') ? `<script src="${assetUrl(root, 'menu.js')}" defer></script>\n` : ''}${variantScript ? `<script src="${assetUrl(root, 'varianten.js')}" defer></script>\n` : ''}${[].concat(script || [], 'zoeksuggesties.js', activeShop.analytics || activeShop.clarity ? 'analytiek.js' : [], activeShop.captcha ? 'captcha.js' : []).map((name) => `<script src="${assetUrl(root, name)}" defer></script>\n`).join('')}</head>
+<body${analyticsAttributes(root, events, canonicalPath == null)}>
 ${site.notice.enabled && site.notice.text ? `<div class="shop-notice kleur-${escapeHtml(site.notice.color || 'purple')}">${escapeHtml(site.notice.text)}</div>` : ''}
 <header class="shop-head">
   <div class="shop-bar">
@@ -346,7 +350,7 @@ ${body}
     <div><strong>Account</strong><ul><li><a href="${root}account/">Mijn account</a></li><li><a href="${root}account/">Inloggen of registreren</a></li></ul></div>
     <div><strong>Over ons</strong><p>${escapeHtml(site.footer.about)}</p><p><a href="${root}over-ons/">Lees ons verhaal</a></p>${footerPages.length ? `<ul>${footerPages.map((page) => `<li><a href="${root}pagina/${escapeHtml(page.slug)}/">${escapeHtml(page.title)}</a></li>`).join('')}</ul>` : ''}</div>
   </div>
-  <nav class="foot-legal" aria-label="Voorwaarden">${legalLinks}${activeShop.analytics ? '<button type="button" class="link-button" data-consent-settings>Cookie-instellingen</button>' : ''}</nav>
+  <nav class="foot-legal" aria-label="Voorwaarden">${legalLinks}${activeShop.analytics || activeShop.clarity ? '<button type="button" class="link-button" data-consent-settings>Cookie-instellingen</button>' : ''}</nav>
   <div class="foot-note"><span>${activeShop.business ? 'Je ziet zakelijke prijzen: alle prijzen zijn exclusief btw.' : 'Alle prijzen zijn inclusief btw.'}</span><img src="${assetUrl(root, 'betaalmethoden.png')}" alt="Betaalmethoden" width="286" height="26" loading="lazy"></div>
 </footer>
 </body>

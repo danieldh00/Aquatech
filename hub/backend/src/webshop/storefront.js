@@ -177,7 +177,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     // Een medewerker of beheerder krijgt de knop naar het beheer; die pagina's zijn persoonlijk en worden niet gedeeld.
     const staff = Boolean(viewer) && viewer.isStaff;
     if (business || (staff && !preview)) res.setHeader('Cache-Control', 'private, no-store');
-    const html = renderWith(contentOf(req), render, { indexing, baseUrl: preview ? '' : publicBaseUrl(req), analytics: preview ? '' : analyticsIdOf(), captcha: preview ? '' : captchaKeyOf(), ordering, cartCount: ordering ? (req.pendingCart || readCart(req)).reduce((total, line) => total + line.qty, 0) : 0, business, staff, wholesale: ordering && business && viewer.wholesale, businessForm: Boolean(orderMail && orderMail.businessRequestReady && orderMail.businessRequestReady(tenantId)), businessSent: ['ja', 'fout'].includes(req.query.aanvraag) ? req.query.aanvraag : '' });
+    const html = renderWith(contentOf(req), render, { indexing, baseUrl: preview ? '' : publicBaseUrl(req), analytics: preview ? '' : analyticsIdOf(), clarity: preview ? '' : clarityIdOf(), captcha: preview ? '' : captchaKeyOf(), ordering, cartCount: ordering ? (req.pendingCart || readCart(req)).reduce((total, line) => total + line.qty, 0) : 0, business, staff, wholesale: ordering && business && viewer.wholesale, businessForm: Boolean(orderMail && orderMail.businessRequestReady && orderMail.businessRequestReady(tenantId)), businessSent: ['ja', 'fout'].includes(req.query.aanvraag) ? req.query.aanvraag : '' });
     const plannerWith = html.replace(/<!--planner:([^>]*)-->/g, (_, root) => (plannerOn() ? `<li class="nav-planner"><a href="${root}planner/">Planner</a></li>` : ''));
     // De plannerpromotie (startpagina en beregeningscategorieën) verschijnt alleen als de planner aan staat.
     const withPlanner = plannerWith.replace(/<!--planner-promo:([^>]*)-->/g, (_, root) => (plannerOn() ? `<section class="planner-promo"><div class="wrap planner-promo-inner"><div><h2>Ontwerp je beregening gratis</h2><p>Teken je tuin in onze planner en bestel de complete materiaallijst in één keer.</p></div><a class="button" href="${root}planner/">Naar de planner</a></div></section>` : ''));
@@ -193,6 +193,11 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
    * @returns {string} Het meet-ID, leeg als er niet gemeten mag worden.
    */
   const analyticsIdOf = () => Analytics.activeMeasurementId(settingsFor(tenantId).get('shopAnalytics'));
+  /**
+   * Het actieve Clarity-project-ID van de shop (instelling shopClarity: aan en een geldig ID).
+   * @returns {string} Het project-ID, of leeg.
+   */
+  const clarityIdOf = () => Analytics.activeClarityId(settingsFor(tenantId).get('shopClarity'));
   /**
    * De sitesleutel van de onzichtbare captcha van de shop (instelling captcha met geheim en aan).
    * @returns {string} De sitesleutel, leeg als de captcha uit staat.
@@ -257,7 +262,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
   router.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     {
-      const policy = Analytics.cspWith(STOREFRONT_CSP, analyticsIdOf());
+      const policy = Analytics.cspWith(STOREFRONT_CSP, analyticsIdOf(), clarityIdOf());
       res.setHeader('Content-Security-Policy', captchaKeyOf() ? captchaCspWith(policy) : policy);
     }
     res.setHeader('Referrer-Policy', 'same-origin');

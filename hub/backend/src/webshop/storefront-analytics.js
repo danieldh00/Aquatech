@@ -1,12 +1,17 @@
-// Meting met Google Analytics (GA4) in de webshop, alleen na toestemming van de bezoeker. Zonder toestemming wordt er niets
-// van Google geladen (geen script, geen cookie, geen verbinding): de toestemmingsbalk bepaalt alles. Consent Mode v2 staat
+// Metingen in de webshop (Google Analytics GA4 en Microsoft Clarity), alleen na toestemming van de bezoeker voor de categorie
+// Analytisch. Zonder toestemming wordt er niets van die diensten geladen (geen script, geen cookie, geen verbinding): de
+// toestemmingsbalk bepaalt alles. De keuze wordt met datum en versie van de tekst bewaard en is altijd te wijzigen of in te trekken. Consent Mode v2 staat
 // standaard op "geweigerd"; alleen analytics_storage gaat bij Accepteren op "toegestaan", advertentie-opslag nooit.
 // De pagina geeft meet-ID, klantgroep en de gebeurtenissen van de pagina mee als data-attributen op <body> (shop-analytics.js);
 // kliks (select_item, add_to_cart, remove_from_cart) en het verzenden van het afrekenformulier meet dit script zelf.
 // Zonder cookies of opslag in de browser vraagt de balk op elke pagina opnieuw.
 
-/** Sleutel in localStorage voor de keuze van de bezoeker ("granted" of "denied"). */
+/** Sleutel in localStorage voor de keuze van de bezoeker (JSON met versie, keuze en datum). */
 const CONSENT_KEY = 'aquatech_shop_consent';
+/** Versie van de toestemmingstekst en de categorieën; een andere versie in de opslag telt als geen keuze en vraagt opnieuw. */
+const CONSENT_VERSION = 1;
+/** Cookies van Clarity (eigen domein) die bij weigeren of intrekken worden gewist. */
+const CLARITY_COOKIES = ['_clck', '_clsk', 'CLID', 'ANONCHK', 'MR', 'SM', 'MUID'];
 /** Sleutel in localStorage voor de bestelnummers waarvoor de aankoop al is doorgegeven (tegen dubbel tellen na een herlading). */
 const PURCHASED_KEY = 'aquatech_shop_purchased';
 /** Hoeveel bestelnummers `PURCHASED_KEY` onthoudt. */
@@ -30,27 +35,38 @@ function safeStorage(win) {
 }
 
 /**
- * Leest de eerder gekozen toestemming.
+ * Leest de eerder vastgelegde keuze met de datum waarop die is gemaakt.
  * @param {?Storage} storage De opslag van de browser.
- * @returns {?string} "granted", "denied" of null als de bezoeker nog niet koos.
+ * @returns {?{ decision: string, at: string }} De keuze ("granted" of "denied") en het tijdstip (ISO), of null als de bezoeker nog niet koos of de versie niet meer klopt.
  */
-function readConsent(storage) {
+function readConsentRecord(storage) {
   try {
-    const value = storage && storage.getItem(CONSENT_KEY);
-    return value === 'granted' || value === 'denied' ? value : null;
+    const parsed = JSON.parse((storage && storage.getItem(CONSENT_KEY)) || 'null');
+    if (!parsed || parsed.v !== CONSENT_VERSION || typeof parsed.analytics !== 'boolean') return null;
+    return { decision: parsed.analytics ? 'granted' : 'denied', at: typeof parsed.at === 'string' ? parsed.at : '' };
   } catch (error) {
     return null;
   }
 }
 
 /**
- * Bewaart de keuze van de bezoeker; lukt dat niet, dan geldt hij alleen voor deze pagina.
+ * Leest de eerder gekozen toestemming.
+ * @param {?Storage} storage De opslag van de browser.
+ * @returns {?string} "granted", "denied" of null als de bezoeker nog niet koos.
+ */
+function readConsent(storage) {
+  const record = readConsentRecord(storage);
+  return record ? record.decision : null;
+}
+
+/**
+ * Legt de keuze van de bezoeker vast met versie en datum; lukt dat niet, dan geldt hij alleen voor deze pagina.
  * @param {?Storage} storage De opslag van de browser.
  * @param {string} decision "granted" of "denied".
  * @returns {void}
  */
 function writeConsent(storage, decision) {
-  try { if (storage) storage.setItem(CONSENT_KEY, decision); } catch (error) { /* niet bewaren kan; de balk komt dan terug */ }
+  try { if (storage) storage.setItem(CONSENT_KEY, JSON.stringify({ v: CONSENT_VERSION, analytics: decision === 'granted', at: new Date().toISOString() })); } catch (error) { /* niet bewaren kan; de balk komt dan terug */ }
 }
 
 /**
@@ -126,6 +142,93 @@ function createGtag(win) {
 }
 
 /**
+ * Wist cookies van deze site waarvan de naam bij de test past, op alle paden en de bovenliggende domeinen.
+ * @param {Window} win Het venster.
+ * @param {Document} doc Het document.
+ * @param {Function} matches Krijgt een cookienaam en geeft terug of die gewist moet worden.
+ * @returns {void}
+ */
+function clearCookiesWhere(win, doc, matches) {
+  const names = String(doc.cookie || '').split(';').map((part) => part.split('=')[0].trim()).filter((name) => name && matches(name));
+  const host = (win.location && win.location.hostname) || '';
+  const domains = ['', host, `.${host}`];
+  for (const name of names) for (const domain of domains) doc.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/${domain ? `; domain=${domain}` : ''}`;
+}
+
+/**
+ * Microsoft Clarity: het script wordt pas bij toestemming geladen; invoervelden en formulieren worden gemaskeerd.
+ * Bij weigeren of intrekken wordt Clarity gestopt en worden de cookies gewist.
+ * @param {{ window: Window, document: Document, projectId: string }} environment De browseromgeving en het project-ID.
+ * @returns {{ grant: Function, deny: Function, isLoaded: Function }} De bediening.
+ */
+function createClarity({ window: win, document: doc, projectId }) {
+  let loaded = false;
+  let watching = false;
+
+  /**
+   * Zet de wachtrij van Clarity klaar (zoals het standaardscript doet) en laadt het script één keer.
+   * @returns {void}
+   */
+  function load() {
+    if (loaded) return;
+    loaded = true;
+    win.clarity = win.clarity || function clarity() { (win.clarity.q = win.clarity.q || []).push(arguments); };
+    const script = doc.createElement('script');
+    script.async = true;
+    script.src = `https://www.clarity.ms/tag/${encodeURIComponent(projectId)}`;
+    doc.head.appendChild(script);
+  }
+
+  /**
+   * Zet alle invoervelden en formulieren op gemaskeerd, zodat Clarity nooit wat iemand typt opneemt.
+   * @returns {void}
+   */
+  function maskInputs() {
+    if (!doc.querySelectorAll) return;
+    for (const element of doc.querySelectorAll('input, textarea, select, form')) element.setAttribute('data-clarity-mask', 'True');
+  }
+
+  /**
+   * Maskeert ook velden die later in de pagina komen (bijvoorbeeld het adres van de postcodezoeker of een bijgewerkt formulier).
+   * @returns {void}
+   */
+  function watchNewInputs() {
+    if (watching || typeof win.MutationObserver !== 'function' || !doc.body) return;
+    watching = true;
+    new win.MutationObserver(maskInputs).observe(doc.body, { childList: true, subtree: true });
+  }
+
+  return {
+    /**
+     * De bezoeker staat meten toe: Clarity laden (alleen analytische opslag, nooit advertenties) en de velden maskeren.
+     * @returns {void}
+     */
+    grant() {
+      maskInputs();
+      watchNewInputs();
+      load();
+      win.clarity('consentv2', { ad_Storage: 'denied', analytics_Storage: 'granted' });
+    },
+    /**
+     * De bezoeker weigert of trekt in: Clarity stoppen en de cookies wissen.
+     * @returns {void}
+     */
+    deny() {
+      if (loaded) {
+        win.clarity('consentv2', { ad_Storage: 'denied', analytics_Storage: 'denied' });
+        win.clarity('stop');
+      }
+      clearCookiesWhere(win, doc, (name) => CLARITY_COOKIES.includes(name));
+    },
+    /**
+     * Of het Clarity-script is gevraagd (alleen na toestemming).
+     * @returns {boolean} true als het script is gevraagd.
+     */
+    isLoaded() { return loaded; },
+  };
+}
+
+/**
  * De meting van deze pagina: houdt bij of er toestemming is, laadt Google pas na Accepteren en verstuurt gebeurtenissen.
  * @param {{ window: Window, document: Document, storage: ?Storage, measurementId: string, customerGroup: string, internal: boolean }} environment De browseromgeving en de instellingen van de pagina.
  * @returns {{ grant: Function, deny: Function, track: Function, isGranted: Function, isLoaded: Function }} De bediening.
@@ -160,10 +263,7 @@ function createTracker({ window: win, document: doc, storage, measurementId, cus
    * @returns {void}
    */
   function clearCookies() {
-    const names = String(doc.cookie || '').split(';').map((part) => part.split('=')[0].trim()).filter((name) => name === '_ga' || name.indexOf('_ga_') === 0);
-    const host = (win.location && win.location.hostname) || '';
-    const domains = ['', host, `.${host}`];
-    for (const name of names) for (const domain of domains) doc.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/${domain ? `; domain=${domain}` : ''}`;
+    clearCookiesWhere(win, doc, (name) => name === '_ga' || name.indexOf('_ga_') === 0);
   }
 
   return {
@@ -214,35 +314,130 @@ function createTracker({ window: win, document: doc, storage, measurementId, cus
 }
 
 /**
- * Bouwt of toont de toestemmingsbalk. Accepteren en Weigeren zijn even duidelijk (zelfde knopstijl).
+ * Maakt een element met een klasse en tekst.
  * @param {Document} doc Het document.
- * @param {{ privacyUrl: string, onChoice: Function }} options Het adres van de privacyverklaring en wat er bij een keuze gebeurt.
+ * @param {string} tag De tagnaam.
+ * @param {string} className De klasse (leeg = geen).
+ * @param {string} text De tekst (leeg = geen).
+ * @returns {Element} Het nieuwe element.
+ */
+function makeElement(doc, tag, className, text) {
+  const element = doc.createElement(tag);
+  if (className) element.className = className;
+  if (text) element.textContent = text;
+  return element;
+}
+
+/**
+ * Maakt een knop. Accepteren en Weigeren krijgen dezelfde stijl en grootte (gelijkwaardig); Instellingen is een tekstlink.
+ * @param {Document} doc Het document.
+ * @param {string} label Het opschrift.
+ * @param {string} className De klasse(n) van de knop.
+ * @param {Function} onClick Wat er bij een klik gebeurt.
+ * @returns {Element} De knop.
+ */
+function makeButton(doc, label, className, onClick) {
+  const button = makeElement(doc, 'button', className, label);
+  button.type = 'button';
+  button.addEventListener('click', onClick);
+  return button;
+}
+
+/**
+ * Toont het instellingenvenster: Noodzakelijk (altijd aan) en Analytisch (aan of uit, standaard uit), met de datum van de vorige keuze.
+ * @param {Document} doc Het document.
+ * @param {{ privacyUrl: string, current: ?{ decision: string, at: string }, onChoice: Function }} options De privacyverklaring, de huidige keuze en wat er bij een keuze gebeurt.
  * @returns {void}
  */
-function showConsentBanner(doc, { privacyUrl, onChoice }) {
+function showConsentSettings(doc, { privacyUrl, current, onChoice }) {
+  const existing = doc.querySelector('[data-consent-settings-dialog]');
+  if (existing) existing.remove();
+  const overlay = makeElement(doc, 'div', 'consent-overlay');
+  overlay.setAttribute('data-consent-settings-dialog', '');
+  const dialog = makeElement(doc, 'div', 'consent-dialog');
+  dialog.setAttribute('role', 'dialog');
+  dialog.setAttribute('aria-modal', 'true');
+  dialog.setAttribute('aria-labelledby', 'consent-dialog-title');
+  const title = makeElement(doc, 'h2', '', 'Cookie-instellingen');
+  title.id = 'consent-dialog-title';
+  dialog.appendChild(title);
+  dialog.appendChild(makeElement(doc, 'p', 'consent-lead', 'Kies zelf welke cookies we mogen gebruiken. Je kunt dit altijd wijzigen via Cookie-instellingen onderaan de pagina.'));
+
+  const necessary = makeElement(doc, 'div', 'consent-category');
+  const necessaryText = makeElement(doc, 'div', 'consent-category-text');
+  necessaryText.appendChild(makeElement(doc, 'strong', '', 'Noodzakelijk'));
+  necessaryText.appendChild(makeElement(doc, 'span', '', 'Winkelwagen, inloggen en veiligheid. Altijd aan, hier is geen toestemming voor nodig.'));
+  necessary.appendChild(necessaryText);
+  necessary.appendChild(makeElement(doc, 'span', 'consent-always', 'Altijd aan'));
+  dialog.appendChild(necessary);
+
+  const analytical = makeElement(doc, 'label', 'consent-category');
+  const analyticalText = makeElement(doc, 'div', 'consent-category-text');
+  analyticalText.appendChild(makeElement(doc, 'strong', '', 'Analytisch'));
+  analyticalText.appendChild(makeElement(doc, 'span', '', 'Anonieme statistieken en schermopnames om de webshop te verbeteren. Invoervelden worden gemaskeerd.'));
+  analytical.appendChild(analyticalText);
+  const toggle = makeElement(doc, 'input', 'consent-toggle');
+  toggle.type = 'checkbox';
+  toggle.setAttribute('data-consent-analytics', '');
+  toggle.checked = Boolean(current && current.decision === 'granted');
+  analytical.appendChild(toggle);
+  dialog.appendChild(analytical);
+
+  const note = makeElement(doc, 'p', 'consent-note');
+  if (current && current.at) note.appendChild(doc.createTextNode(`Je keuze is opgeslagen op ${current.at.slice(0, 10).split('-').reverse().join('-')}. `));
+  const link = makeElement(doc, 'a', '', 'Privacyverklaring');
+  link.setAttribute('href', privacyUrl);
+  note.appendChild(link);
+  dialog.appendChild(note);
+
+  const actions = makeElement(doc, 'div', 'consent-actions');
+  /**
+   * Verwerkt de keuze: venster en balk sluiten en de keuze doorgeven.
+   * @param {string} decision "granted" of "denied".
+   * @returns {void}
+   */
+  const choose = (decision) => { overlay.remove(); const banner = doc.querySelector('[data-consent-banner]'); if (banner) banner.remove(); onChoice(decision); };
+  actions.appendChild(makeButton(doc, 'Alles accepteren', 'button', () => choose('granted')));
+  actions.appendChild(makeButton(doc, 'Alles weigeren', 'button', () => choose('denied')));
+  actions.appendChild(makeButton(doc, 'Keuze opslaan', 'button', () => choose(toggle.checked ? 'granted' : 'denied')));
+  dialog.appendChild(actions);
+  overlay.appendChild(dialog);
+  overlay.addEventListener('keydown', (event) => { if (event.key === 'Escape') overlay.remove(); });
+  doc.body.appendChild(overlay);
+  if (toggle.focus) toggle.focus();
+}
+
+/**
+ * Bouwt of toont de toestemmingsbalk. Accepteren en Weigeren zijn even duidelijk (zelfde knopstijl); Instellingen opent het venster per categorie.
+ * @param {Document} doc Het document.
+ * @param {{ privacyUrl: string, current: ?{ decision: string, at: string }, onChoice: Function }} options Het adres van de privacyverklaring, de huidige keuze en wat er bij een keuze gebeurt.
+ * @returns {void}
+ */
+function showConsentBanner(doc, { privacyUrl, current, onChoice }) {
   const existing = doc.querySelector('[data-consent-banner]');
   if (existing) existing.remove();
-  const banner = doc.createElement('section');
-  banner.className = 'consent-banner';
+  const banner = makeElement(doc, 'section', 'consent-banner');
   banner.setAttribute('data-consent-banner', '');
-  banner.setAttribute('aria-label', 'Cookies en meten');
-  const text = doc.createElement('p');
-  text.appendChild(doc.createTextNode('We willen graag anoniem meten hoe de webshop wordt gebruikt, met Google Analytics, om de shop te verbeteren. Dat gebeurt alleen met jouw toestemming; zonder toestemming plaatsen we geen meetcookies. '));
-  const link = doc.createElement('a');
+  banner.setAttribute('aria-label', 'Cookies');
+  const text = makeElement(doc, 'div', 'consent-text');
+  text.appendChild(makeElement(doc, 'h2', '', 'Cookies op AquaTech Shop'));
+  const paragraph = makeElement(doc, 'p', '');
+  paragraph.appendChild(doc.createTextNode('We gebruiken noodzakelijke cookies voor je winkelwagen en inloggen. Met jouw toestemming meten we ook anoniem hoe de webshop wordt gebruikt om hem te verbeteren. '));
+  const link = makeElement(doc, 'a', '', 'Privacyverklaring');
   link.setAttribute('href', privacyUrl);
-  link.textContent = 'Lees de privacyverklaring';
-  text.appendChild(link);
+  paragraph.appendChild(link);
+  text.appendChild(paragraph);
   banner.appendChild(text);
-  const actions = doc.createElement('div');
-  actions.className = 'consent-actions';
-  for (const [label, decision] of [['Accepteren', 'granted'], ['Weigeren', 'denied']]) {
-    const button = doc.createElement('button');
-    button.type = 'button';
-    button.className = 'button';
-    button.textContent = label;
-    button.addEventListener('click', () => { banner.remove(); onChoice(decision); });
-    actions.appendChild(button);
-  }
+  const actions = makeElement(doc, 'div', 'consent-actions');
+  /**
+   * Verwerkt de keuze: de balk sluiten en de keuze doorgeven.
+   * @param {string} decision "granted" of "denied".
+   * @returns {void}
+   */
+  const choose = (decision) => { banner.remove(); onChoice(decision); };
+  actions.appendChild(makeButton(doc, 'Accepteren', 'button', () => choose('granted')));
+  actions.appendChild(makeButton(doc, 'Weigeren', 'button button-secondary', () => choose('denied')));
+  actions.appendChild(makeButton(doc, 'Instellingen', 'link-button', () => showConsentSettings(doc, { privacyUrl, current, onChoice })));
   banner.appendChild(actions);
   doc.body.appendChild(banner);
 }
@@ -256,8 +451,47 @@ function showConsentBanner(doc, { privacyUrl, onChoice }) {
 function startAnalytics({ window: win, document: doc, storage }) {
   const body = doc.body;
   const measurementId = body && body.getAttribute('data-shop-analytics');
-  if (!measurementId) return null;
-  const tracker = createTracker({ window: win, document: doc, storage, measurementId, customerGroup: body.getAttribute('data-customer-group') || 'particulier', internal: body.getAttribute('data-internal') === '1' });
+  const clarityId = body && body.getAttribute('data-shop-clarity');
+  if (!measurementId && !clarityId) return null;
+  const internal = body.getAttribute('data-internal') === '1';
+  const analyticsTracker = measurementId ? createTracker({ window: win, document: doc, storage, measurementId, customerGroup: body.getAttribute('data-customer-group') || 'particulier', internal }) : null;
+  // Medewerkers worden niet opgenomen: Clarity laadt alleen voor bezoekers.
+  const clarity = clarityId && !internal ? createClarity({ window: win, document: doc, projectId: clarityId }) : null;
+  let analyticsGranted = false;
+  const tracker = {
+    /**
+     * De bezoeker staat analytisch toe: elke actieve dienst starten.
+     * @returns {void}
+     */
+    grant() { analyticsGranted = true; if (analyticsTracker) analyticsTracker.grant(); if (clarity) clarity.grant(); },
+    /**
+     * De bezoeker weigert of trekt in: elke dienst stoppen en de cookies wissen.
+     * @returns {void}
+     */
+    deny() { analyticsGranted = false; if (analyticsTracker) analyticsTracker.deny(); if (clarity) clarity.deny(); },
+    /**
+     * Verstuurt een gebeurtenis naar Google Analytics, alleen met toestemming.
+     * @param {string} name De GA4-naam.
+     * @param {object} params De velden van de gebeurtenis.
+     * @returns {boolean} true als de gebeurtenis is doorgegeven.
+     */
+    track(name, params) { return analyticsTracker ? analyticsTracker.track(name, params) : false; },
+    /**
+     * Of de bezoeker op dit moment analytisch toestaat.
+     * @returns {boolean} true zolang de bezoeker toestemming gaf.
+     */
+    isGranted() { return analyticsGranted; },
+    /**
+     * Of het Google-script is gevraagd (alleen na toestemming).
+     * @returns {boolean} true als het Google-script is gevraagd.
+     */
+    isLoaded() { return Boolean(analyticsTracker && analyticsTracker.isLoaded()); },
+    /**
+     * Of het Clarity-script is gevraagd (alleen na toestemming, nooit voor medewerkers).
+     * @returns {boolean} true als het Clarity-script is gevraagd.
+     */
+    isClarityLoaded() { return Boolean(clarity && clarity.isLoaded()); },
+  };
   const pageEvents = parseEvents(body.getAttribute('data-shop-events'));
   const listItems = new Map();
   const cartItems = new Map();
@@ -295,7 +529,7 @@ function startAnalytics({ window: win, document: doc, storage }) {
    * @returns {void}
    */
   function askConsent() {
-    showConsentBanner(doc, { privacyUrl: body.getAttribute('data-privacy-url') || '#', onChoice: choose });
+    showConsentBanner(doc, { privacyUrl: body.getAttribute('data-privacy-url') || '#', current: readConsentRecord(storage), onChoice: choose });
   }
 
   const earlier = readConsent(storage);
@@ -304,7 +538,7 @@ function startAnalytics({ window: win, document: doc, storage }) {
   doc.addEventListener('click', (event) => {
     const target = event.target && event.target.closest ? event.target : null;
     if (!target) return;
-    if (target.closest('[data-consent-settings]')) { askConsent(); return; }
+    if (target.closest('[data-consent-settings]')) { showConsentSettings(doc, { privacyUrl: body.getAttribute('data-privacy-url') || '#', current: readConsentRecord(storage), onChoice: choose }); return; }
     const link = target.closest('.product-card a.product-name, .product-card a.product-image');
     if (!link) return;
     const form = link.closest('.product-card').querySelector('form[data-item]');

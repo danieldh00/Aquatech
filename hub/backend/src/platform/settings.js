@@ -5,7 +5,7 @@ const { sanitizeMail } = require('./mailer');
 const { sanitizeShop } = require('../webshop/woocommerce');
 const { sanitizeShipping } = require('../webshop/shipping');
 const { sanitizePayment } = require('../webshop/mollie');
-const { sanitizeAnalytics } = require('../webshop/shop-analytics');
+const { sanitizeAnalytics, sanitizeClarity } = require('../webshop/shop-analytics');
 const { sanitizeSeoSettings } = require('../webshop/seo');
 const { sanitizeCaptcha } = require('../beveiliging/captcha');
 const { sanitizeOutsourcing } = require('../uitvoering/outsourcing');
@@ -73,6 +73,9 @@ const FIELDS = {
   shopPayment: { type: 'object', default: {}, sanitize: sanitizePayment },
   // Google Analytics (GA4) in de webshop: aan/uit en meet-ID; stuurt een extern systeem aan, dus alleen live (zie shop-analytics.js).
   shopAnalytics: { type: 'object', default: {}, sanitize: sanitizeAnalytics, liveOnly: true },
+  // Microsoft Clarity in de webshop (sessie-inzichten): aan/uit en project-ID; laadt pas na toestemming voor analytisch (zie shop-analytics.js).
+  // Standaard uit: elke organisatie vult het eigen project-ID in bij Beheer > Webshop.
+  shopClarity: { type: 'object', default: {}, sanitize: sanitizeClarity, liveOnly: true },
   // Vrijgave voor zoekmachines (webshop/seo.js): zolang `indexing` uit staat, krijgt elke pagina noindex en blokkeert robots.txt alles; sitemap en feeds bestaan dan niet. Alleen live.
   shopSeo: { type: 'object', default: {}, sanitize: sanitizeSeoSettings, liveOnly: true },
   // Onzichtbare captcha (Google reCAPTCHA v3) op de openbare formulieren (beveiliging/captcha.js): aan/uit, sitesleutel, minimumscore en

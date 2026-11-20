@@ -1,10 +1,13 @@
-// Google Analytics (GA4) voor de webshop: de instelling `shopAnalytics` (aan/uit en meet-ID), de uitgebreide
+// Google Analytics (GA4) en Microsoft Clarity voor de webshop: de instellingen `shopAnalytics` (aan/uit en meet-ID) en `shopClarity` (aan/uit en project-ID), de uitgebreide
 // Content-Security-Policy en de gebeurtenissen van de koopfunnel (view_item, add_to_cart, begin_checkout, purchase, ...).
 // De server zet alleen gegevens in de pagina; het script `analytiek.js` laadt Google pas na toestemming van de bezoeker
 // (Consent Mode v2, standaard geweigerd). Zonder geldig meet-ID of met de instelling uit staat er niets van dit alles in de pagina.
 
 /** Een GA4-meet-ID: "G-" met 4 tot 14 hoofdletters of cijfers. */
 const MEASUREMENT_ID_PATTERN = /^G-[A-Z0-9]{4,14}$/;
+
+/** Een Microsoft Clarity-project-ID: 6 tot 16 kleine letters of cijfers (bijv. "abcde1fgh2"). */
+const CLARITY_ID_PATTERN = /^[a-z0-9]{6,16}$/;
 
 /** Het hoogste aantal artikelen in één gebeurtenis (de rest valt weg; Google verwerkt er toch maar 200). */
 const MAX_EVENT_ITEMS = 50;
@@ -40,22 +43,61 @@ function activeMeasurementId(setting) {
 }
 
 /**
- * De Content-Security-Policy van de shop, met de Google-adressen erbij zodra er een meet-ID actief is.
- * Zonder meet-ID blijft de policy exact zoals hij was. Er komen geen inline scripts bij.
+ * Maakt van een ingetikt Clarity-project-ID een schone waarde.
+ * @param {*} raw Wat de beheerder invulde.
+ * @returns {string} Het ID in kleine letters, of leeg als het geen geldig project-ID is.
+ */
+function cleanClarityId(raw) {
+  const id = String(raw == null ? '' : raw).trim().toLowerCase();
+  return CLARITY_ID_PATTERN.test(id) ? id : '';
+}
+
+/**
+ * Saneert de instelling `shopClarity`. Lege of onbruikbare invoer geeft de standaard (uit, geen ID).
+ * @param {*} raw De ingevoerde instelling.
+ * @returns {{ enabled: boolean, projectId: string }} De gesaneerde instelling.
+ */
+function sanitizeClarity(raw) {
+  const input = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  return { enabled: input.enabled === true, projectId: cleanClarityId(input.projectId) };
+}
+
+/**
+ * Het Clarity-project dat de shop mag gebruiken: alleen als de instelling aan staat én het ID geldig is.
+ * @param {*} setting De opgeslagen instelling `shopClarity`.
+ * @returns {string} Het project-ID, of leeg als Clarity niet mag laden.
+ */
+function activeClarityId(setting) {
+  const clean = sanitizeClarity(setting);
+  return clean.enabled ? clean.projectId : '';
+}
+
+/**
+ * De Content-Security-Policy van de shop, met de adressen van Google Analytics en/of Microsoft Clarity erbij zodra
+ * die actief zijn. Zonder beide blijft de policy exact zoals hij was. Er komen geen inline scripts bij.
  * @param {string} baseCsp De standaardpolicy van de shop.
- * @param {string} measurementId Het actieve meet-ID (leeg = niet meten).
+ * @param {string} measurementId Het actieve GA4-meet-ID (leeg = niet meten).
+ * @param {string} [clarityId] Het actieve Clarity-project-ID (leeg = geen Clarity).
  * @returns {string} De policy voor dit verzoek.
  */
-function cspWith(baseCsp, measurementId) {
-  if (!measurementId) return baseCsp;
-  const additions = {
-    'script-src': ['https://www.googletagmanager.com'],
-    'connect-src': ['https://www.googletagmanager.com', 'https://*.google-analytics.com', 'https://*.analytics.google.com'],
-  };
-  return baseCsp.split('; ').map((directive) => {
+function cspWith(baseCsp, measurementId, clarityId = '') {
+  if (!measurementId && !clarityId) return baseCsp;
+  const additions = { 'script-src': [], 'connect-src': [] };
+  if (measurementId) {
+    additions['script-src'].push('https://www.googletagmanager.com');
+    additions['connect-src'].push('https://www.googletagmanager.com', 'https://*.google-analytics.com', 'https://*.analytics.google.com');
+  }
+  if (clarityId) {
+    additions['script-src'].push('https://www.clarity.ms', 'https://scripts.clarity.ms');
+    additions['connect-src'].push('https://*.clarity.ms', 'https://c.bing.com');
+  }
+  const directives = baseCsp.split('; ').map((directive) => {
     const [name] = directive.split(' ');
-    return additions[name] ? `${directive} ${additions[name].join(' ')}` : directive;
-  }).join('; ');
+    return additions[name] && additions[name].length ? `${directive} ${additions[name].join(' ')}` : directive;
+  });
+  // Clarity maakt voor het opnemen een werker uit een blob; zonder worker-src zou default-src 'none' die blokkeren.
+  if (clarityId) directives.push('worker-src blob:');
+  return directives.join('; ');
 }
 
 /**
@@ -184,4 +226,4 @@ function eventsJson(events) {
   return events && events.length ? JSON.stringify(events) : '';
 }
 
-module.exports = { MEASUREMENT_ID_PATTERN, cleanMeasurementId, sanitizeAnalytics, activeMeasurementId, cspWith, itemOf, itemOfProduct, listEvents, viewItemEvents, cartEvents, checkoutEvents, errorTypeOf, purchaseEvents, eventsJson, money };
+module.exports = { MEASUREMENT_ID_PATTERN, cleanMeasurementId, sanitizeAnalytics, activeMeasurementId, CLARITY_ID_PATTERN, cleanClarityId, sanitizeClarity, activeClarityId, cspWith, itemOf, itemOfProduct, listEvents, viewItemEvents, cartEvents, checkoutEvents, errorTypeOf, purchaseEvents, eventsJson, money };

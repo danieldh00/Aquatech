@@ -57,7 +57,7 @@ async function setup({ mollie = false, addressFetch = createPdokFake().fetchImpl
   const { server, base } = await listen(app);
   servers.push(server);
   const admin = await createLogin(base, { password: PW })('baas');
-  await admin.put('/app/api/admin/settings', { storefront: true, shopOrdering: true, shopShipping: {
+  await admin.put('/app/api/admin/settings', { storefront: true, shopOrdering: true, shopClarity: { enabled: false }, shopShipping: {
     pickup: { enabled: true }, dpd: { enabled: true, defaultWeightGrams: 1000, zones: [{ country: 'NL', tiers: [{ upToGrams: 2000, price: 6.95 }] }] },
   } });
   if (mollie) {

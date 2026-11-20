@@ -513,13 +513,33 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
 .pager a[aria-current] { background: var(--at-shop-navy); border-color: var(--at-shop-navy); color: var(--at-white); }
 @media (max-width: 860px) { .browse { grid-template-columns: minmax(0, 1fr); gap: 16px; } .browse-side { order: 2; } }
 
-/* Toestemmingsbalk voor Google Analytics (storefront-analytics.js): Accepteren en Weigeren zijn even duidelijk. */
-.consent-banner { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding: 16px max(16px, calc((100% - 1168px) / 2)); background: var(--at-white); border-top: 3px solid var(--at-shop-navy); box-shadow: 0 -4px 16px rgba(20, 42, 82, 0.15); }
-.consent-banner p { flex: 1 1 360px; margin: 0; font-size: 0.9rem; }
-.consent-actions { display: flex; gap: 10px; flex: 0 0 auto; }
-.consent-actions .button { min-width: 120px; }
+/* Toestemmingsbalk en instellingenvenster (storefront-analytics.js): Accepteren en Weigeren zijn even groot en even duidelijk. */
+.consent-banner { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 24px; padding: 20px max(16px, calc((100% - 1168px) / 2)); background: var(--at-white); border-top: 4px solid var(--at-shop-teal); box-shadow: 0 -4px 20px rgba(20, 42, 82, 0.18); }
+.consent-text { flex: 1 1 420px; }
+.consent-text h2 { margin: 0 0 4px; font-size: 1.1rem; color: var(--at-shop-navy); }
+.consent-text p { margin: 0; font-size: 0.9rem; }
+.consent-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; flex: 0 0 auto; }
+.consent-actions .button { min-width: 140px; border: 2px solid var(--at-shop-green); text-align: center; }
+.consent-actions .button-secondary { background: var(--at-white); color: var(--at-shop-green); }
+.consent-actions .button-secondary:hover { background: var(--at-white); color: var(--at-shop-green-dark); border-color: var(--at-shop-green-dark); }
+.consent-actions .link-button { color: var(--at-shop-navy); padding: 10px 6px; }
+.consent-overlay { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(20, 42, 82, 0.55); }
+.consent-dialog { width: 100%; max-width: 560px; max-height: 92vh; overflow: auto; padding: 24px; background: var(--at-white); border-radius: 10px; }
+.consent-dialog h2 { margin: 0 0 8px; color: var(--at-shop-navy); }
+.consent-lead, .consent-note { margin: 0; font-size: 0.9rem; }
+.consent-note { margin-top: 12px; color: var(--at-muted); }
+.consent-category { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin: 12px 0; padding: 14px; border: 1px solid #dde4ee; border-radius: 8px; }
+.consent-category-text { display: flex; flex-direction: column; gap: 2px; }
+.consent-category-text span { font-size: 0.85rem; color: var(--at-muted); }
+.consent-always { flex: none; font-size: 0.85rem; font-weight: 700; color: var(--at-shop-green); }
+.consent-toggle { flex: none; width: 48px; height: 28px; margin: 0; appearance: none; border-radius: 14px; background: #b7c1d1; position: relative; cursor: pointer; transition: background 0.15s; }
+.consent-toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--at-white); transition: left 0.15s; }
+.consent-toggle:checked { background: var(--at-shop-green); }
+.consent-toggle:checked::after { left: 23px; }
+.consent-toggle:focus-visible { outline: 3px solid var(--at-shop-teal); outline-offset: 2px; }
+.consent-dialog .consent-actions { margin-top: 16px; }
 .link-button { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-decoration: underline; cursor: pointer; }
-@media (max-width: 600px) { .consent-actions { width: 100%; } .consent-actions .button { flex: 1; } }
+@media (max-width: 600px) { .consent-actions { width: 100%; } .consent-actions .button { flex: 1 1 auto; } .consent-dialog .consent-actions .button { flex: 1 1 100%; } }
 
 /* Onzichtbare captcha (reCAPTCHA): het kenmerk van Google is verborgen, daarom staat de vermelding onder het formulier. */
 .grecaptcha-badge { visibility: hidden; }
