@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.30.6',
+      date: '2026-11-20',
+      title: 'Terugzetten vanaf Google Drive',
+      items: [
+        { text: 'Terugzetten uit een back-up kan nu ook vanaf Google Drive. In Beheer > Systeem > Terugzetten uit back-up staan de back-ups op Drive als aparte groep in de keuzelijst; de app haalt de gekozen back-up eerst op en bewaart hem een kwartier tijdelijk. Verder werkt het hetzelfde: eerst een voorbeeld, wachtwoord ter bevestiging en vooraf een nieuwe back-up.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.30.5',
       date: '2026-11-20',
       title: 'Hersteltest voor de back-up op Google Drive',

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.30.6
+
+- `platform/drive-restore-source.js`: back-up van Drive als bron (`drive:<naam>` in het veld `backup` van de restore-routes), tijdelijke kopie in `.drive-restore-cache-*` (15 minuten, opruimen per minuut en bij de start), `DriveError` als leesbare fout in `backup-restore-routes.js`.
+- Beheer: keuzelijst met groepen *Op de server* en *Op Google Drive*.
+
 ## 1.30.5
 
 - `platform/drive-restore-test.js` (+ routes `/api/admin/restore-test-drive`, instelling `driveRestoreTest`, bewakingscontrole `hersteltest-drive`): Drive-back-up ophalen als stroom (`driveBackup.download`), `openBackup` in een tijdelijk schema, vergelijken met de actieve database, altijd opruimen; planning via de uurlijkse onderhoudsronde.
