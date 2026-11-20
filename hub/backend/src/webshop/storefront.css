@@ -697,9 +697,9 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
 .product-card .stock::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: currentColor; }
 .product-card > :not(.product-image):not(.stock) { margin-left: 16px; margin-right: 16px; }
 .product-card .product-name, .product-card:hover .product-name, .product-card:focus-within .product-name, .product-card:active .product-name { min-height: 2.7em; margin-top: 14px; font-size: 0.95rem; line-height: 1.35; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
-.product-card .variant-pick, .product-card .card-sku { display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; flex-wrap: nowrap; gap: 0; height: 52px; margin-top: 6px; margin-bottom: 0; padding-bottom: 6px; box-sizing: border-box; }
+.product-card .variant-pick, .product-card .card-sku { display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; flex-wrap: nowrap; gap: 0; min-height: 52px; margin-top: 6px; margin-bottom: 0; padding-bottom: 6px; box-sizing: border-box; }
 .product-card .variant-pick label { flex: none; gap: 2px; font-size: 0.72rem; }
-.product-card .variant-pick .variant-go { display: none; }
+.product-card .variant-pick .variant-go { height: 34px; margin-top: 6px; padding: 0 12px; }
 .product-card .variant-pick select { height: 34px; padding: 0 8px; font-size: 0.85rem; border-radius: 8px; }
 .product-card .card-sku { font-size: 0.72rem; color: var(--at-muted); }
 .product-card .variant-count, .product-card .variant-meta { display: none; }
@@ -723,7 +723,7 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
   .product-card > :not(.product-image):not(.stock) { margin-left: 10px; margin-right: 10px; }
   .product-card .stock { top: 6px; left: 6px; font-size: 0.62rem; }
   .product-card .product-name, .product-card:hover .product-name, .product-card:focus-within .product-name, .product-card:active .product-name { font-size: 0.82rem; }
-  .product-card .variant-pick, .product-card .card-sku { height: 48px; }
+  .product-card .variant-pick, .product-card .card-sku { min-height: 48px; }
   .product-card .product-price strong { font-size: 1.15rem; }
   .product-card .card-order input { width: 46px; }
 }
