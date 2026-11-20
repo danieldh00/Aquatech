@@ -10,6 +10,9 @@
 .card .meta { color: var(--muted); font-size: 13px; }
 .card .when { font-weight: 600; }
 .card .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
+/* Een tabelcel met knoppen blijft een cel (anders zakt ze onder de rij door de flex hierboven). */
+td.actions { display: table-cell; margin-top: 0; white-space: nowrap; vertical-align: middle; text-align: right; }
+td.actions .btn + .btn { margin-left: 8px; }
 .card a.btn, .actions a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 
 .bar { height: 8px; background: #eceff1; border-radius: 999px; overflow: hidden; }
@@ -21,8 +24,6 @@
 .pill.gereed, .pill.akkoord { background: #e8f5e9; color: #2e7d32; }
 .pill.geannuleerd, .pill.afgewezen, .pill.ander_moment, .pill.spoed { background: #ffebee; color: #c62828; }
 
-.contact { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 4px; }
-.contact a { color: var(--primary); }
 
 .modal-card.wide { width: min(900px, 100%); }
 .dossier h3 { margin: 18px 0 6px; font-size: 15px; color: var(--primary-dark); }

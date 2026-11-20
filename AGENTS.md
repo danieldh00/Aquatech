@@ -31,6 +31,7 @@ TEST_DATABASE_URL=postgres://… npm test            # node --test tegen Postgre
 npm run codestyle                                  # namen + doc-blokken
 npm run tenant-filter                              # tenant_id-filter in queries
 kill $(lsof -ti tcp:3300)                          # testserver stoppen (nooit pkill -f)
+cd tests/layout && npm ci && node layout-check.js  # uitlijning van alle schermen op 1440 en 375 px (CI: layout.yml; TEST_DATABASE_URL nodig)
 ```
 Docker is niet beschikbaar in de cloud-sandbox. Er is geen aparte linter; `codestyle` en `tenant-filter` zijn onderdeel van `npm test`.
 

@@ -1,0 +1,61 @@
+name: Layoutcheck
+
+# Doorloopt alle app- en shoppagina's per rol op 1440 en 375 px met Playwright en faalt bij nieuwe uitlijnproblemen
+# (horizontale overflow, elementen buiten hun container, overlap, tabelcellen die uit hun rij vallen, afgekapte tekst,
+# kaarten van ongelijke hoogte). Draait alleen als een PR frontend, webshop-CSS of de check zelf raakt (ca. 3 minuten).
+# Geen verplichte controle; nieuwe bevindingen: los ze op of voeg ze met reden toe aan tests/layout/baseline.json
+# (`npm run check -- --update-baseline`).
+on:
+  pull_request:
+    paths:
+      - "hub/frontend/**"
+      - "hub/backend/src/webshop/**"
+      - "tests/layout/**"
+      - ".github/workflows/layout.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: layout-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  layout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Backend installeren
+        working-directory: hub/backend
+        run: npm ci
+      - name: Layoutcheck installeren
+        working-directory: tests/layout
+        run: npm ci
+      - name: Chromium installeren
+        working-directory: tests/layout
+        run: npx playwright install --with-deps chromium
+      - name: Pagina's doorlopen
+        working-directory: tests/layout
+        run: node layout-check.js
+      - name: Rapport bewaren
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: layout-rapport
+          path: tests/layout/layout-rapport.json

@@ -206,7 +206,7 @@ a.shop-action.shop-admin:hover { background: var(--at-shop-navy); }
 .product-image { display: flex; align-items: center; justify-content: center; aspect-ratio: 1; background: var(--at-white); overflow: hidden; }
 .product-image img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .no-image { width: 60%; height: 60%; border-radius: 8px; background: var(--at-shop-green-soft); }
-.product-name { font-weight: 600; color: var(--at-shop-navy); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; min-height: 4.5em; }
+.product-name { font-weight: 600; color: var(--at-shop-navy); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; min-height: 4.5em; }
 .product-card:hover .product-name, .product-card:focus-within .product-name, .product-card:active .product-name, .product-row:hover .product-name, .product-row:focus-within .product-name, .product-row:active .product-name { -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
 .product-price { font-weight: 700; }
 .product-foot { display: flex; flex-direction: column; gap: 6px; margin-top: auto; }

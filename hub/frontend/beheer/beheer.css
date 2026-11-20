@@ -106,8 +106,8 @@ table.grid.matrix td.na { color: var(--line); }
 /* Telefoon: tabbladen in twee rijen in plaats van horizontaal scrollen */
 @media (max-width: 600px) {
   .brand-name { font-size: 15px; }
-  .tabs { display: grid; grid-template-columns: 1fr 1fr; overflow: visible; }
-  .tab { padding: 10px 8px; text-align: center; }
+  .tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }
+  .tab { padding: 10px 8px; text-align: center; overflow-wrap: anywhere; }
   table.grid.matrix td.wrap { min-width: 150px; }
   table.grid.matrix th, table.grid.matrix td { padding: 8px 6px; }
 }
@@ -377,3 +377,4 @@ dl.kv dd { margin: 0; }
 .kpi-setting-text { display: block; font-weight: 400; }
 .kpi-setting-move { display: flex; gap: 4px; flex: 0 0 auto; }
 .kpi-setting .badge { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 999px; background: var(--at-preview-bg); font-size: 11px; font-weight: 600; color: var(--at-muted); }
+#tab-aikosten select, #tab-aikosten input { max-width: 100%; }

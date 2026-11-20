@@ -144,7 +144,6 @@
     renderQuotes(portal);
     renderInvoices(portal);
     renderPlans(portal);
-    renderContact(portal);
     if (window.PortalLocations) window.PortalLocations.render(portal);
     if (!portal.quotes.length && !(portal.invoices || []).length && !portal.workorders.length && !portal.plans.length && !(portal.requests || []).length && !(portal.reminders || []).length) {
       message('Er staat nog niets voor u klaar. Zodra wij een offerte voor u hebben opgesteld of werkzaamheden hebben ingepland, ziet u die hier.');
@@ -582,24 +581,6 @@
         </span>
       </a>`).join('');
     $('#s-plans').hidden = !portal.plans.length;
-  }
-
-  /**
-   * Tekent de contactgegevens van het bedrijf.
-   * @param {object} portal gegevens uit api/portal
-   */
-  function renderContact(portal) {
-    const contact = portal.contact || {};
-    const site = contact.website ? (/^https?:\/\//i.test(contact.website) ? contact.website : `https://${contact.website}`) : '';
-    const rows = [
-      contact.companyName ? `<b>${esc(contact.companyName)}</b>` : '',
-      contact.address ? `<span>${esc(contact.address).replace(/\n/g, '<br>')}</span>` : '',
-      contact.phone ? `<span>Telefoon: <a href="tel:${esc(contact.phone.replace(/[^\d+]/g, ''))}">${esc(contact.phone)}</a></span>` : '',
-      contact.email ? `<span>E-mail: <a href="mailto:${esc(contact.email)}">${esc(contact.email)}</a></span>` : '',
-      site ? `<span>Website: <a href="${esc(site)}" target="_blank" rel="noopener">${esc(contact.website)}</a></span>` : '',
-    ].filter(Boolean);
-    $('#contact').innerHTML = rows.join('');
-    $('#s-contact').hidden = rows.length < 2;
   }
 
   // ---------- Opleverdossier ----------

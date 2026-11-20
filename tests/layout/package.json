@@ -1,0 +1,8 @@
+{
+  "name": "aquatech-layout-check",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Playwright-layoutcheck voor alle app- en shoppagina's",
+  "scripts": { "check": "node layout-check.js" },
+  "dependencies": { "playwright": "1.49.1" }
+}
