@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.27.8
+
+stock.js is opgesplitst in stock-helpers.js (saneren en hulpfuncties) en stock-routes.js (API-routes), zonder gedragswijziging.
+
 ## 1.27.7
 
 - Intern: profiel, wachtwoord, instellingen, AI-kosten en kleurthema-routes uit server.js naar eigen bestanden (geen gedragswijziging).

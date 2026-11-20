@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.27.8',
+      date: '2026-11-20',
+      title: 'Voorraadcode opgesplitst',
+      items: [],
+    },
+    {
       version: '1.27.7',
       date: '2026-11-20',
       title: 'Serverroutes verdeeld over bestanden',
