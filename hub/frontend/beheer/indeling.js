@@ -24,7 +24,7 @@
       { id: 'shopinhoud', label: 'Webshop-inhoud', pane: 'shopinhoud', words: 'winkel teksten pagina hero mededeling banner afbeeldingen merken contact over ons klantenservice bewerken publiceren concept menu' },
       { id: 'shopleveren', label: 'Levermethodes', pane: 'shopleveren', words: 'levermethode bezorgen pallet dpd levertijd aantal categorie regels' },
       { id: 'shopkortingen', label: 'Zakelijke kortingen', pane: 'shopkortingen', words: 'korting categorie zakelijk groothandel prijs percentage productcategorie' },
-      { id: 'webshop', label: 'Webshop en WooCommerce', pane: 'webshop', words: 'woocommerce winkel sku prijzen voorraad synchroniseren koppeling kopje planner betalen mollie google analytics meten statistieken cookies toestemming ga4 meet-id zoekmachines seo indexeren noindex robots sitemap vrijgeven live' },
+      { id: 'webshop', label: 'Webshop en WooCommerce', pane: 'webshop', words: 'woocommerce winkel sku prijzen voorraad synchroniseren koppeling kopje planner betalen mollie google analytics meten statistieken cookies cookiebanner toestemming ga4 meet-id microsoft clarity heatmap schermopnames project-id zoekmachines seo indexeren noindex robots sitemap vrijgeven live' },
     ] },
     { title: 'Modules', sections: [
       { id: 'modules', label: 'Modules aan/uit', pane: 'settings', form: 's-modules', words: 'zijbalk dashboard uitzetten' },
