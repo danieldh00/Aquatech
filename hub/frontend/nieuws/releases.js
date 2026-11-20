@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.28.1',
+      date: '2026-11-20',
+      title: 'Geen onterechte webshopsync-waarschuwing meer',
+      items: [
+        { text: 'Bewaking waarschuwt niet meer dat de webshop "al uren niet gesynchroniseerd" is als de koppeling bewust maar één keer per nacht synchroniseert.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.28.0',
       date: '2026-11-20',
       title: 'Gegevenslaag opgesplitst',
