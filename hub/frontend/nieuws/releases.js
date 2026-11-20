@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.29.3',
+      date: '2026-11-20',
+      title: 'Nieuwspunt over Uitbesteden alleen voor beheerders',
+      items: [],
+    },
+    {
       version: '1.29.2',
       date: '2026-11-20',
       title: 'Ontvangst in de zijbalk opent direct Ontvangen',
