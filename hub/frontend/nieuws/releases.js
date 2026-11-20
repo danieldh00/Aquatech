@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.31.2',
+      date: '2026-11-20',
+      title: 'Database: foreign keys op de belangrijkste verwijzingen',
+      items: [],
+    },
+    {
       version: '1.31.1',
       date: '2026-11-20',
       title: 'Database: geldbedragen en hoeveelheden exact opgeslagen',
