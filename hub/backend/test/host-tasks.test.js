@@ -49,6 +49,13 @@ function install(setupBody) {
   fs.mkdirSync(bin);
   fs.mkdirSync(repo, { recursive: true });
   fs.writeFileSync(path.join(bin, 'docker'), '#!/usr/bin/env bash\nexit 0\n', { mode: 0o755 });
+  fs.writeFileSync(path.join(bin, 'systemctl'), '#!/usr/bin/env bash\necho "$*" >> "$FAKE_SYSTEMCTL_LOG"\n[[ "$1" == "is-active" ]] && echo active\nexit 0\n', { mode: 0o755 });
+  const systemdDir = path.join(root, 'systemd');
+  fs.mkdirSync(systemdDir);
+  fs.mkdirSync(path.join(repo, 'systemd'), { recursive: true });
+  fs.writeFileSync(path.join(repo, 'restore-test.sh'), '#!/usr/bin/env bash\necho hersteltest\n', { mode: 0o755 });
+  for (const unit of ['aquatech-restore-test.service', 'aquatech-restore-test.timer', 'aquatech-restore-test.path']) fs.writeFileSync(path.join(repo, 'systemd', unit), `[Unit]\nDescription=${unit}\n`);
+  fs.mkdirSync(path.join(appDir, 'update', 'request'), { recursive: true });
   fs.writeFileSync(path.join(repo, 'setup-app-update.sh'), `#!/usr/bin/env bash\necho "setup met \$SETUP_REF"\n${setupBody}\n`, { mode: 0o755 });
   /**
    * Draait een opdracht van het script op de "server".
@@ -59,11 +66,11 @@ function install(setupBody) {
   const run = (command, extraEnv = {}) => {
     const out = spawnSync('bash', [SCRIPT, command], {
       encoding: 'utf8',
-      env: { PATH: `${bin}:${process.env.PATH}`, SERVERTAKEN_REMOTE: '1', APP_DIR: appDir, TASKS_BASE: `file://${path.join(root, 'repo')}`, ...extraEnv },
+      env: { PATH: `${bin}:${process.env.PATH}`, SERVERTAKEN_REMOTE: '1', APP_DIR: appDir, TASKS_BASE: `file://${path.join(root, 'repo')}`, SYSTEMD_DIR: systemdDir, FAKE_SYSTEMCTL_LOG: path.join(root, 'systemctl.log'), ...extraEnv },
     });
     return { status: out.status, stdout: out.stdout, stderr: out.stderr };
   };
-  return { appDir, run };
+  return { appDir, systemdDir, root, run };
 }
 
 test('de lijst in de app en in het hostscript zijn gelijk, met unieke id\'s in het vaste formaat', () => {
@@ -87,7 +94,7 @@ test('de lijst in de app en in het hostscript zijn gelijk, met unieke id\'s in h
 });
 
 test('hostscript: openstaand voert de taak uit, legt hem vast en doet daarna niets meer', () => {
-  const { appDir, run } = install('exit 0');
+  const { appDir, systemdDir, root, run } = install('exit 0');
   assert.strictEqual(run('openstaand-check').status, 2, 'zonder TASKS_REF weigert het script');
   const check = run('openstaand-check', { TASKS_REF: REF });
   assert.strictEqual(check.status, 10, check.stderr);
@@ -96,7 +103,10 @@ test('hostscript: openstaand voert de taak uit, legt hem vast en doet daarna nie
   assert.strictEqual(done.status, 0, done.stderr + done.stdout);
   assert.ok(done.stdout.includes(`setup met ${REF}`), 'het script draait op de vaste commit');
   const ledger = JSON.parse(fs.readFileSync(path.join(appDir, 'update', 'status', 'host-tasks.json'), 'utf8'));
-  assert.ok(Date.parse(ledger.done[FIRST]) > 0);
+  for (const task of HOST_TASKS) assert.ok(Date.parse(ledger.done[task.id]) > 0, `${task.id} is vastgelegd`);
+  assert.ok(fs.existsSync(path.join(appDir, 'restore-test.sh')), 'taak 002 installeert restore-test.sh');
+  assert.deepStrictEqual(fs.readdirSync(systemdDir).sort(), ['aquatech-restore-test.path', 'aquatech-restore-test.service', 'aquatech-restore-test.timer']);
+  assert.match(fs.readFileSync(path.join(root, 'systemctl.log'), 'utf8'), /enable --now aquatech-restore-test\.timer aquatech-restore-test\.path/);
   assert.ok(Date.parse(ledger.checkedAt) > 0);
   const again = run('openstaand-check', { TASKS_REF: REF });
   assert.strictEqual(again.status, 0);
@@ -125,7 +135,7 @@ test('opslag: de host meldt gedaan, met de hand afvinken en weer openzetten, onz
   fs.writeFileSync(path.join(statusDir, 'host-tasks.json'), JSON.stringify({ done: { [FIRST]: '2026-11-19T10:00:00Z', '777-onbekend': '2026-11-19T10:00:00Z' }, checkedAt: '2026-11-19T10:05:00Z' }));
   entry = tasks.view().tasks[0];
   assert.deepStrictEqual([entry.done, entry.doneBy], [true, 'server']);
-  assert.strictEqual(tasks.view().pending, 0);
+  assert.strictEqual(tasks.view().pending, HOST_TASKS.length - 1);
   fs.writeFileSync(path.join(statusDir, 'host-tasks.json'), '{kapot');
   assert.strictEqual(tasks.view().pending, HOST_TASKS.length, 'een kapot bestand telt als niets gedaan');
   assert.deepStrictEqual(sanitizeHostTasks({ checked: { 'x': { at: 'nu' }, [FIRST]: { at: '2026-11-19T10:00:00Z', byName: 'Bert' } } }), { checked: { [FIRST]: { at: '2026-11-19T10:00:00.000Z', byName: 'Bert' } } });
@@ -175,10 +185,12 @@ test('API en dashboard: alleen de beheerder van de hoofdtenant, afvinken met aud
     assert.strictEqual((await bert.put('/app/api/admin/host-tasks/999-niet', { done: true })).status, 404);
     const ticked = await bert.put(`/app/api/admin/host-tasks/${FIRST}`, { done: true });
     assert.strictEqual(ticked.status, 200);
-    assert.strictEqual(ticked.body.pending, 0);
+    assert.strictEqual(ticked.body.pending, HOST_TASKS.length - 1);
+    for (const task of HOST_TASKS.slice(1)) await bert.put(`/app/api/admin/host-tasks/${task.id}`, { done: true });
+    assert.strictEqual((await bert.get('/app/api/admin/host-tasks')).body.pending, 0);
     assert.ok(!(await bert.get('/app/api/tasks')).body.tasks.some((task) => task.key === 'servertaken'), 'afgevinkt = blok weg');
     await bert.put(`/app/api/admin/host-tasks/${FIRST}`, { done: false });
-    assert.strictEqual((await bert.get('/app/api/admin/host-tasks')).body.pending, HOST_TASKS.length);
+    assert.strictEqual((await bert.get('/app/api/admin/host-tasks')).body.pending, 1);
 
     fs.writeFileSync(path.join(statusDir, 'host-tasks.json'), JSON.stringify({ done: { [FIRST]: new Date().toISOString() } }));
     assert.strictEqual((await bert.get('/app/api/admin/host-tasks')).body.tasks[0].doneBy, 'server');

@@ -380,6 +380,7 @@ remote_disk_run() {
 # Alle taken, oudste eerst. Zelfde id's als HOST_TASKS in hub/backend/src/platform/host-tasks.js (een test bewaakt dat).
 HOST_TASK_IDS=(
   001-app-update-opnieuw-inrichten
+  002-hersteltest-back-up-inrichten
 )
 HOST_TASKS_LEDGER="host-tasks.json"
 # Functienaam van een taak (streepjes worden underscores).
@@ -435,6 +436,26 @@ hosttask_001_app_update_opnieuw_inrichten() {
   SETUP_REF="$TASKS_REF" APP_DIR="$APP_DIR" bash "$dir/setup-app-update.sh" || rc=$?
   rm -rf "$dir"
   return "$rc"
+}
+
+# Taak 002: de wekelijkse hersteltest van de back-up inrichten (restore-test.sh + timer + path-unit). Veilig herhaalbaar.
+hosttask_002_hersteltest_back_up_inrichten() {
+  local dir file
+  dir="$(mktemp -d)"
+  fetch_task_file "$dir/restore-test.sh" deploy/apps01/restore-test.sh || { rm -rf "$dir"; return 1; }
+  for file in aquatech-restore-test.service aquatech-restore-test.timer aquatech-restore-test.path; do
+    curl -fsSL -m 60 "${TASKS_BASE:-https://raw.githubusercontent.com/danieldh00/Aquatech}/$TASKS_REF/deploy/apps01/systemd/$file" -o "$dir/$file" \
+      || { echo "FOUT: ophalen van $file mislukt." >&2; rm -rf "$dir"; return 1; }
+  done
+  [[ -d "$APP_DIR/update/request" ]] || { echo "FOUT: update/request ontbreekt; draai eerst taak 001." >&2; rm -rf "$dir"; return 1; }
+  install -m 755 "$dir/restore-test.sh" "$APP_DIR/restore-test.sh"
+  for file in aquatech-restore-test.service aquatech-restore-test.timer aquatech-restore-test.path; do
+    install -m 644 "$dir/$file" "${SYSTEMD_DIR:-/etc/systemd/system}/$file"
+  done
+  rm -rf "$dir"
+  systemctl daemon-reload
+  systemctl enable --now aquatech-restore-test.timer aquatech-restore-test.path >/dev/null
+  echo "Hersteltest ingericht: timer $(systemctl is-active aquatech-restore-test.timer), path $(systemctl is-active aquatech-restore-test.path)."
 }
 
 # Toont wat er openstaat. Uitgangscode 10 = er is iets te doen (two_step vraagt dan om bevestiging).

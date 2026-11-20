@@ -17,6 +17,7 @@
 //                               → check schijf (minstens één van beide), check back-up (backupDir)
 //   listBackups(dir)            backup.js listBackups: [{ name, size, createdAt }] nieuwste eerst → check back-up
 //   systemUpdate                platform/system-update.js: { configured, view() } → check update
+//   restoreTest                 platform/restore-test.js: { view() } → check hersteltest
 //   driveBackup                 platform/drive-backup.js: { status() } → check drive (platform: één koppeling per
 //                               installatie, met de instellingen van de hoofdtenant)
 //   errorCounter                platform/error-report.js errorCounter: { count(sinceMs) } → check serverfouten
@@ -59,6 +60,7 @@ const AI_RECENT = 3;
 // Statussen in ai_usage die op een probleem met de sleutel, het tegoed of de dienst wijzen (niet op de tekening zelf).
 const AI_KEY_PROBLEMS = ['auth', 'permission', 'no_credit', 'not_found'];
 const AI_SERVICE_PROBLEMS = [...AI_KEY_PROBLEMS, 'rate_limited', 'api_error', 'error'];
+const RESTORE_TEST_MAX_HOURS = 9 * 24;
 const DEFAULT_THRESHOLDS = { backupMaxHours: 36, diskMinFreePct: 10, diskMinFreeMb: 1024, errorsPerHour: 20, dbSlowMs: 2000 };
 
 /**
@@ -173,7 +175,7 @@ function createRuntimeStats() {
  */
 function createMonitoringChecks(deps = {}) {
   const {
-    db, settingsFor, dataDir, backupDir, listBackups, systemUpdate, driveBackup, errorCounter,
+    db, settingsFor, dataDir, backupDir, listBackups, systemUpdate, driveBackup, restoreTest, errorCounter,
     mailerFor, mollie, visma, shop, statfs = fs.statfsSync,
   } = deps;
   const runtimeStats = deps.runtimeStats === false ? null : (deps.runtimeStats || createRuntimeStats());
@@ -353,6 +355,29 @@ function createMonitoringChecks(deps = {}) {
         if (failedLast && status.stale) return problem('fout', 'De back-ups gaan al meer dan 36 uur niet naar Google Drive en de laatste poging mislukte. Zie het logboek in Beheer > Systeem > Back-ups naar Google Drive.');
         if (failedLast) return problem('waarschuwing', 'De laatste upload naar Google Drive is mislukt; hij wordt automatisch opnieuw geprobeerd.');
         if (status.stale) return problem('waarschuwing', 'Er is al meer dan 36 uur geen back-up naar Google Drive gegaan.');
+        return OK;
+      },
+    });
+  }
+
+  if (restoreTest && typeof restoreTest.view === 'function') {
+    checks.push({
+      key: 'hersteltest', scope: 'platform', title: 'Hersteltest van de back-up', intervalMinutes: 60,
+      /**
+       * Leest de uitslag van de wekelijkse hersteltest: mislukt = fout, teruggezet met afwijkingen = waarschuwing, en
+       * een test die al meer dan 9 dagen niet gedraaid heeft terwijl hij aan staat = waarschuwing.
+       * @param {object} ctx De context van de monitor.
+       * @returns {Promise<object>} Het resultaat.
+       */
+      async run(ctx) {
+        const view = restoreTest.view();
+        if (!view || !view.configured || !view.policy || !view.policy.enabled) return SKIP;
+        const latest = view.latest;
+        if (!latest) return SKIP;
+        if (latest.state === 'mislukt') return problem('fout', `De hersteltest van de back-up is mislukt: ${latest.message || 'zie Beheer > Systeem > Hersteltest.'}`);
+        if (latest.state === 'waarschuwing') return problem('waarschuwing', `De hersteltest slaagde met opmerkingen: ${latest.message || 'zie Beheer > Systeem > Hersteltest.'}`);
+        const age = hoursSince(ctx.now(), latest.finishedAt || latest.startedAt);
+        if (age > RESTORE_TEST_MAX_HOURS) return problem('waarschuwing', `De laatste hersteltest is ${formatHours(age)} geleden (verwacht: wekelijks). Controleer de timer op de server.`);
         return OK;
       },
     });

@@ -30,6 +30,12 @@ const HOST_TASKS = [
     description: 'Haalt update.sh, compose.yml en de systemd-units opnieuw op en maakt de container opnieuw (ca. 1 minuut niet beschikbaar). Nodig na de wijziging in PR #300.',
     addedAt: '2026-11-19',
   },
+  {
+    id: '002-hersteltest-back-up-inrichten',
+    title: 'Wekelijkse hersteltest van de back-up inrichten',
+    description: 'Installeert restore-test.sh met een timer en een path-unit op apps01. Daarna zet de server elke week de nieuwste back-up terug in een wegwerpcontainer (768 MB, zonder netwerk) en toont Beheer > Systeem > Hersteltest de uitslag.',
+    addedAt: '2026-11-20',
+  },
 ];
 
 const MAX_FILE_BYTES = 64 * 1024;

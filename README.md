@@ -57,7 +57,7 @@ webserver in Docker (poort 3300) met PostgreSQL als enige database (een eigen co
   bron, periode en tekst, Excel-export). Gebufferd en begrensd opgeslagen in de database (`app_logs`), bewaartermijn instelbaar
   bij Sessies en bewaartermijnen (standaard 14 dagen, fouten 30). Wachtwoorden, sleutels, e-mailadressen en IBAN's komen er nooit in.
 - **Bewaking en meldingen** (Beheer > Systeem > Bewaking): de app controleert zelf elke 5 minuten of de database, de schijf, de
-  lokale back-up, de update, de serverfouten, Google Drive, de mailserver, Mollie, Visma, de webshopsynchronisatie en de
+  lokale back-up, de hersteltest, de update, de serverfouten, Google Drive, de mailserver, Mollie, Visma, de webshopsynchronisatie en de
   AI-dienst werken. Bij een storing komt er een incident in Beheer en een melding per e-mail en/of webhook; bij herstel volgt
   een herstelmelding en een herinnering zolang het open blijft. Een extern *heartbeat*-adres (bijvoorbeeld healthchecks.io)
   vangt het geval dat de app of de server zelf uitvalt. Alles is instelbaar in de app (ontvangers, drempels, dempen per controle).
@@ -67,7 +67,7 @@ webserver in Docker (poort 3300) met PostgreSQL als enige database (een eigen co
   `[stilstand]` met wat er toen liep. Zoek ze met `docker logs <container> | grep -E '\[(traag|stilstand)\]'`. De dagelijkse
   versleutelde back-up draait in een eigen proces met lagere prioriteit, zodat het kopiëren van de database de pagina's niet stilzet.
 - **Beveiliging**: sessies alleen als hash, wachtwoorden met scrypt, tweestapsverificatie (TOTP), versleutelde
-  back-ups (dagelijks, ook vóór elke update, optioneel automatisch naar Google Drive vanuit Beheer; losse records, velden of orderregels terugzetten uit een back-up in Beheer), auditlog. Zie *Beveiliging en privacy* in `hub/DOCS.md`.
+  back-ups (dagelijks, ook vóór elke update, optioneel automatisch naar Google Drive vanuit Beheer; losse records, velden of orderregels terugzetten uit een back-up in Beheer; elke week een automatische hersteltest van de nieuwste back-up in een wegwerp-Docker-container, met uitslag in Beheer > Systeem > Hersteltest en een melding van de bewaking bij falen), auditlog. Zie *Beveiliging en privacy* in `hub/DOCS.md`.
 
 ## Beregeningsplanner
 

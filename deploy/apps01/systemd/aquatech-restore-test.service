@@ -1,0 +1,13 @@
+# Hersteltest van de back-up (restore-test.sh). Gestart door aquatech-restore-test.timer en
+# aquatech-restore-test.path (knop "Nu testen" in Beheer > Systeem > Back-ups).
+[Unit]
+Description=Aquatech: hersteltest van de PostgreSQL-back-up in een wegwerpcontainer
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/apps/aquatech/restore-test.sh
+TimeoutStartSec=45min
+Nice=10
+IOSchedulingClass=idle
