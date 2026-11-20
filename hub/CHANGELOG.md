@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.29.3
+
+Het nieuwspunt over de tabbladbalk van Uitbesteden (1.28.9) kreeg een doelgroep (`beheer`, `uitbesteden`), waardoor een klant het niet meer ziet en `test/news.test.js` weer slaagt. `checkFragments` in `tools/release-notes.js` weigert voortaan een nieuwspunt zonder doelgroep dat over Beheer → …, of Uitbesteden gaat (de planner niet: die is ook voor klanten), zodat dit bij de PR zelf opvalt.
+
+De PR-bewaker (`tools/release-notes.js`, `audienceOnlyChange`) staat nu een wijziging van `frontend/nieuws/releases.js` toe als alleen een doelgroep (`for: [...]`) is toegevoegd aan een bestaand punt zonder doelgroep; bestaande doelgroepen wijzigen of weghalen (dat maakt een punt zichtbaar voor meer mensen), tekst, versies, datums en nieuwe of verwijderde punten blijven geweigerd. Zo kan een vergeten doelgroep via een gewone PR worden hersteld, zonder label.
+
 ## 1.29.2
 
 `orderpick/receiving.js` en `counting.js` luisteren naar `hashchange`: een klik op de zijbalklink `orderpick/#ontvangst` (of `#tellen`) op dezelfde pagina laadt niet opnieuw en toonde daardoor Picken. Het scherm volgt nu de hash.

@@ -167,6 +167,9 @@ function applyFragments(options = {}) {
   return versions;
 }
 
+/** Termen die zeker alleen medewerkers aangaan (Beheer → …, Uitbesteden); een nieuwspunt erover zonder rechten ziet ook een klant. De planner staat er bewust niet in: de openbare tekenplanner is ook voor klanten. */
+const STAFF_TERMS = /Beheer\s*(?:→|>)\s*\w+|Uitbesteden/i;
+
 /**
  * Controleert alle bestanden in `changes/` zonder iets te wijzigen.
  * @param {string} [directory] Map met de bestanden.
@@ -176,7 +179,10 @@ function checkFragments(directory = CHANGES_DIR) {
   const problems = [];
   for (const name of listFragments(directory)) {
     try {
-      parseFragment(fs.readFileSync(path.join(directory, name), 'utf8'));
+      const fragment = parseFragment(fs.readFileSync(path.join(directory, name), 'utf8'));
+      for (const item of fragment.items) {
+        if (!item.rights.length && STAFF_TERMS.test(item.text)) problems.push(`changes/${name}: een punt over beheer, planning of uitbesteden hoort een doelgroep te hebben, zoals [beheer]: ${item.text.slice(0, 60)}`);
+      }
     } catch (error) {
       problems.push(`changes/${name}: ${error.message}`);
     }
@@ -185,8 +191,29 @@ function checkFragments(directory = CHANGES_DIR) {
 }
 
 /**
+ * Controleert of twee versies van releases.js alleen in de doelgroepen (`for: [...]`) verschillen.
+ * Een bestaande doelgroep wijzigen of weghalen, tekst, versies, datums en punten toevoegen of verwijderen geven false.
+ * @param {string} before Inhoud op de basisbranch.
+ * @param {string} after Inhoud in de PR.
+ * @returns {boolean} True als alleen een `for:`-doelgroep is toegevoegd aan een punt dat er nog geen had.
+ */
+function audienceOnlyChange(before, after) {
+  const audience = /,\s*for:\s*\[[^\]]*\]/;
+  const beforeLines = String(before).split('\n');
+  const afterLines = String(after).split('\n');
+  if (beforeLines.length !== afterLines.length) return false;
+  return beforeLines.every((line, index) => {
+    const next = afterLines[index];
+    const oldAudience = audience.exec(line);
+    // Een bestaande doelgroep blijft ongewijzigd: verbreden of weghalen maakt een punt zichtbaar voor meer mensen.
+    if (oldAudience) return line === next;
+    return line === next || line === next.replace(audience, '');
+  });
+}
+
+/**
  * Beoordeelt de wijzigingen van een pull request (zie .github/workflows/version.yml).
- * @param {{files: {status: string, name: string, similarity?: number}[], versionLineChanged: boolean, labels: string[]}} change Wat de PR wijzigt.
+ * @param {{files: {status: string, name: string, similarity?: number, audienceOnly?: boolean}[], versionLineChanged: boolean, labels: string[]}} change Wat de PR wijzigt.
  * @returns {string[]} Foutmeldingen (leeg als de PR in orde is).
  */
 function evaluatePullRequest(change) {
@@ -194,6 +221,7 @@ function evaluatePullRequest(change) {
   const forbidden = ['hub/CHANGELOG.md', 'hub/frontend/nieuws/releases.js'];
   for (const file of change.files) {
     if (file.status === 'R' && file.similarity === 100) continue; // alleen verplaatst, inhoud ongewijzigd
+    if (file.audienceOnly && file.name === 'hub/frontend/nieuws/releases.js') continue; // alleen de doelgroep (for:) van bestaande punten wijzigt
     if (forbidden.includes(file.name)) problems.push(`${file.name} wordt na het mergen automatisch bijgewerkt; haal deze wijziging uit de PR en zet de notes in changes/<naam>.md.`);
   }
   if (change.versionLineChanged) problems.push('Het versienummer in hub/backend/package.json wordt na het mergen automatisch verhoogd; haal die wijziging uit de PR.');
@@ -231,6 +259,11 @@ function checkPullRequest(baseRef) {
    */
   const versionOf = (ref, filePath) => { try { return JSON.parse(git('show', `${ref}:${filePath}`)).version; } catch (error) { return null; } };
   const versionLineChanged = Boolean(packageEntry) && versionOf(baseRef, packageEntry.oldName) !== versionOf('HEAD', packageEntry.name);
+  const releasesEntry = files.find((file) => file.name === 'hub/frontend/nieuws/releases.js' && file.status === 'M');
+  if (releasesEntry) {
+    const baseText = git('show', `${baseRef}:${releasesEntry.oldName}`);
+    releasesEntry.audienceOnly = audienceOnlyChange(baseText, git('show', `HEAD:${releasesEntry.name}`));
+  }
   const labels = JSON.parse(process.env.PR_LABELS || '[]');
   return [...evaluatePullRequest({ files, versionLineChanged, labels }), ...checkFragments()];
 }
@@ -256,4 +289,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { parseFragment, nextVersion, renderRelease, listFragments, applyFragments, checkFragments, evaluatePullRequest };
+module.exports = { parseFragment, nextVersion, renderRelease, listFragments, applyFragments, checkFragments, evaluatePullRequest, audienceOnlyChange };
