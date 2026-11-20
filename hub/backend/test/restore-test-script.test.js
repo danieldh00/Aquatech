@@ -184,11 +184,32 @@ test('planning: uit, nog niet aan de beurt en handmatig starten', () => {
   assert.strictEqual(readStatus(env.statusDir).runs[0].trigger, 'handmatig');
 });
 
-test('zonder back-up of met een symlink als aanvraag: veilig falen', () => {
+/** Een ontbrekende dump die pg-backup.sh wél maakt: de hersteltest gaat door naar het terugzetten. */
+test('zonder dump maakt pg-backup.sh er een en gaat de test door', () => {
+  const env = install({ policy: dueNow() });
+  const backupDir = path.join(env.appDir, 'backups', 'postgres');
+  const dump = path.join(backupDir, 'aquatech-20261120-023000.dump.enc');
+  const kept = path.join(env.appDir, 'bewaard.enc');
+  fs.renameSync(dump, kept);
+  fs.writeFileSync(path.join(env.appDir, 'pg-backup.sh'), `cp "${kept}" "${dump}"\n`);
+  assert.strictEqual(env.run().status, 0);
+  assert.strictEqual(readStatus(env.statusDir).runs[0].state, 'geslaagd');
+});
+
+/** Een ontbrekende dump: pg-backup.sh wordt aangeroepen en de melding noemt de oorzaak als dat niets oplevert. */
+test('zonder dump probeert het script er een te laten maken', () => {
+  const env = install({ policy: dueNow() });
+  fs.rmSync(path.join(env.appDir, 'backups', 'postgres', 'aquatech-20261120-023000.dump.enc'));
+  fs.writeFileSync(path.join(env.appDir, 'pg-backup.sh'), 'echo "FOUT: container draait niet" >&2\nexit 1\n');
+  assert.strictEqual(env.run().status, 1);
+  assert.match(readStatus(env.statusDir).runs[0].message, /pg-backup\.sh kon er geen maken.*container draait niet/);
+});
+
+test('zonder back-up: veilig falen en later opnieuw proberen', () => {
   const env = install({ policy: dueNow() });
   fs.rmSync(path.join(env.appDir, 'backups', 'postgres', 'aquatech-20261120-023000.dump.enc'));
   assert.strictEqual(env.run().status, 1);
-  assert.match(readStatus(env.statusDir).runs[0].message, /geen back-up/);
+  assert.match(readStatus(env.statusDir).runs[0].message, /geen aquatech-\*\.dump\.enc/);
   assert.ok(fs.existsSync(path.join(env.statusDir, '.restore-test-retry')), 'mislukte voorbereiding: later opnieuw');
   assert.ok(!fs.existsSync(path.join(env.statusDir, '.restore-test-last')), 'telt niet als gedaan');
   env.run();
