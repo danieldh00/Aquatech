@@ -192,14 +192,23 @@ function checkFragments(directory = CHANGES_DIR) {
 
 /**
  * Controleert of twee versies van releases.js alleen in de doelgroepen (`for: [...]`) verschillen.
- * Tekst, versies, datums en het toevoegen of verwijderen van punten verschillen dan wel en geven false.
+ * Een bestaande doelgroep wijzigen of weghalen, tekst, versies, datums en punten toevoegen of verwijderen geven false.
  * @param {string} before Inhoud op de basisbranch.
  * @param {string} after Inhoud in de PR.
- * @returns {boolean} True als alleen `for:`-doelgroepen zijn toegevoegd, gewijzigd of weggehaald.
+ * @returns {boolean} True als alleen een `for:`-doelgroep is toegevoegd aan een punt dat er nog geen had.
  */
 function audienceOnlyChange(before, after) {
-  const audience = /,\s*for:\s*\[[^\]]*\]/g;
-  return String(before).replace(audience, '') === String(after).replace(audience, '');
+  const audience = /,\s*for:\s*\[[^\]]*\]/;
+  const beforeLines = String(before).split('\n');
+  const afterLines = String(after).split('\n');
+  if (beforeLines.length !== afterLines.length) return false;
+  return beforeLines.every((line, index) => {
+    const next = afterLines[index];
+    const oldAudience = audience.exec(line);
+    // Een bestaande doelgroep blijft ongewijzigd: verbreden of weghalen maakt een punt zichtbaar voor meer mensen.
+    if (oldAudience) return line === next;
+    return line === next || line === next.replace(audience, '');
+  });
 }
 
 /**
