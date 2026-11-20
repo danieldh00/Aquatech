@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.30.3
+
+`restore-test.sh`: ontbreekt `backups/postgres/aquatech-*.dump.enc`, dan draait `pg-backup.sh` eerst (dezelfde dagelijkse back-up) en wordt opnieuw gezocht. Lukt dat niet, dan noemt de melding de oorzaak (map ontbreekt, geen `pg-backup.sh`, of de laatste regels van de mislukte back-up). Test uitgebreid.
+
 ## 1.30.2
 
 - Migratie 89: tabel `price_proposal_rejections` (ongebruikt sinds prijzen automatisch de factor volgen) verwijderd en index `web_returns_user` op `(tenant_id, user_id)` toegevoegd voor het opzoeken en anonimiseren van retouren per klant.

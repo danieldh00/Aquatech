@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.30.3',
+      date: '2026-11-20',
+      title: 'Hersteltest maakt zelf een back-up als er geen is',
+      items: [
+        { text: 'De hersteltest van de back-up meldt nu duidelijk wat er mis is als er geen back-up op de server staat, en laat er eerst zelf één maken.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.30.2',
       date: '2026-11-20',
       title: 'Opruimen van een ongebruikte tabel en een extra index',
