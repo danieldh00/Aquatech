@@ -452,3 +452,13 @@ test('varianten en WooCommerce: mislukt een latere batch, dan blijven de eerder 
   assert.strictEqual(results.filter((result) => result.ok).length, 100);
   assert.strictEqual(results[100].ok, false);
 });
+
+test('varianten: een hoofdartikel zonder mutaties wordt met zijn varianten echt verwijderd (FK stock_items.parent_id)', () => {
+  const db = openDb();
+  const tenantId = createStore(db).ensureTenant().id;
+  const stock = createStockStore(db);
+  const parent = stock.create(tenantId, USER, { code: 'LOSBUIS', name: 'Losse buis', unit: 'm' }).item;
+  stock.setVariants(tenantId, parent.id, [{ name: 'Maat', values: ['16 mm', '20 mm'] }]);
+  assert.deepStrictEqual(stock.remove(tenantId, parent.id), { deleted: true, code: 'LOSBUIS' });
+  assert.strictEqual(db.prepare("SELECT COUNT(*) AS n FROM stock_items WHERE tenant_id = ? AND code LIKE 'LOSBUIS%'").get(tenantId).n, 0);
+});

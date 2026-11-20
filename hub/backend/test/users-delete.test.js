@@ -105,3 +105,22 @@ test('niet jezelf, niet de laatste beheerder en een hoofdbeheerder alleen door e
     server.close();
   }
 });
+
+test('een gebruiker met AI-koppeling, factuur en nieuwsbericht is te verwijderen (foreign keys)', async () => {
+  const { server, as, db, tid, ids } = await setup();
+  try {
+    const baas = await as('baas');
+    const now = new Date().toISOString();
+    db.prepare('INSERT INTO oauth_grants (id, tenant_id, user_id, client_id_hash, redirect_uri, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run('grant-1', tid, ids.klaas, 'hash', 'https://example.org/cb', now, now);
+    db.prepare('INSERT INTO invoices (id, tenant_id, customer_id, data, invoice_date, due_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run('inv-1', tid, ids.klaas, '{}', '2026-11-20', '2026-12-20', now, now);
+    db.prepare('INSERT INTO news (id, tenant_id, author_id, title, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run('news-1', tid, ids.klaas, 'Titel', 'Tekst', now, now);
+    const out = await baas.del(`/app/api/admin/users/${ids.klaas}`);
+    assert.strictEqual(out.status, 200);
+    assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM oauth_grants WHERE user_id = ?').get(ids.klaas).n, 0, 'koppeling verdwijnt met het account');
+    assert.strictEqual(db.prepare('SELECT customer_id FROM invoices WHERE id = ?').get('inv-1').customer_id, null);
+    assert.strictEqual(db.prepare('SELECT author_id FROM news WHERE id = ?').get('news-1').author_id, null);
+  } finally { server.close(); }
+});
