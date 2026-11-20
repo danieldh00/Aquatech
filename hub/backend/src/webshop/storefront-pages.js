@@ -465,7 +465,7 @@ function orderForm(root, code, inStock, className, item = null) {
 }
 
 /**
- * De kaart van een product in een overzicht: foto, naam, (bij een hoofdartikel) de keuzelijst met
+ * De kaart van een product in een overzicht: foto met voorraadlabel, naam, (bij een hoofdartikel) de keuzelijst met
  * uitvoeringen, prijs, voorraad en een aantal-veld met de knop "In winkelwagen". Elk artikel
  * heeft dezelfde kaart; alleen de keuzelijst is er alleen voor een hoofdartikel met varianten.
  * Zonder script kiest de bezoeker met de knop Kies (opent de productpagina van die uitvoering);
@@ -488,11 +488,11 @@ function productCard(product, root) {
   <p class="variant-meta">Artikelnr.: <span data-variant-code>${escapeHtml(selected.code)}</span><span data-variant-meta>${selected.meta ? ` | ${escapeHtml(selected.meta)}` : ''}</span></p>` : '';
   return `<article class="product-card"${variants.length ? ' data-variant-row' : ''}>
   <a class="product-image" href="${href}" data-variant-link tabindex="-1" aria-hidden="true">${image}</a>
+  <p class="stock ${selected.inStock ? 'in' : 'out'}" data-variant-stock>${selected.inStock ? 'Op voorraad' : 'Niet op voorraad'}</p>
   <a class="product-name" href="${href}" data-variant-link title="${escapeHtml(product.name)}">${escapeHtml(product.name)}</a>
-  ${picker}
+  ${picker || `<p class="card-sku">Artikelnr. ${escapeHtml(product.code)}</p>`}
   <div class="product-foot">
     <p class="product-price"><strong data-variant-price>${escapeHtml(formatPrice(shownPrice(selected)))}</strong> <small>${vatLabel(selected)}</small></p>
-    <p class="stock ${selected.inStock ? 'in' : 'out'}" data-variant-stock>${selected.inStock ? 'Op voorraad' : 'Niet op voorraad'}</p>
     ${orderForm(root, selected.code, selected.inStock, 'card-order', Analytics.itemOfProduct({ code: selected.code, name: product.name, categoryName: product.categoryName }, shownPrice(selected), { variant: variants.length ? selected.label : '' }))}
   </div>
 </article>`;
