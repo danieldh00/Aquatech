@@ -935,15 +935,17 @@ ${detailsSection(shownDetails)}`;
 }
 
 /**
- * Pagina Over ons: het verhaal van Aquatechshop.nl, overgenomen van de
- * gelijknamige pagina op aquatechshop.nl.
+ * Pagina Over ons: het verhaal van Aquatechshop.nl (tekst overgenomen van
+ * aquatechshop.nl), met kop, verhaal met bedrijfsgegevens, drie onderscheidende
+ * punten, de waarden en een contactblok. Gegevens komen uit de bedrijfsinstellingen.
  * @param {object[]} groups Alle hoofdcategorieën (voor menu en voet).
  * @returns {string} De HTML-pagina.
  */
 function aboutPage(groups) {
   const root = '../';
+  const contact = activeContent.site.contact;
   const blocks = [
-    ['over-ons-verhaal.png', 'Aquatechshop.nl', 'Aquatechshop.nl is ontstaan vanuit HVT Beregening, een gespecialiseerd bedrijf in beregenings- en watertechniek. Dankzij de ervaring in de sector kunnen wij onze klanten optimaal van dienst zijn. Korte lijnen, klanttevredenheid en efficiëntie zijn onze uitgangspunten.'],
+    ['over-ons-verhaal.png', 'Ontstaan uit vakmanschap', 'Aquatechshop.nl is ontstaan vanuit HVT Beregening, een gespecialiseerd bedrijf in beregenings- en watertechniek. Dankzij de ervaring in de sector kunnen wij onze klanten optimaal van dienst zijn. Korte lijnen, klanttevredenheid en efficiëntie zijn onze uitgangspunten.'],
     ['over-ons-tarieven.png', 'Scherpe tarieven', 'Wij zijn totaalleverancier voor bedrijven, particulieren en organisaties. Door de goede en veelal rechtstreekse relaties met fabrikanten en leveranciers kunnen wij bewezen materialen en techniek leveren tegen zeer scherpe prijzen. Met ons koopt u als het ware de vruchten van een goed netwerk in combinatie met vakkennis en ervaring.'],
     ['over-ons-technische-dienst.png', 'Eigen technische dienst', 'HVT Beregening is onze eigen technische dienst. Voor installatie en/of uitgebreid advies kunt u daarom ook bij ons terecht: <a href="https://www.hvtberegening.nl">www.hvtberegening.nl</a>'],
   ];
@@ -953,13 +955,16 @@ function aboutPage(groups) {
     ['Levering op locatie', 'Bezorging bij u op locatie, om u te ontzorgen'],
     ['Persoonlijke aandacht', 'Of je nu een professional, ondernemer of particulier bent, maatwerk vinden wij belangrijk.'],
   ];
-  const body = `<section class="about-hero"><img src="${assetUrl(root, 'over-ons-hero.webp')}" alt="" width="1440" height="511"><div class="about-hero-text"><h1>Over ons</h1><p>Ons verhaal</p></div></section>
+  const facts = [['Telefoon', contact.phone ? `<a href="${escapeHtml(phoneLink(contact.phone))}">${escapeHtml(contact.phone)}</a>` : ''], ['E-mail', contact.email ? `<a href="mailto:${escapeHtml(contact.email)}">${escapeHtml(contact.email)}</a>` : ''], ['Adres', escapeHtml(contact.address || '')], ['KvK', escapeHtml(contact.kvk || '')]].filter(([, value]) => value);
+  const contactButtons = `${contact.phone ? `<a class="button" href="${escapeHtml(phoneLink(contact.phone))}">Bel ${escapeHtml(contact.phone)}</a>` : ''}${contact.email ? `<a class="button secondary" href="mailto:${escapeHtml(contact.email)}">Stuur een e-mail</a>` : ''}`;
+  const body = `<section class="about-hero"><img src="${assetUrl(root, 'over-ons-hero.webp')}" alt="" width="1440" height="511"><div class="about-hero-text"><p class="about-eyebrow">Ons verhaal</p><h1>Over ons</h1><p class="about-lead">Beregening, leidingen en pompen van mensen die het vak kennen.</p></div></section>
 <div class="wrap">
 <nav class="crumbs" aria-label="Kruimelpad"><a href="${root}">Shop</a> › <span>Over ons</span></nav>
-<div class="about-blocks">${blocks.map(([icon, heading, text]) => `<section class="about-block"><img src="${assetUrl(root, icon)}" alt="" width="64" height="64" loading="lazy"><div><h2>${heading}</h2><p>${text}</p></div></section>`).join('')}</div>
+<div class="about-story"><div><h2>Aquatechshop.nl</h2><p>${blocks[0][2]}</p></div>${facts.length ? `<dl class="about-facts">${facts.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}</dl>` : ''}</div>
+<div class="about-blocks">${blocks.slice(1).map(([icon, heading, text]) => `<section class="about-block"><img src="${assetUrl(root, icon)}" alt="" width="64" height="64" loading="lazy"><div><h2>${heading}</h2><p>${text}</p></div></section>`).join('')}</div>
 <h2 class="centered">Waarom Aquatechshop?</h2>
 <div class="about-values">${values.map(([heading, text]) => `<div class="about-value"><strong>${heading}</strong><span>${text}</span></div>`).join('')}</div>
-<p class="about-claim">Kwaliteit, service en betaalbaarheid komen bij ons samen.</p>
+<section class="about-cta"><p class="about-claim">Kwaliteit, service en betaalbaarheid komen bij ons samen.</p><p>Vragen of advies nodig bij uw project? Neem contact met ons op of bekijk direct het assortiment.</p><div class="about-cta-actions"><a class="button" href="${root}">Bekijk het assortiment</a>${contactButtons}</div></section>
 </div>`;
   return layout({ root, groups, wide: true, canonicalPath: 'over-ons/', title: `Over ons – ${SHOP_NAME}`, description: 'Aquatechshop.nl is ontstaan vanuit HVT Beregening: scherpe tarieven, een eigen technische dienst en levering op locatie.', body });
 }
