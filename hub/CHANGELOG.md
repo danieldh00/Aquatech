@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.30.4
+
+- `createSlowLog({ taskThresholdMs })`: eigen drempel per taaknaam (server.js: Drive-back-up en back-up 90 s, webshopsynchronisatie 5 min, bestellingen ophalen en Visma 30 s, bewaking 25 s); overige taken blijven op `SLOW_REQUEST_MS`.
+- Bewaking (`monitoring.js`, `noteSlow`): een controle of melding van 5 s of langer komt als `taak`-regel `Trage bewaking (controle|melding): <titel>` in het logboek (samenvoegbaar, met `controle` en `fase` in de details).
+- `beheer/logboek.js`: Excel-export met Date-cellen, kolommen Bereik, Queries, Database (ms), Externe aanroepen, Extern (ms) en Overige details, autofilter en vaste kopregel.
+
 ## 1.30.3
 
 `restore-test.sh`: ontbreekt `backups/postgres/aquatech-*.dump.enc`, dan draait `pg-backup.sh` eerst (dezelfde dagelijkse back-up) en wordt opnieuw gezocht. Lukt dat niet, dan noemt de melding de oorzaak (map ontbreekt, geen `pg-backup.sh`, of de laatste regels van de mislukte back-up). Test uitgebreid.

@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.30.4',
+      date: '2026-11-20',
+      title: 'Rustiger logboek en betere Excel-export',
+      items: [
+        { text: 'Het logboek meldt lange taken (back-up naar Google Drive, webshopsynchronisatie) niet meer als trage taak zolang ze binnen hun normale duur blijven.', for: ['beheer'] },
+        { text: 'Een trage bewakingsronde laat nu zien welke controle of melding hem ophoudt.', for: ['beheer'] },
+        { text: 'De Excel-export van het logboek heeft echte datum- en tijdkolommen, aparte kolommen voor queries en externe aanroepen, een kolom Bereik, een filter en een vaste kopregel.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.30.3',
       date: '2026-11-20',
       title: 'Hersteltest maakt zelf een back-up als er geen is',
