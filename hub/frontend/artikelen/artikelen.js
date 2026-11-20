@@ -454,7 +454,7 @@
     if (name === 'pricefactor') window.ArtikelenPriceFactor.load().catch((error) => toast(error.message, true));
     if (name === 'counts') window.ArtikelenCounts.load().catch((error) => toast(error.message, true));
     if (name === 'texts') window.ArtikelenTexts.load().catch((error) => toast(error.message, true));
-    if (name === 'media') loadMedia().catch((error) => toast(error.message, true));
+    if (name === 'media') window.ArtikelenMedia.loadMedia().catch((error) => toast(error.message, true));
     try { history.replaceState(null, '', `./#${name}`); } catch { /* file:// */ }
     if (window.AquatechNav) window.AquatechNav.refresh();
   }
@@ -563,175 +563,6 @@
     };
   }
 
-  // ---------- Nieuw artikel en uit de catalogus ----------
-  /** Opent het formulier voor een nieuw artikel (met codes uit de catalogus om te kiezen). */
-  function openNew() {
-    const formElement = $('#new-form');
-    $('#import-form').hidden = true;
-    $('#units-form').hidden = true;
-    formElement.reset();
-    fillUnits();
-    if (state.units.some((unit) => unit.name === 'st')) formElement.unit.value = 'st';
-    $('.err', formElement).textContent = '';
-    showNewImage(null);
-    const have = new Set(state.items.map((item) => item.code));
-    $('#catalog-codes').innerHTML = Object.entries(Catalog.articles).filter(([code]) => !have.has(code)).map(([code, article]) => `<option value="${esc(code)}">${esc(article.name)}</option>`).join('');
-    formElement.hidden = false;
-    formElement.code.focus();
-  }
-
-  /**
-   * Toont de gekozen afbeelding in het formulier voor een nieuw artikel (of leeg).
-   * @param {{ name: string, data: string }|null} picked de klaargemaakte afbeelding, of null
-   */
-  function showNewImage(picked) {
-    state.newImage = picked;
-    $('#n-image-preview').innerHTML = picked ? `<img src="data:image/*;base64,${picked.data}" alt="">` : '<span class="muted small">Geen afbeelding</span>';
-    $('#n-image-clear').hidden = !picked;
-    if (!picked) $('#new-form').image.value = '';
-  }
-
-  /** Koppelt het formulier voor een nieuw artikel. */
-  function setupNew() {
-    const formElement = $('#new-form');
-    /** Verkleint de gekozen afbeelding en toont hem. */
-    formElement.image.onchange = async () => {
-      const errorBox = $('.err', formElement);
-      errorBox.textContent = '';
-      const file = formElement.image.files && formElement.image.files[0];
-      if (!file) { showNewImage(null); return; }
-      try { showNewImage(await window.ItemImages.prepare(file)); } catch (error) { showNewImage(null); errorBox.textContent = error.message; }
-    };
-    /**
-     * Haalt de gekozen afbeelding weer weg.
-     * @returns {void}
-     */
-    $('#n-image-clear').onclick = () => showNewImage(null);
-    /** Vult naam en eenheid in als de code in de catalogus staat. */
-    formElement.code.oninput = () => {
-      const article = Catalog.articles[formElement.code.value.trim().toUpperCase()];
-      if (article && !formElement.name.value) {
-        formElement.name.value = article.name;
-        fillUnits(article.unit || 'st');
-        formElement.unit.value = article.unit || 'st';
-      }
-    };
-    /** Sluit het formulier. */
-    $('[data-cancel]', formElement).onclick = () => { formElement.hidden = true; };
-    /**
-     * Slaat het nieuwe artikel op.
-     * @param {SubmitEvent} event het verzenden
-     * @returns {Promise<void>}
-     */
-    formElement.onsubmit = async (event) => {
-      event.preventDefault();
-      const errorBox = $('.err', formElement);
-      errorBox.textContent = '';
-      try {
-        const item = await api('stock/items', { method: 'POST', body: {
-          code: formElement.code.value, name: formElement.name.value, unit: formElement.unit.value, location: formElement.location.value,
-          onHand: num(formElement.onHand.value), minQty: num(formElement.minQty.value), reorderQty: num(formElement.reorderQty.value), costPrice: num(formElement.costPrice.value),
-          salePrice: num(formElement.salePrice.value), vatRate: Number(formElement.vatRate.value), weightGrams: num(formElement.weightGrams.value), businessPrice: num(formElement.businessPrice.value), revenueGroup: formElement.revenueGroup.value, shopSync: formElement.shopSync.checked,
-          packSize: num(formElement.packSize.value), orderMinQty: num(formElement.orderMinQty.value), priceTiers: parseTiers(formElement.priceTiers.value), unitContent: num(formElement.unitContent.value), ean: formElement.ean.value,
-          priceMode: formElement.priceMode.value, priceFactor: num(formElement.priceFactor.value),
-        } });
-        formElement.hidden = true;
-        toast(`${item.code} toegevoegd`);
-        if (state.newImage) await window.ItemImages.upload(item.id, state.newImage).catch((error) => toast(`${item.code} is toegevoegd, maar de afbeelding niet: ${error.message}`, true));
-        await Promise.all([load(), loadUnits().catch((error) => toast(error.message, true))]);
-      } catch (error) {
-        errorBox.textContent = error.message;
-        if (error.field && formElement[error.field]) formElement[error.field].focus();
-      }
-    };
-  }
-
-  // ---------- Uit de webshop ----------
-  /**
-   * Neemt alles uit de webshop over (volle synchronisatie) in een venster met
-   * voortgangsbalk; artikelen die niet in de webshop staan worden gearchiveerd.
-   * @returns {Promise<void>}
-   */
-  async function importShop() {
-    const dialog = $('#shop-dialog');
-    const button = $('#b-shop');
-    const bar = $('#shop-bar');
-    $('#shop-text').textContent = 'Producten ophalen uit de webshop en de voorraad bijwerken…';
-    $('#shop-close').hidden = true;
-    bar.removeAttribute('value');
-    dialog.showModal();
-    button.disabled = true;
-    try {
-      const result = await api('stock/import-shop', { method: 'POST', body: {} });
-      bar.value = 1;
-      $('#shop-text').textContent = `Klaar: ${result.created} nieuw, ${result.restored} teruggezet, ${result.archived} gearchiveerd (niet in de webshop)${result.skippedProducts ? `, ${result.skippedProducts} overgeslagen (geen geldige code)` : ''}.`;
-      await Promise.all([load(), loadUnits().catch((error) => toast(error.message, true))]);
-    } catch (error) {
-      bar.value = 0;
-      $('#shop-text').textContent = `Overnemen mislukt: ${error.message}`;
-    } finally {
-      button.disabled = false;
-      $('#shop-close').hidden = false;
-    }
-  }
-
-  /** Koppelt de knop om het venster te sluiten. */
-  function setupShop() {
-    /** Sluit het venster. */
-    $('#shop-close').onclick = () => { $('#shop-dialog').close(); };
-  }
-
-  /**
-   * Opent de lijst met catalogusartikelen om op voorraad te nemen.
-   * @param {string[]} preselect codes die al aangevinkt zijn (bijv. vanuit een werkorder)
-   */
-  function openImport(preselect = []) {
-    const formElement = $('#import-form');
-    $('#new-form').hidden = true;
-    $('.err', formElement).textContent = '';
-    const have = new Set(state.items.map((item) => item.code));
-    const preselected = new Set(preselect.map((code) => code.toUpperCase()));
-    $('#i-list').innerHTML = Object.entries(Catalog.articles).map(([code, article]) => (have.has(code)
-      ? `<label class="have"><input type="checkbox" disabled checked> <span><span class="code">${esc(code)}</span> ${esc(article.name)} (al op voorraad)</span></label>`
-      : `<label data-s="${esc(`${code} ${article.name}`.toLowerCase())}"><input type="checkbox" value="${esc(code)}"${preselected.has(code) ? ' checked' : ''}> <span><span class="code">${esc(code)}</span> ${esc(article.name)}</span></label>`)).join('');
-    $('#i-search').value = '';
-    formElement.hidden = false;
-    if (preselected.size) formElement.scrollIntoView();
-  }
-
-  /** Koppelt het formulier "Uit catalogus". */
-  function setupImport() {
-    const formElement = $('#import-form');
-    /** Sluit het formulier. */
-    $('[data-cancel]', formElement).onclick = () => { formElement.hidden = true; };
-    /** Filtert de lijst op de zoekterm. */
-    $('#i-search').oninput = () => {
-      const term = $('#i-search').value.trim().toLowerCase();
-      formElement.querySelectorAll('#i-list label[data-s]').forEach((label) => { label.hidden = Boolean(term) && !label.dataset.s.includes(term); });
-    };
-    /** Vinkt alle zichtbare artikelen aan. */
-    $('#i-all').onclick = () => { formElement.querySelectorAll('#i-list label[data-s]:not([hidden]) input').forEach((input) => { input.checked = true; }); };
-    /**
-     * Neemt de gekozen catalogusartikelen op voorraad.
-     * @param {SubmitEvent} event het verzenden
-     * @returns {Promise<void>}
-     */
-    formElement.onsubmit = async (event) => {
-      event.preventDefault();
-      const codes = [...formElement.querySelectorAll('#i-list input:checked:not([disabled])')].map((input) => input.value);
-      const errorBox = $('.err', formElement);
-      if (!codes.length) { errorBox.textContent = 'Kies een of meer artikelen.'; return; }
-      try {
-        const result = await api('stock/import', { method: 'POST', body: { codes } });
-        formElement.hidden = true;
-        toast(`${result.created} artikel${result.created === 1 ? '' : 'en'} op voorraad genomen`);
-        await Promise.all([load(), loadUnits().catch((error) => toast(error.message, true))]);
-      } catch (error) {
-        errorBox.textContent = error.message;
-      }
-    };
-  }
-
   // ---------- Artikel ----------
   /** Tekent het geopende artikel: tellers, formulier, webshop, reserveringen en mutaties. */
   function renderItem() {
@@ -770,7 +601,7 @@
       : !item.shop.productId ? (item.shopSync ? 'Nog niet gekoppeld aan een webshopproduct (koppelen gaat op SKU = artikelcode).' : '')
         : item.shop.pending ? 'Webshop: wijziging wordt binnen enkele seconden verstuurd.'
           : `Webshop: gekoppeld (product ${esc(item.shop.productId)})${item.shop.syncedAt ? `, bijgewerkt ${esc(when(item.shop.syncedAt))}` : ''}.`;
-    renderImage();
+    window.ArtikelenMedia.renderImage();
     $('#d-remove').hidden = item.archived;
     $('#d-restore').hidden = !item.archived;
     $('#move-form').hidden = item.archived || item.hasVariants;
@@ -828,154 +659,6 @@
     ? `<form class="layer-cost" data-layer="${esc(layer.id)}" novalidate><input name="unitCost" type="number" min="0" step="0.0001" inputmode="decimal" aria-label="Inkoopprijs van deze laag" placeholder="${layer.unitCost == null ? 'prijs' : 'wijzig'}"><button class="btn small" type="submit">${layer.unitCost == null ? 'Invullen' : 'Wijzigen'}</button></form>` : ''}</td>
         <td class="num">${layer.value == null ? '–' : esc(eur(layer.value))}</td></tr>`).join('')}</tbody>`
       : '<tbody><tr><td class="empty">Niets op voorraad.</td></tr></tbody>';
-  }
-
-  // ---------- Mediabibliotheek ----------
-  /**
-   * Haalt de mediabibliotheek op en tekent hem.
-   * @returns {Promise<void>}
-   */
-  async function loadMedia() {
-    state.media = await api('stock/images');
-    renderMedia();
-  }
-
-  /** Tekent de mediabibliotheek: een raster met alle afbeeldingen (gefilterd op de zoekterm) of de lijst met artikelen zonder afbeelding. */
-  function renderMedia() {
-    if (!state.media) return;
-    const term = $('#m-search').value.trim().toLowerCase();
-    const onlyMissing = $('#m-missing').checked;
-    /**
-     * Of een tekst de zoekterm bevat.
-     * @param {string} text de tekst
-     * @returns {boolean} true bij een treffer
-     */
-    const matches = (text) => String(text).toLowerCase().includes(term);
-    const images = state.media.images.filter((image) => !term || matches(image.name) || image.items.some((item) => matches(item.code) || matches(item.name)));
-    const missing = state.media.missing.filter((item) => !term || matches(item.code) || matches(item.name));
-    $('#m-grid').hidden = onlyMissing;
-    $('#m-missing-table').hidden = !onlyMissing;
-    $('#m-count').textContent = onlyMissing ? `${missing.length} artikel${missing.length === 1 ? '' : 'en'} zonder afbeelding` : `${images.length} afbeelding${images.length === 1 ? '' : 'en'} · ${state.media.missing.length} artikel${state.media.missing.length === 1 ? '' : 'en'} zonder`;
-    $('#m-grid').innerHTML = images.length ? images.map((image) => {
-      const first = image.items[0];
-      const label = image.items.length ? `${esc(first.code)}${image.items.length > 1 ? ` +${image.items.length - 1}` : ''}` : 'Niet in gebruik';
-      return `<figure class="media-card"><a href="${first ? `./?id=${encodeURIComponent(first.id)}` : '#'}" ${first ? `data-open="${esc(first.id)}"` : ''}><img src="${esc(window.ItemImages.src(image.id))}" alt="" loading="lazy"></a>
-        <figcaption><b title="${esc(image.items.map((item) => `${item.code} ${item.name}`).join('\n'))}">${label}</b><span class="muted small">${esc(image.width)}×${esc(image.height)} · ${esc(Math.round(image.size / 1024))} kB</span>${image.sourceUrl ? `<span class="muted small" title="${esc(image.sourceUrl)}">van oude webshop</span>` : ''}</figcaption></figure>`;
-    }).join('') : '<p class="muted">Nog geen afbeeldingen. Upload ze bij een artikel of neem ze over uit de webshop.</p>';
-    $('#m-missing-table').innerHTML = missing.length ? `<thead><tr><th>Code</th><th>Omschrijving</th></tr></thead><tbody>${missing.map((item) => `<tr data-id="${esc(item.id)}"><td class="code"><a href="./?id=${encodeURIComponent(item.id)}">${esc(item.code)}</a></td><td class="wrap">${esc(item.name)}</td></tr>`).join('')}</tbody>`
-      : '<tbody><tr><td class="empty">Alle artikelen hebben een afbeelding.</td></tr></tbody>';
-  }
-
-  /** Koppelt de zoekbalk, het filter en het openen van een artikel in de mediabibliotheek. */
-  function setupMedia() {
-    $('#m-search').oninput = renderMedia;
-    $('#m-missing').onchange = renderMedia;
-    /**
-     * Opent het artikel bij een klik op een afbeelding of een regel zonder afbeelding.
-     * @param {MouseEvent} event de klik
-     */
-    $('#tab-media').onclick = (event) => {
-      const target = event.target.closest('[data-open], tr[data-id]');
-      if (!target || event.metaKey || event.ctrlKey) return;
-      event.preventDefault();
-      openItem(target.dataset.open || target.dataset.id, true);
-    };
-  }
-
-  /** Tekent het blok Afbeelding van het geopende artikel. */
-  function renderImage() {
-    const item = state.item;
-    $('#d-image-view').innerHTML = item.imageId ? `<img src="${esc(window.ItemImages.src(item.imageId))}" alt="">` : '<span class="muted small">Geen afbeelding</span>';
-    $('#d-image-remove').hidden = !item.imageId;
-    $('#d-image-file').value = '';
-    $('.err', $('#d-image')).textContent = '';
-  }
-
-  /** Koppelt het uploaden en verwijderen van de afbeelding van een artikel. */
-  function setupImage() {
-    const errorBox = $('.err', $('#d-image'));
-    /** Verkleint en uploadt de gekozen afbeelding. */
-    $('#d-image-file').onchange = async () => {
-      const file = $('#d-image-file').files && $('#d-image-file').files[0];
-      if (!file) return;
-      errorBox.textContent = '';
-      try {
-        state.item.imageId = await window.ItemImages.upload(state.item.id, await window.ItemImages.prepare(file));
-        toast('Afbeelding opgeslagen');
-      } catch (error) { errorBox.textContent = error.message; }
-      renderImage();
-    };
-    /** Haalt de afbeelding weg. */
-    $('#d-image-remove').onclick = async () => {
-      errorBox.textContent = '';
-      try {
-        await window.ItemImages.remove(state.item.id);
-        state.item.imageId = null;
-        toast('Afbeelding verwijderd');
-      } catch (error) { errorBox.textContent = error.message; }
-      renderImage();
-    };
-  }
-
-  // ---------- Afbeeldingen uit de webshop ----------
-  /** Opent het venster om de afbeeldingen van de webshop over te nemen en toont hoeveel er nog te doen is. */
-  async function openImagesImport() {
-    const dialog = $('#images-dialog');
-    $('#images-failed').hidden = true;
-    $('#images-bar').value = 0;
-    $('#images-start').hidden = true;
-    $('#images-text').textContent = 'Controleren…';
-    dialog.showModal();
-    try {
-      const [pendingCount, thumbCount] = await Promise.all([window.ItemImages.pending(), window.ItemImages.thumbsPending()]);
-      const lines = [];
-      if (pendingCount) lines.push(`${pendingCount} artikel${pendingCount === 1 ? '' : 'en'} gebruik${pendingCount === 1 ? 't' : 'en'} nog de afbeelding van de oude webshop. Overnemen bewaart ze in dit systeem; opnieuw uitvoeren neemt alleen over wat nog ontbreekt.`);
-      if (thumbCount) lines.push(`${thumbCount} afbeelding${thumbCount === 1 ? '' : 'en'} ${thumbCount === 1 ? 'heeft' : 'hebben'} nog geen miniatuur. Miniaturen maken de webshop op telefoons en bij veel producten sneller; ze worden hier in uw browser gemaakt.`);
-      $('#images-text').textContent = lines.length ? lines.join(' ') : 'Alle afbeeldingen staan in dit systeem en hebben een miniatuur.';
-      $('#images-start').hidden = !lines.length;
-      $('#images-start').dataset.total = String(pendingCount);
-      $('#images-start').dataset.thumbs = String(thumbCount);
-    } catch (error) {
-      $('#images-text').textContent = `Controleren mislukt: ${error.message}`;
-    }
-  }
-
-  /** Koppelt de knoppen van het venster Afbeeldingen uit de webshop. */
-  function setupImagesImport() {
-    /** Sluit het venster. */
-    $('#images-close').onclick = () => { $('#images-dialog').close(); };
-    /** Neemt de afbeeldingen over met een voortgangsbalk. */
-    $('#images-start').onclick = async () => {
-      const total = Number($('#images-start').dataset.total) || 0;
-      $('#images-start').hidden = true;
-      $('#images-close').disabled = true;
-      try {
-        const totals = total ? await window.ItemImages.importAll((progress) => {
-          $('#images-bar').value = Math.min(1, (total - progress.pending) / total);
-          $('#images-text').textContent = `${progress.imported + progress.reused} artikelen gekoppeld, ${progress.stored} afbeeldingen bewaard…`;
-        }) : { imported: 0, reused: 0, stored: 0, failed: [] };
-        // Daarna de miniaturen (ook voor de zojuist overgenomen afbeeldingen).
-        const thumbTotal = await window.ItemImages.thumbsPending();
-        $('#images-bar').value = 0;
-        const thumbs = thumbTotal ? await window.ItemImages.thumbsAll((progress) => {
-          $('#images-bar').value = Math.min(1, (progress.done + progress.failed) / thumbTotal);
-          $('#images-text').textContent = `Miniaturen maken: ${progress.done} van ${thumbTotal}…`;
-        }) : { done: 0, failed: 0 };
-        $('#images-bar').value = 1;
-        const linked = totals.imported + totals.reused;
-        $('#images-text').textContent = `Klaar: ${linked} artikel${linked === 1 ? '' : 'en'} gekoppeld; ${totals.stored} nieuwe afbeelding${totals.stored === 1 ? '' : 'en'} bewaard; ${thumbs.done} miniatuur${thumbs.done === 1 ? '' : 'en'} gemaakt${totals.failed.length || thumbs.failed ? `. ${totals.failed.length + thumbs.failed} niet gelukt (opnieuw uitvoeren probeert ze nog eens)` : ''}.`;
-        if (totals.failed.length) {
-          $('#images-failed').hidden = false;
-          $('#images-failed').innerHTML = `Niet gelukt (opnieuw uitvoeren probeert ze nog eens):<br>${totals.failed.slice(0, 20).map((failure) => `${esc(failure.code)}: ${esc(failure.reason)}`).join('<br>')}${totals.failed.length > 20 ? `<br>… en ${totals.failed.length - 20} meer` : ''}`;
-        }
-        await load();
-      } catch (error) {
-        $('#images-text').textContent = `Overnemen mislukt: ${error.message}`;
-        $('#images-start').hidden = false;
-      } finally {
-        $('#images-close').disabled = false;
-      }
-    };
   }
 
   /**
@@ -1318,210 +1001,6 @@
     };
   }
 
-  // ---------- Excel ----------
-  /**
-   * Maakt een nieuwe Excel-werkmap (laadt ExcelJS zo nodig).
-   * @returns {Promise<object|null>} de werkmap, of null als Excel niet beschikbaar is
-   */
-  async function workbook() {
-    if (!window.ExcelJS && !(window.AquatechCommon && await window.AquatechCommon.excel())) { toast('Excel-export niet beschikbaar.', true); return null; }
-    const excelWorkbook = new ExcelJS.Workbook();
-    excelWorkbook.creator = 'AquaTech Service';
-    excelWorkbook.created = new Date();
-    return excelWorkbook;
-  }
-
-  /**
-   * Voegt het blad Mutaties toe.
-   * @param {object} excelWorkbook de werkmap
-   * @param {object[]} items de mutaties
-   */
-  function movesSheet(excelWorkbook, items) {
-    const worksheet = excelWorkbook.addWorksheet('Mutaties', { views: [{ state: 'frozen', ySplit: 1 }] });
-    worksheet.columns = [
-      { header: 'Datum', key: 'at', width: 18, style: { numFmt: 'dd-mm-yyyy hh:mm' } },
-      { header: 'Soort', key: 'kind', width: 12 },
-      { header: 'Artikelcode', key: 'code', width: 16 },
-      { header: 'Omschrijving', key: 'name', width: 40 },
-      { header: 'Aantal', key: 'qty', width: 10, style: { numFmt: '#,##0.###' } },
-      { header: 'Eenheid', key: 'unit', width: 9 },
-      { header: 'Stand na mutatie', key: 'balance', width: 16, style: { numFmt: '#,##0.###' } },
-      { header: 'Werkorder', key: 'wo', width: 14 },
-      { header: 'Door', key: 'user', width: 20 },
-      { header: 'Opmerking', key: 'note', width: 40 },
-    ];
-    for (const movement of items) {
-      worksheet.addRow({ at: new Date(movement.createdAt), kind: KINDS[movement.kind] || movement.kind, code: movement.code, name: movement.name, qty: movement.qty, unit: movement.unit, balance: movement.balance,
-        wo: movement.workOrderNumber, user: movement.userName, note: movement.note });
-    }
-    worksheet.getRow(1).font = { bold: true };
-    worksheet.autoFilter = { from: 'A1', to: 'J1' };
-  }
-
-  /**
-   * Laat de werkmap downloaden.
-   * @param {object} excelWorkbook de werkmap
-   * @param {string} name bestandsnaam
-   * @returns {Promise<void>}
-   */
-  async function save(excelWorkbook, name) {
-    const buffer = await excelWorkbook.xlsx.writeBuffer();
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-    link.download = name;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-  }
-
-  /**
-   * Geeft de datum van vandaag voor in een bestandsnaam.
-   * @returns {string} datum als 'jjjj-mm-dd'
-   */
-  const stamp = () => new Date().toISOString().slice(0, 10);
-
-  /**
-   * Exporteert de zichtbare voorraad en de reserveringen naar Excel.
-   * @returns {Promise<void>}
-   */
-  async function exportStock() {
-    const exportButton = $('#b-export');
-    exportButton.disabled = true;
-    try {
-      const excelWorkbook = await workbook();
-      if (!excelWorkbook) return;
-      const worksheet = excelWorkbook.addWorksheet('Voorraad', { views: [{ state: 'frozen', ySplit: 1 }] });
-      const quantityStyle = { numFmt: '#,##0.###' };
-      worksheet.columns = [
-        { header: 'Artikelcode', key: 'code', width: 16 },
-        { header: 'Omschrijving', key: 'name', width: 44 },
-        { header: 'Hoofdartikel', key: 'parent', width: 16 },
-        { header: 'Variant', key: 'variant', width: 22 },
-        { header: 'Eenheid', key: 'unit', width: 9 },
-        { header: 'Locatie', key: 'location', width: 18 },
-        { header: 'Op voorraad', key: 'onHand', width: 13, style: quantityStyle },
-        { header: 'Gereserveerd', key: 'reserved', width: 13, style: quantityStyle },
-        { header: 'Beschikbaar', key: 'available', width: 13, style: quantityStyle },
-        { header: 'Minimum', key: 'minQty', width: 11, style: quantityStyle },
-        { header: 'Bestellen tot', key: 'reorderQty', width: 13, style: quantityStyle },
-        { header: 'Bijbestellen', key: 'low', width: 12 },
-        { header: 'Inkoopprijs', key: 'costPrice', width: 12, style: { numFmt: '€ #,##0.00' } },
-        { header: 'Waarde', key: 'value', width: 12, style: { numFmt: '€ #,##0.00' } },
-        { header: 'Verkoopprijs excl. btw', key: 'salePrice', width: 14, style: { numFmt: '€ #,##0.00' } },
-        { header: 'Btw', key: 'vat', width: 7 },
-        { header: 'Omzetgroep', key: 'group', width: 12 },
-        { header: 'Webshop', key: 'shop', width: 16 },
-        { header: 'Gearchiveerd', key: 'archived', width: 13 },
-        { header: 'Notities', key: 'notes', width: 30 },
-      ];
-      const GROUPS = { producten: 'Producten', arbeid: 'Arbeid', overig: 'Overig' };
-      // Hoofdartikelen hebben geen eigen voorraad: alleen de varianten (met hun hoofdartikel) komen erin.
-      const codeOf = new Map(state.items.map((item) => [item.id, item.code]));
-      // Past het hoofdartikel bij de zoekterm, dan gaan al zijn varianten mee (zoals in het overzicht).
-      const matched = visible();
-      const matchedParents = new Set(matched.filter((item) => item.hasVariants).map((item) => item.id));
-      const matchedIds = new Set(matched.map((item) => item.id));
-      // Met "Alleen onder minimum" telt per variant het eigen minimum (zoals in het overzicht).
-      const lowOnly = $('#f-low').checked;
-      const items = state.items.filter((item) => !item.hasVariants && (matchedIds.has(item.id) || (item.parentId && matchedParents.has(item.parentId) && (!lowOnly || item.low))));
-      for (const item of items) {
-        worksheet.addRow({ ...item, parent: item.parentId ? codeOf.get(item.parentId) || '' : '', variant: valuesText(item), low: item.low ? 'ja' : '', archived: item.archived ? 'ja' : '', costPrice: item.costPrice, value: item.value, salePrice: item.salePrice,
-          vat: `${item.vatRate}%`, group: GROUPS[item.revenueGroup] || item.revenueGroup,
-          shop: !item.shopSync ? 'niet' : item.shop.error ? 'fout' : item.shop.productId ? `product ${item.shop.productId}` : 'niet gekoppeld' });
-      }
-      worksheet.getRow(1).font = { bold: true };
-      worksheet.autoFilter = `A1:T${items.length + 1}`;
-      const reservedSheet = excelWorkbook.addWorksheet('Gereserveerd', { views: [{ state: 'frozen', ySplit: 1 }] });
-      reservedSheet.columns = [
-        { header: 'Werkorder', key: 'wo', width: 14 }, { header: 'Titel', key: 'title', width: 30 }, { header: 'Klant', key: 'customer', width: 24 },
-        { header: 'Status', key: 'status', width: 14 }, { header: 'Gepland', key: 'date', width: 12 },
-        { header: 'Artikelcode', key: 'code', width: 16 }, { header: 'Omschrijving', key: 'name', width: 40 },
-        { header: 'Gereserveerd', key: 'qty', width: 13, style: quantityStyle }, { header: 'Eenheid', key: 'unit', width: 9 },
-      ];
-      for (const reservation of state.reservations) {
-        reservedSheet.addRow({ wo: reservation.workOrder.number, title: reservation.workOrder.title, customer: reservation.workOrder.customer, status: (WorkOrderCore && WorkOrderCore.STATUSES[reservation.workOrder.status]) || reservation.workOrder.status,
-          date: reservation.workOrder.plannedDate ? new Date(`${reservation.workOrder.plannedDate}T12:00:00`) : null, code: reservation.code, name: reservation.name, qty: reservation.qty, unit: reservation.unit });
-      }
-      reservedSheet.getColumn('date').numFmt = 'dd-mm-yyyy';
-      reservedSheet.getRow(1).font = { bold: true };
-      await save(excelWorkbook, `voorraad-${stamp()}.xlsx`);
-    } finally {
-      exportButton.disabled = false;
-    }
-  }
-
-  /**
-   * Exporteert de mutaties in beeld naar Excel.
-   * @returns {Promise<void>}
-   */
-  async function exportMoves() {
-    const exportButton = $('#m-export');
-    exportButton.disabled = true;
-    try {
-      if (!state.moves) await loadMoves();
-      const excelWorkbook = await workbook();
-      if (!excelWorkbook) return;
-      movesSheet(excelWorkbook, movesShown());
-      await save(excelWorkbook, `voorraadmutaties-${$('#m-from').value || 'begin'}-${$('#m-to').value || stamp()}.xlsx`);
-    } finally {
-      exportButton.disabled = false;
-    }
-  }
-
-  /**
-   * Bestelvoorstel als Excel: per artikel onder het minimum hoeveel er bij
-   * moet om aan te vullen tot "bestellen tot" (de server rekent het uit).
-   * @returns {Promise<void>}
-   */
-  async function exportReorder() {
-    const button = $('#b-reorder');
-    button.disabled = true;
-    try {
-      const proposal = await api('stock/reorder');
-      if (!proposal.items.length) { toast('Niets te bestellen: alle artikelen zitten op of boven de minimumvoorraad.'); return; }
-      const excelWorkbook = await workbook();
-      if (!excelWorkbook) return;
-      const sheet = excelWorkbook.addWorksheet('Bestelvoorstel', { views: [{ state: 'frozen', ySplit: 1 }] });
-      const quantity = { numFmt: '#,##0.###' };
-      const euro = { numFmt: '€ #,##0.00' };
-      sheet.columns = [
-        { header: 'Leverancier', key: 'supplierName', width: 24 },
-        { header: 'Artikelcode', key: 'code', width: 16 },
-        { header: 'Art.nr. leverancier', key: 'supplierSku', width: 18 },
-        { header: 'Omschrijving', key: 'name', width: 44 },
-        { header: 'Eenheid', key: 'unit', width: 9 },
-        { header: 'Locatie', key: 'location', width: 18 },
-        { header: 'Op voorraad', key: 'onHand', width: 13, style: quantity },
-        { header: 'Gereserveerd', key: 'reserved', width: 13, style: quantity },
-        { header: 'Beschikbaar', key: 'available', width: 13, style: quantity },
-        { header: 'Minimum', key: 'minQty', width: 11, style: quantity },
-        { header: 'Bestellen tot', key: 'target', width: 13, style: quantity },
-        { header: 'Te bestellen', key: 'orderQty', width: 13, style: quantity },
-        { header: 'Inkoopprijs', key: 'costPrice', width: 12, style: euro },
-        { header: 'Bedrag', key: 'amount', width: 12, style: euro },
-      ];
-      // Per leverancier bij elkaar (op naam, zonder leverancier als laatste), zoals de server de groepen geeft.
-      const groupOrder = new Map(proposal.suppliers.map((group, index) => [group.supplierId, index]));
-      const sorted = [...proposal.items].sort((left, right) => groupOrder.get(left.supplierId) - groupOrder.get(right.supplierId));
-      for (const item of sorted) sheet.addRow({ ...item, supplierName: item.supplierName || 'Zonder leverancier' });
-      const totalRow = sheet.addRow({ name: 'Totaal (artikelen met inkoopprijs)', amount: proposal.total });
-      totalRow.font = { bold: true };
-      sheet.getRow(1).font = { bold: true };
-      // Filter over de kop en de artikelregels, zonder de totaalregel.
-      sheet.autoFilter = `A1:N${proposal.items.length + 1}`;
-      const summary = excelWorkbook.addWorksheet('Per leverancier', { views: [{ state: 'frozen', ySplit: 1 }] });
-      summary.columns = [
-        { header: 'Leverancier', key: 'supplierName', width: 28 },
-        { header: 'Regels', key: 'count', width: 10 },
-        { header: 'Bedrag (artikelen met inkoopprijs)', key: 'total', width: 34, style: euro },
-      ];
-      for (const group of proposal.suppliers) summary.addRow({ ...group, supplierName: group.supplierName || 'Zonder leverancier' });
-      summary.getRow(1).font = { bold: true };
-      await save(excelWorkbook, `bestelvoorstel-${stamp()}.xlsx`);
-    } finally {
-      button.disabled = false;
-    }
-  }
-
   // ---------- Start ----------
   /**
    * Start de pagina: rechten controleren, knoppen koppelen en het overzicht of
@@ -1558,32 +1037,32 @@
      * @returns {Promise<void>}
      */
     $('#f-archived').onchange = () => load().catch((error) => toast(error.message, true));
-    $('#b-new').onclick = openNew;
+    $('#b-new').onclick = window.ArtikelenNew.openNew;
     /** Opent het formulier "Uit catalogus". */
-    $('#b-import').onclick = () => { openImport(); };
+    $('#b-import').onclick = () => { window.ArtikelenNew.openImport(); };
     /**
      * Opent het formulier "Uit de webshop".
      * @returns {Promise<void>}
      */
-    $('#b-shop').onclick = () => importShop();
+    $('#b-shop').onclick = () => window.ArtikelenNew.importShop();
     /** Opent het venster om de afbeeldingen van de webshop over te nemen. */
-    $('#b-images').onclick = () => { openImagesImport(); };
+    $('#b-images').onclick = () => { window.ArtikelenMedia.openImagesImport(); };
     window.StockBulk.init({ api, toast, reload: load, rerender: renderStock, items: () => state.items });
     /**
      * Exporteert de voorraad.
      * @returns {Promise<void>}
      */
-    $('#b-export').onclick = () => exportStock().catch((error) => toast(`Export mislukt: ${error.message}`, true));
+    $('#b-export').onclick = () => window.ArtikelenExports.exportStock().catch((error) => toast(`Export mislukt: ${error.message}`, true));
     /**
      * Maakt het bestelvoorstel als Excel.
      * @returns {Promise<void>}
      */
-    $('#b-reorder').onclick = () => exportReorder().catch((error) => toast(`Bestelvoorstel mislukt: ${error.message}`, true));
+    $('#b-reorder').onclick = () => window.ArtikelenExports.exportReorder().catch((error) => toast(`Bestelvoorstel mislukt: ${error.message}`, true));
     /**
      * Exporteert de mutaties.
      * @returns {Promise<void>}
      */
-    $('#m-export').onclick = () => exportMoves().catch((error) => toast(`Export mislukt: ${error.message}`, true));
+    $('#m-export').onclick = () => window.ArtikelenExports.exportMoves().catch((error) => toast(`Export mislukt: ${error.message}`, true));
     $('#m-from').onchange = loadMoves;
     $('#m-to').onchange = loadMoves;
     $('#m-kind').onchange = renderMoves;
@@ -1599,8 +1078,11 @@
       } catch (error) { toast(error.message, true); }
     };
     setupUnits();
-    setupNew();
-    setupImport();
+    window.ArtikelenExports.setup({ state, api, toast, visible, valuesText, loadMoves, movesShown, KINDS });
+    window.ArtikelenNew.setup({ state, api, toast, num, parseTiers, load, loadUnits, fillUnits });
+    window.ArtikelenNew.setupAll();
+    window.ArtikelenMedia.setup({ state, toast, load, openItem });
+    window.ArtikelenMedia.setupAll();
     window.ArtikelenMerge.setup({
       api, toast, esc, eur, nl, getItems: () => state.items,
       /**
@@ -1619,19 +1101,15 @@
       pricingForm.addEventListener('reset', () => setTimeout(() => syncPricing(pricingForm)));
     }
     window.ArtikelenTexts.setup({ api, toast, esc, openItem: (id) => openItem(id, true), reloadItem: () => reloadItem() });
-    window.ArtikelenCounts.setup({ api, toast, esc, nl, eur, workbook, save, stamp });
-    window.ArtikelenPriceFactor.setup({ api, toast, esc, nl, eur, workbook, save, stamp });
-    window.ArtikelenOrders.setup({ api, toast, esc, nl, eur, getItems: () => state.items, workbook, save, stamp, afterProposal: () => loadReorder().catch((error) => toast(error.message, true)) });
+    window.ArtikelenCounts.setup({ api, toast, esc, nl, eur, workbook: window.ArtikelenExports.workbook, save: window.ArtikelenExports.save, stamp: window.ArtikelenExports.stamp });
+    window.ArtikelenPriceFactor.setup({ api, toast, esc, nl, eur, workbook: window.ArtikelenExports.workbook, save: window.ArtikelenExports.save, stamp: window.ArtikelenExports.stamp });
+    window.ArtikelenOrders.setup({ api, toast, esc, nl, eur, getItems: () => state.items, workbook: window.ArtikelenExports.workbook, save: window.ArtikelenExports.save, stamp: window.ArtikelenExports.stamp, afterProposal: () => loadReorder().catch((error) => toast(error.message, true)) });
     window.ArtikelenProposals.setup({
       api, toast, esc, nl, eur, openOrder: openPurchaseOrder,
       /** Toont het tabblad Bestelvoorstel (vanuit de melding boven de tabbladen). */
       showReorder: () => { showTab('reorder'); },
     });
     loadUnits().catch((error) => toast(error.message, true));
-    setupShop();
-    setupMedia();
-    setupImagesImport();
-    setupImage();
     setupItem();
     window.addEventListener('popstate', () => {
       const itemId = new URLSearchParams(location.search).get('id');
@@ -1651,7 +1129,7 @@
       else if (TABS.includes(hash)) showTab(hash);
       // Vanuit een werkorder: "Op voorraad nemen" met de ontbrekende codes.
       const codes = (params.get('codes') || '').split(',').map((code) => code.trim()).filter((code) => Catalog.articles[code.toUpperCase()]);
-      if (codes.length) openImport(codes);
+      if (codes.length) window.ArtikelenNew.openImport(codes);
     }
     if (window.AquatechCommon) {
       window.AquatechCommon.onReturn(() => {
