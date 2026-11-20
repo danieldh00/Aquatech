@@ -196,3 +196,6 @@ body.has-nav .tab[data-purchasing] { display: none; }
 
 /* Prioriteitkolom van de leveranciers per artikel: knoppen naast het label, niet eronder. */
 #d-sup-table td.nowrap { white-space: nowrap; }
+
+/* Melding bij leveranciers per artikel: de voorkeur is niet leverbaar, het bestelvoorstel kiest een backup. */
+.sup-notice { margin: 8px 0; padding: 8px 12px; border-left: 4px solid var(--at-warn); background: var(--primary-soft); font-size: 14px; }

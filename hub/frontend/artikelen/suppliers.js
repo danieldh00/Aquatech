@@ -140,16 +140,31 @@
    */
   const rankLabel = (index) => (index === 0 ? 'Voorkeur' : `Backup ${index}`);
 
+  /** Toont boven de tabel wie het bestelvoorstel nu kiest als de voorkeur niet leverbaar is (of dat niemand leverbaar is). */
+  function renderBackupNotice() {
+    const { esc } = context;
+    const notice = $('#d-sup-notice');
+    const [preferred] = state.lines;
+    if (!preferred || preferred.stockStatus !== 'out') { notice.hidden = true; return; }
+    const backupIndex = state.lines.findIndex((line, index) => index > 0 && line.stockStatus !== 'out' && !line.supplierArchived);
+    notice.hidden = false;
+    notice.innerHTML = backupIndex < 0
+      ? `<b>${esc(preferred.supplierName)}</b> (voorkeur) is niet leverbaar en er is geen leverbare backup. Het bestelvoorstel blijft bij de voorkeur bestellen.`
+      : `<b>${esc(preferred.supplierName)}</b> (voorkeur) is niet leverbaar. Het bestelvoorstel bestelt nu bij <b>${esc(state.lines[backupIndex].supplierName)}</b> (${esc(rankLabel(backupIndex))}).`;
+  }
+
   /** Tekent de leveranciersregels van het artikel en de keuzelijst om er een bij te zetten. */
   function renderLines() {
     const { esc } = context;
     const item = state.item;
     const archivedItem = Boolean(item && item.archived);
+    renderBackupNotice();
     $('#d-sup-table').innerHTML = state.lines.length ? `<thead><tr><th>Prioriteit</th><th>Leverancier</th><th>Artikelnummer leverancier</th><th class="num">Inkoopprijs (€)</th><th class="num">Bestelhoeveelheid (${esc(item.unit)})</th><th class="num">Levertijd (dagen)</th><th>Voorraad bij leverancier</th><th></th></tr></thead>
       <tbody>${state.lines.map((line, index) => `<tr data-line="${index}">
         <td class="nowrap"><b>${esc(rankLabel(index))}</b>
           <button class="btn small" type="button" data-move="-1" data-index="${index}" ${index === 0 ? 'disabled' : ''} aria-label="Hogere prioriteit">▲</button>
-          <button class="btn small" type="button" data-move="1" data-index="${index}" ${index === state.lines.length - 1 ? 'disabled' : ''} aria-label="Lagere prioriteit">▼</button></td>
+          <button class="btn small" type="button" data-move="1" data-index="${index}" ${index === state.lines.length - 1 ? 'disabled' : ''} aria-label="Lagere prioriteit">▼</button>
+          ${index > 0 ? `<button class="linkbtn" type="button" data-prefer="${index}">Maak voorkeur</button>` : ''}</td>
         <td class="wrap">${esc(line.supplierName)}${line.supplierArchived ? ' <span class="pill">Gearchiveerd</span>' : ''}</td>
         <td><input data-field="supplierSku" value="${esc(line.supplierSku)}" maxlength="80" aria-label="Artikelnummer van de leverancier"></td>
         <td class="num"><input data-field="costPrice" type="number" min="0" step="0.0001" inputmode="decimal" value="${line.costPrice == null ? '' : line.costPrice}" placeholder="van het artikel" aria-label="Inkoopprijs"></td>
@@ -224,10 +239,26 @@
     /** Bewaart de leveranciers van het artikel. */
     $('#d-suppliers button[data-save]').onclick = () => { saveLines(); };
     /**
+     * Ververst de melding als de voorraadstatus van een leverancier wijzigt.
+     * @param {Event} event de wijziging
+     */
+    $('#d-sup-table').onchange = (event) => {
+      if (!event.target.matches('[data-field=stockStatus]')) return;
+      readLines();
+      renderBackupNotice();
+    };
+    /**
      * Haalt een regel weg (pas bewaard met Bewaren).
      * @param {MouseEvent} event de klik
      */
     $('#d-sup-table').onclick = (event) => {
+      const preferButton = event.target.closest('[data-prefer]');
+      if (preferButton) {
+        readLines();
+        state.lines.unshift(state.lines.splice(Number(preferButton.dataset.prefer), 1)[0]);
+        renderLines();
+        return;
+      }
       const moveButton = event.target.closest('[data-move]');
       if (moveButton) {
         readLines();
