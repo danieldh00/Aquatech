@@ -242,6 +242,10 @@
       const mode = event.target.closest && event.target.closest('.op-mode');
       if (mode && mode.dataset.mode === 'count' && $('#ct-list').hidden && $('#ct-location').hidden) showList();
     });
+    // De zijbalk kan naar #tellen wijzen op dezelfde pagina: het scherm volgt de hash.
+    window.addEventListener('hashchange', () => {
+      if (location.hash === '#tellen' && $('#ct-list').hidden && $('#ct-location').hidden) showList();
+    });
     $('#ct-refresh').addEventListener('click', () => loadList().catch((error) => toast(error.message, true)));
     $('#ct-locations').addEventListener('click', (event) => {
       const row = event.target.closest('[data-index]');
