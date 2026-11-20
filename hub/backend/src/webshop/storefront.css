@@ -757,4 +757,4 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
 .product-card .qty-step:hover:not(:disabled) { background: color-mix(in srgb, var(--at-shop-navy) 14%, var(--at-white)); }
 .product-card .qty-step:disabled { opacity: .4; cursor: default; }
 @media (max-width: 600px) { .product-card .qty-step { width: 24px; } .product-card .qty-group input { width: 30px; } }
-@container (max-width: 215px) { .qty-step { width: 22px; } }
+@container (max-width: 215px) { .product-card .qty-step { width: 22px; } }
