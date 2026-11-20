@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.30.1',
+      date: '2026-11-20',
+      title: 'Wekelijkse hersteltest van de back-up',
+      items: [
+        { text: 'De server test elke week of de nieuwste back-up echt terug te zetten is, in een aparte wegwerpcontainer. De uitslag staat in Beheer > Systeem > Hersteltest, met de dag en tijd in te stellen en een knop *Nu testen*.', for: ['beheer'] },
+        { text: 'Mislukt de hersteltest, of is hij al meer dan 9 dagen niet gedraaid, dan meldt de bewaking dat.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.30.0',
       date: '2026-11-20',
       title: 'Klantlinks altijd op het openbare webadres en limiet op losse mails',

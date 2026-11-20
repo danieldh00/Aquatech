@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.30.1
+
+- `deploy/apps01/restore-test.sh` (+ systemd `aquatech-restore-test.{service,timer,path}`): ontsleutelt de nieuwste `pg_dump` als stroom, zet hem terug in een wegwerp-postgres (zelfde image, `--memory 768m`, `--network none`, geen vaste opslag, altijd opgeruimd) en controleert tabellen, schemaversie, rijtellingen (marge) en sanity-queries; schrijft `update/status/restore-test.json`.
+- Servertaak `002-hersteltest-back-up-inrichten` installeert script en units (`SYSTEMD_DIR` overschrijfbaar voor tests).
+- `platform/restore-test.js` + `restore-test-routes.js` (`/api/admin/restore-test`, `canUpdate`, audit `hersteltest_ingesteld|aangevraagd`), instelling en *Nu testen* via `update/request/`; bewakingscontrole `hersteltest` in `monitoring-checks.js`.
+- Beheer > Systeem > Hersteltest (`beheer/hersteltest.js`): laatste uitslag, planning, historie en Excel-export. `system-update.js` exporteert zijn bestandshulpjes.
+- Tests: `restore-test-script.test.js` (nep-docker), `restore-test-routes.test.js`, `host-tasks.test.js` aangepast voor meerdere taken.
+
 ## 1.30.0
 
 - Offerte- en afspraaklinks: de herkomst komt uit `shopPayment.publicUrl` (`pinShareBase`), niet uit de browser van de medewerker; zonder ingevuld webadres blijft het gedrag gelijk.
