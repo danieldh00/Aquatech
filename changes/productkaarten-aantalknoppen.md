@@ -1,4 +1,6 @@
+---
 titel: Aantalknoppen op productkaarten
+---
 
 ## Nieuws
 - Op de productkaarten in de webshop staan nu − en + knoppen naast het aantal.
