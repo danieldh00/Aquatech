@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.27.6',
+      date: '2026-11-20',
+      title: 'Drive-back-uproutes naar eigen bestand',
+      items: [],
+    },
+    {
       version: '1.27.5',
       date: '2026-11-20',
       title: 'Rollenroutes naar eigen bestand',
