@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.27.9',
+      date: '2026-11-20',
+      title: 'Mail via Microsoft Graph versturen na automatisch instellen',
+      items: [
+        { text: 'Mailen via Microsoft Graph lukt nu ook direct na het instellen: een net verleende machtiging werd soms nog niet herkend. De foutmeldingen noemen nu de gebruikte afzender en dat een nieuwe machtiging tot ongeveer 15 minuten kan duren.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.27.8',
       date: '2026-11-20',
       title: 'Voorraadcode opgesplitst',

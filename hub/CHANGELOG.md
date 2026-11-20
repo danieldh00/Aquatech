@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.27.9
+
+- `mail-graph.js`: een onthouden token bevat de machtigingen van het moment van opvragen. Bij 401/403 op `sendMail` met een onthouden token wordt één keer een vers token opgehaald en opnieuw verstuurd (geen herhaling bij een vers token). `EGRAPH_DENIED` en `EGRAPH_MAILBOX` dragen het afzenderadres (geen geheim) mee.
+- `mailer.js` (`mailFailure`): melding noemt de afzender, de wachttijd van een nieuwe machtiging en dat een alias niet werkt als afzender.
+
 ## 1.27.8
 
 stock.js is opgesplitst in stock-helpers.js (saneren en hulpfuncties) en stock-routes.js (API-routes), zonder gedragswijziging.
