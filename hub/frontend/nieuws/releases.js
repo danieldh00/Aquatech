@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.28.8',
+      date: '2026-11-20',
+      title: 'Mooiere productkaarten in de webshop',
+      items: [
+        { text: 'Productkaarten in de webshop hebben een nieuw ontwerp: foto\'s op een vaste hoogte met het voorraadlabel erop, titel, variantkeuze, prijs en winkelwagenknop staan in elke kaart op dezelfde plek, en op de home staan de producten in een raster van vier kolommen.' },
+      ],
+    },
+    {
       version: '1.28.7',
       date: '2026-11-20',
       title: 'Eigen Over ons-tekst uit Beheer in de nieuwe opmaak',

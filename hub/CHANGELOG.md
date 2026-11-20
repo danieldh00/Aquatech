@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.28.8
+
+`webshop/storefront.css` en `storefront-pages.js` (`productCard`): vaste fotohoogte (190 px, 130 px op een telefoon) op een zacht vlak, voorraadlabel als pil op de foto (het `stock`-element staat nu direct na de fotolink in de kaart, het script `varianten.js` vindt het nog via `data-variant-stock`), een vaste rij van 52 px voor de variantkeuze (kaarten zonder variant tonen daar `Artikelnr.`), raster `minmax(250px, 1fr)`, teal rand en schaduw bij hover. Het winkelwagenicoon op smalle kaarten (container query) is een witte masker-SVG.
+
 ## 1.28.7
 
 `contentPage` toont de pagina `over-ons` met dezelfde kop (`aboutHero`), bedrijfsgegevens (`aboutFacts`) en afsluiting (`aboutCta`) als de standaardpagina; de eigen tekst staat in de verhaalkolom. Alleen HTML en CSS, geen migratie.
