@@ -81,7 +81,7 @@ function registerSystemUpdateRoutes(app, { systemUpdate, store, audit, mainTenan
   });
 
   // Handmatig controleren op een nieuwe versie: alleen kijken, geen wachtwoord nodig. Geen limiet voor de beheerder (de
-  // route zit achter inloggen + canUpdate): een lopende controle wordt hergebruikt (`requestCheck`), dus dubbel klikken
+  // route zit achter inloggen + canUpdate): een lopende of net aangevraagde controle (< 10 s) wordt hergebruikt (`requestCheck`), dus dubbel klikken
   // maakt geen tweede aanvraag en wordt niet geweigerd.
   app.post('/api/admin/system-update/check', (req, res) => {
     const out = systemUpdate.requestCheck({ userId: req.user.id, byName: req.user.display_name });

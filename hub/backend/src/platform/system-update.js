@@ -24,6 +24,7 @@ const STEPS = ['ophalen', 'onderhoud', 'back-up', 'herstarten', 'controleren', '
 const MAX_FILE_BYTES = 256 * 1024;
 const MAINTENANCE_MAX_MS = 30 * 60 * 1000;
 const CACHE_MS = 2000;
+const CHECK_MIN_GAP_MS = 10 * 1000; // minimale tijd tussen twee handmatige controles
 const CHECK_MAX_MS = 3 * 60 * 1000;
 const LIMITS = { releases: 30, items: 20, title: 200, text: 1000, message: 300 };
 
@@ -277,7 +278,8 @@ function createSystemUpdate({ statusDir = '', requestDir = '', currentVersion, n
     const current = view();
     if (current.maintenance.active || current.status.state === 'bezig') return { error: 'busy', status: 409, message: 'Er loopt al een update.' };
     if (current.pending) return { error: 'pending', status: 409, message: 'Er staat al een update aangevraagd.' };
-    if (current.checking) return { checking: true, started: false };
+    // Een lopende controle, of een die net is aangevraagd, wordt hergebruikt: zo kan niemand de host overspoelen.
+    if (current.checking || (lastCheckAt > 0 && now() - lastCheckAt < CHECK_MIN_GAP_MS)) return { checking: true, started: false };
     lastCheckAt = Math.floor(now() / 1000) * 1000;
     writeJsonFile(requestDir, 'request.json', { id: crypto.randomUUID(), check: true, requestedAt: new Date(now()).toISOString(), by: String(userId || ''), byName: cleanText(byName, 80) });
     return { checking: true, started: true };
