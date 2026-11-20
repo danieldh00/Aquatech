@@ -20,7 +20,10 @@ case "$1" in
   inspect)
     if [[ "$*" == *Health* ]]; then echo "\${FAKE_PROD_HEALTH:-healthy}"; else echo "postgres:17"; fi
     exit 0 ;;
-  run) exit \${FAKE_RUN_EXIT:-0} ;;
+  network) exit 0 ;;
+  run)
+    if [[ "$*" == *restoreapp* ]]; then exit \${FAKE_APP_RUN_EXIT:-0}; fi
+    exit \${FAKE_RUN_EXIT:-0} ;;
   rm) exit 0 ;;
   exec)
     shift
@@ -29,6 +32,13 @@ case "$1" in
     side=test; [[ "$container" == "aquatech-postgres" ]] && side=prod
     case "$1" in
       pg_isready) exit 0 ;;
+      node)
+        if [[ "$2" == "-e" ]]; then exit \${FAKE_APP_HEALTH_EXIT:-0}; fi
+        cat >/dev/null
+        echo "ok|App leest de teruggezette gegevens (geen eerste start)"
+        echo "\${FAKE_APP_LOGIN:-ok}|Inloggen als beheerder op de teruggezette gegevens"
+        echo "ok|Offertes ophalen"
+        exit 0 ;;
       pg_restore)
         if [[ -n "\${FAKE_LIST_EARLY:-}" && "$*" == *" -l"* ]]; then
           head -c 1 >/dev/null
@@ -124,10 +134,15 @@ test('geslaagd: terugzetten, controles, opruimen en door de app te lezen', () =>
   assert.strictEqual(latest.tables.backup, 3);
   assert.strictEqual(latest.rows.checked, 3);
   assert.deepStrictEqual(latest.rows.deviating, []);
-  assert.strictEqual(latest.sanity.length, 3);
+  assert.strictEqual(latest.sanity.length, 7, 'drie databasecontroles, de app-start en drie controles van het app-script');
+  assert.ok(latest.sanity.some((item) => /Inloggen als beheerder/.test(item.name) && item.ok), 'de app logde in op de teruggezette gegevens');
   assert.ok(latest.sanity.every((item) => item.ok));
   const calls = fs.readFileSync(path.join(env.state, 'calls.log'), 'utf8');
-  assert.match(calls, /run -d --name aquatech-restoretest-\d+ --memory 768m --memory-swap 768m --network none/);
+  assert.match(calls, /run -d --name aquatech-restoretest-\d+ --memory 768m --memory-swap 768m --network aquatech-restorenet-\d+ --network-alias db/);
+  assert.match(calls, /network create --internal aquatech-restorenet-\d+/, 'intern netwerk zonder uitgang');
+  assert.match(calls, /run -d --name aquatech-restoreapp-\d+ --memory 512m/, 'wegwerp-app met geheugenlimiet');
+  assert.match(calls, /rm -f -v aquatech-restoreapp-\d+/, 'wegwerp-app wordt opgeruimd');
+  assert.match(calls, /network rm aquatech-restorenet-\d+/, 'wegwerpnetwerk wordt opgeruimd');
   assert.match(calls, /rm -f -v aquatech-restoretest-\d+/, 'wegwerpcontainer wordt opgeruimd');
   // De app leest dezelfde uitkomst.
   const view = createRestoreTest({ statusDir: env.statusDir, requestDir: env.requestDir }).view();
@@ -144,6 +159,18 @@ test('een grote back-up waarbij pg_restore -l eerder stopt is geen fout', () => 
   const result = env.run({ FAKE_LIST_EARLY: '1' });
   assert.strictEqual(result.status, 0, result.stdout + result.stderr);
   assert.strictEqual(readStatus(env.statusDir).runs[0].state, 'geslaagd');
+});
+
+test('mislukt: de app kan niet inloggen op de teruggezette gegevens, of start niet', () => {
+  let env = install({ policy: dueNow() });
+  assert.strictEqual(env.run({ FAKE_APP_LOGIN: 'fail' }).status, 1);
+  assert.match(readStatus(env.statusDir).runs[0].message, /sanity-controle/);
+  assert.ok(readStatus(env.statusDir).runs[0].sanity.some((item) => !item.ok && /Inloggen/.test(item.name)));
+  env = install({ policy: dueNow() });
+  assert.strictEqual(env.run({ FAKE_APP_RUN_EXIT: '1' }).status, 1, 'een app die niet start is een mislukte hersteltest');
+  env = install({ policy: dueNow() });
+  assert.strictEqual(env.run({ FAKE_APP_HEALTH_EXIT: '1', APP_WAIT_SEC: '2' }).status, 1, 'een app die niet gezond wordt is mislukt');
+  assert.ok(readStatus(env.statusDir).runs[0].sanity.some((item) => !item.ok && /start/.test(item.name)));
 });
 
 test('waarschuwing: oudere schemaversie en een tabel met een afwijkend aantal rijen', () => {
