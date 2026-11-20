@@ -279,7 +279,8 @@ sanity "Schemaversie vastgelegd" "SELECT count(*) FROM aquatech.schema_version"
 
 # ---------- De app zelf op de teruggezette gegevens ----------
 # Zelfde image als de draaiende app, hoogstens APP_MEMORY, alleen het interne netwerk (geen mail, koppelingen of
-# synchronisaties naar buiten), alleen-lezen bestandssysteem, wegwerp-datamap, CAPTCHA_DISABLED zodat inloggen niet
+# synchronisaties naar buiten), alleen-lezen bestandssysteem, kleine wegwerp-datamap (64 MB: een eigen back-up van de app
+# past er bij een grote database niet in en mislukt dan netjes in plaats van het geheugen te vullen), CAPTCHA_DISABLED zodat inloggen niet
 # naar Google hoeft. De hoofdsleutel gaat alleen-lezen mee: de back-up bevat versleutelde instellingen.
 APP_NOTE=""
 APP_IMAGE="$(docker inspect -f '{{.Config.Image}}' "${APP_PROD_CONTAINER:-aquatech}" 2>/dev/null || true)"
@@ -290,7 +291,7 @@ app_check() { # <naam> <ok|fail> <waarde> (zelfde lijst als de sanity-controles)
 if [[ -z "$APP_IMAGE" ]]; then
   APP_NOTE="De app-controle is overgeslagen (het image van de draaiende app is niet te vinden). "
 elif ! docker run -d --name "$APP_CONTAINER" --memory "$APP_MEMORY" --memory-swap "$APP_MEMORY" --cpus 1 \
-    --network "$TEST_NETWORK" --read-only --tmpfs /tmp --tmpfs /data \
+    --network "$TEST_NETWORK" --read-only --tmpfs /tmp:rw,size=32m --tmpfs /data:rw,size=64m \
     --security-opt no-new-privileges:true --cap-drop ALL --cap-add CHOWN --cap-add FOWNER --cap-add DAC_OVERRIDE --cap-add SETUID --cap-add SETGID \
     -v "$KEY_FILE:/run/secrets/master-key:ro" \
     -e PORT=3300 -e DATA_DIR=/data -e RUN_AS_ROOT=1 -e CAPTCHA_DISABLED=1 -e AQUATECH_MASTER_KEY_FILE=/run/secrets/master-key \
