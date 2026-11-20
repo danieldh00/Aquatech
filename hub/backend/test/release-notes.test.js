@@ -126,7 +126,10 @@ test('checkFragments: een nieuwspunt over uitbesteden of beheer zonder doelgroep
   write('goed.md', '- [beheer, uitbesteden] De tabbladbalk van Uitbesteden past op een telefoon.');
   assert.deepStrictEqual(tool.checkFragments(directory), []);
   write('fout.md', '- De tabbladbalk van Uitbesteden past op een telefoon.');
+  write('planner.md', '- De openbare tekenplanner toont nu de schaal.');
+  write('beheer.md', '- Onder Beheer > Rollen staat een nieuwe knop.');
   const problems = tool.checkFragments(directory);
-  assert.strictEqual(problems.length, 1);
-  assert.match(problems[0], /fout\.md.*doelgroep/);
+  assert.strictEqual(problems.length, 2);
+  assert.ok(problems.some((problem) => /fout\.md.*doelgroep/.test(problem)));
+  assert.ok(problems.some((problem) => /beheer\.md.*doelgroep/.test(problem)));
 });

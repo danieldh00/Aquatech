@@ -167,8 +167,8 @@ function applyFragments(options = {}) {
   return versions;
 }
 
-/** Termen die alleen medewerkers aangaan; een nieuwspunt erover zonder rechten ziet ook een klant (zie test/news.test.js). */
-const STAFF_TERMS = /Beheer → Rollen|Uitbesteden|Planner/;
+/** Termen die zeker alleen medewerkers aangaan (Beheer → …, Uitbesteden); een nieuwspunt erover zonder rechten ziet ook een klant. De planner staat er bewust niet in: de openbare tekenplanner is ook voor klanten. */
+const STAFF_TERMS = /Beheer\s*(?:→|>)\s*\w+|Uitbesteden/i;
 
 /**
  * Controleert alle bestanden in `changes/` zonder iets te wijzigen.
