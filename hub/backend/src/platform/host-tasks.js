@@ -42,6 +42,12 @@ const HOST_TASKS = [
     description: 'Installeert de nieuwste restore-test.sh op apps01 (maakt zelf een back-up als backups/postgres leeg is en meldt precies wat er mis is). Een app-update vernieuwt dit hostscript niet; zonder deze taak blijft de oude melding "Er is geen back-up gevonden" komen.',
     addedAt: '2026-11-20',
   },
+  {
+    id: '004-pg-back-up-script-herstellen',
+    title: 'Dagelijkse database-back-up herstellen',
+    description: 'Installeert de herstelde pg-backup.sh en restore-test.sh op apps01 en maakt meteen een back-up. De oude controle keurde elke back-up groter dan een paar tientallen kB af ("error writing output file"), waardoor er geen enkele bewaard bleef. Daarna werkt ook de lokale hersteltest.',
+    addedAt: '2026-11-20',
+  },
 ];
 
 const MAX_FILE_BYTES = 64 * 1024;

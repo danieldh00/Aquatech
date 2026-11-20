@@ -204,8 +204,11 @@ test_psql -c "CREATE ROLE aquatech_app NOLOGIN; CREATE ROLE aquatech NOLOGIN;" >
 
 # ---------- Terugzetten ----------
 PREPARED=1
-decrypt | docker exec -i "$TEST_CONTAINER" pg_restore -l 2>"$WORK_DIR/list.err" | grep ' TABLE ' >/dev/null \
-  || finish mislukt "De back-up is niet te ontsleutelen of bevat geen tabellen (andere hoofdsleutel?)."
+# pg_restore -l stopt na de inhoudsopgave (openssl krijgt dan een gesloten pijp en pipefail telt dat als fout), dus
+# eerst het hele bestand ontsleutelen en daarna de uitvoer van pg_restore -l in een variabele opvangen.
+decrypt >/dev/null 2>&1 || finish mislukt "De back-up is niet te ontsleutelen (andere hoofdsleutel?)."
+contents="$( { decrypt 2>/dev/null || true; } | docker exec -i "$TEST_CONTAINER" pg_restore -l 2>"$WORK_DIR/list.err" || true )"
+grep -q ' TABLE ' <<<"$contents" || finish mislukt "De back-up bevat geen tabellen."
 decrypt | docker exec -i "$TEST_CONTAINER" pg_restore -U postgres -d postgres --no-owner --no-acl 2>"$WORK_DIR/restore.err" >/dev/null
 errors="$(grep -c 'pg_restore: error' "$WORK_DIR/restore.err" || true)"
 if (( errors > 0 )); then

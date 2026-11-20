@@ -403,7 +403,11 @@ cmd_restore() {
   [[ -f "$file" && ! -L "$file" ]] || die "Back-upbestand niet gevonden: $file"
   [[ "$(pg_health)" == "healthy" ]] || die "De eigen PostgreSQL draait niet (healthy)."
   local decrypt="openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:secrets/master-key"
-  $decrypt < "$file" | docker exec -i "$PG_CONTAINER" pg_restore -l | grep ' TABLE ' >/dev/null || die "Back-up niet te ontsleutelen of leeg (andere hoofdsleutel?)."
+  # pg_restore -l stopt na de inhoudsopgave (openssl krijgt dan een gesloten pijp), dus de uitvoer eerst opvangen.
+  $decrypt < "$file" >/dev/null 2>&1 || die "Back-up niet te ontsleutelen (andere hoofdsleutel?)."
+  local contents
+  contents="$( { $decrypt < "$file" 2>/dev/null || true; } | docker exec -i "$PG_CONTAINER" pg_restore -l 2>/dev/null || true )"
+  grep -q ' TABLE ' <<<"$contents" || die "Back-up bevat geen tabellen."
   log "Back-up van de huidige stand vooraf"
   bash ./pg-backup.sh || die "Back-up vooraf mislukte; niets veranderd."
   trap 'dc_now up -d aquatech >/dev/null 2>&1 || true; rm -f update/status/maintenance.json' EXIT

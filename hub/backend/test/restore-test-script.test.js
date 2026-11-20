@@ -30,6 +30,11 @@ case "$1" in
     case "$1" in
       pg_isready) exit 0 ;;
       pg_restore)
+        if [[ -n "\${FAKE_LIST_EARLY:-}" && "$*" == *" -l"* ]]; then
+          head -c 1 >/dev/null
+          echo "; 1; 1259 TABLE aquatech users x"
+          exit 0
+        fi
         input="$(cat)"
         if [[ "$*" == *" -l"* || "$2" == "-l" ]]; then
           [[ -n "$input" ]] && echo "; 1; 1259 TABLE aquatech users x"
@@ -58,10 +63,10 @@ exit 0
 
 /**
  * Maakt een nep-installatie met een echt versleutelde dump, de nep-docker en de updatemappen.
- * @param {object} [options] policy (inhoud restore-test.json), prodCounts en testCounts (tekst "tabel|aantal" per regel), lastRun (epoch voor .restore-test-last).
+ * @param {object} [options] policy (inhoud restore-test.json), prodCounts en testCounts (tekst "tabel|aantal" per regel), lastRun (epoch voor .restore-test-last), plainBytes (grootte van de nep-dump).
  * @returns {object} appDir, statusDir, requestDir, state en run (script draaien).
  */
-function install({ policy = null, prodCounts = 'users|50\nquotes|200\nwork_orders|100', testCounts = 'users|50\nquotes|190\nwork_orders|100', lastRun = null } = {}) {
+function install({ policy = null, prodCounts = 'users|50\nquotes|200\nwork_orders|100', testCounts = 'users|50\nquotes|190\nwork_orders|100', lastRun = null, plainBytes = 11 } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'aqt-rtest-'));
   const appDir = path.join(root, 'app');
   const bin = path.join(root, 'bin');
@@ -73,7 +78,7 @@ function install({ policy = null, prodCounts = 'users|50\nquotes|200\nwork_order
   const keyFile = path.join(appDir, 'secrets', 'master-key');
   fs.writeFileSync(keyFile, 'k'.repeat(64));
   const plain = path.join(root, 'plain');
-  fs.writeFileSync(plain, 'dump-inhoud');
+  fs.writeFileSync(plain, plainBytes === 11 ? 'dump-inhoud' : 'x'.repeat(plainBytes));
   const encrypted = spawnSync('openssl', ['enc', '-aes-256-cbc', '-pbkdf2', '-iter', '200000', '-salt', '-pass', `file:${keyFile}`, '-in', plain, '-out', path.join(backupDir, 'aquatech-20261120-023000.dump.enc')]);
   assert.strictEqual(encrypted.status, 0, String(encrypted.stderr));
   fs.writeFileSync(path.join(bin, 'docker'), FAKE_DOCKER, { mode: 0o755 });
@@ -131,6 +136,14 @@ test('geslaagd: terugzetten, controles, opruimen en door de app te lezen', () =>
   // Tweede aanroep direct erna: niets meer aan de beurt.
   env.run();
   assert.strictEqual(readStatus(env.statusDir).runs.length, 1);
+});
+
+/** Een grote dump terwijl pg_restore -l na de inhoudsopgave stopt (zoals echt): dat is geen fout (openssl krijgt een gesloten pijp). */
+test('een grote back-up waarbij pg_restore -l eerder stopt is geen fout', () => {
+  const env = install({ policy: dueNow(), plainBytes: 3 * 1024 * 1024 });
+  const result = env.run({ FAKE_LIST_EARLY: '1' });
+  assert.strictEqual(result.status, 0, result.stdout + result.stderr);
+  assert.strictEqual(readStatus(env.statusDir).runs[0].state, 'geslaagd');
 });
 
 test('waarschuwing: oudere schemaversie en een tabel met een afwijkend aantal rijen', () => {
