@@ -48,6 +48,12 @@ const HOST_TASKS = [
     description: 'Installeert de herstelde pg-backup.sh en restore-test.sh op apps01 en maakt meteen een back-up. De oude controle keurde elke back-up groter dan een paar tientallen kB af ("error writing output file"), waardoor er geen enkele bewaard bleef. Daarna werkt ook de lokale hersteltest.',
     addedAt: '2026-11-20',
   },
+  {
+    id: '005-hersteltest-app-controle',
+    title: 'Hersteltest met app-controle bijwerken',
+    description: 'Installeert de nieuwste restore-test.sh op apps01. De hersteltest start daarna ook een wegwerp-app (hoogstens 512 MB, intern netwerk zonder uitgang, geen mail of koppelingen) op de teruggezette database en controleert dat die inlogt en gegevens ophaalt.',
+    addedAt: '2026-11-20',
+  },
 ];
 
 const MAX_FILE_BYTES = 64 * 1024;

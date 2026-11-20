@@ -383,6 +383,7 @@ HOST_TASK_IDS=(
   002-hersteltest-back-up-inrichten
   003-hersteltest-script-bijwerken
   004-pg-back-up-script-herstellen
+  005-hersteltest-app-controle
 )
 HOST_TASKS_LEDGER="host-tasks.json"
 # Functienaam van een taak (streepjes worden underscores).
@@ -476,6 +477,11 @@ hosttask_004_pg_back_up_script_herstellen() {
   hosttask_002_hersteltest_back_up_inrichten || return 1
   (cd "$APP_DIR" && bash ./pg-backup.sh) || { echo "FOUT: de back-up mislukte; zie bovenstaande melding." >&2; return 1; }
   echo "pg-backup.sh vernieuwd en een back-up gemaakt."
+}
+
+# Taak 005: restore-test.sh vernieuwen (de hersteltest start nu ook een wegwerp-app op de teruggezette database).
+hosttask_005_hersteltest_app_controle() {
+  hosttask_002_hersteltest_back_up_inrichten
 }
 
 # Toont wat er openstaat. Uitgangscode 10 = er is iets te doen (two_step vraagt dan om bevestiging).
