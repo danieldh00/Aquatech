@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.27.5
+
+Intern: de routes van Beheer > Rollen (`/api/admin/roles`) staan nu in `platform/roles-routes.js` in plaats van in `server.js`. Geen gedragswijziging.
+
 ## 1.27.4
 
 - Artikelen > Leveranciers per artikel: prioriteit met ▲/▼ in plaats van de voorkeursknop, kolom voorraadstatus (`stockStatus`), nieuwe regels komen onderaan.
