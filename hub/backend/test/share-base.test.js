@@ -23,3 +23,9 @@ test('zonder webadres of bij een ongeldig adres verandert er niets', () => {
   const settings = fakeSettings({ shopPayment: { publicUrl: 'https://aquatech.example/' } });
   assert.strictEqual(pinShareBase(settings, 'https://evil.example/elders.html'), 'https://evil.example/elders.html');
 });
+
+test('een pad in het webadres blijft voor het pad van de app, zonder dubbel voorvoegsel', () => {
+  const settings = fakeSettings({ shopPayment: { publicUrl: 'https://voorbeeld.example/winkel/' } });
+  assert.strictEqual(pinShareBase(settings, 'http://localhost:3300/app/openbaar/offerte.html'), 'https://voorbeeld.example/winkel/app/openbaar/offerte.html');
+  assert.strictEqual(pinShareBase(settings, 'https://intern.example/winkel/app/openbaar/offerte.html'), 'https://voorbeeld.example/winkel/app/openbaar/offerte.html');
+});

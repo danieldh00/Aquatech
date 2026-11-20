@@ -130,7 +130,11 @@ function pinShareBase(settings, url, page = 'offerte.html') {
   if (!base) return url;
   const payment = settings.get('shopPayment');
   const publicUrl = cleanPublicUrl(payment && payment.publicUrl);
-  return publicUrl ? `${new URL(publicUrl).origin}${new URL(base).pathname}` : base;
+  if (!publicUrl) return base;
+  // Een pad in het webadres (bijv. /winkel/) hoort voor het pad van de app, tenzij de browser al via dat pad binnenkwam.
+  const prefix = new URL(publicUrl).pathname.replace(/\/$/, '');
+  const pagePath = new URL(base).pathname;
+  return `${new URL(publicUrl).origin}${pagePath.startsWith(`${prefix}/`) ? '' : prefix}${pagePath}`;
 }
 
 /**
