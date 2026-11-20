@@ -19,6 +19,7 @@ const { preferencesOf } = require('../platform/store');
 const { ifBaseOf } = require('../beveiliging/idempotency');
 const { requireVerifiedAddress } = require('../platform/address-lookup');
 const { linkExpired } = require('../platform/public-links');
+const { createRateLimiter } = require('../beveiliging/rate-limit');
 
 /**
  * Kopie (bcc) van een verstuurde mail naar de afzender, als die dat in Mijn
@@ -27,7 +28,7 @@ const { linkExpired } = require('../platform/public-links');
  * @returns {string|undefined} Het e-mailadres, of undefined.
  */
 const copyTo = (user) => (user && preferencesOf(user).mailCopy && validEmail(user.email) ? user.email : undefined);
-const { validShareBase, mailBody } = require('../verkoop/quotes');
+const { validShareBase, pinShareBase, mailBody } = require('../verkoop/quotes');
 
 const Core = require(path.join(FRONTEND_DIR, 'werkorders', 'workorder-core.js'));
 
@@ -869,7 +870,7 @@ function registerWorkOrderRoutes(app, ctx) {
 
   // ---------- Klantlink: de klant ziet en bevestigt de afspraak ----------
   app.post('/api/workorders/:id/share', requireJson, requireWo, requirePlanning, (req, res) => {
-    const out = workorders.share(tenantOf(req), req.params.id, req.body?.url);
+    const out = workorders.share(tenantOf(req), req.params.id, pinShareBase(settingsOf(req), req.body?.url, PAGE));
     if (out.error === 'invalid_url') return res.status(400).json({ error: 'invalid_url', message: 'Ongeldig adres voor de link.' });
     if (out.error) return notFound(res);
     audit(req, 'afspraaklink_gemaakt', { workOrderId: out.workOrder.id, number: out.workOrder.number });
@@ -884,7 +885,9 @@ function registerWorkOrderRoutes(app, ctx) {
   });
 
   // Afspraak per e-mail naar de klant, met de link (maakt die zo nodig aan).
-  app.post('/api/workorders/:id/send', requireJson, requireWo, requirePlanning, async (req, res) => {
+  /** Hoeveel losse mails per uur een gebruiker via deze route mag versturen (de bulkroute heeft een eigen limiet). */
+  const workOrderSendLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, keyFn: (req) => `workOrderSendLimiter:${req.user.tenant_id}|${req.user.id}` });
+  app.post('/api/workorders/:id/send', requireJson, requireWo, requirePlanning, workOrderSendLimiter, async (req, res) => {
     const { to, subject, message, url } = req.body || {};
     const list = String(to || '').split(/[,;\s]+/).filter(Boolean);
     if (!list.length || list.length > 5 || !list.every(validEmail)) return res.status(400).json({ error: 'invalid_to', message: 'Vul een of meer geldige e-mailadressen in.' });
@@ -894,7 +897,7 @@ function registerWorkOrderRoutes(app, ctx) {
     const settings = settingsOf(req);
     const mailer = mailerFor(settings);
     if (!mailer.configured()) return res.status(409).json({ error: 'not_configured', message: 'Er is geen mailserver ingesteld (Beheer → Integraties → E-mail).' });
-    const shared = workorders.share(tenantOf(req), req.params.id, url);
+    const shared = workorders.share(tenantOf(req), req.params.id, pinShareBase(settings, url, PAGE));
     if (shared.error === 'invalid_url') return res.status(400).json({ error: 'invalid_url', message: 'Ongeldig adres voor de link.' });
     if (shared.error) return notFound(res);
     const workOrder = shared.workOrder;

@@ -583,3 +583,23 @@ test('API: VIES wordt niet gevraagd voor een onbekende offerte en heeft een limi
     server.close();
   }
 });
+
+test('klantlink: herkomst uit het webadres in Beheer, ongeldig adres blijft 400, losse mails hebben een limiet', async () => {
+  const { server, as } = await setup();
+  try {
+    const piet = await as('piet'), baas = await as('baas');
+    assert.strictEqual((await baas.put('/app/api/admin/settings', { shopPayment: { publicUrl: 'https://winkel.example/' } })).status, 200);
+    const quote = (await piet.post('/app/api/quotes', { data: { customer: { name: 'Fam. Jansen' } } })).body;
+    const bad = await piet.post(`/app/api/quotes/${quote.id}/share`, { url: 'https://evil.example/elders.html' });
+    assert.strictEqual(bad.status, 400);
+    assert.strictEqual(bad.body.error, 'invalid_url');
+    const shared = (await piet.post(`/app/api/quotes/${quote.id}/share`, { url: 'http://localhost:3300/app/openbaar/offerte.html' })).body;
+    assert.ok(shared.share.url.startsWith('https://winkel.example/app/openbaar/offerte.html#t='), shared.share.url);
+    // Zonder geldig e-mailadres 400 invalid_to; na 30 verzoeken per uur 429.
+    let last;
+    for (let count = 0; count < 31; count += 1) last = await piet.post(`/app/api/quotes/${quote.id}/send`, { to: 'geen-mailadres' });
+    assert.strictEqual(last.status, 429);
+  } finally {
+    server.close();
+  }
+});

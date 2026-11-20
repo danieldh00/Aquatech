@@ -28,6 +28,7 @@ const Core = require(path.join(FRONTEND_DIR, 'offertes', 'quote-core.js'));
 const InvoiceCore = require(path.join(FRONTEND_DIR, 'facturen', 'invoice-core.js'));
 const DocText = require(path.join(FRONTEND_DIR, 'shared', 'doc-text.js'));
 const { normalizeVatNumber, validVatNumber } = require('../webshop/vat');
+const { cleanPublicUrl } = require('../webshop/mollie');
 const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
 
 // Bedrijfsprofiel: tekstvelden met maximale lengte en getallen [min, max].
@@ -113,6 +114,27 @@ function validShareBase(url, page = 'offerte.html') {
   } catch {
     return null;
   }
+}
+
+/**
+ * Zet de herkomst van een klantlink vast op het webadres uit Beheer (Webshop > Betalen). De browser van de
+ * medewerker kan via localhost, een intern adres of een testdomein binnenkomen; zo'n link zou bij de klant niet werken.
+ * Is er geen webadres ingevuld of is het adres ongeldig, dan blijft het adres zoals het is (validShareBase beslist dan).
+ * @param {{ get: Function }} settings De instellingen van de omgeving.
+ * @param {string} url Het adres van de openbare pagina uit de browser.
+ * @param {string} [page] De openbare pagina (offerte.html of afspraak.html).
+ * @returns {string} Het adres met de openbare herkomst, of het oorspronkelijke adres.
+ */
+function pinShareBase(settings, url, page = 'offerte.html') {
+  const base = validShareBase(url, page);
+  if (!base) return url;
+  const payment = settings.get('shopPayment');
+  const publicUrl = cleanPublicUrl(payment && payment.publicUrl);
+  if (!publicUrl) return base;
+  // Een pad in het webadres (bijv. /winkel/) hoort voor het pad van de app, tenzij de browser al via dat pad binnenkwam.
+  const prefix = new URL(publicUrl).pathname.replace(/\/$/, '');
+  const pagePath = new URL(base).pathname;
+  return `${new URL(publicUrl).origin}${pagePath.startsWith(`${prefix}/`) ? '' : prefix}${pagePath}`;
 }
 
 /**
@@ -1084,7 +1106,7 @@ function registerQuoteRoutes(app, ctx) {
   // ---------- Openbare link (digitale offerte) ----------
   // Link maken (of de bestaande houden): de offerte gaat naar Verzonden.
   app.post('/api/quotes/:id/share', requireJson, requireQuotes, (req, res) => {
-    const out = quotes.share(req.user, req.params.id, req.body?.url);
+    const out = quotes.share(req.user, req.params.id, pinShareBase(settingsOf(req), req.body?.url));
     if (out.error === 'invalid_url') return res.status(400).json({ error: 'invalid_url', message: 'Ongeldig adres voor de link.' });
     if (out.error) return notFound(res);
     audit(req, 'offertelink_gemaakt', { quoteId: out.quote.id, number: out.quote.number });
@@ -1100,14 +1122,16 @@ function registerQuoteRoutes(app, ctx) {
   });
 
   // Versturen per e-mail met de link (maakt de link zo nodig aan).
-  app.post('/api/quotes/:id/send', requireJson, requireQuotes, async (req, res) => {
+  /** Hoeveel losse mails per uur een gebruiker via deze route mag versturen (de bulkroute heeft een eigen limiet). */
+  const quoteSendLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, keyFn: (req) => `quoteSendLimiter:${req.user.tenant_id}|${req.user.id}` });
+  app.post('/api/quotes/:id/send', requireJson, requireQuotes, quoteSendLimiter, async (req, res) => {
     const { to, subject, message, url } = req.body || {};
     const list = String(to || '').split(/[,;\s]+/).filter(Boolean);
     if (!list.length || list.length > 5 || !list.every(validEmail)) return res.status(400).json({ error: 'invalid_to', message: 'Vul een of meer geldige e-mailadressen in.' });
     const settings = settingsOf(req);
     const mailer = mailerFor(settings);
     if (!mailer.configured()) return res.status(409).json({ error: 'not_configured', message: 'Er is geen mailserver ingesteld (Beheer → Integraties → E-mail).' });
-    const shared = quotes.share(req.user, req.params.id, url);
+    const shared = quotes.share(req.user, req.params.id, pinShareBase(settings, url));
     if (shared.error === 'invalid_url') return res.status(400).json({ error: 'invalid_url', message: 'Ongeldig adres voor de link.' });
     if (shared.error) return notFound(res);
     const quote = shared.quote;
@@ -1158,7 +1182,7 @@ function registerQuoteRoutes(app, ctx) {
       const email = String(current.data?.customer?.email || '').trim();
       if (current.acceptance || current.order || !['concept', 'verzonden'].includes(current.status)) { skipped.push({ id, number: label, reason: 'Is al beantwoord, omgezet of afgesloten.' }); continue; }
       if (!validEmail(email)) { skipped.push({ id, number: label, reason: 'Geen geldig e-mailadres bij de klant.' }); continue; }
-      const shared = quotes.share(req.user, id, req.body.url);
+      const shared = quotes.share(req.user, id, pinShareBase(settings, req.body.url));
       if (shared.error) { skipped.push({ id, number: label, reason: 'Niet gevonden.' }); continue; }
       const quote = shared.quote;
       const language = quote.data && quote.data.language;
@@ -1311,4 +1335,4 @@ function registerQuoteRoutes(app, ctx) {
   });
 }
 
-module.exports = { createQuoteStore, registerQuoteRoutes, sanitizeProfile, withoutInternal, PROFILE_DEFAULTS, Core, validShareBase, validSignature, mailBody };
+module.exports = { createQuoteStore, registerQuoteRoutes, sanitizeProfile, withoutInternal, PROFILE_DEFAULTS, Core, validShareBase, pinShareBase, validSignature, mailBody };
