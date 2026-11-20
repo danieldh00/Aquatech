@@ -148,6 +148,7 @@ test('mislukt: fouten bij het terugzetten, een lege sanity-query en een nieuwere
   let env = install({ policy: dueNow() });
   assert.strictEqual(env.run({ FAKE_RESTORE_ERROR: 'could not execute query' }).status, 1);
   assert.match(readStatus(env.statusDir).runs[0].message, /Terugzetten gaf 1 fout/);
+  assert.ok(fs.existsSync(path.join(env.statusDir, '.restore-test-last')), 'een run die tot het terugzetten kwam telt als gedaan');
   assert.match(fs.readFileSync(path.join(env.state, 'calls.log'), 'utf8'), /rm -f -v aquatech-restoretest-/);
 
   env = install({ policy: dueNow() });
@@ -188,6 +189,13 @@ test('zonder back-up of met een symlink als aanvraag: veilig falen', () => {
   fs.rmSync(path.join(env.appDir, 'backups', 'postgres', 'aquatech-20261120-023000.dump.enc'));
   assert.strictEqual(env.run().status, 1);
   assert.match(readStatus(env.statusDir).runs[0].message, /geen back-up/);
+  assert.ok(fs.existsSync(path.join(env.statusDir, '.restore-test-retry')), 'mislukte voorbereiding: later opnieuw');
+  assert.ok(!fs.existsSync(path.join(env.statusDir, '.restore-test-last')), 'telt niet als gedaan');
+  env.run();
+  assert.strictEqual(readStatus(env.statusDir).runs.length, 1, 'binnen drie uur geen nieuwe poging');
+  fs.writeFileSync(path.join(env.statusDir, '.restore-test-retry'), `${Math.floor(Date.now() / 1000) - 4 * 3600}\n`);
+  env.run();
+  assert.strictEqual(readStatus(env.statusDir).runs.length, 2, 'na drie uur opnieuw geprobeerd');
 
   // Een symlink als instelling wordt niet gelezen (standaard: zondag 03:30, wel aan).
   const linked = install({});

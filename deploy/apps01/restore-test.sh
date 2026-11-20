@@ -29,6 +29,8 @@ STATUS_DIR="$APP_DIR/update/status"
 REQUEST_DIR="$APP_DIR/update/request"
 HISTORY_FILE="$STATUS_DIR/.restore-test-history"
 LAST_FILE="$STATUS_DIR/.restore-test-last"
+RETRY_FILE="$STATUS_DIR/.restore-test-retry"
+RETRY_AFTER_SEC=10800
 TEST_CONTAINER="aquatech-restoretest-$$"
 WORK_DIR=""
 
@@ -94,11 +96,15 @@ else
   last_epoch="$(cat "$LAST_FILE" 2>/dev/null || echo 0)"
   [[ "$last_epoch" =~ ^[0-9]+$ ]] || last_epoch=0
   (( slot_epoch > 0 && slot_epoch > last_epoch )) || exit 0
+  # Faalde de vorige poging vóór het terugzetten (geen back-up, productie niet gezond), dan pas na een paar uur opnieuw.
+  retry_epoch="$(cat "$RETRY_FILE" 2>/dev/null || echo 0)"
+  [[ "$retry_epoch" =~ ^[0-9]+$ ]] || retry_epoch=0
+  (( $(date +%s) - retry_epoch >= RETRY_AFTER_SEC )) || exit 0
 fi
 
 # ---------- Uitslag bijhouden ----------
 STARTED_AT="$(now)"; START_EPOCH="$(date +%s)"
-date +%s > "$LAST_FILE"
+PREPARED=0
 STATE="mislukt"; MESSAGE=""; BACKUP_NAME=""; BACKUP_BYTES=0; BACKUP_AT=""
 VERSION_BACKUP=0; VERSION_PROD=0; TABLES_BACKUP=0; TABLES_PROD=0; MISSING=""; DEVIATING=""; ROWS_CHECKED=0; SANITY=""
 
@@ -130,6 +136,8 @@ publish() { # <run-json> <afgerond: 0|1>
 # Rondt af met een uitslag en stopt.
 finish() { # <state> <melding>
   STATE="$1"; MESSAGE="$2"
+  # Alleen een run die tot het terugzetten kwam telt als gedaan; een mislukte voorbereiding wordt over enkele uren herhaald.
+  if (( PREPARED == 1 )); then date +%s > "$LAST_FILE"; rm -f "$RETRY_FILE"; else date +%s > "$RETRY_FILE"; fi
   publish "$(run_json "$STATE" "$(now)")" 1
   log "Hersteltest: $STATE. $MESSAGE"
   [[ "$STATE" == "mislukt" ]] && exit 1
@@ -171,6 +179,7 @@ prod_psql() { docker exec -i "$PG_CONTAINER" psql -U postgres -d aquatech -X -q 
 test_psql -c "CREATE ROLE aquatech_app NOLOGIN; CREATE ROLE aquatech NOLOGIN;" >/dev/null 2>&1 || true
 
 # ---------- Terugzetten ----------
+PREPARED=1
 decrypt | docker exec -i "$TEST_CONTAINER" pg_restore -l 2>"$WORK_DIR/list.err" | grep ' TABLE ' >/dev/null \
   || finish mislukt "De back-up is niet te ontsleutelen of bevat geen tabellen (andere hoofdsleutel?)."
 decrypt | docker exec -i "$TEST_CONTAINER" pg_restore -U postgres -d postgres --no-owner --no-acl 2>"$WORK_DIR/restore.err" >/dev/null
