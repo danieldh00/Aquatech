@@ -261,8 +261,13 @@ test('webshop: nooit gesynchroniseerd, fout, te oud en ok', async () => {
   });
   assert.deepStrictEqual(await runCheck(build(null, {}), 'webshop'), { skip: true });
   assert.deepStrictEqual(await runCheck(build({ syncedAt: new Date(NOW - HOUR).toISOString(), lastError: null }), 'webshop'), { ok: true });
-  assert.strictEqual((await runCheck(build({ syncedAt: new Date(NOW - 5 * HOUR).toISOString(), lastError: null }), 'webshop')).severity, 'waarschuwing');
-  assert.strictEqual((await runCheck(build({ syncedAt: new Date(NOW - 30 * HOUR).toISOString(), lastError: null }), 'webshop')).severity, 'fout');
+  const hourly = { url: 'https://shop.example.nl', syncSchedule: 'hourly' };
+  assert.strictEqual((await runCheck(build({ syncedAt: new Date(NOW - 5 * HOUR).toISOString(), lastError: null }, hourly), 'webshop')).severity, 'waarschuwing');
+  assert.strictEqual((await runCheck(build({ syncedAt: new Date(NOW - 30 * HOUR).toISOString(), lastError: null }, hourly), 'webshop')).severity, 'fout');
+  // Nachtrooster (standaard): een synchronisatie van 20 uur geleden is normaal, na een overgeslagen nacht volgt een waarschuwing.
+  assert.deepStrictEqual(await runCheck(build({ syncedAt: new Date(NOW - 20 * HOUR).toISOString(), lastError: null }), 'webshop'), { ok: true });
+  assert.strictEqual((await runCheck(build({ syncedAt: new Date(NOW - 32 * HOUR).toISOString(), lastError: null }), 'webshop')).severity, 'waarschuwing');
+  assert.strictEqual((await runCheck(build({ syncedAt: new Date(NOW - 60 * HOUR).toISOString(), lastError: null }), 'webshop')).severity, 'fout');
   assert.strictEqual((await runCheck(build({ syncedAt: new Date(NOW - HOUR).toISOString(), lastError: 'timeout' }), 'webshop')).severity, 'waarschuwing');
 });
 

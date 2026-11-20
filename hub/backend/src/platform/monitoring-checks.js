@@ -49,8 +49,9 @@ const EVENT_LOOP_MAX_MS = 1000;
 const HEAP_MAX_PCT = 90;
 const UPDATE_CHECK_MAX_HOURS = 24;
 const UPDATE_REFUSED_HOURS = 24;
-const SHOP_WARN_HOURS = 3;
-const SHOP_FAIL_HOURS = 24;
+// Drempels (uren) per synchronisatierooster van shopSource.syncSchedule: bij 'night' (standaard) hoort de laatste
+// synchronisatie tot ruim een dag oud te zijn, dus pas waarschuwen als een nacht is overgeslagen.
+const SHOP_THRESHOLDS = { tenmin: { warn: 3, fail: 24 }, hourly: { warn: 3, fail: 24 }, night: { warn: 30, fail: 54 } };
 const VISMA_WINDOW_HOURS = 24;
 const VISMA_REPEATED = 3;
 const AI_WINDOW_HOURS = 24;
@@ -480,8 +481,8 @@ function createMonitoringChecks(deps = {}) {
     checks.push({
       key: 'webshop', scope: 'tenant', title: 'Webshopsynchronisatie', intervalMinutes: 15,
       /**
-       * Als er een webshop (WooCommerce) gekoppeld is: laatste synchronisatie mislukt of langer dan 3 uur geleden =
-       * waarschuwing, langer dan een dag = fout.
+       * Als er een webshop (WooCommerce) gekoppeld is: laatste synchronisatie mislukt of ouder dan het rooster toelaat =
+       * waarschuwing (nachtrooster: 30 uur; elk uur of 10 minuten: 3 uur), veel ouder = fout.
        * @param {object} ctx De context van de monitor.
        * @returns {Promise<object>} Het resultaat.
        */
@@ -490,12 +491,13 @@ function createMonitoringChecks(deps = {}) {
         if (!source || !source.url) return SKIP;
         const status = shop.status(ctx.tenantId);
         if (!status) return SKIP;
+        const limits = SHOP_THRESHOLDS[source.syncSchedule] || SHOP_THRESHOLDS.night;
         const age = hoursSince(ctx.now(), status.syncedAt);
-        if (status.syncedAt && age > SHOP_FAIL_HOURS) {
+        if (status.syncedAt && age > limits.fail) {
           return problem('fout', `De webshop is al ${formatHours(age)} niet gesynchroniseerd${status.lastError ? `: ${status.lastError}` : '.'}`);
         }
         if (status.lastError) return problem('waarschuwing', `De laatste synchronisatie met de webshop is mislukt: ${status.lastError}`);
-        if (status.syncedAt && age > SHOP_WARN_HOURS) return problem('waarschuwing', `De webshop is al ${formatHours(age)} niet gesynchroniseerd.`);
+        if (status.syncedAt && age > limits.warn) return problem('waarschuwing', `De webshop is al ${formatHours(age)} niet gesynchroniseerd.`);
         return OK;
       },
     });
