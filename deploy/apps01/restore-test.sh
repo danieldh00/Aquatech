@@ -58,6 +58,8 @@ request_read() {
 }
 
 cleanup() {
+  # Onderbroken voordat het terugzetten begon (time-out, kill): ook dan pas over enkele uren opnieuw proberen.
+  [[ "${PREPARED:-0}" == 1 ]] || { [[ -n "${STARTED_AT:-}" ]] && date +%s > "$RETRY_FILE"; }
   docker rm -f -v "$TEST_CONTAINER" >/dev/null 2>&1 || true
   [[ -n "$WORK_DIR" ]] && rm -rf "$WORK_DIR"
 }
