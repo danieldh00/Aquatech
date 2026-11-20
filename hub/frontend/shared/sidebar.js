@@ -58,12 +58,20 @@
   let lastSignature = '';
   let lastData = null;
 
+  /** De groep die nu openstaat (hoogstens één); undefined zolang de zijbalk nog niet getekend is. */
+  let openKey;
+
   /**
-   * Leest welke groepen de gebruiker zelf heeft opengeklapt (per browser onthouden).
-   * @returns {object} Groepsleutel → true als de groep open staat.
+   * Leest de groep die de gebruiker zelf opengeklapt had (per browser onthouden, hoogstens één).
+   * @returns {string} Groepsleutel, of een lege tekst.
    */
-  function readOpenGroups() {
-    try { return JSON.parse(store.get(OPEN_GROUPS) || '{}') || {}; } catch (error) { return {}; }
+  function readOpenGroup() {
+    const saved = store.get(OPEN_GROUPS) || '';
+    // Oudere versies bewaarden een object met meerdere groepen: neem er één van.
+    if (saved.startsWith('{')) {
+      try { return Object.keys(JSON.parse(saved) || {})[0] || ''; } catch (error) { return ''; }
+    }
+    return saved;
   }
 
   /**
@@ -134,17 +142,21 @@
       const currentAttribute = module.id === active ? ' aria-current="page"' : '';
       return `<a class="at-nav-item" href="${esc(module.href)}" title="${esc(title)}"${currentAttribute}>${label}</a>`;
     };
-    const openGroups = readOpenGroups();
+    // Accordeon: hoogstens één groep open. Bij het laden staat dat de groep met de huidige pagina, anders de laatst gekozen.
+    if (openKey === undefined) {
+      const activeGroup = tools.navSections(items).find((section) => section.title && section.items.some((module) => module.id === active));
+      openKey = activeGroup ? activeGroup.key : readOpenGroup();
+    }
     /**
      * Inklapbare groep met de modules ingesprongen eronder; met één module is het gewoon een link.
-     * De groep met de huidige pagina staat open (en is gemarkeerd, ook als de gebruiker hem dichtklapt).
+     * Alleen de groep in `openKey` staat open; de groep met de huidige pagina is altijd gemarkeerd.
      * @param {{key: string, title: string, icon: string, items: object[]}} group De groep.
      * @returns {string} HTML van de groep.
      */
     const collapsible = (group) => {
       if (!group.title || group.items.length < 2) return group.items.map(link).join('');
       const hasActive = group.items.some((module) => module.id === active);
-      const open = hasActive || openGroups[group.key] === true;
+      const open = openKey === group.key;
       const total = group.items.reduce((sum, module) => sum + countOf(module), 0);
       const totalBadge = total > 0 ? `<span class="at-nav-sec-count" title="Nieuw sinds je vorige bezoek">${total > 9 ? '9+' : total}</span>` : '';
       return `<div class="at-nav-sec${open ? ' open' : ''}${hasActive ? ' has-active' : ''}" data-group="${esc(group.key)}">
@@ -185,13 +197,17 @@
         const head = event.target.closest('.at-nav-sec-head');
         if (!head) return;
         const group = head.closest('.at-nav-sec');
-        const open = group.classList.toggle('open');
+        const open = !group.classList.contains('open');
+        // Hoogstens één groep open: de andere klappen dicht.
+        nav.querySelectorAll('.at-nav-sec.open').forEach((other) => {
+          other.classList.remove('open');
+          other.querySelector('.at-nav-sec-head').setAttribute('aria-expanded', 'false');
+        });
+        group.classList.toggle('open', open);
         head.setAttribute('aria-expanded', String(open));
-        // De groep met de huidige pagina staat bij elk bezoek weer open; alleen de keuze voor de andere groepen blijft bewaard.
-        if (group.classList.contains('has-active')) return;
-        const saved = readOpenGroups();
-        if (open) saved[group.dataset.group] = true; else delete saved[group.dataset.group];
-        store.set(OPEN_GROUPS, JSON.stringify(saved));
+        openKey = open ? group.dataset.group : '';
+        // De groep met de huidige pagina staat bij elk bezoek weer open; de keuze telt alleen op pagina's zonder groep.
+        if (!nav.querySelector('.at-nav-sec.has-active')) store.set(OPEN_GROUPS, openKey);
       });
       attachSearch();
       /**
