@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.31.0',
+      date: '2026-11-20',
+      title: 'Database: extra indexen en controles op statussen',
+      items: [],
+    },
+    {
       version: '1.30.9',
       date: '2026-11-20',
       title: 'Hersteltest controleert nu ook de app zelf',
