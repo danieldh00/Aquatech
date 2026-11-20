@@ -585,11 +585,11 @@ test('script: een medewerker wordt niet door Clarity opgenomen en een oude of on
   assert.strictEqual(client.readConsent({ getItem: () => JSON.stringify({ v: 99, analytics: true }) }), null, 'een andere versie vraagt opnieuw');
 });
 
-test('webshop: Clarity staat standaard aan voor het project van AquaTech, komt met CSP in de pagina en is uit te zetten', async () => {
+test('webshop: Clarity staat standaard uit, komt met een project-ID met CSP in de pagina en is uit te zetten', async () => {
   const world = await setup();
   const shopper = world.shoppers[0].client;
-  // De testwereld zet Clarity uit; terugzetten naar de standaard geeft het project van AquaTech Service.
-  assert.strictEqual((await world.admin.put('/app/api/admin/settings', { reset: ['shopClarity'] })).status, 200);
+  assert.ok(!/data-shop-clarity/.test((await shopper.get('/')).text), 'uit zolang er niets is ingesteld');
+  assert.strictEqual((await world.admin.put('/app/api/admin/settings', { shopClarity: { enabled: true, projectId: 'zgjek0q90a' } })).status, 200);
   const home = await shopper.get('/');
   assert.match(home.text, /data-shop-clarity="zgjek0q90a"/);
   assert.ok(!/data-shop-analytics/.test(home.text), 'zonder Google Analytics geen meet-ID');

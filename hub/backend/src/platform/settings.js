@@ -74,8 +74,8 @@ const FIELDS = {
   // Google Analytics (GA4) in de webshop: aan/uit en meet-ID; stuurt een extern systeem aan, dus alleen live (zie shop-analytics.js).
   shopAnalytics: { type: 'object', default: {}, sanitize: sanitizeAnalytics, liveOnly: true },
   // Microsoft Clarity in de webshop (sessie-inzichten): aan/uit en project-ID; laadt pas na toestemming voor analytisch (zie shop-analytics.js).
-  // Standaard aan met het project van AquaTech Service, zodat er na de uitrol niets ingevuld hoeft te worden; wijzigbaar in Beheer.
-  shopClarity: { type: 'object', default: { enabled: true, projectId: 'zgjek0q90a' }, sanitize: sanitizeClarity, liveOnly: true },
+  // Standaard uit: elke organisatie vult het eigen project-ID in bij Beheer > Webshop.
+  shopClarity: { type: 'object', default: {}, sanitize: sanitizeClarity, liveOnly: true },
   // Vrijgave voor zoekmachines (webshop/seo.js): zolang `indexing` uit staat, krijgt elke pagina noindex en blokkeert robots.txt alles; sitemap en feeds bestaan dan niet. Alleen live.
   shopSeo: { type: 'object', default: {}, sanitize: sanitizeSeoSettings, liveOnly: true },
   // Onzichtbare captcha (Google reCAPTCHA v3) op de openbare formulieren (beveiliging/captcha.js): aan/uit, sitesleutel, minimumscore en
