@@ -24,8 +24,6 @@
 .pill.gereed, .pill.akkoord { background: #e8f5e9; color: #2e7d32; }
 .pill.geannuleerd, .pill.afgewezen, .pill.ander_moment, .pill.spoed { background: #ffebee; color: #c62828; }
 
-.contact { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 4px; }
-.contact a { color: var(--primary); }
 
 .modal-card.wide { width: min(900px, 100%); }
 .dossier h3 { margin: 18px 0 6px; font-size: 15px; color: var(--primary-dark); }
