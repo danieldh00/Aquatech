@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.28.2
+
+Het script van het artikelenscherm is opgesplitst in kleinere bestanden (Excel-export, nieuw artikel en overnames, mediabibliotheek), zonder wijziging in gedrag.
+
 ## 1.28.1
 
 De controle *Webshopsynchronisatie* (`monitoring-checks.js`) gebruikte vaste drempels (waarschuwing na 3 uur, fout na 24 uur) en negeerde `shopSource.syncSchedule`. Bij het standaardrooster `night` leverde dat dagelijks een onterechte waarschuwing op. De drempels volgen nu het rooster: `night` 30 uur (waarschuwing) en 54 uur (fout), `hourly` en `tenmin` ongewijzigd 3 en 24 uur. Test uitgebreid.

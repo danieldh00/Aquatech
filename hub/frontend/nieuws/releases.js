@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.28.2',
+      date: '2026-11-20',
+      title: 'Artikelen-scherm in kleinere bestanden',
+      items: [],
+    },
+    {
       version: '1.28.1',
       date: '2026-11-20',
       title: 'Geen onterechte webshopsync-waarschuwing meer',
