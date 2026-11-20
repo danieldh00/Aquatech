@@ -133,3 +133,18 @@ test('checkFragments: een nieuwspunt over uitbesteden of beheer zonder doelgroep
   assert.ok(problems.some((problem) => /fout\.md.*doelgroep/.test(problem)));
   assert.ok(problems.some((problem) => /beheer\.md.*doelgroep/.test(problem)));
 });
+
+test('releases.js in een PR: alleen een wijziging van de doelgroep (for:) is toegestaan', () => {
+  const base = "items: [\n  { text: 'Een punt over Uitbesteden.' },\n  { text: 'Nog een punt.', for: ['beheer'] },\n]";
+  assert.strictEqual(tool.audienceOnlyChange(base, base.replace("'Een punt over Uitbesteden.' }", "'Een punt over Uitbesteden.', for: ['beheer', 'uitbesteden'] }")), true);
+  assert.strictEqual(tool.audienceOnlyChange(base, base.replace(", for: ['beheer']", ", for: ['planning']")), true);
+  assert.strictEqual(tool.audienceOnlyChange(base, base.replace(", for: ['beheer']", '')), true);
+  assert.strictEqual(tool.audienceOnlyChange(base, base.replace('Nog een punt.', 'Een ander punt.')), false);
+  assert.strictEqual(tool.audienceOnlyChange(base, base.replace('items: [', "items: [\n  { text: 'Nieuw.', for: ['beheer'] },")), false);
+  assert.strictEqual(tool.audienceOnlyChange(base, base.replace("  { text: 'Nog een punt.', for: ['beheer'] },\n", '')), false);
+  const app = { status: 'M', name: 'hub/backend/src/server.js' };
+  const fragment = { status: 'A', name: 'changes/iets.md' };
+  const releases = { status: 'M', name: 'hub/frontend/nieuws/releases.js' };
+  assert.deepStrictEqual(tool.evaluatePullRequest({ files: [app, fragment, { ...releases, audienceOnly: true }], versionLineChanged: false, labels: [] }), []);
+  assert.strictEqual(tool.evaluatePullRequest({ files: [app, fragment, { ...releases, audienceOnly: false }], versionLineChanged: false, labels: [] }).length, 1);
+});

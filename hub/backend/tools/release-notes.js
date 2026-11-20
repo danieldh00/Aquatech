@@ -191,8 +191,20 @@ function checkFragments(directory = CHANGES_DIR) {
 }
 
 /**
+ * Controleert of twee versies van releases.js alleen in de doelgroepen (`for: [...]`) verschillen.
+ * Tekst, versies, datums en het toevoegen of verwijderen van punten verschillen dan wel en geven false.
+ * @param {string} before Inhoud op de basisbranch.
+ * @param {string} after Inhoud in de PR.
+ * @returns {boolean} True als alleen `for:`-doelgroepen zijn toegevoegd, gewijzigd of weggehaald.
+ */
+function audienceOnlyChange(before, after) {
+  const audience = /,\s*for:\s*\[[^\]]*\]/g;
+  return String(before).replace(audience, '') === String(after).replace(audience, '');
+}
+
+/**
  * Beoordeelt de wijzigingen van een pull request (zie .github/workflows/version.yml).
- * @param {{files: {status: string, name: string, similarity?: number}[], versionLineChanged: boolean, labels: string[]}} change Wat de PR wijzigt.
+ * @param {{files: {status: string, name: string, similarity?: number, audienceOnly?: boolean}[], versionLineChanged: boolean, labels: string[]}} change Wat de PR wijzigt.
  * @returns {string[]} Foutmeldingen (leeg als de PR in orde is).
  */
 function evaluatePullRequest(change) {
@@ -200,6 +212,7 @@ function evaluatePullRequest(change) {
   const forbidden = ['hub/CHANGELOG.md', 'hub/frontend/nieuws/releases.js'];
   for (const file of change.files) {
     if (file.status === 'R' && file.similarity === 100) continue; // alleen verplaatst, inhoud ongewijzigd
+    if (file.audienceOnly && file.name === 'hub/frontend/nieuws/releases.js') continue; // alleen de doelgroep (for:) van bestaande punten wijzigt
     if (forbidden.includes(file.name)) problems.push(`${file.name} wordt na het mergen automatisch bijgewerkt; haal deze wijziging uit de PR en zet de notes in changes/<naam>.md.`);
   }
   if (change.versionLineChanged) problems.push('Het versienummer in hub/backend/package.json wordt na het mergen automatisch verhoogd; haal die wijziging uit de PR.');
@@ -237,6 +250,11 @@ function checkPullRequest(baseRef) {
    */
   const versionOf = (ref, filePath) => { try { return JSON.parse(git('show', `${ref}:${filePath}`)).version; } catch (error) { return null; } };
   const versionLineChanged = Boolean(packageEntry) && versionOf(baseRef, packageEntry.oldName) !== versionOf('HEAD', packageEntry.name);
+  const releasesEntry = files.find((file) => file.name === 'hub/frontend/nieuws/releases.js' && file.status === 'M');
+  if (releasesEntry) {
+    const baseText = git('show', `${baseRef}:${releasesEntry.oldName}`);
+    releasesEntry.audienceOnly = audienceOnlyChange(baseText, git('show', `HEAD:${releasesEntry.name}`));
+  }
   const labels = JSON.parse(process.env.PR_LABELS || '[]');
   return [...evaluatePullRequest({ files, versionLineChanged, labels }), ...checkFragments()];
 }
@@ -262,4 +280,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { parseFragment, nextVersion, renderRelease, listFragments, applyFragments, checkFragments, evaluatePullRequest };
+module.exports = { parseFragment, nextVersion, renderRelease, listFragments, applyFragments, checkFragments, evaluatePullRequest, audienceOnlyChange };
