@@ -690,10 +690,10 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
 .product-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; }
 .product-card { position: relative; gap: 0; padding: 0; border-radius: 16px; overflow: hidden; container-type: inline-size; transition: border-color 0.15s, box-shadow 0.15s; }
 .product-card:hover { border-color: var(--at-shop-teal); box-shadow: 0 8px 22px rgba(27, 55, 104, 0.12); }
-.product-card .product-image { flex: none; aspect-ratio: auto; height: 190px; padding: 16px; box-sizing: border-box; background: #f2f5fa; border-bottom: 0; }
+.product-card .product-image { flex: none; aspect-ratio: auto; height: 190px; padding: 16px; box-sizing: border-box; background: color-mix(in srgb, var(--at-shop-navy) 5%, var(--at-white)); border-bottom: 0; }
 .product-card .product-image img { mix-blend-mode: multiply; }
 .product-card .stock { position: absolute; top: 10px; left: 10px; z-index: 1; padding: 4px 10px 4px 8px; font-size: 0.7rem; background: var(--at-shop-green-soft); border-radius: 999px; white-space: nowrap; }
-.product-card .stock.out { background: #fbe9e7; }
+.product-card .stock.out { background: color-mix(in srgb, var(--at-stock-out) 12%, var(--at-white)); }
 .product-card .stock::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: currentColor; }
 .product-card > :not(.product-image):not(.stock) { margin-left: 16px; margin-right: 16px; }
 .product-card .product-name, .product-card:hover .product-name, .product-card:focus-within .product-name, .product-card:active .product-name { min-height: 2.7em; margin-top: 14px; font-size: 0.95rem; line-height: 1.35; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
