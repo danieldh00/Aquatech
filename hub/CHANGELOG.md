@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.30.2
+
+- Migratie 89: tabel `price_proposal_rejections` (ongebruikt sinds prijzen automatisch de factor volgen) verwijderd en index `web_returns_user` op `(tenant_id, user_id)` toegevoegd voor het opzoeken en anonimiseren van retouren per klant.
+
 ## 1.30.1
 
 - `deploy/apps01/restore-test.sh` (+ systemd `aquatech-restore-test.{service,timer,path}`): ontsleutelt de nieuwste `pg_dump` als stroom, zet hem terug in een wegwerp-postgres (zelfde image, `--memory 768m`, `--network none`, geen vaste opslag, altijd opgeruimd) en controleert tabellen, schemaversie, rijtellingen (marge) en sanity-queries; schrijft `update/status/restore-test.json`.

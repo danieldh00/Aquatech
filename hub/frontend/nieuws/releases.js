@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.30.2',
+      date: '2026-11-20',
+      title: 'Opruimen van een ongebruikte tabel en een extra index',
+      items: [],
+    },
+    {
       version: '1.30.1',
       date: '2026-11-20',
       title: 'Wekelijkse hersteltest van de back-up',
