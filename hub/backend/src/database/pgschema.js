@@ -1442,6 +1442,19 @@ const PG_MIGRATIONS = [
   ALTER TABLE users ALTER COLUMN wholesale_discount TYPE NUMERIC(10,4) USING round(wholesale_discount::numeric, 4);
   ALTER TABLE stock_items ALTER COLUMN unit_content TYPE NUMERIC(10,4) USING round(unit_content::numeric, 4);
   `,
+  // 92: ontbrekende foreign keys op de belangrijkste verwijzingen (NOT VALID: bestaande rijen worden niet gecontroleerd, nieuwe en gewijzigde rijen wel; verwijzingen naar iets dat wordt verwijderd gaan naar NULL waar de kolom leeg mag zijn).
+  `
+  ALTER TABLE invoices ADD CONSTRAINT invoices_work_order_id_fkey FOREIGN KEY (work_order_id) REFERENCES work_orders(id) ON DELETE SET NULL DEFERRABLE INITIALLY IMMEDIATE NOT VALID;
+  ALTER TABLE invoices ADD CONSTRAINT invoices_quote_id_fkey FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE SET NULL DEFERRABLE INITIALLY IMMEDIATE NOT VALID;
+  ALTER TABLE invoices ADD CONSTRAINT invoices_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES users(id) ON DELETE SET NULL DEFERRABLE INITIALLY IMMEDIATE NOT VALID;
+  ALTER TABLE invoices ADD CONSTRAINT invoices_debtor_id_fkey FOREIGN KEY (debtor_id) REFERENCES debtors(id) ON DELETE SET NULL DEFERRABLE INITIALLY IMMEDIATE NOT VALID;
+  ALTER TABLE work_orders ADD CONSTRAINT work_orders_quote_id_fkey FOREIGN KEY (quote_id) REFERENCES quotes(id) ON DELETE SET NULL DEFERRABLE INITIALLY IMMEDIATE NOT VALID;
+  ALTER TABLE stock_items ADD CONSTRAINT stock_items_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES stock_items(id) DEFERRABLE INITIALLY IMMEDIATE NOT VALID;
+  ALTER TABLE service_requests ADD CONSTRAINT service_requests_work_order_id_fkey FOREIGN KEY (work_order_id) REFERENCES work_orders(id) ON DELETE SET NULL DEFERRABLE INITIALLY IMMEDIATE NOT VALID;
+  ALTER TABLE service_requests ADD CONSTRAINT service_requests_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES users(id) ON DELETE SET NULL DEFERRABLE INITIALLY IMMEDIATE NOT VALID;
+  ALTER TABLE oauth_grants ADD CONSTRAINT oauth_grants_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE NOT VALID;
+  ALTER TABLE news ADD CONSTRAINT news_author_id_fkey FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE SET NULL DEFERRABLE INITIALLY IMMEDIATE NOT VALID;
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };
