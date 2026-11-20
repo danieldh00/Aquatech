@@ -973,7 +973,7 @@ function createStore(db) {
         let owner = users[plan.owner];
         if (plan.guest) {
           owner = insertUser(tenantId, { username: `aanvraag-${crypto.randomBytes(4).toString('hex')}`, displayName: plan.guest.name, role: 'klant', kind: 'gast' });
-          prepare('UPDATE users SET email = ?, phone = ? WHERE id = ?').run(plan.guest.email || '', plan.guest.phone || '', owner.id);
+          prepare('UPDATE users SET email = ?, phone = ? WHERE tenant_id = ? AND id = ?').run(plan.guest.email || '', plan.guest.phone || '', tenantId, owner.id);
         }
         const review = plan.review || { status: 'concept' };
         const requested = review.status === 'concept' ? null : plan.at;

@@ -288,7 +288,7 @@ function createPlanStore(db, { insertUser }) {
     return transaction(db, () => {
       const tag = crypto.randomBytes(4).toString('hex');
       const guest = insertUser(tenantId, { username: `aanvraag-${tag}`, displayName: name, role: 'klant', kind: 'gast' });
-      prepare('UPDATE users SET email = ?, phone = ? WHERE id = ?').run(email, phone, guest.id);
+      prepare('UPDATE users SET email = ?, phone = ? WHERE tenant_id = ? AND id = ?').run(email, phone, tenantId, guest.id);
       const meta = { ...(data.meta || {}) };
       if (!String(meta.customer || '').trim()) meta.customer = name;
       if (address) meta.address = address;
