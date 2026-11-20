@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.31.4',
+      date: '2026-11-20',
+      title: 'Database: typeparsers voor de volgende kolomtypen',
+      items: [],
+    },
+    {
       version: '1.31.3',
       date: '2026-11-20',
       title: 'Webshopsync schrijft in bulk en alleen bij verschillen',
