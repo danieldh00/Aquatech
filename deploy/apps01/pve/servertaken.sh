@@ -384,6 +384,7 @@ HOST_TASK_IDS=(
   003-hersteltest-script-bijwerken
   004-pg-back-up-script-herstellen
   005-hersteltest-app-controle
+  006-database-grootte-en-indexgebruik
 )
 HOST_TASKS_LEDGER="host-tasks.json"
 # Functienaam van een taak (streepjes worden underscores).
@@ -482,6 +483,30 @@ hosttask_004_pg_back_up_script_herstellen() {
 # Taak 005: restore-test.sh vernieuwen (de hersteltest start nu ook een wegwerp-app op de teruggezette database).
 hosttask_005_hersteltest_app_controle() {
   hosttask_002_hersteltest_back_up_inrichten
+}
+
+# Taak 006: alleen lezen. Toont de grootste tabellen en het gebruik van de indexen van de productiedatabase (voor de beslissing over
+# zware kolomomzettingen) en bewaart dezelfde uitvoer in update/status/db-stats.txt. Geen gegevens, alleen namen, aantallen en groottes.
+hosttask_006_database_grootte_en_indexgebruik() {
+  local out="$APP_DIR/update/status/db-stats.txt" tmp
+  docker inspect aquatech-postgres >/dev/null 2>&1 || { echo "FOUT: geen eigen PostgreSQL-container (aquatech-postgres)." >&2; return 1; }
+  mkdir -p "$APP_DIR/update/status"
+  tmp="$(mktemp "$APP_DIR/update/status/.tmp.XXXXXX")"
+  {
+    echo "== Database-statistieken $(date -u +%Y-%m-%dT%H:%M:%SZ) =="
+    echo "-- Grootste tabellen (met indexen), aantal rijen volgens de statistieken --"
+    docker exec -e PGOPTIONS='-c default_transaction_read_only=on' -u postgres aquatech-postgres psql -X -A -F ' | ' -t -d aquatech -c \
+      "SELECT relname, pg_size_pretty(pg_total_relation_size(relid)), n_live_tup FROM pg_stat_user_tables WHERE schemaname = 'aquatech' ORDER BY pg_total_relation_size(relid) DESC LIMIT 25" || return 1
+    echo "-- Indexen die sinds de laatste statistiekreset nooit gebruikt zijn (groter dan 1 MB, niet uniek) --"
+    docker exec -e PGOPTIONS='-c default_transaction_read_only=on' -u postgres aquatech-postgres psql -X -A -F ' | ' -t -d aquatech -c \
+      "SELECT s.relname, s.indexrelname, pg_size_pretty(pg_relation_size(s.indexrelid)), s.idx_scan FROM pg_stat_user_indexes s JOIN pg_index i ON i.indexrelid = s.indexrelid WHERE s.schemaname = 'aquatech' AND s.idx_scan = 0 AND NOT i.indisunique AND pg_relation_size(s.indexrelid) > 1048576 ORDER BY pg_relation_size(s.indexrelid) DESC LIMIT 25" || return 1
+    echo "-- Statistieken lopen sinds --"
+    docker exec -e PGOPTIONS='-c default_transaction_read_only=on' -u postgres aquatech-postgres psql -X -A -t -d aquatech -c "SELECT COALESCE(stats_reset::text, 'nooit gereset') FROM pg_stat_database WHERE datname = 'aquatech'" || return 1
+  } > "$tmp" || { rm -f "$tmp"; echo "FOUT: de database-statistieken ophalen mislukte." >&2; return 1; }
+  chmod 644 "$tmp"
+  mv -f "$tmp" "$out"
+  cat "$out"
+  echo "Bewaard in $out."
 }
 
 # Toont wat er openstaat. Uitgangscode 10 = er is iets te doen (two_step vraagt dan om bevestiging).

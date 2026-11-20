@@ -54,6 +54,12 @@ const HOST_TASKS = [
     description: 'Installeert de nieuwste restore-test.sh op apps01. De hersteltest start daarna ook een wegwerp-app (hoogstens 512 MB, intern netwerk zonder uitgang, geen mail of koppelingen) op de teruggezette database en controleert dat die inlogt en gegevens ophaalt.',
     addedAt: '2026-11-20',
   },
+  {
+    id: '006-database-grootte-en-indexgebruik',
+    title: 'Database: tabelgroottes en indexgebruik opvragen (alleen lezen)',
+    description: 'Toont de 25 grootste tabellen en de ongebruikte indexen van de productiedatabase en bewaart dat in update/status/db-stats.txt. Er wordt niets gewijzigd en er verschijnen geen gegevens, alleen namen en groottes. Plak de uitvoer in de thread: hij bepaalt of de zware kolomomzettingen (tijdstippen) veilig zijn.',
+    addedAt: '2026-11-20',
+  },
 ];
 
 const MAX_FILE_BYTES = 64 * 1024;
