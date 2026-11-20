@@ -80,8 +80,10 @@ function registerSystemUpdateRoutes(app, { systemUpdate, store, audit, mainTenan
     res.status(202).json(systemUpdate.view());
   });
 
-  // Handmatig controleren op een nieuwe versie: alleen kijken, geen wachtwoord nodig; wel begrensd (elke controle haalt het image op).
-  const checkLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 6, keyFn: (req) => `update-controle:${req.user ? req.user.id : ''}` });
+  // Handmatig controleren op een nieuwe versie: alleen kijken, geen wachtwoord nodig. Ruime limiet per gebruiker (een mens
+  // haalt hem nooit); de echte bescherming van de host is `requestCheck`: een lopende of net aangevraagde controle
+  // (< 10 s) wordt hergebruikt, dus dubbel klikken geeft 202 zonder tweede aanvraag of auditregel.
+  const checkLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 60, keyFn: (req) => `update-controle:${req.user ? req.user.id : ''}` });
   app.post('/api/admin/system-update/check', checkLimiter, (req, res) => {
     const out = systemUpdate.requestCheck({ userId: req.user.id, byName: req.user.display_name });
     if (out.error) return res.status(out.status).json({ error: out.error, message: out.message });

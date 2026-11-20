@@ -387,6 +387,9 @@ test('createSystemUpdate: handmatig controleren zet een check-aanvraag klaar en 
 
   hostWrites(statusDir, { 'status.json': { current: RUNNING, available: RUNNING, checkedAt: '2026-11-19T10:00:05Z' } });
   assert.strictEqual(update.view().checking, false, 'de host heeft een nieuwe controle vastgelegd');
+  assert.strictEqual(update.requestCheck({}).started, false, 'binnen 10 seconden na de vorige aanvraag: hergebruiken');
+  clock += 10 * 1000;
+  assert.strictEqual(update.requestCheck({}).started, true, 'na 10 seconden mag een nieuwe controle weer');
 
   clock += 10 * 1000;
   update.requestCheck({});
@@ -398,7 +401,7 @@ test('createSystemUpdate: handmatig controleren zet een check-aanvraag klaar en 
   assert.strictEqual(createSystemUpdate({ statusDir: '', requestDir: '', currentVersion: RUNNING }).requestCheck({}).error, 'not_configured');
 });
 
-test('API: handmatig controleren: 401 zonder login, 403 zonder recht, 202, audit alleen bij een nieuwe controle en limiet', async () => {
+test('API: handmatig controleren: 401 zonder login, 403 zonder recht, 202, audit alleen bij een nieuwe controle, geen 429 bij normaal gebruik', async () => {
   const { server, base, as, store, main, statusDir, requestDir } = await setup();
   try {
     hostWrites(statusDir, { 'status.json': { current: RUNNING, available: RUNNING, checkedAt: '2026-01-01T00:00:00Z' } });
@@ -416,8 +419,8 @@ test('API: handmatig controleren: 401 zonder login, 403 zonder recht, 202, audit
     assert.strictEqual((await bert.post('/app/api/admin/system-update/check', {})).status, 202);
     assert.strictEqual(auditActions(store, main).filter((action) => action === 'update_controle').length, 1);
 
-    for (let i = 0; i < 4; i++) await bert.post('/app/api/admin/system-update/check', {});
-    assert.strictEqual((await bert.post('/app/api/admin/system-update/check', {})).status, 429, 'de 7e aanroep binnen 10 minuten');
+    for (let i = 0; i < 10; i++) assert.strictEqual((await bert.post('/app/api/admin/system-update/check', {})).status, 202, 'geen 429 bij normaal gebruik');
+    assert.strictEqual(auditActions(store, main).filter((action) => action === 'update_controle').length, 1);
   } finally {
     server.close();
   }
