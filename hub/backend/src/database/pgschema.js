@@ -1377,6 +1377,22 @@ const PG_MIGRATIONS = [
   DROP TABLE IF EXISTS price_proposal_rejections;
   CREATE INDEX web_returns_user ON web_returns (tenant_id, user_id);
   `,
+  // 90: indexen op FK-kolommen en opzoekingen zonder index, gedeeltelijke index voor de webshopsync en CHECK op statuskolommen (NOT VALID: bestaande rijen blijven ongemoeid, nieuwe schrijfacties worden wel gecontroleerd).
+  `
+  CREATE INDEX work_orders_owner ON work_orders (tenant_id, owner_id);
+  CREATE INDEX audit_user ON audit (tenant_id, user_id, created_at);
+  CREATE INDEX stock_cost_entries_item ON stock_cost_entries (tenant_id, item_id);
+  CREATE INDEX stock_count_entries_line_only ON stock_count_entries (tenant_id, line_id);
+  CREATE INDEX support_grants_tenant ON support_grants (tenant_id);
+  CREATE INDEX impersonations_tenant ON impersonations (tenant_id);
+  CREATE INDEX web_orders_email ON web_orders (tenant_id, lower(email));
+  CREATE INDEX stock_alerts_email_lower ON stock_alerts (tenant_id, lower(email));
+  DROP INDEX stock_items_dirty;
+  CREATE INDEX stock_items_dirty ON stock_items (tenant_id) WHERE shop_dirty = 1;
+  ALTER TABLE web_orders ADD CONSTRAINT web_orders_status_check CHECK (status IN ('nieuw', 'verzonden', 'afgerond', 'geannuleerd')) NOT VALID;
+  ALTER TABLE web_returns ADD CONSTRAINT web_returns_status_check CHECK (status IN ('aangevraagd', 'goedgekeurd', 'afgewezen', 'ingetrokken', 'afgerond')) NOT VALID;
+  ALTER TABLE purchase_orders ADD CONSTRAINT purchase_orders_status_check CHECK (status IN ('concept', 'besteld', 'deels_ontvangen', 'ontvangen', 'geannuleerd')) NOT VALID;
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };
