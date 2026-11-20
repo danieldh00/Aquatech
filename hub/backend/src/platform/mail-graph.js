@@ -43,9 +43,10 @@ function parseSender(from) {
  * @param {string} code De code (EGRAPH_AUTH, EGRAPH_DENIED, EGRAPH_MAILBOX, EGRAPH_THROTTLED, EGRAPH_ERROR, EGRAPH_SIZE).
  * @param {string} message De melding voor het serverlog.
  * @param {string} [reply] Korte tekst van Microsoft (zonder geheimen), komt achter de melding.
+ * @param {string} [mailbox] De afzender-mailbox (geen geheim), voor de melding bij een weigering.
  * @returns {Error} De fout, met mailHost en mailPort van Graph.
  */
-const graphError = (code, message, reply) => Object.assign(new Error(message), { code, response: reply, mailHost: GRAPH_HOST, mailPort: 443 });
+const graphError = (code, message, reply, mailbox) => Object.assign(new Error(message), { code, response: reply, mailbox, mailHost: GRAPH_HOST, mailPort: 443 });
 
 /**
  * Zet een netwerkfout van fetch om in een fout met de codes die mailFailure al kent.
@@ -80,6 +81,8 @@ function replyOf(body) {
  */
 function createGraphSender({ tenantId, clientId, clientSecret, from }, { fetchImpl = fetch, now = Date.now } = {}) {
   const sender = parseSender(from);
+  /** Sleutel van het onthouden token: een hash van tenant, app en geheim. */
+  const cacheKey = crypto.createHash('sha256').update(`${tenantId}\n${clientId}\n${clientSecret}`).digest('hex');
 
   /**
    * Een verzoek met time-out; netwerkfouten worden leesbare fouten.
@@ -102,13 +105,15 @@ function createGraphSender({ tenantId, clientId, clientSecret, from }, { fetchIm
 
   /**
    * Haalt een toegangstoken op (of gebruikt het onthouden token).
+   * @param {{ fresh?: boolean }} [options] fresh: het onthouden token overslaan (een token bevat de machtigingen van het moment van opvragen).
    * @returns {Promise<string>} Het token.
    * @throws {Error} Met code EGRAPH_AUTH als Microsoft de gegevens weigert.
    */
-  async function token() {
-    const key = crypto.createHash('sha256').update(`${tenantId}\n${clientId}\n${clientSecret}`).digest('hex');
+  async function token({ fresh = false } = {}) {
+    const key = cacheKey;
     const cached = tokenCache.get(key);
-    if (cached && cached.until > now() + 60000) return cached.value;
+    if (!fresh && cached && cached.until > now() + 60000) return cached.value;
+    if (fresh) tokenCache.delete(key);
     const form = new URLSearchParams({ client_id: clientId, client_secret: clientSecret, scope: `https://${GRAPH_HOST}/.default`, grant_type: 'client_credentials' });
     const { status, body } = await call(`https://${LOGIN_HOST}/${encodeURIComponent(tenantId)}/oauth2/v2.0/token`, {
       method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: form.toString(),
@@ -117,6 +122,16 @@ function createGraphSender({ tenantId, clientId, clientSecret, from }, { fetchIm
     if (tokenCache.size > 50) tokenCache.clear();
     tokenCache.set(key, { value: body.access_token, until: now() + Math.max(120, Number(body.expires_in) || 3000) * 1000 });
     return body.access_token;
+  }
+
+  /**
+   * Of er een bruikbaar onthouden token is (voor de keuze om bij een weigering opnieuw te proberen).
+   * @returns {Promise<{ cached: boolean }>} cached is true als het token uit het geheugen komt.
+   */
+  async function tokenState() {
+    const key = cacheKey;
+    const known = tokenCache.get(key);
+    return { cached: Boolean(known && known.until > now() + 60000) };
   }
 
   /**
@@ -159,15 +174,24 @@ function createGraphSender({ tenantId, clientId, clientSecret, from }, { fetchIm
       from: { emailAddress: { address: sender.address, ...(sender.name ? { name: sender.name } : {}) } },
       ...(files.length ? { attachments: files } : {}),
     };
-    const accessToken = await token();
-    const { status, body } = await call(`https://${GRAPH_HOST}/v1.0/users/${encodeURIComponent(sender.address)}/sendMail`, {
+    /**
+     * Eén sendMail-aanroep met het gegeven token.
+     * @param {string} accessToken Het token.
+     * @returns {Promise<{ status: number, body: object }>} Status en antwoord.
+     */
+    const post = (accessToken) => call(`https://${GRAPH_HOST}/v1.0/users/${encodeURIComponent(sender.address)}/sendMail`, {
       method: 'POST', headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' }, body: JSON.stringify({ message, saveToSentItems: true }),
     }, 30000);
+    const { cached } = await tokenState();
+    let { status, body } = await post(await token());
+    // Een onthouden token is van vóór een net verleende machtiging (bijvoorbeeld direct na automatisch instellen) en
+    // heeft de rol Mail.Send dan niet: één keer opnieuw met een vers token.
+    if ((status === 401 || status === 403) && cached) ({ status, body } = await post(await token({ fresh: true })));
     if (status === 202 || status === 200) return { accepted: to };
     const reply = replyOf(body);
     if (status === 401) { tokenCache.clear(); throw graphError('EGRAPH_AUTH', 'Graph weigerde het token (401)', reply); }
-    if (status === 403) throw graphError('EGRAPH_DENIED', 'Graph weigert toegang (403)', reply);
-    if (status === 404 || (status === 400 && /MailboxNotEnabled|InvalidUser|ResourceNotFound/i.test(reply))) throw graphError('EGRAPH_MAILBOX', `Graph kent de mailbox niet (${status})`, reply);
+    if (status === 403) throw graphError('EGRAPH_DENIED', 'Graph weigert toegang (403)', reply, sender.address);
+    if (status === 404 || (status === 400 && /MailboxNotEnabled|InvalidUser|ResourceNotFound/i.test(reply))) throw graphError('EGRAPH_MAILBOX', `Graph kent de mailbox niet (${status})`, reply, sender.address);
     if (status === 413) throw graphError('EGRAPH_SIZE', 'Graph weigert de grootte (413)', reply);
     if (status === 429) throw graphError('EGRAPH_THROTTLED', 'Graph beperkt het versturen (429)', reply);
     throw graphError('EGRAPH_ERROR', `Graph gaf een fout (${status})`, reply);

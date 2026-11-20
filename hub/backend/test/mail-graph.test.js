@@ -91,8 +91,8 @@ test('Graph: foutmeldingen per soort, nooit het clientgeheim', async () => {
   const auth = await failure({ token: 401, tokenBody: { error: 'invalid_client', error_description: 'AADSTS7000215: Invalid client secret provided. Trace ID: abc' } }, 'cs-uniek-2');
   assert.match(auth, /weigert de aanmelding.*tenant-ID, client-ID en het clientgeheim.*AADSTS7000215: Invalid client secret provided\./);
   assert.ok(!auth.includes('cs-uniek-2') && !auth.includes('Trace ID'));
-  assert.match(await failure({ send: 403, sendBody: { error: { code: 'ErrorAccessDenied', message: 'Access is denied.' } } }, 'cs-uniek-3'), /weigert de app toegang.*Mail\.Send.*Application Access Policy.*ErrorAccessDenied/);
-  assert.match(await failure({ send: 404, sendBody: { error: { code: 'ErrorInvalidUser', message: 'x' } } }, 'cs-uniek-4'), /mailbox is niet gevonden/);
+  assert.match(await failure({ send: 403, sendBody: { error: { code: 'ErrorAccessDenied', message: 'Access is denied.' } } }, 'cs-uniek-3'), /weigert de app toegang.*afzender: offerte@bedrijf\.nl.*15 minuten.*Application Access Policy.*ErrorAccessDenied/);
+  assert.match(await failure({ send: 404, sendBody: { error: { code: 'ErrorInvalidUser', message: 'x' } } }, 'cs-uniek-4'), /mailbox is niet gevonden.*afzender: offerte@bedrijf\.nl.*hoofdadres/);
   assert.match(await failure({ send: 429 }, 'cs-uniek-5'), /beperkt het versturen/);
   assert.match(await failure({ send: 500 }, 'cs-uniek-6'), /Microsoft Graph gaf een fout/);
   const unreachable = createGraphSender({ tenantId: TENANT, clientId: CLIENT, clientSecret: 'cs-uniek-7', from: 'a@b.nl' }, { fetchImpl: async () => { throw Object.assign(new Error('fetch failed'), { name: 'TimeoutError' }); } });
@@ -151,4 +151,29 @@ test('createMailer: graph is pas ingesteld met tenant, client, afzender en gehei
   assert.strictEqual(mailer.configured(), false);
   values.mailGraphSecret = 'Geheim-Graph-Waarde~1';
   assert.strictEqual(mailer.configured(), true);
+});
+
+test('Graph: een onthouden token van vóór de machtiging krijgt bij 403 één keer een vers token', async () => {
+  const calls = [];
+  let tokens = 0;
+  /**
+   * Nagebootste Microsoft: het eerste token mist de rol Mail.Send (403), het tweede heeft hem.
+   * @param {string} url Het adres.
+   * @param {object} init De opties.
+   * @returns {Promise<object>} Het antwoord.
+   */
+  const fetchImpl = async (url, init) => {
+    calls.push(url);
+    if (url.includes('/oauth2/v2.0/token')) { tokens += 1; return { status: 200, json: async () => ({ access_token: `tok${tokens}`, expires_in: 3600 }) }; }
+    const ok = init.headers.authorization === 'Bearer tok2';
+    return { status: ok ? 202 : 403, json: async () => (ok ? {} : { error: { code: 'ErrorAccessDenied' } }) };
+  };
+  const sender = createGraphSender({ tenantId: TENANT, clientId: CLIENT, clientSecret: 'cs-uniek-12', from: 'offerte@bedrijf.nl' }, { fetchImpl });
+  await sender.verify();
+  assert.deepStrictEqual(await sender.send({ to: ['k@x.nl'], subject: 's', text: 't' }), { accepted: ['k@x.nl'] });
+  assert.strictEqual(tokens, 2, 'één vers token');
+  // Een vers token dat ook geweigerd wordt, wordt niet eindeloos herhaald.
+  const denied = createGraphSender({ tenantId: TENANT, clientId: CLIENT, clientSecret: 'cs-uniek-13', from: 'offerte@bedrijf.nl' }, { fetchImpl: async (url) => (url.includes('/token') ? { status: 200, json: async () => ({ access_token: 'x', expires_in: 3600 }) } : { status: 403, json: async () => ({}) }) });
+  await denied.verify();
+  await assert.rejects(denied.send({ to: ['k@x.nl'], subject: 's', text: 't' }), (error) => error.code === 'EGRAPH_DENIED');
 });
