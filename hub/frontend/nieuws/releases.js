@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.31.3',
+      date: '2026-11-20',
+      title: 'Webshopsync schrijft in bulk en alleen bij verschillen',
+      items: [
+        { text: 'De synchronisatie met de oude webshop is veel lichter voor de database: een ronde zonder wijzigingen doet nog maar een handvol queries in plaats van duizenden. [beheer]' },
+      ],
+    },
+    {
       version: '1.31.2',
       date: '2026-11-20',
       title: 'Database: foreign keys op de belangrijkste verwijzingen',

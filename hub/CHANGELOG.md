@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.31.3
+
+- Webshopsync: koppelingen, standen en prijzen worden per ronde in bulk (`UPDATE … FROM unnest`) en alleen bij een verschil weggeschreven; het bijwerkmoment van een ongewijzigd artikel wordt hooguit eens per dag vernieuwd.
+- `shop_products` wordt bijgewerkt met één upsert (alleen veranderde rijen) en verdwenen producten worden gewist, in plaats van alles wissen en per product invoegen.
+- Test: een ronde zonder verschillen kost bij 60 artikelen minder dan 25 queries.
+
 ## 1.31.2
 
 Migratie 92 (database-doorlichting 2026-11-20): `NOT VALID` foreign keys (DEFERRABLE) op `invoices` (werkorder, offerte, klant, debiteur), `work_orders.quote_id`, `stock_items.parent_id`, `service_requests` (werkorder, klant), `oauth_grants.user_id` (ON DELETE CASCADE: koppelingen verdwijnen met het account) en `news.author_id`. Bestaande rijen worden niet gecontroleerd; nieuwe en gewijzigde rijen wel. Verwijzingen die leeg mogen zijn gaan bij verwijderen van het doel naar NULL. Bewust niet gedaan: `quotes.plan_id`, `work_orders.plan_id`, `stock_items.image_id`, `ai_usage.user_id` en `invoice_payments.invoice_id` (de API accepteert daar waarden zonder bestaande rij; eerst invoer valideren, zie de database-doorlichting).
