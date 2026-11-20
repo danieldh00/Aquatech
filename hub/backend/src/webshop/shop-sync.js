@@ -97,6 +97,8 @@ const parseValues = (text, fallback = {}) => {
  */
 const valuesKeyOf = (values) => Object.entries(values || {}).map(([name, value]) => `${String(name).toLowerCase()}=${String(value).toLowerCase()}`).sort().join('|');
 
+/** Na zoveel tijd wordt het bijwerkmoment van een ongewijzigd artikel toch vernieuwd (het staat als tooltip in Artikelen). */
+const SYNCED_AT_REFRESH_MS = 24 * 60 * 60 * 1000;
 /**
  * Rekent een prijs uit de webshop (zoals opgeslagen) om naar excl. btw met het tarief van het artikel.
  * @param {number} raw Prijs zoals de webshop hem opslaat.
@@ -184,6 +186,23 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
   }
 
   /**
+   * Schrijft de koppeling (webshopproduct-id en foutmelding) van meerdere artikelen in één opdracht,
+   * alleen voor artikelen waar iets verschilt of waarvan het bijwerkmoment oud is.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ itemId: string, productId: string, error: string }[]} links De koppelingen.
+   * @param {string} timestamp Moment van deze ronde.
+   * @param {string} staleBefore Bijwerkmomenten ouder dan dit worden vernieuwd.
+   */
+  function writeLinks(tenantId, links, timestamp, staleBefore) {
+    if (!links.length) return;
+    prepare(`UPDATE stock_items i SET shop_product_id = v.product_id, shop_error = v.error, shop_synced_at = ?
+      FROM unnest(?::text[], ?::text[], ?::text[]) AS v(id, product_id, error)
+      WHERE i.tenant_id = ? AND i.id = v.id
+        AND (i.shop_product_id IS DISTINCT FROM v.product_id OR COALESCE(i.shop_error, '') <> v.error OR i.shop_synced_at IS NULL OR i.shop_synced_at < ?)`)
+      .run(timestamp, links.map((link) => link.itemId), links.map((link) => link.productId), links.map((link) => link.error), tenantId, staleBefore);
+  }
+
+  /**
    * Eén synchronisatie: voorraad en prijs uit de webshop verwerken en terugschrijven wat er veranderd is.
    * @param {string} tenantId Id van de omgeving.
    * @param {{ full?: boolean, user?: object }} [options] full: alle producten ophalen (en de catalogus bijwerken), anders alleen de gewijzigde, gekoppelde artikelen; user voor de voorraadboekingen.
@@ -219,14 +238,18 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
     const summary = { created: 0, restored: 0, archived: 0, skippedProducts: 0, mirror: mirrorOn, ...mirrored, linked: 0, unlinked: 0, soldInShop: 0, pricesFromShop: 0, updated: 0, failed: 0, createdVariations };
     const updates = [];
     const timestamp = new Date().toISOString();
+    const staleBefore = new Date(Date.now() - SYNCED_AT_REFRESH_MS).toISOString();
+    // Koppelingen, losgekoppelde artikelen en voorraadbeheer worden verzameld en na de lus in één opdracht weggeschreven.
+    const links = [];
+    const unlinkedIds = [];
+    const managedIds = [];
 
     transaction(db, () => {
       for (const item of items) {
         const product = (item.shop_product_id && byId.get(String(item.shop_product_id))) || (full ? match(item) : null);
         if (!product) {
           if (full && item.shop_product_id) {
-            prepare(`UPDATE stock_items SET shop_product_id = NULL, shop_price_seen = NULL, shop_stock_seen = NULL, shop_dirty = 0,
-              shop_error = 'Niet (meer) gevonden in de webshop.' WHERE tenant_id = ? AND id = ?`).run(tenantId, item.id);
+            unlinkedIds.push(item.id);
             summary.unlinked++;
           }
           continue;
@@ -235,14 +258,13 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
         if (first) summary.linked++;
         if (Number(item.has_variants)) {
           // Hoofdartikel: alleen de koppeling; prijs en voorraad zitten bij de variaties.
-          prepare(`UPDATE stock_items SET shop_product_id = ?, shop_synced_at = ?, shop_error = '' WHERE tenant_id = ? AND id = ?`).run(String(product.id), timestamp, tenantId, item.id);
+          links.push({ itemId: item.id, productId: String(product.id), error: '' });
           updates.push({ id: String(product.id), itemId: item.id, priceSeen: null, stockSeen: null });
           continue;
         }
         if (product.type === 'variable') {
           // Gewoon artikel bij een product met variaties (van vóór de varianten, met voorraad): alleen koppelen, geen prijs of stand.
-          prepare('UPDATE stock_items SET shop_product_id = ?, shop_synced_at = ?, shop_error = ? WHERE tenant_id = ? AND id = ?')
-            .run(String(product.id), timestamp, VARIABLE_ON_PLAIN, tenantId, item.id);
+          links.push({ itemId: item.id, productId: String(product.id), error: VARIABLE_ON_PLAIN });
           continue;
         }
         let onHand = Number(item.on_hand) || 0;
@@ -270,7 +292,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
 
         // De webshop houdt een aantal bij: dan is de voorraad vanaf nu ook in Aquatech bijgehouden (stand uit stap 1).
         if (pushStock && product.stockQty != null) {
-          prepare('UPDATE stock_items SET stock_managed = 1 WHERE tenant_id = ? AND id = ? AND stock_managed = 0').run(tenantId, item.id);
+          managedIds.push(item.id);
         }
 
         // 2. Prijs.
@@ -311,9 +333,15 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
         } else {
           update.stockSeen = product.stockQty;
         }
-        prepare(`UPDATE stock_items SET shop_product_id = ?, shop_synced_at = ?, shop_error = '' WHERE tenant_id = ? AND id = ?`).run(String(product.id), timestamp, tenantId, item.id);
+        links.push({ itemId: item.id, productId: String(product.id), error: '' });
         updates.push(update);
       }
+      if (unlinkedIds.length) {
+        prepare(`UPDATE stock_items SET shop_product_id = NULL, shop_price_seen = NULL, shop_stock_seen = NULL, shop_dirty = 0,
+          shop_error = 'Niet (meer) gevonden in de webshop.' WHERE tenant_id = ? AND id = ANY(?::text[])`).run(tenantId, unlinkedIds);
+      }
+      if (managedIds.length) prepare('UPDATE stock_items SET stock_managed = 1 WHERE tenant_id = ? AND id = ANY(?::text[]) AND stock_managed = 0').run(tenantId, managedIds);
+      writeLinks(tenantId, links, timestamp, staleBefore);
     });
 
     // 4. Terugschrijven (buiten de transactie: dat is een netwerkverzoek).
@@ -329,18 +357,33 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
       }
     }
     transaction(db, () => {
+      const confirmed = [];
+      const failed = [];
       for (const update of updates) {
         const sent = update.price != null || update.stockQty != null;
         const result = sent ? results.get(update.id) : { ok: true };
         if (result && result.ok) {
           if (sent) summary.updated++;
-          prepare(`UPDATE stock_items SET shop_price_seen = ?, shop_stock_seen = ?, shop_dirty = 0, shop_error = '', shop_synced_at = ?
-            WHERE tenant_id = ? AND id = ?`).run(update.priceSeen ?? null, update.stockSeen ?? null, timestamp, tenantId, update.itemId);
+          confirmed.push(update);
         } else {
           summary.failed++;
-          prepare("UPDATE stock_items SET shop_dirty = 1, shop_error = ? WHERE tenant_id = ? AND id = ?")
-            .run(String(sendError || (result && result.error) || 'Niet bijgewerkt in de webshop.').slice(0, 300), tenantId, update.itemId);
+          failed.push({ itemId: update.itemId, error: String(sendError || (result && result.error) || 'Niet bijgewerkt in de webshop.').slice(0, 300) });
         }
+      }
+      // Alleen artikelen die écht anders zijn (of al lang niet bijgewerkt) worden geschreven: een ongewijzigde ronde schrijft niets.
+      if (confirmed.length) {
+        prepare(`UPDATE stock_items i SET shop_price_seen = v.price_seen, shop_stock_seen = v.stock_seen, shop_dirty = 0, shop_error = '', shop_synced_at = ?
+          FROM unnest(?::text[], ?::numeric[], ?::numeric[]) AS v(id, price_seen, stock_seen)
+          WHERE i.tenant_id = ? AND i.id = v.id
+            AND (i.shop_dirty <> 0 OR COALESCE(i.shop_error, '') <> '' OR i.shop_price_seen IS DISTINCT FROM v.price_seen
+              OR i.shop_stock_seen IS DISTINCT FROM v.stock_seen OR i.shop_synced_at IS NULL OR i.shop_synced_at < ?)`)
+          .run(timestamp, confirmed.map((update) => update.itemId), confirmed.map((update) => update.priceSeen ?? null),
+            confirmed.map((update) => update.stockSeen ?? null), tenantId, staleBefore);
+      }
+      if (failed.length) {
+        prepare(`UPDATE stock_items i SET shop_dirty = 1, shop_error = v.error
+          FROM unnest(?::text[], ?::text[]) AS v(id, error) WHERE i.tenant_id = ? AND i.id = v.id`)
+          .run(failed.map((entry) => entry.itemId), failed.map((entry) => entry.error), tenantId);
       }
     });
     if (sendError) shop.setStatus(tenantId, { error: sendError });

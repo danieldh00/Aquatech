@@ -102,19 +102,43 @@ function createShopStore(db) {
    * @param {string} syncedAt Moment van ophalen.
    */
   function replaceProducts(tenantId, products, syncedAt) {
+    const seen = new Set();
+    const rows = [];
+    for (const product of products) {
+      if (seen.has(product.id)) continue;
+      seen.add(product.id);
+      rows.push({
+        id: String(product.id), sku: product.sku.slice(0, 100), name: product.name.slice(0, 300), price: product.price, currency: product.currency.slice(0, 3),
+        url: product.url.slice(0, 1000), image: product.image.slice(0, 1000), inStock: product.inStock ? 1 : 0, code: product.code.slice(0, 40),
+        categories: JSON.stringify(product.categories.slice(0, 20)), parentId: product.parentId ? String(product.parentId) : null,
+        attributes: JSON.stringify(attributesToKeep(product.attributes)),
+        type: product.parentId ? 'variation' : product.type === 'variable' ? 'variable' : 'simple', description: String(product.description || '').slice(0, 5000),
+      });
+    }
+    /**
+     * Alle waarden van één veld, voor een unnest-parameter.
+     * @param {string} key Naam van het veld.
+     * @returns {Array} De waarden in de volgorde van de rijen.
+     */
+    const column = (key) => rows.map((row) => row[key]);
     transaction(db, () => {
-      prepare('DELETE FROM shop_products WHERE tenant_id = ?').run(tenantId);
-      const insert = prepare(`INSERT INTO shop_products (tenant_id, id, sku, name, price, currency, url, image, in_stock, code, categories, parent_id, attributes, type, description)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-      const seen = new Set();
-      for (const product of products) {
-        if (seen.has(product.id)) continue;
-        seen.add(product.id);
-        insert.run(tenantId, product.id, product.sku.slice(0, 100), product.name.slice(0, 300), product.price, product.currency.slice(0, 3), product.url.slice(0, 1000),
-          product.image.slice(0, 1000), product.inStock ? 1 : 0, product.code.slice(0, 40), JSON.stringify(product.categories.slice(0, 20)),
-          product.parentId ? String(product.parentId) : null, JSON.stringify(attributesToKeep(product.attributes)),
-          product.parentId ? 'variation' : product.type === 'variable' ? 'variable' : 'simple', String(product.description || '').slice(0, 5000));
+      // Een upsert in één opdracht i.p.v. wissen + één INSERT per product; alleen veranderde rijen worden geschreven.
+      if (rows.length) {
+        prepare(`INSERT INTO shop_products (tenant_id, id, sku, name, price, currency, url, image, in_stock, code, categories, parent_id, attributes, type, description)
+          SELECT ?, v.id, v.sku, v.name, v.price, v.currency, v.url, v.image, v.in_stock, v.code, v.categories, v.parent_id, v.attributes, v.type, v.description
+          FROM unnest(?::text[], ?::text[], ?::text[], ?::numeric[], ?::text[], ?::text[], ?::text[], ?::bigint[], ?::text[], ?::text[], ?::text[], ?::text[], ?::text[], ?::text[])
+            AS v(id, sku, name, price, currency, url, image, in_stock, code, categories, parent_id, attributes, type, description)
+          ON CONFLICT (tenant_id, id) DO UPDATE SET sku = excluded.sku, name = excluded.name, price = excluded.price, currency = excluded.currency,
+            url = excluded.url, image = excluded.image, in_stock = excluded.in_stock, code = excluded.code, categories = excluded.categories,
+            parent_id = excluded.parent_id, attributes = excluded.attributes, type = excluded.type, description = excluded.description
+          WHERE (shop_products.sku, shop_products.name, shop_products.price, shop_products.currency, shop_products.url, shop_products.image, shop_products.in_stock,
+              shop_products.code, shop_products.categories, shop_products.parent_id, shop_products.attributes, shop_products.type, shop_products.description)
+            IS DISTINCT FROM (excluded.sku, excluded.name, excluded.price, excluded.currency, excluded.url, excluded.image, excluded.in_stock,
+              excluded.code, excluded.categories, excluded.parent_id, excluded.attributes, excluded.type, excluded.description)`)
+          .run(tenantId, column('id'), column('sku'), column('name'), column('price'), column('currency'), column('url'), column('image'), column('inStock'),
+            column('code'), column('categories'), column('parentId'), column('attributes'), column('type'), column('description'));
       }
+      prepare('DELETE FROM shop_products WHERE tenant_id = ? AND id <> ALL(?::text[])').run(tenantId, column('id'));
       setStatus(tenantId, { syncedAt, productCount: seen.size, error: null });
     });
   }

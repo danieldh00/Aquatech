@@ -252,3 +252,38 @@ test('fullSyncDue: standaard één keer per nacht, na 04:00 Nederlandse tijd', (
   const ok = { syncedAt: '2026-11-19T12:00:00.000Z', lastAttemptAt: '2026-11-19T12:00:05.000Z', lastError: null };
   assert.equal(fullSyncDue('tenmin', ok, new Date('2026-11-19T12:10:00Z')), true);
 });
+
+test('webshop: een ronde zonder verschillen kost een vast aantal queries, ook bij veel artikelen', async () => {
+  const entries = [];
+  for (let number = 1; number <= 60; number++) entries.push(product(100 + number, `ART-${number}`, '12.10', 5));
+  const products = new Map(entries);
+  const { db, tid, stock, sync } = setup(products, { url: 'http://shop.test', mode: 'rest', push: true, pricesIncludeTax: true, vatRate: 21 });
+  for (let number = 1; number <= 60; number++) stock.create(tid, null, { code: `ART-${number}`, name: `Artikel ${number}`, salePrice: 10, vatRate: 21, onHand: 5 });
+  await sync.run(tid);
+  await sync.run(tid);
+
+  let queries = 0;
+  const prepare = db.prepare.bind(db);
+  /**
+   * Een getelde versie van db.prepare.
+   * @param {string} sql De SQL.
+   * @returns {object} Het statement, met getelde get/all/run.
+   */
+  db.prepare = (sql) => {
+    const statement = prepare(sql);
+    return new Proxy(statement, { get: (target, property) => (['get', 'all', 'run'].includes(property)
+      ? (...args) => { queries++; return target[property](...args); }
+      : typeof target[property] === 'function' ? target[property].bind(target) : target[property]) });
+  };
+  const summary = await sync.run(tid);
+  db.prepare = prepare;
+  assert.strictEqual(summary.updated, 0);
+  assert.strictEqual(summary.failed, 0);
+  assert.ok(queries < 25, `een ronde zonder verschillen deed ${queries} queries (60 artikelen)`);
+
+  // Een product dat uit de webshop verdwijnt, verdwijnt ook uit de opgeslagen lijst; de rest blijft staan.
+  products.delete('101');
+  await sync.run(tid);
+  const stored = db.prepare('SELECT COUNT(*) AS n FROM shop_products WHERE tenant_id = ?').get(tid).n;
+  assert.strictEqual(Number(stored), 59);
+});
