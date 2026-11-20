@@ -257,7 +257,7 @@ function seedLateTables(db, tenantId, userId) {
     stock_units: { id: `su-${suffix}`, tenant_id: tenantId, name: 'doos', created_at: 1 },
     web_orders: { id: `wo-${suffix}`, tenant_id: tenantId, number: `W-${suffix}`, user_id: userId, status: 'nieuw', customer_name: 'Klant', email: 'klant@example.nl', total: 100, data: '{}', created_at: 1, updated_at: 1 },
     web_order_slips: { tenant_id: tenantId, order_id: `wo-${suffix}`, file_name: 'Pakbon.pdf', pages: 1, size: 10, data: 'f1:x:y:z', created_at: 1 },
-    web_returns: { id: `wr-${suffix}`, tenant_id: tenantId, order_id: `wo-${suffix}`, user_id: userId, number: `R-${suffix}`, status: 'nieuw', data: '{}', created_at: 1, updated_at: 1 },
+    web_returns: { id: `wr-${suffix}`, tenant_id: tenantId, order_id: `wo-${suffix}`, user_id: userId, number: `R-${suffix}`, status: 'aangevraagd', data: '{}', created_at: 1, updated_at: 1 },
   };
   for (const [table, values] of Object.entries(rows)) {
     const names = Object.keys(values);
