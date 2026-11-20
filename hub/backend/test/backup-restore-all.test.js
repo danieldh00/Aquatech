@@ -25,7 +25,7 @@ test('restoreAll zet een hele back-up identiek terug in een gemigreerde database
     const target = openDb();
     // De gemigreerde database kan beginrijen hebben; die moeten verdwijnen.
     createStore(target).ensureTenant();
-    await restoreAll({ db: target, file: path.join(dir, backup.name), vault, env: { AQUATECH_RESTORE_TEST: '1' }, tempDir: dir });
+    await restoreAll({ db: target, file: path.join(dir, backup.name), vault, env: { AQUATECH_RESTORE_TEST: '1', DATABASE_URL: 'postgres://postgres@db:5432/postgres' }, tempDir: dir });
     assert.deepStrictEqual(fingerprint(target), fingerprint(source));
     assert.deepStrictEqual(fs.readdirSync(dir).filter((name) => name.startsWith('restore-all-')), [], 'tussenbestand opgeruimd');
   } finally {
@@ -41,4 +41,11 @@ test('restoreAll weigert zonder de schakelaar van de hersteltest', async () => {
 test('restoreAll weigert een database die niet de wegwerpdatabase (host db) is', async () => {
   const database = openDb();
   await assert.rejects(restoreAll({ db: database, file: '/nergens', vault: createVault(Buffer.alloc(32, 7)), env: { AQUATECH_RESTORE_TEST: '1', DATABASE_URL: 'postgres://postgres@productie.example.nl:5432/aquatech' } }), /alleen in de wegwerpdatabase/);
+});
+
+test('restoreAll weigert zonder bekende verbindings-URL (faalt gesloten)', async () => {
+  const database = openDb();
+  const vault = createVault(Buffer.alloc(32, 7));
+  await assert.rejects(restoreAll({ db: database, file: '/nergens', vault, env: { AQUATECH_RESTORE_TEST: '1' } }), /alleen in de wegwerpdatabase/);
+  await assert.rejects(restoreAll({ db: database, file: '/nergens', vault, env: { AQUATECH_RESTORE_TEST: '1', DATABASE_URL_FILE: '/bestaat/niet' } }), /alleen in de wegwerpdatabase/);
 });
