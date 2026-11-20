@@ -11,10 +11,10 @@ const HOUR = 3600 * 1000;
 
 /**
  * Bouwt een monitor met een eigen database, een nepklok, een nepmailer en een nepfetch.
- * @param {object} [options] mainConfig (instelling van de hoofdtenant), otherConfig, mailBroken en webhookStatus.
+ * @param {object} [options] mainConfig (instelling van de hoofdtenant), otherConfig, mailBroken, webhookStatus en appLog (het centrale logboek).
  * @returns {object} monitor, clock (met advance), mails, requests en setConfig.
  */
-function setup({ mainConfig = {}, otherConfig = {}, mailBroken = false, webhookStatus = 200 } = {}) {
+function setup({ mainConfig = {}, otherConfig = {}, mailBroken = false, webhookStatus = 200, appLog = null } = {}) {
   const db = openDb();
   for (const [id, slug] of [[MAIN, 'hoofd'], [OTHER, 'ander']]) {
     db.prepare("INSERT INTO tenants (id, slug, name, created_at) VALUES (?, ?, ?, '2026-01-01')").run(id, slug, slug);
@@ -33,7 +33,7 @@ function setup({ mainConfig = {}, otherConfig = {}, mailBroken = false, webhookS
     }),
     fetchImpl: async (url, init) => { requests.push({ url, method: init.method, body: init.body }); return { ok: webhookStatus < 400, status: webhookStatus }; },
     resolveHost: async () => '93.184.216.34',
-    now: () => clock.time, log: { warn() {}, error() {} }, startGraceMs: 0,
+    now: () => clock.time, log: { warn() {}, error() {} }, startGraceMs: 0, appLog,
   });
   return { db, monitor, clock, mails, requests, configs };
 }
@@ -268,4 +268,25 @@ test('gelijktijdige rondes lopen na elkaar: één incident en één melding', as
   await Promise.all([monitor.runAll({ force: true }), monitor.runAll({ force: true })]);
   assert.strictEqual(monitor.list(MAIN, { state: 'open' }).length, 1);
   assert.strictEqual(mails.length, 1);
+});
+
+test('een trage controle komt als regel met de naam van de controle in het logboek', async () => {
+  const lines = [];
+  const appLog = { warn: (source, message, details) => lines.push({ source, message, details }), info() {}, error() {} };
+  const { monitor, clock } = setup({ appLog });
+  monitor.register({ key: 'traag', scope: 'tenant', title: 'Trage controle', intervalMinutes: 1, run: async () => { clock.advance(6000); return { ok: true }; } });
+  await monitor.runAll({ force: true });
+  const slow = lines.filter((line) => line.source === 'taak');
+  assert.ok(slow.length >= 1);
+  assert.ok(slow.every((line) => line.message === 'Trage bewaking (controle): Trage controle'));
+  assert.ok(slow.every((line) => line.details.data.controle === 'traag' && line.details.durationMs >= 6000));
+});
+
+test('een snelle controle laat geen regel achter in het logboek', async () => {
+  const lines = [];
+  const appLog = { warn: (source, message) => lines.push({ source, message }), info() {}, error() {} };
+  const { monitor } = setup({ appLog });
+  monitor.register({ key: 'snel', scope: 'tenant', title: 'Snelle controle', intervalMinutes: 1, run: async () => ({ ok: true }) });
+  await monitor.runAll({ force: true });
+  assert.deepStrictEqual(lines.filter((line) => line.source === 'taak'), []);
 });

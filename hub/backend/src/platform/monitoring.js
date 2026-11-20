@@ -22,6 +22,8 @@ const INCIDENT_COLUMNS = 'id, tenant_id, scope, check_key, severity, state, titl
 const MAX_MESSAGE = 500;
 /** Een controle mag hoogstens zo lang duren. */
 const CHECK_TIMEOUT_MS = 20000;
+/** Vanaf zoveel ms komt een controle of melding als trage bewaking in het logboek. */
+const SLOW_STEP_MS = 5000;
 /** Zoveel controles lopen tegelijk. */
 const PARALLEL_CHECKS = 4;
 /** Speling bij "aan de beurt": een ronde die iets te vroeg komt, telt toch mee. */
@@ -375,6 +377,20 @@ function createMonitor({
   }
 
   /**
+   * Zet een trage controle of melding in het logboek (bron 'taak', stabiele tekst, dus herhalingen worden één regel met teller),
+   * zodat te zien is welke controle de bewakingsronde ophoudt (bijvoorbeeld een mailserver die niet antwoordt).
+   * @param {object} check De controle.
+   * @param {string} owner De omgeving.
+   * @param {'controle'|'melding'} phase Wat traag was: de controle zelf of het versturen van de melding.
+   * @param {number} elapsedMs Hoe lang het duurde.
+   * @returns {void}
+   */
+  function noteSlow(check, owner, phase, elapsedMs) {
+    if (!appLog || elapsedMs < SLOW_STEP_MS) return;
+    appLog.warn('taak', `Trage bewaking (${phase}): ${check.title}`, { tenantId: check.scope === 'platform' ? null : owner, durationMs: elapsedMs, data: { controle: check.key, fase: phase } });
+  }
+
+  /**
    * Voert een controle uit voor een omgeving en verwerkt de uitkomst. Gooit nooit.
    * @param {object} check De controle.
    * @param {string} owner De omgeving (bij platform de hoofdtenant); de controle krijgt de instelling van die omgeving.
@@ -383,13 +399,17 @@ function createMonitor({
   async function execute(check, owner) {
     const stateKey = `${owner}|${check.key}`;
     const context = { tenantId: owner, scope: check.scope, config: config(owner), now };
+    const checkStarted = now();
     const result = await runCheck(check, context);
+    noteSlow(check, owner, 'controle', now() - checkStarted);
     lastResults.set(stateKey, {
       status: result.skip ? 'overgeslagen' : result.ok ? 'ok' : 'open', severity: result.ok || result.skip ? '' : result.severity,
       message: result.ok || result.skip ? '' : result.message, lastRunAt: nowIso(), ranAtMs: now(),
     });
     try {
+      const applyStarted = now();
       const outcome = await apply({ owner, scope: check.scope, key: check.key, title: check.title, result });
+      noteSlow(check, owner, 'melding', now() - applyStarted);
       return { opened: outcome.opened, resolved: outcome.resolved };
     } catch (error) {
       log.error('[bewaking] Uitkomst niet vast te leggen:', check.key, redact(error && error.message, 300));

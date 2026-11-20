@@ -142,16 +142,27 @@
       workbook.creator = 'Aquatech';
       workbook.created = new Date();
       const sheet = workbook.addWorksheet('Logboek');
+      const dateFormat = 'dd-mm-yyyy hh:mm:ss';
       sheet.columns = [
-        { header: 'Tijdstip (laatste)', key: 'at', width: 22 }, { header: 'Eerste keer', key: 'firstAt', width: 22 }, { header: 'Niveau', key: 'level', width: 14 }, { header: 'Bron', key: 'source', width: 14 },
+        { header: 'Tijdstip (laatste)', key: 'at', width: 20, style: { numFmt: dateFormat } }, { header: 'Eerste keer', key: 'firstAt', width: 20, style: { numFmt: dateFormat } },
+        { header: 'Niveau', key: 'level', width: 14 }, { header: 'Bron', key: 'source', width: 14 }, { header: 'Bereik', key: 'scope', width: 11 },
         { header: 'Melding', key: 'message', width: 70 }, { header: 'Foutcode', key: 'errorCode', width: 12 }, { header: 'Verzoek-id', key: 'requestId', width: 16 },
-        { header: 'Duur (ms)', key: 'durationMs', width: 11 }, { header: 'Aantal', key: 'repeat', width: 9 }, { header: 'Details', key: 'data', width: 60 },
+        { header: 'Duur (ms)', key: 'durationMs', width: 11 }, { header: 'Aantal', key: 'repeat', width: 9 },
+        { header: 'Queries', key: 'queries', width: 10 }, { header: 'Database (ms)', key: 'dbMs', width: 14 },
+        { header: 'Externe aanroepen', key: 'externalCalls', width: 18 }, { header: 'Extern (ms)', key: 'externalMs', width: 12 }, { header: 'Overige details', key: 'other', width: 50 },
       ];
       sheet.getRow(1).font = { bold: true };
-      items.slice(0, EXPORT_MAX).forEach((item) => sheet.addRow({
-        at: when(item.at), firstAt: item.firstAt ? when(item.firstAt) : '', level: LEVEL_TEXT[item.level] || item.level, source: item.source, message: item.message, errorCode: item.errorCode,
-        requestId: item.requestId, durationMs: item.durationMs || '', repeat: item.repeat, data: item.data && Object.keys(item.data).length ? JSON.stringify(item.data) : '',
-      }));
+      sheet.views = [{ state: 'frozen', ySplit: 1 }];
+      sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: sheet.columns.length } };
+      items.slice(0, EXPORT_MAX).forEach((item) => {
+        const { queries, dbMs, externalCalls, externalMs, ...rest } = item.data || {};
+        sheet.addRow({
+          at: new Date(item.at), firstAt: item.firstAt ? new Date(item.firstAt) : null, level: LEVEL_TEXT[item.level] || item.level, source: item.source,
+          scope: item.scope === 'platform' ? 'Platform' : 'Omgeving', message: item.message, errorCode: item.errorCode, requestId: item.requestId,
+          durationMs: item.durationMs || null, repeat: item.repeat, queries: queries ?? null, dbMs: dbMs ?? null, externalCalls: externalCalls ?? null, externalMs: externalMs ?? null,
+          other: Object.keys(rest).length ? JSON.stringify(rest) : '',
+        });
+      });
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const link = document.createElement('a');
