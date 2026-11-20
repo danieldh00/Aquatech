@@ -315,6 +315,36 @@ test('script: Weigeren bewaart de keuze en laadt niets; eerdere toestemming laad
   assert.strictEqual(callsOf(agreed.win, 'config')[0][2].traffic_type, 'internal');
 });
 
+test('script: het vakje Analytisch staat vooraf aan zonder eerdere keuze, een eerdere keuze blijft zoals die was', () => {
+  const client = loadClient();
+  /**
+   * Zoekt het vakje Analytisch in het element en zijn kinderen.
+   * @param {object} element Het element om te doorzoeken.
+   * @returns {?object} Het vakje of null.
+   */
+  const findToggle = (element) => {
+    if (element.attributes && element.attributes['data-consent-analytics'] !== undefined) return element;
+    for (const child of element.children || []) { const found = findToggle(child); if (found) return found; }
+    return null;
+  };
+  /**
+   * Opent het instellingenvenster via de voetlink en geeft de beginstand van het vakje.
+   * @param {object} stored Wat er al in localStorage staat.
+   * @returns {boolean} Of het vakje Analytisch aanstaat.
+   */
+  const toggleOpensAs = (stored) => {
+    const browser = fakeBrowser({ bodyAttributes: PAGE, stored });
+    client.startAnalytics({ window: browser.win, document: browser.doc, storage: browser.storage });
+    browser.documentHandlers.click({ target: { closest: (selector) => (selector === '[data-consent-settings]' ? {} : null) } });
+    const toggle = findToggle(browser.body);
+    assert.ok(toggle, 'het instellingenvenster is geopend');
+    return toggle.checked;
+  };
+  assert.strictEqual(toggleOpensAs({}), true, 'zonder keuze vooraf aan');
+  assert.strictEqual(toggleOpensAs({ aquatech_shop_consent: consent('denied') }), false, 'een eerdere weigering blijft uit');
+  assert.strictEqual(toggleOpensAs({ aquatech_shop_consent: consent('granted') }), true, 'een eerdere toestemming blijft aan');
+});
+
 test('script: toestemming intrekken zet de meting uit en wist de cookies van Google', () => {
   const client = loadClient();
   const browser = fakeBrowser({ bodyAttributes: PAGE, stored: { aquatech_shop_consent: consent('granted') }, cookie: '_ga=GA1.1; _ga_ABC=GS1; sessie=houden' });
