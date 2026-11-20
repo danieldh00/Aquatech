@@ -51,7 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: gitleaks
@@ -69,7 +69,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Image bouwen
         run: docker build -t hub:scan hub
       # Op een PR en op master alleen rapporteren (een bestaande kwetsbaarheid in het basisimage mag een PR niet blokkeren);
@@ -87,7 +87,7 @@ jobs:
           image --format table --severity CRITICAL,HIGH --ignore-unfixed --exit-code 0 hub:scan
       - name: Resultaat naar GitHub-beveiliging
         if: always() && hashFiles('trivy.sarif') != ''
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy.sarif
           category: trivy-container
