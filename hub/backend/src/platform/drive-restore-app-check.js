@@ -11,7 +11,7 @@ const { readJsonFile, writeJsonFile, cleanText } = require('./system-update');
 const HANDOVER = 'drive-restore';
 const STATUS_FILE = 'drive-restore-app.json';
 const PICKUP_MS = 90 * 1000;
-const TOTAL_MS = 40 * 60 * 1000;
+const TOTAL_MS = 25 * 60 * 1000;
 const POLL_MS = 3000;
 const MAX_SANITY = 20;
 
@@ -83,7 +83,7 @@ function createDriveAppCheck({ statusDir = '', requestDir = '', pickupMs = PICKU
           return { ran: false, ok: true, message: 'De app-controle draaide niet: het hostscript reageerde niet (servertaak 007 nog niet uitgevoerd?).', sanity: [] };
         }
       }
-      return { ran: false, ok: true, message: 'De app-controle gaf geen uitslag binnen 40 minuten.', sanity: [] };
+      return { ran: false, ok: true, message: 'De app-controle gaf geen uitslag binnen 25 minuten.', sanity: [] };
     } catch (error) {
       return { ran: false, ok: true, message: 'De app-controle kon niet worden klaargezet in de aanvraagmap.', sanity: [] };
     } finally {

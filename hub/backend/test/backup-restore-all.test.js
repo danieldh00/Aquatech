@@ -37,3 +37,8 @@ test('restoreAll weigert zonder de schakelaar van de hersteltest', async () => {
   const database = openDb();
   await assert.rejects(restoreAll({ db: database, file: '/nergens', vault: createVault(Buffer.alloc(32, 7)), env: {} }), /alleen voor de hersteltest/);
 });
+
+test('restoreAll weigert een database die niet de wegwerpdatabase (host db) is', async () => {
+  const database = openDb();
+  await assert.rejects(restoreAll({ db: database, file: '/nergens', vault: createVault(Buffer.alloc(32, 7)), env: { AQUATECH_RESTORE_TEST: '1', DATABASE_URL: 'postgres://postgres@productie.example.nl:5432/aquatech' } }), /alleen in de wegwerpdatabase/);
+});

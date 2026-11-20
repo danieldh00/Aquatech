@@ -30,6 +30,10 @@ function clearTables(db) {
  */
 async function restoreAll({ db, file, vault, env = process.env, tempDir = os.tmpdir() }) {
   if (env.AQUATECH_RESTORE_TEST !== '1') throw new Error('Terugzetten van een hele back-up is alleen voor de hersteltest (AQUATECH_RESTORE_TEST=1); dit leegt alle tabellen.');
+  // Tweede slot: de hersteltest-container bereikt de wegwerpdatabase altijd onder de naam `db` op een intern netwerk.
+  let host = '';
+  try { host = new URL(env.DATABASE_URL || '').hostname; } catch { host = ''; }
+  if (env.DATABASE_URL && host !== 'db') throw new Error('Terugzetten van een hele back-up mag alleen in de wegwerpdatabase (host `db`), niet in deze database.');
   const plain = path.join(tempDir, `restore-all-${process.pid}.ndjson.gz`);
   try {
     await decryptFile(file, plain, keyOf(vault));
