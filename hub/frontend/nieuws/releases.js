@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.29.4',
+      date: '2026-11-20',
+      title: 'Cookiebanner volgens de AVG en Microsoft Clarity in de webshop',
+      items: [
+        { text: 'De webshop heeft een nieuwe cookiebanner: Accepteren en Weigeren zijn even duidelijk, bezoekers kiezen per categorie (Noodzakelijk of Analytisch) en kunnen hun keuze altijd wijzigen of intrekken via *Cookie-instellingen* onderaan de pagina.', for: ['beheer'] },
+        { text: 'Microsoft Clarity staat in de webshop en laadt pas nadat de bezoeker Analytisch toestaat. Zet hem aan met je project-ID in Beheer > Webshop > Microsoft Clarity.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.29.3',
       date: '2026-11-20',
       title: 'Nieuwspunt over Uitbesteden alleen voor beheerders',
