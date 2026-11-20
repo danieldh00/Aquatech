@@ -312,8 +312,11 @@ else
     app_check "App start op de teruggezette database" ok
     # Het controlescript draait in de wegwerp-app: het zet in de wegwerpdatabase een wegwerpwachtwoord op een actieve
     # beheerder, logt in via de echte inlogroute en haalt een paar kerngegevens op. Uitvoer: ok|naam of fail|naam.
+    script_failed=0; script_finished=0
     while IFS='|' read -r verdict name; do
       [[ "$verdict" == ok || "$verdict" == fail ]] || continue
+      [[ "$verdict" == fail ]] && script_failed=1
+      [[ "$verdict" == ok && "$name" == "Gebruikers ophalen" ]] && script_finished=1
       app_check "$(printf '%s' "$name" | tr -cd 'A-Za-z0-9 ,.()-')" "$verdict"
     done < <(timeout 120 docker exec -i "$APP_CONTAINER" node - 2>/dev/null <<'NODESCRIPT'
 const crypto = require('crypto');
@@ -348,6 +351,9 @@ async function main() {
 main().catch((error) => { say(false, 'Controle van de app voltooid'); });
 NODESCRIPT
 )
+    # Geen uitvoer (require mislukt, time-out, docker exec zelf mislukt) mag nooit als geslaagd tellen: de laatste controle
+    # van het script moet gelopen hebben, of er moet al een mislukte regel zijn.
+    (( script_failed == 1 || script_finished == 1 )) || app_check "Controlescript van de app voltooid" fail
   fi
 fi
 

@@ -35,9 +35,11 @@ case "$1" in
       node)
         if [[ "$2" == "-e" ]]; then exit \${FAKE_APP_HEALTH_EXIT:-0}; fi
         cat >/dev/null
+        [[ -n "\${FAKE_APP_SILENT:-}" ]] && exit 1
         echo "ok|App leest de teruggezette gegevens (geen eerste start)"
         echo "\${FAKE_APP_LOGIN:-ok}|Inloggen als beheerder op de teruggezette gegevens"
         echo "ok|Offertes ophalen"
+        echo "ok|Gebruikers ophalen"
         exit 0 ;;
       pg_restore)
         if [[ -n "\${FAKE_LIST_EARLY:-}" && "$*" == *" -l"* ]]; then
@@ -134,7 +136,7 @@ test('geslaagd: terugzetten, controles, opruimen en door de app te lezen', () =>
   assert.strictEqual(latest.tables.backup, 3);
   assert.strictEqual(latest.rows.checked, 3);
   assert.deepStrictEqual(latest.rows.deviating, []);
-  assert.strictEqual(latest.sanity.length, 7, 'drie databasecontroles, de app-start en drie controles van het app-script');
+  assert.strictEqual(latest.sanity.length, 8, 'drie databasecontroles, de app-start en drie controles van het app-script');
   assert.ok(latest.sanity.some((item) => /Inloggen als beheerder/.test(item.name) && item.ok), 'de app logde in op de teruggezette gegevens');
   assert.ok(latest.sanity.every((item) => item.ok));
   const calls = fs.readFileSync(path.join(env.state, 'calls.log'), 'utf8');
@@ -166,6 +168,9 @@ test('mislukt: de app kan niet inloggen op de teruggezette gegevens, of start ni
   assert.strictEqual(env.run({ FAKE_APP_LOGIN: 'fail' }).status, 1);
   assert.match(readStatus(env.statusDir).runs[0].message, /sanity-controle/);
   assert.ok(readStatus(env.statusDir).runs[0].sanity.some((item) => !item.ok && /Inloggen/.test(item.name)));
+  env = install({ policy: dueNow() });
+  assert.strictEqual(env.run({ FAKE_APP_SILENT: '1' }).status, 1, 'een controlescript zonder uitvoer is nooit geslaagd');
+  assert.ok(readStatus(env.statusDir).runs[0].sanity.some((item) => !item.ok && /Controlescript/.test(item.name)));
   env = install({ policy: dueNow() });
   assert.strictEqual(env.run({ FAKE_APP_RUN_EXIT: '1' }).status, 1, 'een app die niet start is een mislukte hersteltest');
   env = install({ policy: dueNow() });
