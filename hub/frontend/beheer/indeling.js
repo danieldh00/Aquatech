@@ -51,6 +51,7 @@
     { title: 'Systeem', sections: [
       { id: 'backup', label: 'Back-ups', pane: 'settings', form: 's-backup', words: 'kopie database herstellen versleuteld', needs: 'backups' },
       { id: 'restore', label: 'Terugzetten uit back-up', pane: 'settings', form: 's-restore', words: 'herstellen terugzetten verwijderd offerte bestelling orderregel klant artikel per record', needs: 'backups' },
+      { id: 'hersteltest', label: 'Hersteltest van de back-up', pane: 'hersteltest', words: 'hersteltest recovery restore test back-up terugzetten wekelijks controle wegwerpcontainer docker', needs: 'updates' },
       { id: 'backup-drive', label: 'Back-ups naar Google Drive', pane: 'settings', form: 's-backup-drive', words: 'google drive kopie buiten server offsite cloud upload oauth', needs: 'backups' },
       { id: 'vps', label: 'Draaiboek VPS-verhuizing', pane: 'settings', form: 's-vps', words: 'vps verhuizen migratie server nieuwe host draaiboek tunnel cloudflare docker hoofdsleutel terugzetten', needs: 'updates' },
       { id: 'aikosten', label: 'AI-kosten', pane: 'aikosten', words: 'verbruik tokens kosten export per gebruiker' },

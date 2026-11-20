@@ -1,0 +1,10 @@
+# Start de hersteltest meteen zodra de app "Nu testen" aanvraagt (restore-test.sh haalt het bestand direct weg).
+[Unit]
+Description=Aquatech: hersteltest starten op aanvraag vanuit de app
+
+[Path]
+PathExists=/opt/apps/aquatech/update/request/restore-test-now.json
+Unit=aquatech-restore-test.service
+
+[Install]
+WantedBy=multi-user.target

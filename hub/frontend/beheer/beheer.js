@@ -1443,6 +1443,7 @@
     if (section.pane === 'documentopmaak') window.BeheerDocumentopmaak.load();
     if (section.pane === 'mailopmaak') window.BeheerMailopmaak.load();
     if (section.pane === 'updates') window.BeheerUpdates.load(); else window.BeheerUpdates.stop();
+    if (section.pane === 'hersteltest') window.BeheerHersteltest.load(); else window.BeheerHersteltest.stop();
     if (section.pane === 'logboek') window.BeheerLogboek.load();
     if (section.pane === 'bewaking') window.BeheerBewaking.load(); else window.BeheerBewaking.stop();
     if (section.pane === 'audit') loadAudit();

@@ -326,4 +326,4 @@ function createSystemUpdate({ statusDir = '', requestDir = '', currentVersion, n
   return { configured, maintenance, view, request, requestCheck, cancel, setAuto, auto, finishedRun };
 }
 
-module.exports = { createSystemUpdate, compareVersions, sanitizeStatus, sanitizeReleases, MAINTENANCE_MAX_MS };
+module.exports = { createSystemUpdate, compareVersions, sanitizeStatus, sanitizeReleases, readJsonFile, writeJsonFile, cleanTime, cleanText, MAINTENANCE_MAX_MS };

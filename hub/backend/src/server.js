@@ -121,6 +121,8 @@ const { registerAppLogRoutes } = require('./platform/app-log-routes');
 const { createMonitoringChecks } = require('./platform/monitoring-checks');
 const { registerRoleRoutes } = require('./platform/roles-routes');
 const { registerSystemUpdateRoutes, maintenanceGuard } = require('./platform/system-update-routes');
+const { createRestoreTest } = require('./platform/restore-test');
+const { registerRestoreTestRoutes } = require('./platform/restore-test-routes');
 const { createIdempotency, ifBaseOf } = require('./beveiliging/idempotency');
 const { createOAuthGrants } = require('./mcp/oauth-grants');
 const { registerOAuthRoutes } = require('./mcp/oauth-server');
@@ -1722,6 +1724,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Servertaken (afvinklijst voor wat op de Proxmox-host moet gebeuren; platform/host-tasks.js).
   const hostTasks = createHostTasks({ statusDir: env.UPDATE_STATUS_DIR || '', settings: settingsFor(tenant.id) });
   registerHostTaskRoutes(app, { hostTasks, audit, mainTenantId: tenant.id, canUpdate });
+  // Hersteltest van de back-up (platform/restore-test.js; het hostscript deploy/apps01/restore-test.sh doet het werk).
+  const restoreTest = createRestoreTest({ statusDir: env.UPDATE_STATUS_DIR || '', requestDir: env.UPDATE_REQUEST_DIR || '' });
+  registerRestoreTestRoutes(app, { restoreTest, audit, mainTenantId: tenant.id, canUpdate });
+  app.locals.restoreTest = restoreTest;
   app.locals.systemUpdate = systemUpdate;
   app.locals.recordSystemUpdate = registerSystemUpdateRoutes(app, { systemUpdate, store, audit, mainTenantId: tenant.id, canUpdate }).recordFinished;
 
@@ -3171,7 +3177,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // De controles van de bewaking; elke ontbrekende afhankelijkheid slaat zijn controle over.
   createMonitoringChecks({
     db: database, settingsFor: (id) => settingsFor(id), dataDir: env.DATA_DIR || (backupDir ? path.dirname(backupDir) : ''), backupDir,
-    listBackups: backups.listBackups, systemUpdate, driveBackup, errorCounter, mailerFor,
+    listBackups: backups.listBackups, systemUpdate, driveBackup, restoreTest, errorCounter, mailerFor,
     mollie: createMollie(mollieFetch ? { fetchImpl: mollieFetch } : {}), visma, shop: shopStore,
   }).forEach((check) => monitor.register(check));
   /**

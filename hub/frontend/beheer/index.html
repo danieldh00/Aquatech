@@ -962,6 +962,57 @@
           </section>
         </div>
       </section>
+      <section id="tab-hersteltest" class="tabpane" hidden>
+        <p class="muted small">Een back-up is pas veilig als terugzetten werkt. Elke week zet de server de nieuwste back-up terug in een wegwerpcontainer (met een geheugenlimiet en zonder netwerk), controleert tabellen, schemaversie, rijtellingen en een paar sanity-queries, en ruimt alles weer op. Gaat het mis, dan meldt de bewaking dat.</p>
+        <div id="rt-none" class="card" hidden>
+          <h3>Niet ingericht</h3>
+          <p class="muted small">De hersteltest is op deze server nog niet ingericht. Voer de servertaak <em>Wekelijkse hersteltest van de back-up inrichten</em> uit (Beheer &gt; Systeem &gt; Updates, Servertaken).</p>
+        </div>
+        <div id="rt-main" hidden>
+          <div class="card-grid">
+            <section class="card" aria-labelledby="rt-last-title">
+              <h3 id="rt-last-title">Laatste uitslag</h3>
+              <p><span class="mon-badge" id="rt-badge">–</span> <span id="rt-last-text" class="muted small"></span></p>
+              <dl class="up-facts">
+                <dt>Back-up</dt><dd id="rt-backup">–</dd>
+                <dt>Tabellen</dt><dd id="rt-tables">–</dd>
+                <dt>Schemaversie</dt><dd id="rt-version">–</dd>
+                <dt>Rijtellingen</dt><dd id="rt-rows">–</dd>
+                <dt>Duur</dt><dd id="rt-duration">–</dd>
+              </dl>
+              <div id="rt-details"></div>
+              <p class="muted small" id="rt-state" role="status" aria-live="polite"></p>
+              <div class="form-actions">
+                <button class="btn primary" type="button" id="rt-run">Nu testen</button>
+                <button class="btn" type="button" id="rt-export">Exporteren naar Excel</button>
+              </div>
+            </section>
+            <section class="card" aria-labelledby="rt-settings-title">
+              <h3 id="rt-settings-title">Planning</h3>
+              <form id="rt-form" class="form-grid" novalidate>
+                <label class="chk full"><input type="checkbox" id="rt-enabled"> Wekelijkse hersteltest aan</label>
+                <label class="field">Dag
+                  <select id="rt-day">
+                    <option value="1">Maandag</option><option value="2">Dinsdag</option><option value="3">Woensdag</option><option value="4">Donderdag</option>
+                    <option value="5">Vrijdag</option><option value="6">Zaterdag</option><option value="0">Zondag</option>
+                  </select>
+                </label>
+                <label class="field">Tijd
+                  <input type="time" id="rt-time" required>
+                  <span class="hint">Server-tijd (Europe/Amsterdam). De dagelijkse back-up draait om 02:30.</span>
+                </label>
+                <p class="muted small full" id="rt-next"></p>
+                <div class="form-actions full"><button class="btn primary" type="submit" id="rt-save">Opslaan</button></div>
+              </form>
+            </section>
+          </div>
+          <section class="card" aria-labelledby="rt-history-title">
+            <h3 id="rt-history-title">Historie</h3>
+            <div class="tablewrap"><table class="grid"><thead><tr><th>Gestart</th><th>Uitslag</th><th>Start</th><th>Back-up</th><th>Duur</th><th>Opmerking</th></tr></thead><tbody id="rt-history"></tbody></table></div>
+          </section>
+        </div>
+        <div id="rt-err" class="err" role="alert"></div>
+      </section>
       <section id="tab-bewaking" class="tabpane" hidden>
         <p class="muted small">De app controleert zichzelf en de koppelingen van deze omgeving. Gaat er iets mis, dan krijg je een mail (en eventueel een bericht via een webhook); is het weer in orde, dan hoor je dat ook. Alles staat hier en in de database, dus het verhuist mee met een back-up.</p>
         <div class="card mon-summary" id="mon-summary">
@@ -1135,6 +1186,7 @@
   <script src="documentopmaak.js"></script>
   <script src="mailopmaak.js"></script>
   <script src="updates.js"></script>
+  <script src="hersteltest.js"></script>
   <script src="bewaking.js"></script>
   <script src="logboek.js"></script>
   <script src="collapse-list.js"></script>

@@ -1,0 +1,12 @@
+# Elk half uur kijken of de ingestelde dag en tijd van de hersteltest bereikt zijn (het script beslist; staat de test
+# uit, of is er deze week al getest, dan gebeurt er niets). Persistent: een gemiste test wordt ingehaald.
+[Unit]
+Description=Aquatech: hersteltest plannen
+
+[Timer]
+OnCalendar=*:0/30
+RandomizedDelaySec=2min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

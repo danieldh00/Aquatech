@@ -280,7 +280,7 @@ dl.kv dd { margin: 0; }
 /* Beheer > Systeem > Updates (updates.js) */
 .up-facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0 0 12px; font-size: 14px; }
 .up-facts dt { color: var(--muted); }
-.up-facts dd { margin: 0; font-weight: 600; }
+.up-facts dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; min-width: 0; }
 .up-release h4 { margin: 12px 0 4px; font-size: 14px; }
 .up-release:first-child h4 { margin-top: 0; }
 .up-release ul { margin: 0; padding-left: 20px; font-size: 14px; }
@@ -313,6 +313,7 @@ dl.kv dd { margin: 0; }
 .mon-badge { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; color: var(--at-surface); background: var(--at-warn); }
 .mon-badge.bad { background: var(--at-danger); }
 .mon-badge.info { background: var(--at-teal); }
+.mon-badge.ok { background: var(--at-ok); }
 .log-filters { margin-bottom: 8px; }
 .log-data { margin: 4px 0 0; max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
 #log-table .nowrap { white-space: nowrap; }
