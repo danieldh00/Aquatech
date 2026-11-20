@@ -1372,6 +1372,11 @@ const PG_MIGRATIONS = [
   ) ordered WHERE item_suppliers.id = ordered.id;
   UPDATE item_suppliers SET preferred = CASE WHEN rank = 0 THEN 1 ELSE 0 END;
   `,
+  // 89: opruimen: ongebruikte tabel met afgewezen prijsvoorstellen weg (prijzen volgen automatisch de factor) en een index op de klant van een retour (account verwijderen en klantgegevens).
+  `
+  DROP TABLE IF EXISTS price_proposal_rejections;
+  CREATE INDEX web_returns_user ON web_returns (tenant_id, user_id);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };
