@@ -104,7 +104,7 @@ test('webshop staat standaard uit en dan is niets bereikbaar', async () => {
 
 test('webshop aan: start, categorie en product zonder inloggen, zonder interne gegevens', async () => {
   const { db, anonymous, admin, main } = await setup();
-  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true })).status, 200);
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true, shopClarity: { enabled: false } })).status, 200);
   db.prepare('INSERT INTO shop_products (tenant_id, id, name, image, categories) VALUES (?, ?, ?, ?, ?)').run(main, '77', 'x', 'https://shop.test/buis.jpg', '["Leidingen"]');
   db.prepare("UPDATE stock_items SET shop_product_id = '77' WHERE tenant_id = ? AND code = 'BUIS-25'").run(main);
 
@@ -138,7 +138,7 @@ test('webshop aan: start, categorie en product zonder inloggen, zonder interne g
 
 test('webshop: assets, doorverwijzing, 404 en alleen lezen', async () => {
   const { base, admin, anonymous } = await setup();
-  await admin.put('/app/api/admin/settings', { storefront: true });
+  await admin.put('/app/api/admin/settings', { storefront: true, shopClarity: { enabled: false } });
   const noSlash = await createClient(base, { followRedirects: false }).get('/product/pe-buis-25-mm-buis-25');
   assert.strictEqual(noSlash.status, 302);
   assert.strictEqual(noSlash.location, 'pe-buis-25-mm-buis-25/');
@@ -178,7 +178,7 @@ test('webshop-instelling alleen in de hoofdtenant', async () => {
   const saved = await other.put('/app/api/admin/settings', { drawingRequests: false });
   assert.strictEqual(saved.status, 200);
   assert.ok(!('storefront' in saved.body.settings), 'veld ook niet in de PUT-response');
-  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true })).status, 200);
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true, shopClarity: { enabled: false } })).status, 200);
 });
 
 test('HTML-tekens in namen worden gelezen, niet dubbel getoond', () => {
@@ -221,7 +221,7 @@ test('categorieën worden in hoofdcategorieën gegroepeerd', () => {
 
 test('webshop: hoofdcategorie, zoeken, kop en voet', async () => {
   const { db, anonymous, admin, main } = await setup();
-  await admin.put('/app/api/admin/settings', { storefront: true });
+  await admin.put('/app/api/admin/settings', { storefront: true, shopClarity: { enabled: false } });
   db.prepare('INSERT INTO shop_products (tenant_id, id, name, image, categories) VALUES (?, ?, ?, ?, ?)').run(main, '77', 'x', 'https://shop.test/buis.jpg', '["Tyleen &amp; koppelingen"]');
   db.prepare("UPDATE stock_items SET shop_product_id = '77' WHERE tenant_id = ? AND code = 'BUIS-25'").run(main);
 
@@ -254,7 +254,7 @@ test('webshop: hoofdcategorie, zoeken, kop en voet', async () => {
 
 test('webshop: assets met versie in het adres, startpagina in de opzet van aquatechshop.nl', async () => {
   const { admin, anonymous } = await setup();
-  await admin.put('/app/api/admin/settings', { storefront: true });
+  await admin.put('/app/api/admin/settings', { storefront: true, shopClarity: { enabled: false } });
   const { version } = require('../package.json');
   const home = await anonymous.get('/');
   for (const name of ['winkel.css', 'brand.css', 'aquatechshop-logo.png', 'hero-tuin.jpg', 'merk-dab.webp', 'usp-bezorgd.png', 'betaalmethoden.png']) {
@@ -279,7 +279,7 @@ test('webshop: assets met versie in het adres, startpagina in de opzet van aquat
 
 test('webshop: eigen pagina Over ons, vaste kaarthoogte en telefoonlink met naam', async () => {
   const { admin, anonymous } = await setup();
-  await admin.put('/app/api/admin/settings', { storefront: true });
+  await admin.put('/app/api/admin/settings', { storefront: true, shopClarity: { enabled: false } });
   const { version } = require('../package.json');
   const home = await anonymous.get('/');
   assert.match(home.text, /href="over-ons\/"/, 'menu verwijst naar de eigen pagina');
@@ -324,7 +324,7 @@ test('catalogus: varianten van een hoofdartikel worden één regel met keuzes, l
 
 test('webshop: hoofdartikel met varianten als regel met keuzelijst en eigen script', async () => {
   const { db, admin, anonymous, main } = await setup();
-  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true })).status, 200);
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true, shopClarity: { enabled: false } })).status, 200);
   const parent = (await admin.post('/app/api/stock/items', { code: 'KOP', name: 'Koppeling pp', salePrice: 5 })).body;
   const made = await admin.put(`/app/api/stock/items/${parent.id}/variants`, { attributes: [{ name: 'Maat', values: ['25 mm', '32 mm'] }] });
   assert.strictEqual(made.status, 200, JSON.stringify(made.body));
@@ -369,7 +369,7 @@ test('webshop: hoofdartikel met varianten als regel met keuzelijst en eigen scri
 
 test('webshop: voorraadstand uit het systeem en filter alleen op voorraad', async () => {
   const { admin, anonymous } = await setup();
-  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true })).status, 200);
+  assert.strictEqual((await admin.put('/app/api/admin/settings', { storefront: true, shopClarity: { enabled: false } })).status, 200);
   const home = await anonymous.get('/');
   const categorySlug = home.text.match(/href="categorie\/(overig-[0-9a-f]{6})\//)[1];
   const all = await anonymous.get(`/categorie/${categorySlug}/`);

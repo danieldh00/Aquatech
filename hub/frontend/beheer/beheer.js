@@ -605,6 +605,7 @@
     $('#s-shipping').hidden = !state.storefrontAllowed;
     renderPayment(view);
     renderAnalytics(view);
+    renderClarity(view);
     renderSeo(view);
     renderCaptcha(view);
     codeState.className = `state ${code.set ? 'ok' : 'off'}`;
@@ -928,6 +929,23 @@
   }
 
   /**
+   * Vult het formulier Microsoft Clarity met de opgeslagen instelling en toont of Clarity nu actief is.
+   * @param {object} view De instellingen zoals de server ze toont (shopClarity).
+   * @returns {void}
+   */
+  function renderClarity(view) {
+    const form = $('#s-clarity');
+    const clarity = view.shopClarity?.value || {};
+    form.hidden = !state.storefrontAllowed;
+    form.enabled.checked = Boolean(clarity.enabled);
+    form.projectId.value = clarity.projectId || '';
+    const status = $('#s-clarity-state');
+    const active = Boolean(clarity.enabled && clarity.projectId);
+    status.textContent = active ? `Actief: Clarity (${clarity.projectId}) laadt alleen na toestemming van de bezoeker.` : clarity.enabled ? 'Niet actief: vul een geldig project-ID in.' : 'Uit: de webshop laadt niets van Clarity.';
+    status.className = `state ${active ? 'ok' : 'off'}`;
+  }
+
+  /**
    * Vult het formulier Zoekmachines met de opgeslagen instelling en toont of de webshop voor zoekmachines open staat.
    * @param {object} view De instellingen zoals de server ze toont (shopSeo en shopPayment).
    * @returns {void}
@@ -1125,6 +1143,18 @@
       if (measurementId && !/^G-[A-Z0-9]{4,14}$/.test(measurementId)) { $('.err', analyticsForm).textContent = 'Dit is geen geldig meet-ID. Het begint met G- en heeft 4 tot 14 letters of cijfers.'; return; }
       if (analyticsForm.enabled.checked && !measurementId) { $('.err', analyticsForm).textContent = 'Vul een meet-ID in om Google Analytics aan te zetten.'; return; }
       saveSettings(analyticsForm, { shopAnalytics: { enabled: analyticsForm.enabled.checked, measurementId } }, 'Google Analytics opgeslagen');
+    };
+    const clarityForm = $('#s-clarity');
+    /**
+     * Slaat de instelling voor Clarity op; een ongeldig project-ID wordt niet bewaard.
+     * @param {SubmitEvent} event het verzenden
+     */
+    clarityForm.onsubmit = (event) => {
+      event.preventDefault();
+      const projectId = clarityForm.projectId.value.trim().toLowerCase();
+      if (projectId && !/^[a-z0-9]{6,16}$/.test(projectId)) { $('.err', clarityForm).textContent = 'Dit is geen geldig project-ID. Het bestaat uit 6 tot 16 letters of cijfers.'; return; }
+      if (clarityForm.enabled.checked && !projectId) { $('.err', clarityForm).textContent = 'Vul een project-ID in om Clarity aan te zetten.'; return; }
+      saveSettings(clarityForm, { shopClarity: { enabled: clarityForm.enabled.checked, projectId } }, 'Clarity opgeslagen');
     };
     const seoForm = $('#s-seo');
     /**

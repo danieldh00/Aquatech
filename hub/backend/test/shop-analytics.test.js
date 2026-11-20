@@ -233,6 +233,13 @@ function loadClient() {
 }
 
 /** Een pagina met meting en één gebeurtenis (view_item) als bodyattributen. */
+/**
+ * De opgeslagen keuze zoals het script die bewaart (versie, keuze en datum).
+ * @param {string} decision 'granted' of 'denied'.
+ * @returns {string} De JSON-tekst.
+ */
+const consent = (decision) => JSON.stringify({ v: 1, analytics: decision === 'granted', at: '2026-11-20T10:00:00.000Z' });
+
 const PAGE = { 'data-shop-analytics': 'G-TEST1234', 'data-customer-group': 'zakelijk', 'data-privacy-url': '../pagina/privacyverklaring/', 'data-shop-events': JSON.stringify([{ name: 'view_item', params: { items: [{ item_id: 'A' }] } }]) };
 
 /**
@@ -264,8 +271,8 @@ test('script: zonder toestemming wordt er niets van Google geladen en staat alle
   const banner = browser.body.children.find((child) => child.attributes['data-consent-banner'] !== undefined);
   assert.ok(banner, 'de balk staat er');
   const buttons = banner.children[1].children;
-  assert.deepStrictEqual(buttons.map((button) => button.textContent), ['Accepteren', 'Weigeren']);
-  assert.strictEqual(buttons[0].className, buttons[1].className, 'even duidelijk');
+  assert.deepStrictEqual(buttons.map((button) => button.textContent), ['Accepteren', 'Weigeren', 'Instellingen']);
+  assert.strictEqual(buttons[0].className.split(' ')[0], buttons[1].className.split(' ')[0], 'even duidelijk (zelfde knop)');
 });
 
 test('script: Accepteren laadt Google, geeft alleen analytics toestemming en stuurt de gebeurtenissen van de pagina', () => {
@@ -276,7 +283,8 @@ test('script: Accepteren laadt Google, geeft alleen analytics toestemming en stu
   banner.children[1].children[0].click();
   assert.strictEqual(browser.scripts.length, 1);
   assert.strictEqual(browser.scripts[0].src, 'https://www.googletagmanager.com/gtag/js?id=G-TEST1234');
-  assert.strictEqual(browser.storage.data.aquatech_shop_consent, 'granted');
+  assert.deepStrictEqual({ ...JSON.parse(browser.storage.data.aquatech_shop_consent), at: 'x' }, { v: 1, analytics: true, at: 'x' });
+  assert.match(JSON.parse(browser.storage.data.aquatech_shop_consent).at, /^\d{4}-\d{2}-\d{2}T/, 'met datum');
   const update = callsOf(browser.win, 'consent').find((call) => call[1] === 'update');
   assert.deepStrictEqual(update[2], { analytics_storage: 'granted', ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' });
   const config = callsOf(browser.win, 'config')[0];
@@ -291,16 +299,16 @@ test('script: Weigeren bewaart de keuze en laadt niets; eerdere toestemming laad
   const declined = fakeBrowser({ bodyAttributes: PAGE });
   client.startAnalytics({ window: declined.win, document: declined.doc, storage: declined.storage });
   declined.body.children.find((child) => child.attributes['data-consent-banner'] !== undefined).children[1].children[1].click();
-  assert.strictEqual(declined.storage.data.aquatech_shop_consent, 'denied');
+  assert.strictEqual(JSON.parse(declined.storage.data.aquatech_shop_consent).analytics, false);
   assert.strictEqual(declined.scripts.length, 0);
   assert.strictEqual(callsOf(declined.win, 'event').length, 0);
 
-  const returning = fakeBrowser({ bodyAttributes: PAGE, stored: { aquatech_shop_consent: 'denied' } });
+  const returning = fakeBrowser({ bodyAttributes: PAGE, stored: { aquatech_shop_consent: consent('denied') } });
   client.startAnalytics({ window: returning.win, document: returning.doc, storage: returning.storage });
   assert.strictEqual(returning.body.children.length, 0, 'geen balk bij een eerdere keuze');
   assert.strictEqual(returning.scripts.length, 0);
 
-  const agreed = fakeBrowser({ bodyAttributes: { ...PAGE, 'data-internal': '1' }, stored: { aquatech_shop_consent: 'granted' } });
+  const agreed = fakeBrowser({ bodyAttributes: { ...PAGE, 'data-internal': '1' }, stored: { aquatech_shop_consent: consent('granted') } });
   client.startAnalytics({ window: agreed.win, document: agreed.doc, storage: agreed.storage });
   assert.strictEqual(agreed.body.children.length, 0);
   assert.strictEqual(agreed.scripts.length, 1);
@@ -309,7 +317,7 @@ test('script: Weigeren bewaart de keuze en laadt niets; eerdere toestemming laad
 
 test('script: toestemming intrekken zet de meting uit en wist de cookies van Google', () => {
   const client = loadClient();
-  const browser = fakeBrowser({ bodyAttributes: PAGE, stored: { aquatech_shop_consent: 'granted' }, cookie: '_ga=GA1.1; _ga_ABC=GS1; sessie=houden' });
+  const browser = fakeBrowser({ bodyAttributes: PAGE, stored: { aquatech_shop_consent: consent('granted') }, cookie: '_ga=GA1.1; _ga_ABC=GS1; sessie=houden' });
   const tracker = client.startAnalytics({ window: browser.win, document: browser.doc, storage: browser.storage });
   assert.strictEqual(tracker.track('add_to_cart', {}), true);
   tracker.deny();
@@ -361,7 +369,7 @@ test('script: add_to_cart, select_item, remove_from_cart en de stappen van afrek
     { name: 'view_cart', params: { items: [{ item_id: 'SPR-1', item_name: 'Sproeier', price: 10, quantity: 2 }] } },
     { name: 'begin_checkout', params: { value: 20, items: [{ item_id: 'SPR-1', quantity: 2 }] } },
   ];
-  const browser = fakeBrowser({ bodyAttributes: { ...PAGE, 'data-shop-events': JSON.stringify(events) }, stored: { aquatech_shop_consent: 'granted' } });
+  const browser = fakeBrowser({ bodyAttributes: { ...PAGE, 'data-shop-events': JSON.stringify(events) }, stored: { aquatech_shop_consent: consent('granted') } });
   client.startAnalytics({ window: browser.win, document: browser.doc, storage: browser.storage });
   const before = callsOf(browser.win, 'event').length;
   /**
@@ -431,13 +439,14 @@ test('script: add_to_cart, select_item, remove_from_cart en de stappen van afrek
   assert.ok(before >= 0);
 
   // Na intrekken van de toestemming meet niets meer.
-  const tracker = client.startAnalytics({ window: fakeBrowser({ bodyAttributes: PAGE, stored: { aquatech_shop_consent: 'granted' } }).win, document: fakeBrowser({ bodyAttributes: PAGE, stored: { aquatech_shop_consent: 'granted' } }).doc, storage: null });
+  const tracker = client.startAnalytics({ window: fakeBrowser({ bodyAttributes: PAGE, stored: { aquatech_shop_consent: consent('granted') } }).win, document: fakeBrowser({ bodyAttributes: PAGE, stored: { aquatech_shop_consent: consent('granted') } }).doc, storage: null });
   tracker.deny();
   assert.strictEqual(tracker.track('add_to_cart', {}), false);
 });
 
-test('webshop: zonder Google Analytics staat er niets van in de pagina en blijft de CSP zoals hij was', async () => {
+test('webshop: zonder Google Analytics en Clarity staat er niets van in de pagina en blijft de CSP zoals hij was', async () => {
   const world = await setup();
+  await world.admin.put('/app/api/admin/settings', { shopClarity: { enabled: false, projectId: 'zgjek0q90a' } });
   const home = await world.shoppers[0].client.get('/');
   assert.strictEqual(home.status, 200);
   assert.ok(!/data-shop-analytics|analytiek\.js|data-consent-settings|googletagmanager/.test(home.text));
@@ -469,6 +478,7 @@ test('webshop: de instelling gaat alleen door beheerders, wordt gesaneerd en gel
 
 test('webshop: met een actief ID komen attributen, het script, de uitgebreide CSP, de voetlink en de gebeurtenissen in de pagina', async () => {
   const world = await setup();
+  await world.admin.put('/app/api/admin/settings', { shopClarity: { enabled: false, projectId: 'zgjek0q90a' } });
   await world.admin.put('/app/api/admin/settings', { shopAnalytics: { enabled: true, measurementId: 'G-TEST1234' } });
   const shopper = world.shoppers[0].client;
   const home = await shopper.get('/');
@@ -541,4 +551,59 @@ test('webshop: een medewerker meet mee als intern verkeer en een voorbeeld van d
   assert.match(staffPage.text, /data-shop-analytics="G-TEST1234"[^>]* data-internal="1"/);
   const preview = await world.admin.get('/?voorbeeld=1');
   assert.ok(!/data-shop-analytics/.test(preview.text));
+});
+
+test('script: Clarity laadt pas na Accepteren, maskeert invoervelden en stopt met cookies wissen bij intrekken', () => {
+  const client = loadClient();
+  const clarityPage = { 'data-shop-clarity': 'zgjek0q90a', 'data-customer-group': 'particulier', 'data-privacy-url': '../pagina/privacyverklaring/' };
+  const browser = fakeBrowser({ bodyAttributes: clarityPage, cookie: '_clck=1; _clsk=2; sessie=houden' });
+  const tracker = client.startAnalytics({ window: browser.win, document: browser.doc, storage: browser.storage });
+  assert.strictEqual(browser.scripts.length, 0, 'geen Clarity-script zonder toestemming');
+  assert.strictEqual(typeof browser.win.clarity, 'undefined', 'ook geen wachtrij');
+  const banner = browser.body.children.find((child) => child.attributes['data-consent-banner'] !== undefined);
+  assert.ok(banner, 'de balk staat er ook zonder Google Analytics');
+  banner.children[1].children[0].click();
+  assert.strictEqual(browser.scripts.length, 1);
+  assert.strictEqual(browser.scripts[0].src, 'https://www.clarity.ms/tag/zgjek0q90a');
+  assert.strictEqual(tracker.isClarityLoaded(), true);
+  assert.strictEqual(tracker.isLoaded(), false, 'Google niet geladen');
+  assert.deepStrictEqual(plain(Array.from(browser.win.clarity.q[0]).slice(0, 2)), ['consentv2', { ad_Storage: 'denied', analytics_Storage: 'granted' }]);
+  tracker.deny();
+  assert.deepStrictEqual(plain(Array.from(browser.win.clarity.q.pop())), ['stop']);
+  const wiped = browser.cookieWrites.filter((line) => /^_cl[cs]k=;/.test(line));
+  assert.ok(wiped.length >= 2, 'beide Clarity-cookies gewist');
+  assert.ok(!browser.cookieWrites.some((line) => /^sessie=/.test(line)), 'andere cookies blijven');
+});
+
+test('script: een medewerker wordt niet door Clarity opgenomen en een oude of onbekende keuze vraagt opnieuw', () => {
+  const client = loadClient();
+  const staff = fakeBrowser({ bodyAttributes: { 'data-shop-clarity': 'zgjek0q90a', 'data-internal': '1' }, stored: { aquatech_shop_consent: consent('granted') } });
+  const tracker = client.startAnalytics({ window: staff.win, document: staff.doc, storage: staff.storage });
+  assert.strictEqual(staff.scripts.length, 0);
+  assert.strictEqual(tracker.isClarityLoaded(), false);
+  assert.strictEqual(client.readConsent({ getItem: () => 'granted' }), null, 'de oude tekstkeuze telt niet meer');
+  assert.strictEqual(client.readConsent({ getItem: () => JSON.stringify({ v: 99, analytics: true }) }), null, 'een andere versie vraagt opnieuw');
+});
+
+test('webshop: Clarity staat standaard aan voor het project van AquaTech, komt met CSP in de pagina en is uit te zetten', async () => {
+  const world = await setup();
+  const shopper = world.shoppers[0].client;
+  // De testwereld zet Clarity uit; terugzetten naar de standaard geeft het project van AquaTech Service.
+  assert.strictEqual((await world.admin.put('/app/api/admin/settings', { reset: ['shopClarity'] })).status, 200);
+  const home = await shopper.get('/');
+  assert.match(home.text, /data-shop-clarity="zgjek0q90a"/);
+  assert.ok(!/data-shop-analytics/.test(home.text), 'zonder Google Analytics geen meet-ID');
+  assert.ok(!/clarity\.ms/.test(home.text), 'Clarity staat niet in de pagina, alleen in het script na toestemming');
+  assert.match(home.text, /data-consent-settings>Cookie-instellingen<\/button>/);
+  const csp = home.headers.get('content-security-policy');
+  assert.match(csp, /script-src 'self' https:\/\/www\.clarity\.ms https:\/\/scripts\.clarity\.ms/);
+  assert.match(csp, /connect-src 'self' https:\/\/\*\.clarity\.ms https:\/\/c\.bing\.com/);
+  assert.ok(!/google/.test(csp));
+  const saved = await world.admin.put('/app/api/admin/settings', { shopClarity: { enabled: true, projectId: ' ABCDE12345 ', onzin: 1 } });
+  assert.deepStrictEqual(saved.body.settings.shopClarity.value, { enabled: true, projectId: 'abcde12345' });
+  assert.strictEqual((await world.admin.put('/app/api/admin/settings', { shopClarity: { enabled: true, projectId: 'niet geldig!' } })).body.settings.shopClarity.value.projectId, '');
+  await world.admin.put('/app/api/admin/settings', { shopClarity: { enabled: false, projectId: 'zgjek0q90a' } });
+  const off = await shopper.get('/');
+  assert.ok(!/data-shop-clarity|clarity|analytiek\.js/.test(off.text + off.headers.get('content-security-policy')));
+  assert.strictEqual((await world.shoppers[0].client.put('/app/api/admin/settings', { shopClarity: { enabled: true, projectId: 'hackhack12' } })).status === 200, false);
 });

@@ -603,6 +603,16 @@
           <p><button class="btn primary" type="submit">Google Analytics opslaan</button></p>
           <div class="err" role="alert"></div>
         </form>
+        <form id="s-clarity" class="card-form settings">
+          <h3>Microsoft Clarity</h3>
+          <p class="muted small">Toont hoe bezoekers de webshop gebruiken (heatmaps en schermopnames). Clarity laadt pas als de bezoeker in de cookiebalk Analytisch toestaat; zonder toestemming wordt er niets geladen. Alle invoervelden worden gemaskeerd, advertentiefuncties staan uit en medewerkers worden niet opgenomen. Zet in Clarity zelf ook de maskering op Strikt. Zonder project-ID of met deze schakelaar uit staat er niets van Clarity in de pagina. Alleen voor de hoofdtenant.</p>
+          <label class="chk"><input type="checkbox" name="enabled"> <span>Clarity gebruiken in de webshop</span></label>
+          <label>Project-ID<input name="projectId" placeholder="abcde1fgh2" autocomplete="off" spellcheck="false" maxlength="16" pattern="[A-Za-z0-9]{6,16}"></label>
+          <span class="muted small">Te vinden in Clarity onder Instellingen → Overzicht (de korte code in het script). Vermeld Clarity ook in je privacyverklaring; dat staat al in de standaardtekst.</span>
+          <p class="state" id="s-clarity-state" role="status"></p>
+          <p><button class="btn primary" type="submit">Clarity opslaan</button></p>
+          <div class="err" role="alert"></div>
+        </form>
         <form id="s-seo" class="card-form settings">
           <h3>Zoekmachines</h3>
           <p class="muted small">Zolang dit uit staat, is de webshop onzichtbaar voor Google en andere zoekmachines: elke pagina krijgt <code>noindex</code>, robots.txt blokkeert alles en sitemap en productfeed bestaan niet. Zet dit pas aan als de webshop live gaat. Het webadres van de webshop (bij Betalen) moet dan ingevuld zijn; daarmee worden de canonical-links, de sitemap en de gestructureerde gegevens (prijs, voorraad, merk, EAN) gemaakt. De titel en omschrijving voor zoekmachines stel je per artikel, categorie en pagina in. Alleen voor de hoofdtenant.</p>
