@@ -110,8 +110,15 @@ test('de nieuwste back-up van Drive wordt teruggezet en komt overeen; er blijft 
     // Geen tijdelijk bestand of tijdelijke map in de back-upmap en geen back-up erbij.
     assert.deepStrictEqual(fs.readdirSync(world.dir).filter((name) => name.startsWith('.')), []);
     // Een tweede run telt los (de historie groeit).
-    await world.runTest();
-    assert.strictEqual((await world.baas.get(TEST)).body.runs.length, 2);
+    // Terwijl een run loopt heeft de lopende run dezelfde vorm als een afgeronde (het scherm leest er backup.name uit).
+    world.google.holdDownloads = new Promise((resolve) => { world.releaseDownload = resolve; });
+    assert.strictEqual((await world.baas.post(`${TEST}/run`, {})).status, 202);
+    const during = (await world.baas.get(TEST)).body;
+    assert.strictEqual(during.running.state, 'bezig');
+    assert.strictEqual(during.running.backup.name, '');
+    assert.deepStrictEqual(during.running.rows.deviating, []);
+    world.releaseDownload();
+    await until(async () => (await world.baas.get(TEST)).body.runs.length === 2);
   } finally { await world.cleanup(); }
 });
 

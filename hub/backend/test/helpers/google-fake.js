@@ -11,7 +11,7 @@ async function createGoogleFake() {
   const sessions = new Map();
   const calls = [];
   const revoked = [];
-  const fake = { files, calls, revoked, failUploads: null, failDownloads: null, createdNow: false, holdUploads: null, tokenRevoked: false, nextRefreshToken: 'refresh-1' };
+  const fake = { files, calls, revoked, failUploads: null, failDownloads: null, holdDownloads: null, createdNow: false, holdUploads: null, tokenRevoked: false, nextRefreshToken: 'refresh-1' };
   let counter = 0;
   let accessCounter = 0;
 
@@ -94,6 +94,7 @@ async function createGoogleFake() {
       if (!file) return send(res, 404, { error: { status: 'NOT_FOUND' } });
       if (req.method === 'DELETE') { files.delete(file.id); res.writeHead(204); return res.end(); }
       if (url.searchParams.get('alt') === 'media') {
+        if (fake.holdDownloads) await fake.holdDownloads;
         if (fake.failDownloads) return send(res, fake.failDownloads.status, { error: { status: 'INTERNAL' } });
         res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': file.body.length });
         return res.end(file.body);

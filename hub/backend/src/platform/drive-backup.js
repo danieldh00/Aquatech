@@ -15,6 +15,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { Readable } = require('stream');
 const { pipeline } = require('stream/promises');
+const { Transform } = require('stream');
 
 const GOOGLE = {
   authorize: 'https://accounts.google.com/o/oauth2/v2/auth',
@@ -534,7 +535,22 @@ function createDriveBackup({ settings, backupDir, listBackups, fetchImpl = fetch
     if (!response.body) throw new DriveError('google_error', 'Google gaf geen bestand terug.', 502);
     const target = path.join(directory, name);
     try {
-      await pipeline(Readable.fromWeb(response.body), fs.createWriteStream(target, { mode: 0o600 }));
+      // Harde grens op de stroom zelf, ook als Drive geen grootte opgaf of er meer binnenkomt dan aangekondigd.
+      let received = 0;
+      const limit = new Transform({
+        /**
+         * Telt de bytes en breekt af boven de grens.
+         * @param {Buffer} chunk Een stuk van de download.
+         * @param {string} encoding Niet gebruikt.
+         * @param {Function} callback Geeft het stuk door of een fout.
+         * @returns {void}
+         */
+        transform(chunk, encoding, callback) {
+          received += chunk.length;
+          callback(received > MAX_DOWNLOAD_BYTES ? new Error('download te groot') : null, chunk);
+        },
+      });
+      await pipeline(Readable.fromWeb(response.body), limit, fs.createWriteStream(target, { mode: 0o600 }));
     } catch (error) {
       fs.rmSync(target, { force: true });
       throw new DriveError('unreachable', 'Het ophalen van de back-up van Google Drive is afgebroken. Probeer het later opnieuw.', 502, error);

@@ -131,7 +131,7 @@ function createDriveRestoreTest({ settings, driveBackup, backupDir, vault, datab
    */
   function view() {
     const { runs, ...policy } = stored();
-    return { configured: configured(), policy, nextRunAt: nextRunAt(policy, now()), running, latest: runs[0] || null, runs };
+    return { configured: configured(), policy, nextRunAt: nextRunAt(policy, now()), running: running ? sanitizeRun(running) : null, latest: runs[0] || null, runs };
   }
 
   /**
