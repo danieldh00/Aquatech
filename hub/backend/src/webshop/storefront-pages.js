@@ -935,6 +935,36 @@ ${detailsSection(shownDetails)}`;
 }
 
 /**
+ * Kop van de pagina Over ons (gedeeld door de standaardpagina en een eigen pagina uit Beheer).
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @returns {string} HTML van de kop.
+ */
+function aboutHero(root) {
+  return `<section class="about-hero"><img src="${assetUrl(root, 'over-ons-hero.webp')}" alt="" width="1440" height="511"><div class="about-hero-text"><p class="about-eyebrow">Ons verhaal</p><h1>Over ons</h1><p class="about-lead">Beregening, leidingen en pompen van mensen die het vak kennen.</p></div></section>`;
+}
+
+/**
+ * Blok met de bedrijfsgegevens (telefoon, e-mail, adres, KvK) uit de bedrijfsinstellingen.
+ * @returns {string} HTML van het blok, of leeg zonder gegevens.
+ */
+function aboutFacts() {
+  const contact = activeContent.site.contact;
+  const facts = [['Telefoon', contact.phone ? `<a href="${escapeHtml(phoneLink(contact.phone))}">${escapeHtml(contact.phone)}</a>` : ''], ['E-mail', contact.email ? `<a href="mailto:${escapeHtml(contact.email)}">${escapeHtml(contact.email)}</a>` : ''], ['Adres', escapeHtml(contact.address || '')], ['KvK', escapeHtml(contact.kvk || '')]].filter(([, value]) => value);
+  return facts.length ? `<dl class="about-facts">${facts.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}</dl>` : '';
+}
+
+/**
+ * Afsluitend blok van de pagina Over ons met knoppen voor het assortiment, bellen en mailen.
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @returns {string} HTML van het blok.
+ */
+function aboutCta(root) {
+  const contact = activeContent.site.contact;
+  const contactButtons = `${contact.phone ? `<a class="button" href="${escapeHtml(phoneLink(contact.phone))}">Bel ${escapeHtml(contact.phone)}</a>` : ''}${contact.email ? `<a class="button secondary" href="mailto:${escapeHtml(contact.email)}">Stuur een e-mail</a>` : ''}`;
+  return `<section class="about-cta"><p class="about-claim">Kwaliteit, service en betaalbaarheid komen bij ons samen.</p><p>Vragen of advies nodig bij uw project? Neem contact met ons op of bekijk direct het assortiment.</p><div class="about-cta-actions"><a class="button" href="${root}">Bekijk het assortiment</a>${contactButtons}</div></section>`;
+}
+
+/**
  * Pagina Over ons: het verhaal van Aquatechshop.nl (tekst overgenomen van
  * aquatechshop.nl), met kop, verhaal met bedrijfsgegevens, twee onderscheidende
  * punten, de waarden en een contactblok. Gegevens komen uit de bedrijfsinstellingen.
@@ -943,7 +973,6 @@ ${detailsSection(shownDetails)}`;
  */
 function aboutPage(groups) {
   const root = '../';
-  const contact = activeContent.site.contact;
   const blocks = [
     ['over-ons-verhaal.png', 'Aquatechshop.nl is ontstaan vanuit HVT Beregening, een gespecialiseerd bedrijf in beregenings- en watertechniek. Dankzij de ervaring in de sector kunnen wij onze klanten optimaal van dienst zijn. Korte lijnen, klanttevredenheid en efficiëntie zijn onze uitgangspunten.'],
     ['over-ons-tarieven.png', 'Scherpe tarieven', 'Wij zijn totaalleverancier voor bedrijven, particulieren en organisaties. Door de goede en veelal rechtstreekse relaties met fabrikanten en leveranciers kunnen wij bewezen materialen en techniek leveren tegen zeer scherpe prijzen. Met ons koopt u als het ware de vruchten van een goed netwerk in combinatie met vakkennis en ervaring.'],
@@ -955,16 +984,15 @@ function aboutPage(groups) {
     ['Levering op locatie', 'Bezorging bij u op locatie, om u te ontzorgen'],
     ['Persoonlijke aandacht', 'Of je nu een professional, ondernemer of particulier bent, maatwerk vinden wij belangrijk.'],
   ];
-  const facts = [['Telefoon', contact.phone ? `<a href="${escapeHtml(phoneLink(contact.phone))}">${escapeHtml(contact.phone)}</a>` : ''], ['E-mail', contact.email ? `<a href="mailto:${escapeHtml(contact.email)}">${escapeHtml(contact.email)}</a>` : ''], ['Adres', escapeHtml(contact.address || '')], ['KvK', escapeHtml(contact.kvk || '')]].filter(([, value]) => value);
-  const contactButtons = `${contact.phone ? `<a class="button" href="${escapeHtml(phoneLink(contact.phone))}">Bel ${escapeHtml(contact.phone)}</a>` : ''}${contact.email ? `<a class="button secondary" href="mailto:${escapeHtml(contact.email)}">Stuur een e-mail</a>` : ''}`;
-  const body = `<section class="about-hero"><img src="${assetUrl(root, 'over-ons-hero.webp')}" alt="" width="1440" height="511"><div class="about-hero-text"><p class="about-eyebrow">Ons verhaal</p><h1>Over ons</h1><p class="about-lead">Beregening, leidingen en pompen van mensen die het vak kennen.</p></div></section>
+  const factsHtml = aboutFacts();
+  const body = `${aboutHero(root)}
 <div class="wrap">
 <nav class="crumbs" aria-label="Kruimelpad"><a href="${root}">Shop</a> › <span>Over ons</span></nav>
-<div class="about-story"><div><h2>Aquatechshop.nl</h2><p>${blocks[0][1]}</p></div>${facts.length ? `<dl class="about-facts">${facts.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}</dl>` : ''}</div>
+<div class="about-story"><div><h2>Aquatechshop.nl</h2><p>${blocks[0][1]}</p></div>${factsHtml}</div>
 <div class="about-blocks">${blocks.slice(1).map(([icon, heading, text]) => `<section class="about-block"><img src="${assetUrl(root, icon)}" alt="" width="64" height="64" loading="lazy"><div><h2>${heading}</h2><p>${text}</p></div></section>`).join('')}</div>
 <h2 class="centered">Waarom Aquatechshop?</h2>
 <div class="about-values">${values.map(([heading, text]) => `<div class="about-value"><strong>${heading}</strong><span>${text}</span></div>`).join('')}</div>
-<section class="about-cta"><p class="about-claim">Kwaliteit, service en betaalbaarheid komen bij ons samen.</p><p>Vragen of advies nodig bij uw project? Neem contact met ons op of bekijk direct het assortiment.</p><div class="about-cta-actions"><a class="button" href="${root}">Bekijk het assortiment</a>${contactButtons}</div></section>
+${aboutCta(root)}
 </div>`;
   return layout({ root, groups, wide: true, canonicalPath: 'over-ons/', title: `Over ons – ${SHOP_NAME}`, description: 'Aquatechshop.nl is ontstaan vanuit HVT Beregening: scherpe tarieven, een eigen technische dienst en levering op locatie.', body });
 }
@@ -1067,7 +1095,14 @@ function faqEntriesOfPage(page, blocks) {
  */
 function contentPage(page, groups, root, catalog = { products: [], categories: [] }) {
   const blocks = blocksOf(page);
-  const html = `<div class="wrap"><nav class="crumbs" aria-label="Kruimelpad"><a href="${root}">Shop</a> › <span>${escapeHtml(page.title)}</span></nav>
+  // Een eigen Over ons uit Beheer krijgt dezelfde kop, bedrijfsgegevens en afsluiting als de standaardpagina.
+  const html = page.slug === 'over-ons'
+    ? `${aboutHero(root)}
+<div class="wrap"><nav class="crumbs" aria-label="Kruimelpad"><a href="${root}">Shop</a> › <span>${escapeHtml(page.title)}</span></nav>
+<div class="about-story"><article class="cms-page">${renderPageBlocks(blocks, root, catalog)}</article>${aboutFacts()}</div>
+${aboutCta(root)}
+</div>`
+    : `<div class="wrap"><nav class="crumbs" aria-label="Kruimelpad"><a href="${root}">Shop</a> › <span>${escapeHtml(page.title)}</span></nav>
 <article class="cms-page"><h1>${escapeHtml(page.title)}</h1>
 ${renderPageBlocks(blocks, root, catalog)}
 </article></div>`;
