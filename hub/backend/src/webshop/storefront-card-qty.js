@@ -21,6 +21,17 @@
   }
 
   /**
+   * Leest de grenzen van het aantalveld; een min van 0 blijft 0 en een ontbrekend max wordt 99.
+   * @param {HTMLInputElement} input Het aantalveld.
+   * @returns {{min: number, max: number}} Laagste en hoogste toegestane aantal.
+   */
+  function limitsOf(input) {
+    var min = input.min === '' || isNaN(Number(input.min)) ? 1 : Number(input.min);
+    var max = input.max === '' || isNaN(Number(input.max)) ? 99 : Number(input.max);
+    return { min: min, max: max };
+  }
+
+  /**
    * Zet de knoppen om een aantalveld en houdt hun stand gelijk aan het veld.
    * @param {HTMLInputElement} input Het aantalveld van een productkaart.
    * @returns {void}
@@ -39,9 +50,10 @@
 
     /** Past de beschikbaarheid van de knoppen aan op waarde en grenzen van het veld. */
     function refresh() {
-      var min = Number(input.min) || 1;
-      var max = Number(input.max) || 99;
-      var value = Number(input.value) || min;
+      var limits = limitsOf(input);
+      var value = input.value === '' || isNaN(Number(input.value)) ? limits.min : Number(input.value);
+      var min = limits.min;
+      var max = limits.max;
       minus.disabled = input.disabled || value <= min;
       plus.disabled = input.disabled || value >= max;
     }
@@ -49,10 +61,10 @@
     group.addEventListener('click', function (event) {
       var button = event.target.closest('[data-qty-step]');
       if (!button || button.disabled) return;
-      var min = Number(input.min) || 1;
-      var max = Number(input.max) || 99;
-      var next = (Number(input.value) || min) + Number(button.getAttribute('data-qty-step'));
-      input.value = String(Math.min(max, Math.max(min, next)));
+      var limits = limitsOf(input);
+      var current = input.value === '' || isNaN(Number(input.value)) ? limits.min : Number(input.value);
+      var next = current + Number(button.getAttribute('data-qty-step'));
+      input.value = String(Math.min(limits.max, Math.max(limits.min, next)));
       input.dispatchEvent(new Event('input', { bubbles: true }));
       input.dispatchEvent(new Event('change', { bubbles: true }));
       refresh();

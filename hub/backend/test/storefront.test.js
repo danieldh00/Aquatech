@@ -115,7 +115,7 @@ test('webshop aan: start, categorie en product zonder inloggen, zonder interne g
   assert.match(home.text, /product\/pe-buis-25-mm-buis-25\//);
   assert.ok(!home.text.includes('Alleen intern') && !home.text.includes('Niet naar de shop'));
   assert.match(home.headers.get('content-security-policy'), /default-src 'none'/);
-  assert.ok(!/<script(?![^>]*(?:assets\/(?:menu|zoeksuggesties)\.js|application\/ld\+json))/i.test(home.text), 'alleen het menu- en zoeksuggestiescript');
+  assert.ok(!/<script(?![^>]*(?:assets\/(?:menu|zoeksuggesties|kaartaantal)\.js|application\/ld\+json))/i.test(home.text), 'alleen het menu-, zoeksuggestie- en kaartaantalscript');
 
   const categorySlug = home.text.match(/href="categorie\/(leidingen-[0-9a-f]{6})\//)[1];
   const category = await anonymous.get(`/categorie/${categorySlug}/`);
@@ -364,7 +364,7 @@ test('webshop: hoofdartikel met varianten als regel met keuzelijst en eigen scri
   assert.ok(!mixed.text.includes('data-variant-row'), 'woorden uit verschillende varianten tellen niet samen');
   const found = await anonymous.get('/zoeken/?q=koppeling');
   assert.strictEqual(found.text.match(/data-variant-row/g).length, 1);
-  assert.ok(!/<script(?![^>]*(?:assets\/(?:menu|zoeksuggesties)\.js|application\/ld\+json))/i.test((await anonymous.get('/')).text), 'startpagina laadt alleen het menu- en zoeksuggestiescript');
+  assert.ok(!/<script(?![^>]*(?:assets\/(?:menu|zoeksuggesties|kaartaantal)\.js|application\/ld\+json))/i.test((await anonymous.get('/')).text), 'startpagina laadt alleen het menu- en zoeksuggestiescript');
 });
 
 test('webshop: voorraadstand uit het systeem en filter alleen op voorraad', async () => {
