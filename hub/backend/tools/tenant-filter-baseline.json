@@ -70,6 +70,54 @@
       "sql": "SELECT ${}, u.display_name, u.username, u.kind, t.name AS tenant_name, t.environment FROM ai_usage a LEFT JOIN users u ON u.id = a.user_id LEFT JOIN tenants t ON t.id = a.tenant_id WHERE ${} ORDER BY a.created_at DESC, a.id LIMIT ${} OFFSET ${}"
     },
     {
+      "file": "platform/plan-store.js",
+      "sql": "UPDATE history SET title = ?, customer = ?, address = ?, summary = ?, snapshot = ?, ip = ?, updated_at = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/plan-store.js",
+      "sql": "SELECT h.id, h.plan_id, h.user_id, h.action, h.title, h.customer, h.address, h.summary, h.ip, h.created_at, h.updated_at, h.snapshot IS NOT NULL AS has_snapshot, u.username, u.display_name, u.role, u.kind, EXISTS (SELECT 1 FROM plans p WHERE p.id = h.plan_id AND p.deleted_at IS NULL) AS plan_exists"
+    },
+    {
+      "file": "platform/plan-store.js",
+      "sql": "(SELECT COUNT(*) FROM history h WHERE h.tenant_id = p.tenant_id AND h.plan_id = p.id) AS history_count,"
+    },
+    {
+      "file": "platform/plan-store.js",
+      "sql": "SELECT display_name FROM users WHERE id = ?"
+    },
+    {
+      "file": "platform/plan-store.js",
+      "sql": "UPDATE plans SET review_status = 'ter_controle', review_question = ?, review_requested_at = ?, reviewed_by = NULL, reviewed_at = NULL, submitted_via = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/plan-store.js",
+      "sql": "UPDATE plans SET review_status = 'goedgekeurd', reviewed_by = ?, reviewed_at = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/plan-store.js",
+      "sql": "UPDATE plans SET review_status = 'concept', reviewed_by = NULL, reviewed_at = NULL WHERE id = ?"
+    },
+    {
+      "file": "platform/plan-store.js",
+      "sql": "UPDATE users SET email = ?, phone = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/plan-store.js",
+      "sql": "UPDATE plans SET title = ?, customer = ?, address = ?, data = ?, updated_at = ? WHERE id = ?"
+    },
+    {
+      "file": "platform/plan-store.js",
+      "sql": "UPDATE plans SET review_status = 'ter_controle', review_requested_at = ?, reviewed_by = NULL, reviewed_at = NULL WHERE id = ?"
+    },
+    {
+      "file": "platform/plan-store.js",
+      "sql": "DELETE FROM plans WHERE id = ?"
+    },
+    {
+      "file": "platform/plan-store.js",
+      "sql": "UPDATE plans SET deleted_at = ? WHERE id = ?"
+    },
+    {
       "file": "platform/store.js",
       "sql": "UPDATE users SET display_name = ?, email = ?, phone = ?, preferences = ? WHERE id = ?"
     },
@@ -240,50 +288,6 @@
     {
       "file": "platform/store.js",
       "sql": "UPDATE users SET last_seen_at = ? WHERE id = ? AND (last_seen_at IS NULL OR last_seen_at < ?)"
-    },
-    {
-      "file": "platform/store.js",
-      "sql": "UPDATE history SET title = ?, customer = ?, address = ?, summary = ?, snapshot = ?, ip = ?, updated_at = ? WHERE id = ?"
-    },
-    {
-      "file": "platform/store.js",
-      "sql": "SELECT h.id, h.plan_id, h.user_id, h.action, h.title, h.customer, h.address, h.summary, h.ip, h.created_at, h.updated_at, h.snapshot IS NOT NULL AS has_snapshot, u.username, u.display_name, u.role, u.kind, EXISTS (SELECT 1 FROM plans p WHERE p.id = h.plan_id AND p.deleted_at IS NULL) AS plan_exists"
-    },
-    {
-      "file": "platform/store.js",
-      "sql": "(SELECT COUNT(*) FROM history h WHERE h.tenant_id = p.tenant_id AND h.plan_id = p.id) AS history_count,"
-    },
-    {
-      "file": "platform/store.js",
-      "sql": "SELECT display_name FROM users WHERE id = ?"
-    },
-    {
-      "file": "platform/store.js",
-      "sql": "UPDATE plans SET review_status = 'ter_controle', review_question = ?, review_requested_at = ?, reviewed_by = NULL, reviewed_at = NULL, submitted_via = ? WHERE id = ?"
-    },
-    {
-      "file": "platform/store.js",
-      "sql": "UPDATE plans SET review_status = 'goedgekeurd', reviewed_by = ?, reviewed_at = ? WHERE id = ?"
-    },
-    {
-      "file": "platform/store.js",
-      "sql": "UPDATE plans SET review_status = 'concept', reviewed_by = NULL, reviewed_at = NULL WHERE id = ?"
-    },
-    {
-      "file": "platform/store.js",
-      "sql": "UPDATE plans SET title = ?, customer = ?, address = ?, data = ?, updated_at = ? WHERE id = ?"
-    },
-    {
-      "file": "platform/store.js",
-      "sql": "UPDATE plans SET review_status = 'ter_controle', review_requested_at = ?, reviewed_by = NULL, reviewed_at = NULL WHERE id = ?"
-    },
-    {
-      "file": "platform/store.js",
-      "sql": "DELETE FROM plans WHERE id = ?"
-    },
-    {
-      "file": "platform/store.js",
-      "sql": "UPDATE plans SET deleted_at = ? WHERE id = ?"
     },
     {
       "file": "platform/test-data.js",
