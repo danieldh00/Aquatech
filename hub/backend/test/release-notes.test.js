@@ -122,7 +122,7 @@ test('checkFragments: een nieuwspunt over uitbesteden of beheer zonder doelgroep
    * @param {string} name Bestandsnaam.
    * @param {string} point Het nieuwspunt als regel met streepje.
    */
-  const write = (name, point) => fs.writeFileSync(path.join(directory, name), `---\ntitel: Test\n---\n\n## Nieuws\n${point}\n\n## Changelog\nTechnisch.\n`);
+  const write = (name, point) => { fs.writeFileSync(path.join(directory, name), `---\ntitel: Test\n---\n\n## Nieuws\n${point}\n\n## Changelog\nTechnisch.\n`); };
   write('goed.md', '- [beheer, uitbesteden] De tabbladbalk van Uitbesteden past op een telefoon.');
   assert.deepStrictEqual(tool.checkFragments(directory), []);
   write('fout.md', '- De tabbladbalk van Uitbesteden past op een telefoon.');
