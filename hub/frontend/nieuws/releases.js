@@ -13,6 +13,32 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.30.0',
+      date: '2026-11-20',
+      title: 'Klantlinks altijd op het openbare webadres en limiet op losse mails',
+      items: [
+        { text: 'Links naar offertes en afspraken gebruiken altijd het webadres uit Beheer, ook als een medewerker de app via een intern adres opent.' },
+      ],
+    },
+    {
+      version: '1.29.9',
+      date: '2026-11-20',
+      title: 'Backupleverancier zichtbaar bij een niet-leverbare voorkeur',
+      items: [
+        { text: 'Staat de voorkeursleverancier van een artikel op niet leverbaar, dan zie je dat op het artikel zelf, met de backup waar het bestelvoorstel nu bestelt.', for: ['voorraad'] },
+        { text: 'In het blok met automatische voorstellen staat bij elke regel die bij een backup wordt besteld een melding met het meerprijsverschil.', for: ['voorraad'] },
+        { text: 'Bij de leveranciers van een artikel maak je met één klik een andere leverancier de voorkeur.', for: ['voorraad'] },
+      ],
+    },
+    {
+      version: '1.29.8',
+      date: '2026-11-20',
+      title: 'Aantalknoppen op productkaarten',
+      items: [
+        { text: 'Op de productkaarten in de webshop staan nu − en + knoppen naast het aantal.' },
+      ],
+    },
+    {
       version: '1.29.7',
       date: '2026-11-20',
       title: 'Offerte-, factuur- en debiteurenlijsten laden sneller bij drukte',

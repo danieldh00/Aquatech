@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.30.0
+
+- Offerte- en afspraaklinks: de herkomst komt uit `shopPayment.publicUrl` (`pinShareBase`), niet uit de browser van de medewerker; zonder ingevuld webadres blijft het gedrag gelijk.
+- Losse mails (offerte, werkorder-afspraak, factuur) hebben een limiet van 30 per uur per gebruiker.
+
+## 1.29.9
+
+- `annotateBackups` (purchase-orders.js): backup-melding (`backup` met `preferredUnavailable`) op de regels van `proposals()`, twee queries voor alle voorstellen samen.
+- Artikelen > Leveranciers per artikel: melding boven de tabel (`#d-sup-notice`) en de knop *Maak voorkeur*; bestelvoorstelblok toont de backup-melding.
+
+## 1.29.8
+
+- Webshop: kleine script `kaartaantal.js` zet − / + knoppen om het aantalveld van productkaarten; zonder script blijft het een gewoon invoerveld.
+
 ## 1.29.7
 
 - Lijstroutes `GET /api/quotes`, `/api/invoices` en `/api/debtors` lezen via `db.async` (pool) met `listAsync`; de query-opbouw is gedeeld met de synchrone `list`, uitkomst ongewijzigd.
