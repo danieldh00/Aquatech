@@ -9,6 +9,8 @@ test('isInstant: bestaande datums en tijdstippen zijn geldig, onmogelijke en rom
   assert.strictEqual(isInstant('2026-11-20 10:00:00'), true);
   assert.strictEqual(isInstant('2026-02-31T10:00:00Z'), false, '31 februari bestaat niet');
   assert.strictEqual(isInstant('2026-13-01'), false);
+  assert.strictEqual(isInstant('2026-02-03 10:00 junk'), false, 'rommel achter het tijdstip');
+  assert.strictEqual(isInstant('2026-11-20T10:00:00+01:00'), true);
   assert.strictEqual(isInstant('nu'), false);
   assert.strictEqual(isInstant(''), false);
   assert.strictEqual(isInstant(null), false);

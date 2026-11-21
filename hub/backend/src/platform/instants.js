@@ -8,7 +8,7 @@
  */
 function isInstant(text) {
   if (typeof text !== 'string' || text.length > 40) return false;
-  const match = /^(\d{4})-(\d{2})-(\d{2})(?:[T ]\d{2}:\d{2}.*)?$/.exec(text);
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}(?::?\d{2})?)?)?$/.exec(text);
   if (!match) return false;
   const time = Date.parse(text);
   if (!Number.isFinite(time)) return false;
