@@ -1123,11 +1123,11 @@ function registerQuoteRoutes(app, ctx) {
     res.json(quote);
   });
 
-  // Versturen per e-mail met de link (maakt de link zo nodig aan).
   /** Hoeveel offertemails één e-mailadres per uur kan krijgen, over alle medewerkers en beide verstuurroutes samen (een plek wordt vooraf gereserveerd en bij een mislukte verzending teruggegeven). */
   const recipientLimit = createRecipientLimit({ windowMs: 60 * 60 * 1000, max: 5 });
   /** Hoeveel losse mails per uur een gebruiker via deze route mag versturen (de bulkroute heeft een eigen limiet). */
   const quoteSendLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, keyFn: (req) => `quoteSendLimiter:${req.user.tenant_id}|${req.user.id}` });
+  // Versturen per e-mail met de link (maakt de link zo nodig aan).
   app.post('/api/quotes/:id/send', requireJson, requireQuotes, quoteSendLimiter, async (req, res) => {
     const { to, subject, message, url } = req.body || {};
     const list = String(to || '').split(/[,;\s]+/).filter(Boolean);
