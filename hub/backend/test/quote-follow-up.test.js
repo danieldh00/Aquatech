@@ -150,9 +150,9 @@ test('opvolging: opnieuw mailen start opnieuw, oude offertes blijven met rust, m
     assert.deepStrictEqual(await app.locals.quoteFollowUpAll(later(8)), {});
     assert.strictEqual(sent.length, mailsBefore);
 
-    // Een kapotte rij houdt de ronde niet tegen.
+    // Een onbruikbare rij houdt de ronde niet tegen (kapotte JSON kan sinds jsonb niet meer worden opgeslagen).
     const broken = await sendQuote(anne, 'Kapot');
-    db.prepare('UPDATE quotes SET data = ? WHERE id = ?').run('{kapot', broken.id);
+    db.prepare("UPDATE quotes SET sent_to = 'geen adres' WHERE id = ?").run(broken.id);
     const good = await sendQuote(anne, 'Goed');
     const round = await app.locals.quoteFollowUpAll(later(8));
     assert.deepStrictEqual([round[main].sent, round[main].skipped], [1, 1]);
