@@ -11,10 +11,8 @@ test('stripNul haalt NUL-tekens en hun JSON-schrijfwijze weg, maar laat een echt
   assert.strictEqual(stripNul('gewone tekst'), 'gewone tekst');
 });
 
-test('een offertegegevensveld met een NUL-teken wordt zonder fout bewaard', () => {
+test('stripNul werkt via de parameterroute: een NUL-teken in JSON-tekst gaat zonder fout naar een jsonb-kolom', () => {
   const db = openDb();
-  const tenant = db.prepare('SELECT id FROM tenants LIMIT 1').get();
-  assert.ok(tenant || true);
-  const result = db.prepare("SELECT ?::jsonb AS data").get(JSON.stringify({ name: 'Jan\u0000sen' }));
+  const result = db.prepare('SELECT ?::jsonb AS data').get(JSON.stringify({ name: 'Jan\u0000sen' }));
   assert.strictEqual(JSON.parse(result.data).name, 'Jansen');
 });
