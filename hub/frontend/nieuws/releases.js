@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.32.2',
+      date: '2026-11-21',
+      title: 'Database: id\'s en verwijzingen zijn echte uuid\'s',
+      items: [],
+    },
+    {
       version: '1.32.1',
       date: '2026-11-21',
       title: 'Database: reserveringen verwijzen echt naar hun werkorder of bestelling',
