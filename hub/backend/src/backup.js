@@ -246,8 +246,8 @@ module.exports = { createBackup, createBackupInChild, listBackups, pruneBackups,
 
 if (require.main === module) {
   const [command, source, target] = process.argv.slice(2);
-  if (!(command === 'decrypt' && source && target) && command !== 'create') {
-    console.error('Gebruik: node src/backup.js create [map]\n       node src/backup.js decrypt <back-up.db.enc> <doel.ndjson.gz>');
+  if (!(command === 'decrypt' && source && target) && !(command === 'restore-into' && source) && command !== 'create') {
+    console.error('Gebruik: node src/backup.js create [map]\n       node src/backup.js decrypt <back-up.db.enc> <doel.ndjson.gz>\n       node src/backup.js restore-into <back-up.db.enc>   (alleen hersteltest, met AQUATECH_RESTORE_TEST=1: leegt de database)');
     process.exit(2);
   }
   const { createVault, loadOrCreateMasterKey } = require('./beveiliging/vault');
@@ -264,6 +264,12 @@ if (require.main === module) {
     createBackup({ db: openDatabase(), dir, vault, runId: /^[0-9a-f-]{36}$/.test(process.env.AQUATECH_BACKUP_RUN || '') ? process.env.AQUATECH_BACKUP_RUN : '' })
       .then((backup) => { console.log(`Back-up gemaakt: ${path.join(dir, backup.name)} (${backup.size} bytes)`); process.exit(0); })
       .catch((err) => { console.error(`Back-up mislukt: ${err.message}`); process.exit(1); });
+  } else if (command === 'restore-into') {
+    // Hersteltest van de Google Drive-back-up: zet de hele back-up terug in de (lege, gemigreerde) wegwerpdatabase van DATABASE_URL.
+    const { openDatabase } = require('./database/db');
+    require('./platform/backup-restore-all').restoreAll({ db: openDatabase(), file: source, vault })
+      .then((result) => { console.log(`Teruggezet: ${Object.keys(result.tables).length} tabellen, ${Object.values(result.tables).reduce((sum, rows) => sum + rows, 0)} rijen.`); process.exit(0); })
+      .catch((err) => { console.error(`Terugzetten mislukt: ${err.message}`); process.exit(1); });
   } else if (fs.existsSync(target)) {
     console.error(`${target} bestaat al; kies een ander doel of verplaats het eerst.`);
     process.exit(1);

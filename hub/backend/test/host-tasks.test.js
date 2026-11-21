@@ -55,8 +55,8 @@ function install(setupBody) {
   fs.mkdirSync(path.join(repo, 'systemd'), { recursive: true });
   fs.mkdirSync(path.join(repo, 'localdb'), { recursive: true });
   fs.writeFileSync(path.join(repo, 'localdb', 'pg-backup.sh'), '#!/usr/bin/env bash\necho "back-up gemaakt" > "$APP_DIR/backup-gedraaid"\n', { mode: 0o755 });
-  fs.writeFileSync(path.join(repo, 'restore-test.sh'), '#!/usr/bin/env bash\necho hersteltest\n', { mode: 0o755 });
-  for (const unit of ['aquatech-restore-test.service', 'aquatech-restore-test.timer', 'aquatech-restore-test.path']) fs.writeFileSync(path.join(repo, 'systemd', unit), `[Unit]\nDescription=${unit}\n`);
+  for (const script of ['restore-test.sh', 'restore-app-check.sh', 'restore-test-drive.sh']) fs.writeFileSync(path.join(repo, script), '#!/usr/bin/env bash\necho hersteltest\n', { mode: 0o755 });
+  for (const unit of ['aquatech-restore-test.service', 'aquatech-restore-test.timer', 'aquatech-restore-test.path', 'aquatech-restore-test-drive.service', 'aquatech-restore-test-drive.path']) fs.writeFileSync(path.join(repo, 'systemd', unit), `[Unit]\nDescription=${unit}\n`);
   fs.mkdirSync(path.join(appDir, 'update', 'request'), { recursive: true });
   fs.writeFileSync(path.join(repo, 'setup-app-update.sh'), `#!/usr/bin/env bash\necho "setup met \$SETUP_REF"\n${setupBody}\n`, { mode: 0o755 });
   /**
@@ -107,10 +107,11 @@ test('hostscript: openstaand voert de taak uit, legt hem vast en doet daarna nie
   const ledger = JSON.parse(fs.readFileSync(path.join(appDir, 'update', 'status', 'host-tasks.json'), 'utf8'));
   for (const task of HOST_TASKS) assert.ok(Date.parse(ledger.done[task.id]) > 0, `${task.id} is vastgelegd`);
   assert.ok(fs.existsSync(path.join(appDir, 'restore-test.sh')), 'taak 002 installeert restore-test.sh');
+  assert.ok(fs.existsSync(path.join(appDir, 'restore-test-drive.sh')) && fs.existsSync(path.join(appDir, 'restore-app-check.sh')), 'taak 007 installeert de Drive-app-controle');
   assert.ok(fs.existsSync(path.join(appDir, 'pg-backup.sh')), 'taak 004 installeert pg-backup.sh');
   assert.ok(fs.existsSync(path.join(appDir, 'backup-gedraaid')), 'taak 004 maakt direct een back-up');
-  assert.deepStrictEqual(fs.readdirSync(systemdDir).sort(), ['aquatech-restore-test.path', 'aquatech-restore-test.service', 'aquatech-restore-test.timer']);
-  assert.match(fs.readFileSync(path.join(root, 'systemctl.log'), 'utf8'), /enable --now aquatech-restore-test\.timer aquatech-restore-test\.path/);
+  assert.deepStrictEqual(fs.readdirSync(systemdDir).sort(), ['aquatech-restore-test-drive.path', 'aquatech-restore-test-drive.service', 'aquatech-restore-test.path', 'aquatech-restore-test.service', 'aquatech-restore-test.timer']);
+  assert.match(fs.readFileSync(path.join(root, 'systemctl.log'), 'utf8'), /enable --now aquatech-restore-test\.timer aquatech-restore-test\.path aquatech-restore-test-drive\.path/);
   assert.ok(Date.parse(ledger.checkedAt) > 0);
   const again = run('openstaand-check', { TASKS_REF: REF });
   assert.strictEqual(again.status, 0);

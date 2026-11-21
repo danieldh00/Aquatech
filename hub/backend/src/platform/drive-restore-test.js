@@ -12,6 +12,7 @@ const { isBackupName } = require('../backup');
 const { openBackup } = require('./backup-restore');
 const { DriveError } = require('./drive-backup');
 const { sanitizeRun, sanitizePolicy, nextRunAt } = require('./restore-test');
+const { createDriveAppCheck } = require('./drive-restore-app-check');
 
 const MAX_RUNS = 12;
 const DEFAULT_TIME = '04:30';
@@ -108,11 +109,26 @@ function compare(backupDb, liveDb, backup, nowMs) {
 }
 
 /**
+ * Voegt de uitslag van de app-controle (hostscript) toe aan de uitslag van de vergelijking.
+ * @param {object} outcome Uitslag van compare.
+ * @param {{ ran: boolean, ok: boolean, message: string, sanity: object[] }} check Uitslag van de overdracht.
+ * @returns {{ state: string, message: string, sanity: object[] }} De nieuwe staat, melding en controlelijst.
+ */
+function mergeAppCheck(outcome, check) {
+  const sanity = outcome.sanity.concat(check.sanity);
+  if (!check.ran) {
+    return { state: 'waarschuwing', message: `${outcome.state === 'geslaagd' ? '' : `${outcome.message} `}${check.message}`.trim(), sanity };
+  }
+  if (!check.ok) return { state: 'mislukt', message: check.message, sanity };
+  return { state: outcome.state, message: outcome.state === 'geslaagd' ? 'De Drive-back-up is ontsleuteld, teruggezet en de app startte erop, logde in en haalde gegevens op.' : outcome.message, sanity };
+}
+
+/**
  * Maakt de hersteltest van de Google Drive-back-ups.
- * @param {object} options settings (instellingen van de hoofdtenant), driveBackup (platform/drive-backup.js), backupDir, vault, database (actieve database), now (alleen tests) en log.
+ * @param {object} options settings (instellingen van de hoofdtenant), driveBackup (platform/drive-backup.js), backupDir, vault, database (actieve database), now (alleen tests), log en appCheck (overdracht aan het hostscript voor de wegwerp-app; standaard uit UPDATE_STATUS_DIR en UPDATE_REQUEST_DIR).
  * @returns {object} view, setPolicy, run, due en tick.
  */
-function createDriveRestoreTest({ settings, driveBackup, backupDir, vault, database, now = () => Date.now(), log = console }) {
+function createDriveRestoreTest({ settings, driveBackup, backupDir, vault, database, now = () => Date.now(), log = console, appCheck = createDriveAppCheck({ statusDir: process.env.UPDATE_STATUS_DIR || '', requestDir: process.env.UPDATE_REQUEST_DIR || '' }) }) {
   let running = null;
   /**
    * De bewaarde instelling.
@@ -182,6 +198,8 @@ function createDriveRestoreTest({ settings, driveBackup, backupDir, vault, datab
         opened = await openBackup({ dir: directory, name: newest.name, vault, current: database });
         return compare(opened.db, database, backup, now());
       });
+      // Daarna de wegwerp-app op de teruggezette gegevens (hostscript): de back-up moet niet alleen leesbaar zijn maar ook werken.
+      if (outcome.state !== 'mislukt' && appCheck.available) Object.assign(outcome, mergeAppCheck(outcome, await appCheck.run({ file: path.join(directory, newest.name), name: newest.name })));
       const finishedAt = new Date(now()).toISOString();
       return record({ ...base, ...outcome, backup, finishedAt, durationSec: Math.round((Date.parse(finishedAt) - Date.parse(startedAt)) / 1000) });
     } catch (error) {
@@ -234,4 +252,4 @@ function createDriveRestoreTest({ settings, driveBackup, backupDir, vault, datab
   return { view, setPolicy, run, due, tick };
 }
 
-module.exports = { createDriveRestoreTest, sanitizeDriveRestoreTest, lastDueAt };
+module.exports = { createDriveRestoreTest, sanitizeDriveRestoreTest, lastDueAt, mergeAppCheck };

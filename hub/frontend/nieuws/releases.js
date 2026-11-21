@@ -13,6 +13,22 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.31.8',
+      date: '2026-11-20',
+      title: 'Hersteltest Google Drive controleert nu ook de app zelf',
+      items: [
+        { text: 'De hersteltest van de back-up op Google Drive zet de back-up nu ook terug in een tijdelijke database en start daarop een tijdelijke kopie van de app, die inlogt en gegevens ophaalt. Zo is ook de Drive-kopie bewezen bruikbaar. Na het uitrollen: servertaak 007 uitvoeren in Beheer > Systeem > Updates.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.31.7',
+      date: '2026-11-20',
+      title: 'Zijbalk houdt maximaal één groep open',
+      items: [
+        { text: 'In de zijbalk staat nog maar één groep tegelijk open: klap je een groep open, dan klapt de vorige dicht. Dat houdt het menu compact.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.31.6',
       date: '2026-11-20',
       title: 'Servertaak voor databasegroottes en indexgebruik',
