@@ -31,22 +31,22 @@ test('remainingOf telt geleverd mee en wordt nooit negatief', () => {
 test('plan: FIFO over twee bestellingen, pakketten in hele stuks, artikelen zonder voorraadbeheer altijd leverbaar', () => {
   const db = openDb();
   const tenant = db.prepare('SELECT id FROM tenants LIMIT 1').get();
-  const tenantId = tenant ? tenant.id : 't';
-  if (!tenant) db.prepare("INSERT INTO tenants (id, slug, name, created_at) VALUES ('t', 'hoofd', 'Hoofd', '2026-01-01')").run();
+  const tenantId = tenant ? tenant.id : '00000000-0000-4000-8000-0a0500000001';
+  if (!tenant) db.prepare("INSERT INTO tenants (id, slug, name, created_at) VALUES ('00000000-0000-4000-8000-0a0500000001', 'hoofd', 'Hoofd', '2026-01-01')").run();
   const now = '2026-11-01T10:00:00.000Z';
   const insertItem = db.prepare('INSERT INTO stock_items (id, tenant_id, code, name, unit, on_hand, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-  insertItem.run('i1', tenantId, 'A', 'Artikel A', 'st', 12, now, now);
-  insertItem.run('i2', tenantId, 'B', 'Artikel B', 'st', 25, now, now);
+  insertItem.run('00000000-0000-4000-8000-0a0500000002', tenantId, 'A', 'Artikel A', 'st', 12, now, now);
+  insertItem.run('00000000-0000-4000-8000-0a0500000003', tenantId, 'B', 'Artikel B', 'st', 25, now, now);
   const plan = createFulfilment(db).plan(tenantId, [
-    { id: 'old', number: 'W1', createdAt: '2026-11-01T09:00:00.000Z', status: 'nieuw', lines: [{ itemId: 'i1', qty: 10 }, { itemId: 'i2', qty: 1, stockPer: 10, shippedQty: 0 }, { itemId: '', qty: 3 }] },
-    { id: 'new', number: 'W2', createdAt: '2026-11-02T09:00:00.000Z', status: 'nieuw', allowPartial: false, lines: [{ itemId: 'i1', qty: 5 }] },
+    { id: '00000000-0000-4000-8000-0a0500000004', number: 'W1', createdAt: '2026-11-01T09:00:00.000Z', status: 'nieuw', lines: [{ itemId: '00000000-0000-4000-8000-0a0500000002', qty: 10 }, { itemId: '00000000-0000-4000-8000-0a0500000003', qty: 1, stockPer: 10, shippedQty: 0 }, { itemId: '', qty: 3 }] },
+    { id: '00000000-0000-4000-8000-0a0500000005', number: 'W2', createdAt: '2026-11-02T09:00:00.000Z', status: 'nieuw', allowPartial: false, lines: [{ itemId: '00000000-0000-4000-8000-0a0500000002', qty: 5 }] },
   ]);
-  const old = plan.get('old');
+  const old = plan.get('00000000-0000-4000-8000-0a0500000004');
   assert.strictEqual(old.lines[0].ready, 10, 'de oudste krijgt eerst');
   assert.strictEqual(old.lines[1].ready, 1);
   assert.strictEqual(old.lines[2].ready, 3, 'een vrije regel is altijd leverbaar');
   assert.strictEqual(old.complete, true);
-  const young = plan.get('new');
+  const young = plan.get('00000000-0000-4000-8000-0a0500000005');
   assert.deepStrictEqual([young.lines[0].ready, young.lines[0].backorder], [2, 3], 'de jongste krijgt wat overblijft (12 - 10)');
   assert.strictEqual(young.backorder, true);
   assert.strictEqual(young.canShip, false, 'zonder Deellevering toestaan wacht de bestelling op de rest');
@@ -269,11 +269,23 @@ test('rechten en organisaties: een klant en een andere organisatie kunnen niet v
   assert.strictEqual((await admin.get(path)).body.order.allowPartial, true, 'niets gewijzigd door de afgewezen verzoeken');
 });
 
+const TQ_TENANT = '00000000-0000-4000-8000-0a0500001000';
+
+/**
+ * Maakt een geldige uuid uit een soort en een volgnummer.
+ * @param {number} kind Het soort (voor onderscheid tussen artikelen en bestellingen).
+ * @param {number} position Het volgnummer.
+ * @returns {string} Een uuid.
+ */
+function numberedUuid(kind, position) {
+  return `00000000-0000-4000-8000-0a05${String(kind).padStart(2, '0')}${String(position).padStart(6, '0')}`;
+}
+
 test('plan: het aantal queries hangt niet af van het aantal bestellingen of regels (geen N+1)', () => {
   const db = openDb();
-  db.prepare("INSERT INTO tenants (id, slug, name, created_at) VALUES ('tq', 'tq', 'TQ', '2026-01-01')").run();
+  db.prepare("INSERT INTO tenants (id, slug, name, created_at) VALUES ('00000000-0000-4000-8000-0a0500001000', 'tq', 'TQ', '2026-01-01')").run();
   const insertItem = db.prepare('INSERT INTO stock_items (id, tenant_id, code, name, unit, on_hand, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-  for (let i = 0; i < 20; i++) insertItem.run(`q${i}`, 'tq', `Q${i}`, `Artikel ${i}`, 'st', 5, '2026-01-01', '2026-01-01');
+  for (let i = 0; i < 20; i++) insertItem.run(numberedUuid(1, i), TQ_TENANT, `Q${i}`, `Artikel ${i}`, 'st', 5, '2026-01-01', '2026-01-01');
   let queries = 0;
   const prepare = db.prepare.bind(db);
   /**
@@ -290,11 +302,11 @@ test('plan: het aantal queries hangt niet af van het aantal bestellingen of rege
    * @param {number} count Het aantal bestellingen.
    * @returns {object[]} De bestellingen.
    */
-  const build = (count) => Array.from({ length: count }, (_, position) => ({ id: `o${position}`, number: `W${position}`, createdAt: `2026-02-${String(position + 1).padStart(2, '0')}`, status: 'nieuw', lines: Array.from({ length: 5 }, (__, offset) => ({ itemId: `q${(position + offset) % 20}`, qty: 2 })) }));
-  createFulfilment(db).plan('tq', build(1));
+  const build = (count) => Array.from({ length: count }, (_, position) => ({ id: numberedUuid(2, position), number: `W${position}`, createdAt: `2026-02-${String(position + 1).padStart(2, '0')}`, status: 'nieuw', lines: Array.from({ length: 5 }, (__, offset) => ({ itemId: numberedUuid(1, (position + offset) % 20), qty: 2 })) }));
+  createFulfilment(db).plan(TQ_TENANT, build(1));
   const single = queries;
   queries = 0;
-  const plan = createFulfilment(db).plan('tq', build(25));
+  const plan = createFulfilment(db).plan(TQ_TENANT, build(25));
   assert.strictEqual(queries, single, 'zelfde aantal queries voor 25 bestellingen als voor 1');
   assert.ok(single <= 4, `hoogstens vier queries per groep van 200 artikelen (${single})`);
   assert.strictEqual(plan.size, 25);

@@ -178,6 +178,19 @@ function mergePerItem(lines) {
 const revenueOf = (line, qty = line.qty) => (line.lineExcl !== undefined && qty === line.qty ? round2(line.lineExcl) : round2(Number(line.unitExcl) * qty));
 
 /**
+ * Maakt een vaste UUID uit een lijst waarden (dezelfde invoer geeft altijd dezelfde id), zodat dezelfde verkoopregel nooit dubbel wordt opgeslagen.
+ * @param {Array} parts De waarden waaruit het id wordt afgeleid.
+ * @returns {string} Een UUID (versie 5, afgeleid van SHA-256).
+ */
+function uuidFromParts(parts) {
+  const hex = crypto.createHash('sha256').update(JSON.stringify(parts)).digest('hex').slice(0, 32).split('');
+  hex[12] = '5';
+  hex[16] = '89ab'[parseInt(hex[16], 16) % 4];
+  const flat = hex.join('');
+  return `${flat.slice(0, 8)}-${flat.slice(8, 12)}-${flat.slice(12, 16)}-${flat.slice(16, 20)}-${flat.slice(20)}`;
+}
+
+/**
  * Maakt de opslag en de rapportage van de webshopverkopen.
  * @param {object} db De database (PostgreSQL).
  * @param {{ stock?: object }} [deps] Voorraad (stock.js) voor de voorraadwaarde.
@@ -224,7 +237,7 @@ function createWebSalesStore(db, { stock = null } = {}) {
     return insertLines(tenantId, mergePerItem(lines.map((line) => ({
       itemId: line.itemId, code: line.baseCode || line.code, name: line.itemName || line.name, qty: baseQtyOf(line), revenue: revenueOf(line),
     }))).map((line, index) => ({
-      id: crypto.createHash('sha256').update(JSON.stringify([tenantId, 'verkoop', order.id, index])).digest('hex'),
+      id: uuidFromParts([tenantId, 'verkoop', order.id, index]),
       kind: 'verkoop', soldAt, orderId: order.id, reference: order.number, itemId: line.itemId, code: line.code, name: line.name,
       qty: line.qty, revenue: line.revenue, movementId: movementIds.get(line.itemId) || null,
     })));
@@ -243,7 +256,7 @@ function createWebSalesStore(db, { stock = null } = {}) {
     return insertLines(tenantId, mergePerItem(lines.map((line) => ({
       itemId: line.itemId, code: line.baseCode || line.code, name: line.itemName || line.name, qty: baseQtyOf(line), revenue: round2(Number(line.unitExcl) * line.qty),
     }))).map((line, index) => ({
-      id: crypto.createHash('sha256').update(JSON.stringify([tenantId, 'retour', record.orderId, record.number, index])).digest('hex'),
+      id: uuidFromParts([tenantId, 'retour', record.orderId, record.number, index]),
       kind: 'retour', soldAt, orderId: record.orderId, reference: record.number, itemId: line.itemId, code: line.code, name: line.name,
       qty: -line.qty, revenue: -line.revenue, movementId: movementIds.get(line.itemId) || null,
     })));

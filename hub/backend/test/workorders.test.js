@@ -57,7 +57,7 @@ const garden = () => ({
  */
 const quoteFromGarden = () => {
   const built = plain(QuoteCore.fromPlan(garden(), lib, { hourlyRate: 55, callOutFee: 35 }));
-  return { id: 'q1', number: 'OF-2026-0007', data: QuoteCore.sanitize({ title: 'Aanleg beregening', customer: { name: 'Fam. Jansen', address: 'Tuinstraat 1\n8071 AB Nunspeet' }, planId: 'p1', lines: built.lines }) };
+  return { id: '00000000-0000-4000-8000-0000000000a1', number: 'OF-2026-0007', data: QuoteCore.sanitize({ title: 'Aanleg beregening', customer: { name: 'Fam. Jansen', address: 'Tuinstraat 1\n8071 AB Nunspeet' }, planId: '00000000-0000-4000-8000-0000000000a2', lines: built.lines }) };
 };
 
 test('werkorder uit offerte: materialen zonder prijzen, arbeid als werkstappen in uitvoeringsvolgorde', () => {

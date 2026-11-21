@@ -212,9 +212,9 @@ test('producttekst: dagelijks maximum, rechten en andere organisatie', async () 
     assert.strictEqual((await klant.post('/app/api/stock/item-texts/approve', { itemIds: [item.id] })).status, 403);
     // Een artikel van een andere organisatie is hier onvindbaar.
     const other = store.createTenant({ name: 'Groen BV', slug: 'groen' }).tenant;
-    db.prepare("INSERT INTO stock_items (id, tenant_id, code, name, unit, location, min_qty, on_hand, cost_price, notes, archived, created_at, updated_at) VALUES ('vreemd', ?, 'V', 'Vreemd', 'st', '', 0, 0, 0, '', 0, '2026-01-01', '2026-01-01')").run(other.id);
-    assert.strictEqual((await baas.get('/app/api/stock/item-texts/vreemd')).status, 404);
-    const foreign = await baas.post('/app/api/stock/item-texts/generate', { itemIds: ['vreemd'] });
+    db.prepare("INSERT INTO stock_items (id, tenant_id, code, name, unit, location, min_qty, on_hand, cost_price, notes, archived, created_at, updated_at) VALUES ('00000000-0000-4000-8000-0000000000e1', ?, 'V', 'Vreemd', 'st', '', 0, 0, 0, '', 0, '2026-01-01', '2026-01-01')").run(other.id);
+    assert.strictEqual((await baas.get('/app/api/stock/item-texts/00000000-0000-4000-8000-0000000000e1')).status, 404);
+    const foreign = await baas.post('/app/api/stock/item-texts/generate', { itemIds: ['00000000-0000-4000-8000-0000000000e1'] });
     assert.strictEqual(foreign.body.results[0].code, 'not_found');
     // Dagelijks maximum: zet het op 1; het tweede artikel in dezelfde portie wordt geweigerd.
     await baas.put('/app/api/admin/settings', { aiDailyLimit: 1 });

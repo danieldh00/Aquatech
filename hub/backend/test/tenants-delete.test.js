@@ -253,14 +253,15 @@ const STAMP = '2026-11-20T10:00:00.000Z';
  */
 function seedLateTables(db, tenantId, userId) {
   const suffix = `${tenantId.slice(0, 8)}-${crypto.randomBytes(4).toString('hex')}`;
+  const ids = { serviceRequest: crypto.randomUUID(), stockMerge: crypto.randomUUID(), stockUnit: crypto.randomUUID(), webOrder: crypto.randomUUID(), webReturn: crypto.randomUUID() };
   const rows = {
     roles: { tenant_id: tenantId, role_key: `eigen-${suffix}`, label: 'Eigen rol', description: '', kind: 'medewerker', rights: '[]', created_at: STAMP, updated_at: STAMP },
-    service_requests: { id: `sr-${suffix}`, tenant_id: tenantId, number: `M-${suffix}`, customer_id: userId, customer_name: 'Klant', kind: 'storing', urgent: 0, subject: 'Storing', description: '', address: '', phone: '', email: '', preferred: '', status: 'nieuw', reply: '', note: '', handled_by: userId, handled_by_name: '', created_at: STAMP, updated_at: STAMP },
-    stock_merges: { id: `sm-${suffix}`, tenant_id: tenantId, parent_id: `p-${suffix}`, parent_code: 'P', parent_name: 'Hoofdartikel', snapshot: '{}', created_by: userId, created_at: STAMP },
-    stock_units: { id: `su-${suffix}`, tenant_id: tenantId, name: 'doos', created_at: STAMP },
-    web_orders: { id: `wo-${suffix}`, tenant_id: tenantId, number: `W-${suffix}`, user_id: userId, status: 'nieuw', customer_name: 'Klant', email: 'klant@example.nl', total: 100, data: '{}', created_at: STAMP, updated_at: STAMP },
-    web_order_slips: { tenant_id: tenantId, order_id: `wo-${suffix}`, file_name: 'Pakbon.pdf', pages: 1, size: 10, data: 'f1:x:y:z', created_at: STAMP },
-    web_returns: { id: `wr-${suffix}`, tenant_id: tenantId, order_id: `wo-${suffix}`, user_id: userId, number: `R-${suffix}`, status: 'aangevraagd', data: '{}', created_at: STAMP, updated_at: STAMP },
+    service_requests: { id: ids.serviceRequest, tenant_id: tenantId, number: `M-${suffix}`, customer_id: userId, customer_name: 'Klant', kind: 'storing', urgent: 0, subject: 'Storing', description: '', address: '', phone: '', email: '', preferred: '', status: 'nieuw', reply: '', note: '', handled_by: userId, handled_by_name: '', created_at: STAMP, updated_at: STAMP },
+    stock_merges: { id: ids.stockMerge, tenant_id: tenantId, parent_id: crypto.randomUUID(), parent_code: 'P', parent_name: 'Hoofdartikel', snapshot: '{}', created_by: userId, created_at: STAMP },
+    stock_units: { id: ids.stockUnit, tenant_id: tenantId, name: 'doos', created_at: STAMP },
+    web_orders: { id: ids.webOrder, tenant_id: tenantId, number: `W-${suffix}`, user_id: userId, status: 'nieuw', customer_name: 'Klant', email: 'klant@example.nl', total: 100, data: '{}', created_at: STAMP, updated_at: STAMP },
+    web_order_slips: { tenant_id: tenantId, order_id: ids.webOrder, file_name: 'Pakbon.pdf', pages: 1, size: 10, data: 'f1:x:y:z', created_at: STAMP },
+    web_returns: { id: ids.webReturn, tenant_id: tenantId, order_id: ids.webOrder, user_id: userId, number: `R-${suffix}`, status: 'aangevraagd', data: '{}', created_at: STAMP, updated_at: STAMP },
   };
   for (const [table, values] of Object.entries(rows)) {
     const names = Object.keys(values);

@@ -98,13 +98,16 @@ test('prijzen: kosten per model, cache en onbekend model', () => {
   for (const key of AiModels.SELECTABLE) assert.ok(AiModels.MODELS[key].description && AiModels.MODELS[key].label);
 });
 
+const USER_ONE = '00000000-0000-4000-8000-0000000000a1';
+const USER_TWO = '00000000-0000-4000-8000-0000000000a2';
+
 test('opslag: kosten exact in miljoensten, filters en periode', () => {
   const db = openDb();
   const store = createStore(db);
   const tid = store.ensureTenant().id;
   const ai = createAiUsageStore(db);
-  ai.record({ tenantId: tid, userId: 'u1', feature: 'plan_analyse', model: 'claude-opus-5-5', usage: { input_tokens: 3000, output_tokens: 10000 }, durationMs: 4000, eurCentsPerUsd: 90 });
-  ai.record({ tenantId: tid, userId: 'u2', feature: 'plan_analyse', model: 'claude-sonnet-5-5', status: 'refusal', usage: { input_tokens: 1000, output_tokens: 0 }, eurCentsPerUsd: 90 });
+  ai.record({ tenantId: tid, userId: USER_ONE, feature: 'plan_analyse', model: 'claude-opus-5-5', usage: { input_tokens: 3000, output_tokens: 10000 }, durationMs: 4000, eurCentsPerUsd: 90 });
+  ai.record({ tenantId: tid, userId: USER_TWO, feature: 'plan_analyse', model: 'claude-sonnet-5-5', status: 'refusal', usage: { input_tokens: 1000, output_tokens: 0 }, eurCentsPerUsd: 90 });
   const summary = ai.summary([tid], {});
   assert.strictEqual(summary.totals.requests, 2);
   assert.strictEqual(summary.totals.failed, 1);
@@ -112,7 +115,7 @@ test('opslag: kosten exact in miljoensten, filters en periode', () => {
   assert.strictEqual(summary.totals.costEur, Math.round(0.214 * 0.9 * 1e6) / 1e6);
   assert.strictEqual(summary.byModel.length, 2);
   assert.strictEqual(summary.byUser[0].user.displayName, 'Verwijderde gebruiker', 'onbekende gebruiker');
-  assert.strictEqual(ai.summary([tid], { user: 'u2' }).totals.requests, 1);
+  assert.strictEqual(ai.summary([tid], { user: USER_TWO }).totals.requests, 1);
   assert.strictEqual(ai.summary([tid], { from: '2000-01-01', to: '2000-01-31' }).totals.requests, 0);
   assert.strictEqual(ai.summary([tid], { period: 'month' }).byPeriod[0].key.length, 7);
   assert.strictEqual(ai.list([tid], {}, { limit: 1 }).items.length, 1);

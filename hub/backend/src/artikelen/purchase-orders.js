@@ -210,8 +210,8 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
    * @param {string} id Id van de order.
    * @returns {object|undefined} De rij.
    */
-  const findRow = (tenantId, id) => prepare(`SELECT ${ORDER_COLS} FROM purchase_orders o JOIN suppliers s ON s.tenant_id = o.tenant_id AND s.id = o.supplier_id
-    WHERE o.tenant_id = ? AND o.id = ?`).get(tenantId, String(id || ''));
+  const findRow = (tenantId, id) => (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id || '')) ? prepare(`SELECT ${ORDER_COLS} FROM purchase_orders o JOIN suppliers s ON s.tenant_id = o.tenant_id AND s.id = o.supplier_id
+    WHERE o.tenant_id = ? AND o.id = ?`).get(tenantId, String(id)) : undefined);
 
   /**
    * De regels van een order, in volgorde.

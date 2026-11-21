@@ -1,6 +1,7 @@
 // Globaal zoeken: zoekt in klanten, offertes, werkorders, facturen en artikelen, alleen waar het recht voor is,
 // alleen in de eigen omgeving, met begrensde groepen en zonder jokertekens uit de invoer.
 const test = require('node:test');
+const { randomUUID } = require('node:crypto');
 const assert = require('node:assert');
 const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
@@ -44,7 +45,7 @@ test('zoeken: rechten per soort, eigen omgeving, geen resultaat bij te korte tek
     assert.ok(item.id, JSON.stringify(item));
     // Een artikel en een offerte van een andere omgeving mogen nooit verschijnen.
     db.prepare('INSERT INTO stock_items (id, tenant_id, code, name, unit, location, min_qty, on_hand, cost_price, notes, archived, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, ?, 0, ?, ?)')
-      .run('x-1', other.id, 'GRN-999', 'Groene vreemde', 'st', '', '', new Date().toISOString(), new Date().toISOString());
+      .run(randomUUID(), other.id, 'GRN-999', 'Groene vreemde', 'st', '', '', new Date().toISOString(), new Date().toISOString());
 
     /**
      * De sleutels van de groepen in een zoekantwoord.

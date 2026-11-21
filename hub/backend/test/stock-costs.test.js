@@ -10,6 +10,23 @@ const { createWebSalesStore, periodOf, bucketOf, bucketsBetween } = require('../
 const { setup, order } = require('./helpers/webshop-world');
 const { postForm } = require('./helpers/http-client');
 
+/** Een geldige uuid die nergens bestaat. */
+const UNKNOWN_ID = '00000000-0000-4000-8000-0000000000ff';
+
+/** Vaste uuid's voor de mutaties, werkorders en bestellingen in de FIFO-tests. */
+const ids = {
+  issueA: '00000000-0000-4000-8000-0000000000a1',
+  issueB: '00000000-0000-4000-8000-0000000000a2',
+  workOrderA: '00000000-0000-4000-8000-0000000000b1',
+  workOrderB: '00000000-0000-4000-8000-0000000000b2',
+  returnA: '00000000-0000-4000-8000-0000000000c1',
+  returnSource: '00000000-0000-4000-8000-0000000000c2',
+  returnOld: '00000000-0000-4000-8000-0000000000c3',
+  raceOrder: '00000000-0000-4000-8000-0000000000d1',
+  returnOne: '00000000-0000-4000-8000-0000000000d2',
+  returnTwo: '00000000-0000-4000-8000-0000000000d3'
+};
+
 /**
  * Een lege omgeving met een voorraadopslag.
  * @returns {{ db: object, stock: object, tenantId: string }} De database, de opslag en de omgeving.
@@ -43,7 +60,7 @@ test('inkoopprijs: een nieuwe prijs overschrijft de oude niet', () => {
   const future = stock.addCostPrice(tenantId, null, created.id, { price: 2, validFrom: '2999-01-01' });
   assert.strictEqual(future.field, 'validFrom');
   assert.strictEqual(stock.addCostPrice(tenantId, null, created.id, { price: -1 }).field, 'price');
-  assert.strictEqual(stock.addCostPrice(tenantId, null, 'bestaat-niet', { price: 1 }).status, 404);
+  assert.strictEqual(stock.addCostPrice(tenantId, null, UNKNOWN_ID, { price: 1 }).status, 404);
 });
 
 test('FIFO: afboeken gebruikt de oudste laag eerst, ook na een prijsstijging', () => {
@@ -81,7 +98,7 @@ test('FIFO: een onbekende inkoopprijs blijft onbekend tot hij is ingevuld', () =
   assert.strictEqual(filled.item.layers[0].unitCost, 4.5);
   assert.deepStrictEqual(entriesOf(db, issue.movementId), [{ qty: -3, unitCost: 4.5 }], 'wat al uit de laag kwam krijgt de prijs ook');
   assert.strictEqual(stock.setLayerCost(tenantId, item.id, layerId, -2).field, 'unitCost');
-  assert.strictEqual(stock.setLayerCost(tenantId, item.id, 'bestaat-niet', 1).status, 404);
+  assert.strictEqual(stock.setLayerCost(tenantId, item.id, UNKNOWN_ID, 1).status, 404);
 
   const receipt = stock.move(tenantId, null, item.id, { kind: 'ontvangst', qty: 2, unitCost: 5 });
   const fixed = receipt.item.layers.find((layer) => layer.unitCost === 5);
@@ -202,14 +219,14 @@ test('FIFO: retour kiest de werkorder boven een gedeelde bron', () => {
   const { createStockCosts } = require('../src/artikelen/stock-costs');
   const costs = createStockCosts(db);
   const item = stock.create(tenantId, null, { code: 'RETOUR', name: 'Retour' }).item;
-  for (const [id, workOrderId, price] of [['issue-a', 'a', 2], ['issue-b', 'b', 8]]) {
+  for (const [id, workOrderId, price] of [[ids.issueA, ids.workOrderA, 2], [ids.issueB, ids.workOrderB, 8]]) {
     db.prepare(`INSERT INTO stock_movements (id, tenant_id, item_id, kind, qty, balance, work_order_id, source, created_at)
       VALUES (?, ?, ?, 'afboeking', -1, -1, ?, 'gereed', '2026-01-01')`).run(id, tenantId, item.id, workOrderId);
     costs.record(tenantId, { id: item.id, cost_price: price }, { movementId: id, delta: -1, onHandBefore: 0, kind: 'afboeking', at: '2026-01-01' });
   }
   // Werkorder bekend: de prijs van die werkorder. Alleen een algemene bron: niets herleidbaars,
   // dus de actuele inkoopprijs. Een eigen bron zonder kostregels (van vóór de lagen): onbekend.
-  const cases = [['return-a', { workOrderId: 'a', source: 'gereed' }, 2], ['return-source', { source: 'gereed' }, 99], ['return-old', { source: 'bestelling:W-OUD' }, null]];
+  const cases = [[ids.returnA, { workOrderId: ids.workOrderA, source: 'gereed' }, 2], [ids.returnSource, { source: 'gereed' }, 99], [ids.returnOld, { source: 'bestelling:W-OUD' }, null]];
   for (const [id, basis, expected] of cases) {
     db.prepare(`INSERT INTO stock_movements (id, tenant_id, item_id, kind, qty, balance, created_at)
       VALUES (?, ?, ?, 'retour', 1, 1, '2026-01-02')`).run(id, tenantId, item.id);
@@ -223,10 +240,10 @@ test('rapportage: overlappende selecties voegen order- en retourregels eenmaal t
   const lines = [{ code: 'ZELFDE', qty: 1, unitExcl: 10 }, { code: 'ZELFDE', qty: 2, unitExcl: 10 }];
   const data = JSON.stringify({ lines });
   db.prepare(`INSERT INTO web_orders (id, tenant_id, number, status, customer_name, email, total, data, created_at, updated_at)
-    VALUES ('race', ?, 'W-RACE', 'verzonden', '', '', 30, ?, '2026-01-01', '2026-01-01')`).run(tenantId, data);
-  for (const id of ['return-one', 'return-two']) {
+    VALUES (?, ?, 'W-RACE', 'verzonden', '', '', 30, ?, '2026-01-01', '2026-01-01')`).run(ids.raceOrder, tenantId, data);
+  for (const id of [ids.returnOne, ids.returnTwo]) {
     db.prepare(`INSERT INTO web_returns (id, tenant_id, order_id, number, status, data, created_at, updated_at)
-      VALUES (?, ?, 'race', ?, 'afgerond', ?, '2026-01-02', '2026-01-02')`).run(id, tenantId, id, data);
+      VALUES (?, ?, ?, ?, 'afgerond', ?, '2026-01-02', '2026-01-02')`).run(id, tenantId, ids.raceOrder, id, data);
   }
   // Beide processen kunnen dezelfde ontbrekende regels selecteren. De echte
   // database verwerkt de inserts en controleert de unieke primaire sleutel.

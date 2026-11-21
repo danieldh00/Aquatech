@@ -223,7 +223,7 @@ test('database blijft bewaard na herstart en migreert niet dubbel', () => {
   const file = path.join(dir, 'aquatech.db');
   try {
     let db = openDb(file);
-    db.prepare("INSERT INTO tenants (id, slug, name, created_at) VALUES ('t', 'x', 'X', '2026-11-20T10:00:00.000Z')").run();
+    db.prepare("INSERT INTO tenants (id, slug, name, created_at) VALUES ('00000000-0000-4000-8000-0000000000a1', 'x', 'X', '2026-11-20T10:00:00.000Z')").run();
     db.close();
     db = openDb(file);
     assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM tenants').get().n, 1);

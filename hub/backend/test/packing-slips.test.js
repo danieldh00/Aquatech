@@ -3,6 +3,7 @@
 const test = require('node:test');
 const { after } = test;
 const assert = require('node:assert');
+const crypto = require('node:crypto');
 const { createApp } = require('../src/server');
 const { createPdokFake } = require('./helpers/pdok-fake');
 const { openDb } = require('../src/database/db');
@@ -232,7 +233,7 @@ test('Te picken: meer dan 200 onbetaalde online bestellingen verdringen een beta
     const data = JSON.stringify({ ...JSON.parse(original.data), payment: 'online', pay: { status } });
     for (let i = 0; i < count; i++) {
       db.prepare('INSERT INTO web_orders (id, tenant_id, number, user_id, status, customer_name, email, total, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-        .run(`${prefix}-${i}`, original.tenant_id, `${prefix.toUpperCase()}-${i}`, original.user_id, 'nieuw', original.customer_name, original.email, original.total, data, '2020-01-01T00:00:00.000Z', original.updated_at);
+        .run(crypto.randomUUID(), original.tenant_id, `${prefix.toUpperCase()}-${i}`, original.user_id, 'nieuw', original.customer_name, original.email, original.total, data, '2020-01-01T00:00:00.000Z', original.updated_at);
     }
   };
   clone('open', 'open', 230);

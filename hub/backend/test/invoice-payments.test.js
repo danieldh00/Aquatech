@@ -2,8 +2,13 @@
 // terugkeer, een mislukte betaling, dat een factuur maar één keer op betaald gaat, de beveiliging van de webhook en de rechten.
 const test = require('node:test');
 const assert = require('node:assert');
+const { randomUUID } = require('node:crypto');
 const { setup } = require('./helpers/webshop-world');
 const { createClient, postForm } = require('./helpers/http-client');
+
+const INVOICE_ONE = randomUUID();
+const INVOICE_TWO = randomUUID();
+const CUSTOMER = randomUUID();
 
 /**
  * Maakt een definitieve factuur van 121 euro voor een klant uit de shop.
@@ -177,7 +182,7 @@ test('valt de verwerking halverwege weg, dan herstelt de volgende melding de fac
   const { createMollie } = require('../src/webshop/mollie');
   const db = openDb();
   const tenantId = createStore(db).ensureTenant().id;
-  const invoice = { id: 'inv-1', number: 'F1', status: 'definitief', kind: 'factuur', total: 50, customerId: 'c1' };
+  const invoice = { id: INVOICE_ONE, number: 'F1', status: 'definitief', kind: 'factuur', total: 50, customerId: CUSTOMER };
   let failOnce = true;
   let paidCalls = 0;
   const invoices = {
@@ -207,12 +212,12 @@ test('valt de verwerking halverwege weg, dan herstelt de volgende melding de fac
   assert.ok(started.checkoutUrl);
   const [paymentId] = [...fake.payments.keys()];
   fake.set(paymentId, 'paid');
-  await assert.rejects(payments.sync(tenantId, 'inv-1', { paymentId }), /databasefout/);
+  await assert.rejects(payments.sync(tenantId, INVOICE_ONE, { paymentId }), /databasefout/);
   assert.strictEqual(invoice.status, 'definitief');
-  const retry = await payments.sync(tenantId, 'inv-1', { paymentId });
+  const retry = await payments.sync(tenantId, INVOICE_ONE, { paymentId });
   assert.strictEqual(retry.becamePaid, true);
   assert.strictEqual(invoice.status, 'betaald');
-  assert.strictEqual((await payments.sync(tenantId, 'inv-1', { paymentId })).becamePaid, false);
+  assert.strictEqual((await payments.sync(tenantId, INVOICE_ONE, { paymentId })).becamePaid, false);
   assert.strictEqual(paidCalls, 1);
 });
 
@@ -224,7 +229,7 @@ test('opnieuw klikken op Nu betalen na een halverwege weggevallen verwerking maa
   const { createMollie } = require('../src/webshop/mollie');
   const db = openDb();
   const tenantId = createStore(db).ensureTenant().id;
-  const invoice = { id: 'inv-2', number: 'F2', status: 'definitief', kind: 'factuur', total: 50, customerId: 'c1' };
+  const invoice = { id: INVOICE_TWO, number: 'F2', status: 'definitief', kind: 'factuur', total: 50, customerId: CUSTOMER };
   let failOnce = true;
   const invoices = {
     /**
@@ -252,7 +257,7 @@ test('opnieuw klikken op Nu betalen na een halverwege weggevallen verwerking maa
   await payments.start(tenantId, invoice);
   const [paymentId] = [...fake.payments.keys()];
   fake.set(paymentId, 'paid');
-  await assert.rejects(payments.sync(tenantId, 'inv-2', { paymentId }), /databasefout/);
+  await assert.rejects(payments.sync(tenantId, INVOICE_TWO, { paymentId }), /databasefout/);
   const again = await payments.start(tenantId, invoice);
   assert.deepStrictEqual(again, { paid: true });
   assert.strictEqual(invoice.status, 'betaald');

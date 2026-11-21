@@ -3,11 +3,14 @@
 // boekingen en verwijzingen (werkorders) verloren gaan.
 const test = require('node:test');
 const assert = require('node:assert');
+const { randomUUID } = require('node:crypto');
 const { createApp } = require('../src/server');
 const { suggestGroups, splitName, commonCodePrefix } = require('../src/artikelen/variant-suggestions');
 const { createLogin, listen } = require('./helpers/http-client');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
+
+const IMAGE_ID = randomUUID();
 
 const SECRET = 's'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
@@ -71,7 +74,7 @@ test('samenvoegen via de API: voorraad, prijs, afbeelding en reserveringen blijv
       made.push(response.body);
     }
     const other = (await baas.post('/app/api/stock/items', { code: 'LOS', name: 'Losse kraan', unit: 'st' })).body;
-    db.prepare('UPDATE stock_items SET image_id = ? WHERE id = ?').run('img-1', made[1].id);
+    db.prepare('UPDATE stock_items SET image_id = ? WHERE id = ?').run(IMAGE_ID, made[1].id);
     db.prepare('UPDATE stock_items SET shop_product_id = ?, shop_dirty = 1 WHERE id = ?').run('77', made[0].id);
 
     // Een werkorder met PEB-20 reserveert 5 m; dat moet na het samenvoegen zo blijven.
@@ -109,7 +112,7 @@ test('samenvoegen via de API: voorraad, prijs, afbeelding en reserveringen blijv
     const parent = merged.body.item;
     assert.strictEqual(parent.code, 'PEB');
     assert.strictEqual(parent.hasVariants, true);
-    assert.strictEqual(parent.imageId, 'img-1');
+    assert.strictEqual(parent.imageId, IMAGE_ID);
     assert.strictEqual(parent.onHand, 150, 'het hoofdartikel telt de varianten op');
     assert.deepStrictEqual(parent.attributes, [{ name: 'Maat', values: ['16 mm', '20 mm', '25 mm'] }]);
 
@@ -126,7 +129,7 @@ test('samenvoegen via de API: voorraad, prijs, afbeelding en reserveringen blijv
       assert.strictEqual(variant.shop.productId, null);
     }
     assert.strictEqual((await baas.get(`/app/api/stock/items/${made[1].id}`)).body.reserved, 5, 'reservering van de werkorder blijft');
-    assert.strictEqual((await baas.get(`/app/api/stock/items/${made[1].id}`)).body.imageId, 'img-1');
+    assert.strictEqual((await baas.get(`/app/api/stock/items/${made[1].id}`)).body.imageId, IMAGE_ID);
     assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_movements WHERE item_id = ?').get(made[0].id).n, 1, 'boekingen blijven');
     const workOrderStock = (await baas.get(`/app/api/stock/workorders/${workOrder.id}`)).body;
     assert.deepStrictEqual(workOrderStock.lines.map((line) => [line.code, line.reserved]), [['PEB-20', 5]]);
@@ -278,8 +281,8 @@ test('samenvoeging terugdraaien zonder logboek (samengevoegd voor 1.5.9) en met 
   // Een reservering op een later bijgemaakte variant blokkeert het terugdraaien.
   const plain = added.item.variants.find((variant) => variant.values.Maat === '25 mm');
   const owner = createStore(db).createCustomer(tenantId, { displayName: 'Eigenaar' }).user;
-  db.prepare("INSERT INTO work_orders (id, tenant_id, owner_id, number, status, data, created_at, updated_at) VALUES ('wo-1', ?, ?, 'W-1', 'open', '{}', ?, ?)").run(tenantId, owner.id, '2026-11-04T10:00:00Z', '2026-11-04T10:00:00Z');
-  db.prepare('INSERT INTO stock_reservations (tenant_id, work_order_id, item_id, qty, updated_at) VALUES (?, ?, ?, 1, ?)').run(tenantId, 'wo-1', plain.id, '2026-11-04T10:00:00Z');
+  db.prepare("INSERT INTO work_orders (id, tenant_id, owner_id, number, status, data, created_at, updated_at) VALUES ('00000000-0000-4000-8000-0000000000d1', ?, ?, 'W-1', 'open', '{}', ?, ?)").run(tenantId, owner.id, '2026-11-04T10:00:00Z', '2026-11-04T10:00:00Z');
+  db.prepare('INSERT INTO stock_reservations (tenant_id, work_order_id, item_id, qty, updated_at) VALUES (?, ?, ?, 1, ?)').run(tenantId, '00000000-0000-4000-8000-0000000000d1', plain.id, '2026-11-04T10:00:00Z');
   assert.ok(stock.unmergePreview(tenantId, again.parentId).blocked);
   assert.strictEqual(stock.unmergeVariants(tenantId, again.parentId).status, 409);
   db.prepare('DELETE FROM stock_reservations').run();

@@ -371,7 +371,9 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    */
   function eanTaken(tenantId, id, ean) {
     if (!ean) return null;
-    const other = prepare('SELECT code FROM stock_items WHERE tenant_id = ? AND ean = ? AND id <> ?').get(tenantId, ean, id || '');
+    const other = id
+      ? prepare('SELECT code FROM stock_items WHERE tenant_id = ? AND ean = ? AND id <> ?').get(tenantId, ean, id)
+      : prepare('SELECT code FROM stock_items WHERE tenant_id = ? AND ean = ?').get(tenantId, ean);
     if (other) return { error: `Deze EAN hoort al bij artikel ${other.code}.`, field: 'ean', status: 409 };
     const packaging = prepare('SELECT i.code AS code FROM item_packagings p JOIN stock_items i ON i.tenant_id = p.tenant_id AND i.id = p.item_id WHERE p.tenant_id = ? AND p.ean = ?').get(tenantId, ean);
     return packaging ? { error: `Deze EAN hoort al bij een verpakking van artikel ${packaging.code}.`, field: 'ean', status: 409 } : null;

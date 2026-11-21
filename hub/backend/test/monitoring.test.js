@@ -5,8 +5,8 @@ const assert = require('node:assert');
 const { openDb } = require('../src/database/db');
 const { createMonitor } = require('../src/platform/monitoring');
 
-const MAIN = 'main';
-const OTHER = 'other';
+const MAIN = '00000000-0000-4000-8000-00000000a001';
+const OTHER = '00000000-0000-4000-8000-00000000a002';
 const HOUR = 3600 * 1000;
 
 /**

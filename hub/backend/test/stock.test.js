@@ -10,6 +10,9 @@ const { createStockStore, sanitizeItem, needsOf } = require('../src/artikelen/st
 const { transaction } = require('../src/database/db');
 const { createLogin, listen } = require('./helpers/http-client');
 
+/** Een vaste uuid voor de gebruiker die in de verbruiksboekingen als uitvoerder staat. */
+const KEES_ID = '00000000-0000-4000-8000-0000000000a1';
+
 const SECRET = 's'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
 
@@ -157,7 +160,7 @@ test('voorraad: retour van een verbruiksregel krijgt de prijs van díe regel', a
     const wo = await workOrder(kees, [['KLEP', 15]]);
     const item = (await kees.post('/app/api/stock/items', { code: 'KLEP', name: 'Magneetklep', costPrice: 2, onHand: 10 })).body;
     const stock = createStockStore(db);
-    const user = { id: 'u1', display_name: 'Kees' };
+    const user = { id: KEES_ID, display_name: 'Kees' };
     stock.move(main, null, item.id, { kind: 'ontvangst', qty: 10, unitCost: 5 });
     stock.syncUsage(main, { usageId: 'v1', workOrderId: wo.id, code: 'KLEP', qty: 10, user });
     stock.syncUsage(main, { usageId: 'v2', workOrderId: wo.id, code: 'KLEP', qty: 5, user });
@@ -179,7 +182,7 @@ test('voorraad: verbruik boeken is idempotent per verbruiksregel; met verbruik v
     assert.strictEqual(item.onHand, 80);
     assert.strictEqual(item.reserved, 50);
     const stock = createStockStore(db);
-    const user = { id: 'u1', display_name: 'Kees' };
+    const user = { id: KEES_ID, display_name: 'Kees' };
     /**
      * Huidige stand van het artikel.
      * @returns {number} Aantal op voorraad.

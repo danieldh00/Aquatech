@@ -37,11 +37,11 @@ async function start() {
   const tenantId = store.ensureTenant().id;
   const { user: baas } = await store.createAccount(tenantId, { username: 'baas', role: 'beheerder', password: PW }, { platformAdmin: true });
   await store.createAccount(tenantId, { username: 'jan', role: 'beheerder', password: PW });
-  const otherTenantId = 'andere-organisatie';
+  const otherTenantId = '00000000-0000-4000-8000-0a0300000003';
   db.prepare("INSERT INTO tenants (id, slug, name, created_at, environment) VALUES (?, 'ander', 'Ander', ?, 'live')").run(otherTenantId, NOW);
   const data = JSON.stringify(quoteData());
-  db.prepare("INSERT INTO quotes (id, tenant_id, owner_id, number, status, title, customer, total_excl, total_incl, data, created_at, updated_at) VALUES ('qa', ?, ?, 'O2026-0001', 'concept', 'Tuin', 'Jansen', 200, 242, ?, ?, ?)").run(tenantId, baas.id, data, NOW, NOW);
-  db.prepare("INSERT INTO quotes (id, tenant_id, owner_id, number, status, title, customer, total_excl, total_incl, data, created_at, updated_at) VALUES ('qx', ?, ?, 'O-ANDER-1', 'concept', 'Elders', 'X', 200, 242, ?, ?, ?)").run(otherTenantId, baas.id, data, NOW, NOW);
+  db.prepare("INSERT INTO quotes (id, tenant_id, owner_id, number, status, title, customer, total_excl, total_incl, data, created_at, updated_at) VALUES ('00000000-0000-4000-8000-0a0300000001', ?, ?, 'O2026-0001', 'concept', 'Tuin', 'Jansen', 200, 242, ?, ?, ?)").run(tenantId, baas.id, data, NOW, NOW);
+  db.prepare("INSERT INTO quotes (id, tenant_id, owner_id, number, status, title, customer, total_excl, total_incl, data, created_at, updated_at) VALUES ('00000000-0000-4000-8000-0a0300000002', ?, ?, 'O-ANDER-1', 'concept', 'Elders', 'X', 200, 242, ?, ?, ?)").run(otherTenantId, baas.id, data, NOW, NOW);
   const app = createApp({ secret: SECRET, db, loginDelayMs: 0, env: { MULTITENANCY: '1' }, backupDir: dir });
   const { server, base } = await listen(app);
   const baasClient = createClient(base, { followRedirects: false });
@@ -57,7 +57,7 @@ async function start() {
  * @returns {number} Het aantal regels.
  */
 function lineCount(world) {
-  return JSON.parse(world.db.prepare("SELECT data FROM quotes WHERE id = 'qa'").get().data).lines.length;
+  return JSON.parse(world.db.prepare("SELECT data FROM quotes WHERE id = '00000000-0000-4000-8000-0a0300000001'").get().data).lines.length;
 }
 
 test('alleen een hoofdbeheerder mag de regelroutes gebruiken', async () => {
@@ -65,7 +65,7 @@ test('alleen een hoofdbeheerder mag de regelroutes gebruiken', async () => {
   try {
     const made = await world.baas.post(BASE);
     assert.strictEqual(made.status, 201);
-    const body = { backup: made.body.name, kind: 'quote', id: 'qa' };
+    const body = { backup: made.body.name, kind: 'quote', id: '00000000-0000-4000-8000-0a0300000001' };
     assert.strictEqual((await world.jan.post(`${BASE}/restore/lines/preview`, body)).status, 403);
     assert.strictEqual((await world.jan.post(`${BASE}/restore/lines/apply`, { ...body, keys: ['l1'], password: PW })).status, 403);
     assert.strictEqual((await world.jan.get(`${BASE}/restore/kinds`)).status, 403);
@@ -80,8 +80,8 @@ test('een verkeerd wachtwoord wijzigt niets; het goede zet de regel terug, met v
     const made = await world.baas.post(BASE);
     const data = quoteData();
     data.lines.pop();
-    world.db.prepare("UPDATE quotes SET data = ? WHERE id = 'qa'").run(JSON.stringify(data));
-    const target = { backup: made.body.name, kind: 'quote', id: 'qa', keys: ['l2'] };
+    world.db.prepare("UPDATE quotes SET data = ? WHERE id = '00000000-0000-4000-8000-0a0300000001'").run(JSON.stringify(data));
+    const target = { backup: made.body.name, kind: 'quote', id: '00000000-0000-4000-8000-0a0300000001', keys: ['l2'] };
     const view = await world.baas.post(`${BASE}/restore/lines/preview`, target);
     assert.deepStrictEqual(view.body.lines.map((line) => [line.key, line.state]), [['l1', 'gelijk'], ['l2', 'ontbreekt']]);
     const wrong = await world.baas.post(`${BASE}/restore/lines/apply`, { ...target, password: 'Fout-wachtwoord-2026!' });
@@ -102,15 +102,15 @@ test('een record van een andere organisatie is niet te zien en niet terug te zet
   const world = await start();
   try {
     const made = await world.baas.post(BASE);
-    world.db.prepare("UPDATE quotes SET data = '{\"lines\":[]}' WHERE id = 'qx'").run();
-    const target = { backup: made.body.name, kind: 'quote', id: 'qx', keys: ['l1'] };
+    world.db.prepare("UPDATE quotes SET data = '{\"lines\":[]}' WHERE id = '00000000-0000-4000-8000-0a0300000002'").run();
+    const target = { backup: made.body.name, kind: 'quote', id: '00000000-0000-4000-8000-0a0300000002', keys: ['l1'] };
     const view = await world.baas.post(`${BASE}/restore/lines/preview`, target);
     assert.strictEqual(view.status, 200);
     assert.match(view.body.blocked, /niet in de back-up/);
     assert.deepStrictEqual(view.body.lines, []);
     const done = await world.baas.post(`${BASE}/restore/lines/apply`, { ...target, password: PW });
     assert.strictEqual(done.status, 409);
-    assert.strictEqual(JSON.parse(world.db.prepare("SELECT data FROM quotes WHERE id = 'qx'").get().data).lines.length, 0, 'de andere organisatie is ongemoeid');
+    assert.strictEqual(JSON.parse(world.db.prepare("SELECT data FROM quotes WHERE id = '00000000-0000-4000-8000-0a0300000002'").get().data).lines.length, 0, 'de andere organisatie is ongemoeid');
   } finally { world.cleanup(); }
 });
 
@@ -119,7 +119,7 @@ test('een onbekende soort (ook een naam uit het prototype) geeft 400, geen inter
   try {
     const made = await world.baas.post(BASE);
     for (const kind of ['constructor', 'toString', '__proto__', 'bestaat-niet']) {
-      const view = await world.baas.post(`${BASE}/restore/lines/preview`, { backup: made.body.name, kind, id: 'qa' });
+      const view = await world.baas.post(`${BASE}/restore/lines/preview`, { backup: made.body.name, kind, id: '00000000-0000-4000-8000-0a0300000001' });
       assert.strictEqual(view.status, 400, kind);
       const records = await world.baas.get(`${BASE}/restore/records?backup=${encodeURIComponent(made.body.name)}&kind=${kind}`);
       assert.strictEqual(records.status, 400, kind);
@@ -131,9 +131,9 @@ test('een geweigerde terugzetting maakt geen veiligheidsback-up', async () => {
   const world = await start();
   try {
     const made = await world.baas.post(BASE);
-    world.db.prepare("UPDATE quotes SET status = 'verzonden' WHERE id = 'qa'").run();
+    world.db.prepare("UPDATE quotes SET status = 'verzonden' WHERE id = '00000000-0000-4000-8000-0a0300000001'").run();
     const before = fs.readdirSync(world.dir).length;
-    const done = await world.baas.post(`${BASE}/restore/lines/apply`, { backup: made.body.name, kind: 'quote', id: 'qa', keys: ['l1'], password: PW });
+    const done = await world.baas.post(`${BASE}/restore/lines/apply`, { backup: made.body.name, kind: 'quote', id: '00000000-0000-4000-8000-0a0300000001', keys: ['l1'], password: PW });
     assert.strictEqual(done.status, 409);
     assert.strictEqual(fs.readdirSync(world.dir).length, before);
   } finally { world.cleanup(); }
