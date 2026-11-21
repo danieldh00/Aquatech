@@ -12,6 +12,7 @@ const { renderMail, mailStyleOf } = require('../platform/mail-layout');
 const { preferencesOf } = require('../platform/store');
 const { requireVerifiedAddress } = require('../platform/address-lookup');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
+const { stableStringify } = require('../platform/stable-json');
 const { linkExpired } = require('../platform/public-links');
 const { sanitizeDocumentLayout } = require('./document-layout');
 const { sanitizeQuoteTemplates, upsertTemplate, MAX_TEMPLATES, MAX_TEMPLATE_LINES } = require('./quote-templates');
@@ -82,8 +83,6 @@ const STATUSES = Object.keys(Core.STATUSES);
  * @returns {string} Tijdstip als ISO-tekst.
  */
 const currentTimestamp = () => new Date().toISOString();
-
-const { stableStringify } = require('../platform/stable-json');
 
 /**
  * SHA-256 van een tekst.
