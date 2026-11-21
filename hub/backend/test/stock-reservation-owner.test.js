@@ -86,3 +86,18 @@ test('een back-up van vóór migratie 97 met tekst-id\'s wordt met dezelfde afge
   const { legacyUuid } = require('../src/database/pgschema');
   assert.strictEqual(db.prepare('SELECT id FROM suppliers WHERE tenant_id = ?').get(tenantId).id, legacyUuid('oude-leverancier'));
 });
+
+test('een back-up van vóór migratie 97 met een lege tekst in een verplichte id-kolom krijgt een afgeleide uuid, geen NULL', async () => {
+  const { db, tenantId } = scene();
+  const header = JSON.stringify({ format: 'aquatech-backup', version: 2, schemaVersion: 90 });
+  const columns = JSON.stringify({ table: 'suppliers', columns: ['id', 'tenant_id', 'name', 'archived', 'created_at', 'updated_at'] });
+  const rows = [['', tenantId, 'Leeg id BV', 0, '2026-11-21T10:00:00Z', '2026-11-21T10:00:00Z']].map((row) => JSON.stringify(row));
+  /**
+   * De regels van het nagebootste bestand, één voor één.
+   * @returns {AsyncGenerator<string>} De regels.
+   */
+  async function* lines() { for (const line of [header, columns, ...rows]) yield line; }
+  await importLines(db, lines());
+  const { legacyUuid } = require('../src/database/pgschema');
+  assert.strictEqual(db.prepare('SELECT id FROM suppliers WHERE tenant_id = ?').get(tenantId).id, legacyUuid('', true));
+});
