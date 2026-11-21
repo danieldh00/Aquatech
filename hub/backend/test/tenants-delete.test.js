@@ -251,7 +251,6 @@ const STAMP = '2026-11-20T10:00:00.000Z';
  * @param {string} userId Een gebruiker uit die omgeving.
  * @returns {string[]} De tabellen waarin een rij is gezet.
  */
-
 function seedLateTables(db, tenantId, userId) {
   const suffix = `${tenantId.slice(0, 8)}-${crypto.randomBytes(4).toString('hex')}`;
   const rows = {
