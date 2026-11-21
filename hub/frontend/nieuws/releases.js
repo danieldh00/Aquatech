@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.31.9',
+      date: '2026-11-21',
+      title: 'Database: tijdstippen zijn echte tijdstippen',
+      items: [],
+    },
+    {
       version: '1.31.8',
       date: '2026-11-20',
       title: 'Hersteltest Google Drive controleert nu ook de app zelf',
