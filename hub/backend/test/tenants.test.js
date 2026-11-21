@@ -410,9 +410,9 @@ test('migratie: de globale index op gebruikersnaam vervalt, uniek per tenant bli
   const store = createStore(db);
   const t1 = store.ensureTenant().id;
   const t2 = store.createTenant({ name: 'Groen', slug: 'groen' }).tenant.id;
-  db.prepare("INSERT INTO users (id, tenant_id, username, display_name, role, kind, created_at) VALUES ('u1', ?, 'jan', 'Jan', 'klant', 'account', '')").run(t1);
-  db.prepare("INSERT INTO users (id, tenant_id, username, display_name, role, kind, created_at) VALUES ('u2', ?, 'jan', 'Jan', 'klant', 'account', '')").run(t2);
-  assert.throws(() => db.prepare("INSERT INTO users (id, tenant_id, username, display_name, role, kind, created_at) VALUES ('u3', ?, 'jan', 'Jan', 'klant', 'account', '')").run(t2));
+  db.prepare("INSERT INTO users (id, tenant_id, username, display_name, role, kind, created_at) VALUES ('u1', ?, 'jan', 'Jan', 'klant', 'account', '2026-11-20T10:00:00.000Z')").run(t1);
+  db.prepare("INSERT INTO users (id, tenant_id, username, display_name, role, kind, created_at) VALUES ('u2', ?, 'jan', 'Jan', 'klant', 'account', '2026-11-20T10:00:00.000Z')").run(t2);
+  assert.throws(() => db.prepare("INSERT INTO users (id, tenant_id, username, display_name, role, kind, created_at) VALUES ('u3', ?, 'jan', 'Jan', 'klant', 'account', '2026-11-20T10:00:00.000Z')").run(t2));
 });
 
 test('testomgeving neemt geen koppelingen en geheimen van live over', async () => {

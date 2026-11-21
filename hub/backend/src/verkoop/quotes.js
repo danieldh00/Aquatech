@@ -577,7 +577,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
   function followUpDue(tenantId, cutoff, maxReminders, limit, oldest = '') {
     return prepare(`${FULL_SQL} WHERE q.tenant_id = ? AND q.deleted_at IS NULL AND q.status = 'verzonden' AND q.acceptance IS NULL
       AND q.sent_at IS NOT NULL AND q.sent_to IS NOT NULL AND q.followup_count < ? AND COALESCE(q.followup_at, q.sent_at) <= ? AND q.sent_at >= ?
-      ORDER BY COALESCE(q.followup_at, q.sent_at) LIMIT ?`).all(tenantId, maxReminders, cutoff, oldest, limit);
+      ORDER BY COALESCE(q.followup_at, q.sent_at) LIMIT ?`).all(tenantId, maxReminders, cutoff, oldest || '1970-01-01T00:00:00.000Z', limit);
   }
 
   /**

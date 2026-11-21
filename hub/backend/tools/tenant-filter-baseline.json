@@ -43,7 +43,7 @@
     },
     {
       "file": "platform/ai-usage.js",
-      "sql": "SELECT substr(a.created_at, 1, ${}) AS k, ${} FROM ai_usage a WHERE ${} GROUP BY 1 ORDER BY 1"
+      "sql": "SELECT to_char(a.created_at AT TIME ZONE 'UTC', '${}') AS k, ${} FROM ai_usage a WHERE ${} GROUP BY 1 ORDER BY 1"
     },
     {
       "file": "platform/ai-usage.js",

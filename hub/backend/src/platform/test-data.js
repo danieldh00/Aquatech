@@ -618,7 +618,7 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
   const incidentTime = new Date().toISOString();
   for (const [key, state, severity, title] of [['mail', 'open', 'waarschuwing', 'Mailserver niet bereikbaar'], ['drive', 'opgelost', 'fout', 'Back-up naar Google Drive mislukt']]) {
     prepare('INSERT INTO monitor_incidents (id, tenant_id, scope, check_key, severity, state, title, message, first_at, last_at, resolved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(crypto.randomUUID(), seeded.tenantId, 'tenant', key, severity, state, title, 'Testmelding uit de testdata.', incidentTime, incidentTime, state === 'opgelost' ? incidentTime : '');
+      .run(crypto.randomUUID(), seeded.tenantId, 'tenant', key, severity, state, title, 'Testmelding uit de testdata.', incidentTime, incidentTime, state === 'opgelost' ? incidentTime : null);
     counts.monitorIncidents = (counts.monitorIncidents || 0) + 1;
   }
   // Zakelijke webshopklanten: bedrijfsgegevens, en één aanvraag die nog goedgekeurd moet worden.

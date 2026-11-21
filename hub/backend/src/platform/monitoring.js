@@ -79,11 +79,11 @@ function createIncidentStore({ db }) {
    * @param {{ tenantId: string, scope: string, checkKey: string, severity: string, title: string, message: string, at: string, state?: string, resolvedAt?: string, occurrences?: number, notifiedAt?: string }} incident De gegevens.
    * @returns {object} De nieuwe rij.
    */
-  function insert({ tenantId, scope, checkKey, severity, title, message, at, state = 'open', resolvedAt = '', occurrences = 1, notifiedAt = '' }) {
+  function insert({ tenantId, scope, checkKey, severity, title, message, at, state = 'open', resolvedAt = null, occurrences = 1, notifiedAt = null }) {
     const id = crypto.randomUUID();
     prepare(`INSERT INTO monitor_incidents (id, tenant_id, scope, check_key, severity, state, title, message, first_at, last_at, resolved_at, occurrences, notified_at, reminded_at, resolved_notified_at, notify_error)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', '')`)
-      .run(id, tenantId, scope, checkKey, cleanSeverity(severity), state, redact(title, 200), redact(message, MAX_MESSAGE), at, resolvedAt || at, resolvedAt, occurrences, notifiedAt);
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, '')`)
+      .run(id, tenantId, scope, checkKey, cleanSeverity(severity), state, redact(title, 200), redact(message, MAX_MESSAGE), at, resolvedAt || at, resolvedAt || null, occurrences, notifiedAt || null);
     return prepare(`SELECT ${INCIDENT_COLUMNS} FROM monitor_incidents WHERE tenant_id = ? AND id = ?`).get(tenantId, id);
   }
 
@@ -124,7 +124,8 @@ function createIncidentStore({ db }) {
     const params = [tenantId];
     if (state === 'open' || state === 'opgelost') { filters.push('state = ?'); params.push(state); }
     if (scope === 'platform' || scope === 'tenant') { filters.push('scope = ?'); params.push(scope); }
-    if (typeof before === 'string' && before) { filters.push('last_at < ?'); params.push(before.slice(0, 40)); }
+    const beforeMs = typeof before === 'string' ? Date.parse(before.slice(0, 40)) : NaN;
+    if (Number.isFinite(beforeMs)) { filters.push('last_at < ?'); params.push(before.slice(0, 40)); }
     const count = Math.min(MAX_LIST, Math.max(1, Math.floor(Number(limit)) || 50));
     return prepare(`SELECT ${INCIDENT_COLUMNS} FROM monitor_incidents WHERE tenant_id = ?${filters.map((filter) => ` AND ${filter}`).join('')} ORDER BY last_at DESC, id DESC LIMIT ${count}`).all(...params);
   }
@@ -159,7 +160,7 @@ function createIncidentStore({ db }) {
    * @param {string} beforeIso Grens (ISO).
    * @returns {number} Aantal verwijderde incidenten.
    */
-  const prune = (tenantId, beforeIso) => Number(prepare("DELETE FROM monitor_incidents WHERE tenant_id = ? AND state = 'opgelost' AND resolved_at <> '' AND resolved_at < ?")
+  const prune = (tenantId, beforeIso) => Number(prepare("DELETE FROM monitor_incidents WHERE tenant_id = ? AND state = 'opgelost' AND resolved_at IS NOT NULL AND resolved_at < ?")
     .run(tenantId, beforeIso).changes) || 0;
 
   return { findOpen, insert, update, resolve, list, counts, openOf, prune };
@@ -308,7 +309,7 @@ function createMonitor({
         if (appLog) appLog.info('bewaking', `Opgelost: ${open.title}`, { tenantId: scope === 'platform' ? null : owner, data: { controle: key } });
         if (!result.skip && settingsConfig.notifyRecovery && !silent && open.notified_at) {
           const outcome = await notify(owner, row, 'opgelost', settingsConfig);
-          row = incidents.update(owner, open.id, { resolved_notified_at: outcome.sent ? nowIso() : '', notify_error: outcome.error });
+          row = incidents.update(owner, open.id, { resolved_notified_at: outcome.sent ? nowIso() : null, notify_error: outcome.error });
         }
         return { incident: publicIncident(row), opened: false, resolved: true };
       }
@@ -343,7 +344,7 @@ function createMonitor({
         const sentAt = nowIso();
         const fields = { notify_error: outcome.error };
         // Ook een volledig mislukte melding telt als poging: anders volgt bij elke ronde een nieuwe poging (en logregel).
-        if (kind === 'open') Object.assign(fields, { notified_at: sentAt, reminded_at: '' });
+        if (kind === 'open') Object.assign(fields, { notified_at: sentAt, reminded_at: null });
         else fields.reminded_at = sentAt;
         row = incidents.update(owner, row.id, fields);
       }
