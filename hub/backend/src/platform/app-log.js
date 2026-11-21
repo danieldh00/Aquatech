@@ -12,6 +12,7 @@ const crypto = require('crypto');
 const { redact } = require('./error-report');
 const { asSystem } = require('../database/tenant-scope');
 const { transaction } = require('../database/db');
+const { isInstant } = require('./instants');
 
 const LEVELS = ['info', 'warn', 'error'];
 const MAX_MESSAGE = 500;
@@ -276,15 +277,16 @@ function createAppLog({ db, mainTenantId, flushMs = 2000, batchSize = 50, perMin
     const wanted = levels.filter((level) => LEVELS.includes(level));
     if (wanted.length) { where.push(`level IN (${wanted.map(() => '?').join(', ')})`); args.push(...wanted); }
     if (source) { where.push('source = ?'); args.push(String(source).slice(0, 40)); }
-    if (from) { where.push('created_at >= ?'); args.push(from); }
-    if (to) { where.push('created_at <= ?'); args.push(to); }
+    // Een tijdstip dat geen tijdstip is (uit de zoekopdracht) wordt genegeerd: de kolom is een echt tijdstip en weigert tekst.
+    if (isInstant(from)) { where.push('created_at >= ?'); args.push(from); }
+    if (isInstant(to)) { where.push('created_at <= ?'); args.push(to); }
     const text = String(search || '').trim().slice(0, 100);
     if (text) {
       where.push("(request_id = ? OR error_code = ? OR lower(message) LIKE lower(?) ESCAPE '\\')");
       args.push(text, text, `%${text.replace(/[\\%_]/g, (character) => `\\${character}`)}%`);
     }
     const [cursorAt, cursorId] = String(before || '').split('|');
-    if (cursorAt && cursorId) {
+    if (isInstant(cursorAt) && cursorId) {
       where.push('(created_at < ? OR (created_at = ? AND id < ?))');
       args.push(cursorAt, cursorAt, cursorId);
     }

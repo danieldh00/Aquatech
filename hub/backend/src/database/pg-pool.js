@@ -70,7 +70,7 @@ function poolFor(url, config) {
 async function prepareClient(client, schema, scope) {
   const state = client.aquatechState || (client.aquatechState = { ready: false, schema: null, scope: null });
   const statements = [];
-  if (!state.ready) statements.push(`SET statement_timeout = ${STATEMENT_TIMEOUT_MS}`);
+  if (!state.ready) statements.push(`SET statement_timeout = ${STATEMENT_TIMEOUT_MS}`, "SET TIME ZONE 'UTC'");
   if (state.schema !== schema) statements.push(`SET search_path TO "${schema}"`);
   if (state.scope !== scope) {
     // Beperkt = als de rol zonder BYPASSRLS (de policies gelden); leeg = weer als de eigenaar.

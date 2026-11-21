@@ -148,7 +148,7 @@ function createAiUsageStore(db) {
     const condition = where(tenantIds, cleanFilter);
     const keyLength = cleanFilter.period === 'month' ? 7 : 10;
     const totals = shapeTotals(prepare(`SELECT ${SUMS} FROM ai_usage a WHERE ${condition.sql}`).get(...condition.args));
-    const byPeriod = prepare(`SELECT substr(a.created_at, 1, ${keyLength}) AS k, ${SUMS} FROM ai_usage a WHERE ${condition.sql} GROUP BY 1 ORDER BY 1`)
+    const byPeriod = prepare(`SELECT to_char(a.created_at AT TIME ZONE 'UTC', '${keyLength === 7 ? 'YYYY-MM' : 'YYYY-MM-DD'}') AS k, ${SUMS} FROM ai_usage a WHERE ${condition.sql} GROUP BY 1 ORDER BY 1`)
       .all(...condition.args).map((row) => ({ key: row.k, ...shapeTotals(row) }));
     const byUser = prepare(`SELECT a.user_id AS k, u.display_name, u.username, u.kind, ${SUMS} FROM ai_usage a LEFT JOIN users u ON u.id = a.user_id
         WHERE ${condition.sql} GROUP BY a.user_id, u.display_name, u.username, u.kind ORDER BY cost_eur_micro DESC, requests DESC`)

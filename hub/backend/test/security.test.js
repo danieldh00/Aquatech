@@ -64,7 +64,7 @@ test('hoofdsleutel: uit de omgeving, of eenmalig aangemaakt in de datamap (0600)
 test('onversleutelde geheimen van een oudere versie worden bij de start versleuteld', () => {
   const db = openDb();
   const tenant = createStore(db).ensureTenant();
-  db.prepare("INSERT INTO settings (tenant_id, key, value, updated_at) VALUES (?, 'accessCode', ?, 'nu')").run(tenant.id, JSON.stringify('oude-code'));
+  db.prepare("INSERT INTO settings (tenant_id, key, value, updated_at) VALUES (?, 'accessCode', ?, '2026-11-20T10:00:00.000Z')").run(tenant.id, JSON.stringify('oude-code'));
   const vault = createVault(crypto.randomBytes(32));
   assert.strictEqual(createSettings({ db, tenantId: tenant.id, vault }).get('accessCode'), 'oude-code');
   const raw = db.prepare("SELECT value FROM settings WHERE key = 'accessCode'").get().value;

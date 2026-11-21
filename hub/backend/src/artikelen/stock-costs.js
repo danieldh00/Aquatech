@@ -302,7 +302,7 @@ function createStockCosts(db) {
         SELECT id, valid_from, note, price, user_name, created_at FROM stock_cost_prices WHERE tenant_id = ? AND item_id = ?
         ORDER BY valid_from DESC, created_at DESC LIMIT ${HISTORY_LIMIT}) AS price_rows
       UNION ALL
-      SELECT 'laag' AS part, id, received_at AS moment, source AS label, qty, remaining, unit_cost AS amount, '' AS user_name, created_at FROM (
+      SELECT 'laag' AS part, id, to_char(received_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS moment, source AS label, qty, remaining, unit_cost AS amount, '' AS user_name, created_at FROM (
         SELECT id, received_at, source, qty, remaining, unit_cost, created_at FROM stock_layers WHERE tenant_id = ? AND item_id = ? AND (remaining > 0 OR unit_cost IS NULL)
         ORDER BY received_at, created_at, id LIMIT ${HISTORY_LIMIT}) AS layer_rows`).all(tenantId, itemId, tenantId, itemId);
     const prices = rows.filter((row) => row.part === 'prijs')
