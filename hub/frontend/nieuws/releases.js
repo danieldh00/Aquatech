@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.32.0',
+      date: '2026-11-21',
+      title: 'Database: gegevensveld van bestellingen, werkorders, facturen en offertes is JSONB',
+      items: [],
+    },
+    {
       version: '1.31.9',
       date: '2026-11-21',
       title: 'Database: tijdstippen zijn echte tijdstippen',
