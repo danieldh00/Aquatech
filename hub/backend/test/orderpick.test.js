@@ -133,7 +133,7 @@ test('minder gepickt of niet aanwezig: het verschil blijft op backorder en de pa
   assert.deepStrictEqual([part.body.complete, part.body.status], [false, 'nieuw']);
   assert.strictEqual(db.prepare("SELECT on_hand FROM stock_items WHERE code = 'BUS'").get().on_hand, 44);
   assert.strictEqual(db.prepare("SELECT on_hand FROM stock_items WHERE code = 'PIJP'").get().on_hand, 20, 'niet aanwezig = niet afgeboekt');
-  assert.strictEqual(Number(db.prepare('SELECT SUM(qty) AS n FROM stock_reservations WHERE work_order_id = ?').get(`order:${id}`).n), 6, 'reservering: 4 BUS + 2 PIJP');
+  assert.strictEqual(Number(db.prepare('SELECT SUM(qty) AS n FROM stock_reservations WHERE web_order_id = ?').get(id).n), 6, 'reservering: 4 BUS + 2 PIJP');
   const order = (await admin.get(`/app/api/admin/web-orders/${id}`)).body.order;
   assert.deepStrictEqual(order.lines.map((line) => line.shippedQty), [6, 0]);
   assert.strictEqual(order.shipments.length, 1);

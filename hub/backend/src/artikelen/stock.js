@@ -210,7 +210,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         COALESCE(r.qty, 0) AS reserved, COALESCE(r.orders, 0) AS orders, COALESCE(f.orders, 0) AS family_orders
       FROM stock_items i
       LEFT JOIN (SELECT item_id, SUM(qty) AS qty, COUNT(*) AS orders FROM stock_reservations WHERE tenant_id = ?${reservedFilter} GROUP BY item_id) r ON r.item_id = i.id
-      LEFT JOIN (SELECT sibling.parent_id, COUNT(DISTINCT family.work_order_id) AS orders FROM stock_reservations family
+      LEFT JOIN (SELECT sibling.parent_id, COUNT(DISTINCT COALESCE(family.work_order_id, family.web_order_id)) AS orders FROM stock_reservations family
           JOIN stock_items sibling ON sibling.id = family.item_id AND sibling.tenant_id = ?
           WHERE family.tenant_id = ? AND sibling.archived = 0 AND sibling.parent_id IS NOT NULL${familyFilter} GROUP BY sibling.parent_id) f
         ON f.parent_id = COALESCE(i.parent_id, i.id)
@@ -241,12 +241,12 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    */
   function reservationsOf(tenantId, itemId = null) {
     const args = [tenantId];
-    let sql = `SELECT r.item_id, r.work_order_id, r.qty, r.updated_at, COALESCE(w.number, o.number) AS number,
+    let sql = `SELECT r.item_id, COALESCE(r.work_order_id, 'order:' || r.web_order_id) AS work_order_id, r.qty, r.updated_at, COALESCE(w.number, o.number) AS number,
         COALESCE(w.title, CASE WHEN o.id IS NULL THEN NULL ELSE 'Webshopbestelling' END) AS title, COALESCE(w.customer, o.customer_name) AS customer,
         COALESCE(w.status, o.status) AS status, w.planned_date, i.code, i.name, i.unit
       FROM stock_reservations r JOIN stock_items i ON i.id = r.item_id
       LEFT JOIN work_orders w ON w.id = r.work_order_id AND w.tenant_id = r.tenant_id
-      LEFT JOIN web_orders o ON r.work_order_id = 'order:' || o.id AND o.tenant_id = r.tenant_id
+      LEFT JOIN web_orders o ON o.id = r.web_order_id AND o.tenant_id = r.tenant_id
       WHERE r.tenant_id = ?`;
     if (itemId) { sql += ' AND r.item_id = ?'; args.push(String(itemId)); }
     return prepare(`${sql} ORDER BY w.planned_date, w.number`).all(...args).map((reservationRow) => ({
@@ -563,7 +563,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   function heldByOrders(tenantId, itemIds) {
     if (!itemIds.length) return null;
     const numbers = prepare(`SELECT DISTINCT o.number FROM stock_reservations r
-        JOIN web_orders o ON o.tenant_id = r.tenant_id AND r.work_order_id = 'order:' || o.id
+        JOIN web_orders o ON o.tenant_id = r.tenant_id AND o.id = r.web_order_id
       WHERE r.tenant_id = ? AND r.item_id IN (${itemIds.map(() => '?').join(', ')}) ORDER BY o.number`).all(tenantId, ...itemIds).map((row) => row.number);
     if (!numbers.length) return null;
     const shown = numbers.slice(0, 5).join(', ');
@@ -1316,7 +1316,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   // ---------- Webshopbestellingen: reserveren en afboeken ----------
   /**
    * Reserveert voorraad voor een webshopbestelling. De reservering staat in
-   * stock_reservations onder work_order_id 'order:<id>', dus elke
+   * stock_reservations onder web_order_id (een bestelling, naast work_order_id voor een werkorder), dus elke
    * beschikbaarheidsberekening houdt er rekening mee. Moet binnen de
    * transactie van de aanroeper lopen.
    * @param {string} tenantId Id van de omgeving.
@@ -1325,9 +1325,9 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @returns {void}
    */
   function reserveOrder(tenantId, orderId, lines) {
-    const put = prepare('INSERT INTO stock_reservations (tenant_id, work_order_id, item_id, qty, updated_at) VALUES (?, ?, ?, ?, ?)');
+    const put = prepare('INSERT INTO stock_reservations (tenant_id, web_order_id, item_id, qty, updated_at) VALUES (?, ?, ?, ?, ?)');
     const timestamp = currentTimestamp();
-    for (const line of lines) put.run(tenantId, `order:${orderId}`, line.itemId, round3(line.qty), timestamp);
+    for (const line of lines) put.run(tenantId, String(orderId), line.itemId, round3(line.qty), timestamp);
     dirty(tenantId);
   }
 
@@ -1345,7 +1345,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     if (!needed.size) return [];
     const ids = [...needed.keys()];
     const rows = prepare(`SELECT i.id, i.name, i.on_hand, i.stock_managed,
-        (SELECT COALESCE(SUM(r.qty), 0) FROM stock_reservations r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id AND r.work_order_id <> ?) AS reserved
+        (SELECT COALESCE(SUM(r.qty), 0) FROM stock_reservations r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id AND COALESCE(r.work_order_id, 'order:' || r.web_order_id) <> ?) AS reserved
       FROM stock_items i WHERE i.tenant_id = ? AND i.id IN (${ids.map(() => '?').join(', ')})`).all(String(ownKey), tenantId, ...ids);
     return rows
       .filter((itemRow) => itemRow.stock_managed === undefined || Number(itemRow.stock_managed))
@@ -1360,7 +1360,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @returns {void}
    */
   function releaseOrder(tenantId, orderId) {
-    prepare('DELETE FROM stock_reservations WHERE tenant_id = ? AND work_order_id = ?').run(tenantId, `order:${orderId}`);
+    prepare('DELETE FROM stock_reservations WHERE tenant_id = ? AND web_order_id = ?').run(tenantId, String(orderId));
     dirty(tenantId);
   }
 

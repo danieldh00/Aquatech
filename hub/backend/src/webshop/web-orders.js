@@ -1028,7 +1028,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
     const orderIds = new Set();
     for (let start = 0; start < ids.length; start += 200) {
       const chunk = ids.slice(start, start + 200);
-      for (const row of prepare(`SELECT DISTINCT work_order_id FROM stock_reservations WHERE tenant_id = ? AND item_id IN (${chunk.map(() => '?').join(', ')}) AND work_order_id LIKE 'order:%'`).all(tenantId, ...chunk)) orderIds.add(String(row.work_order_id).slice(6));
+      for (const row of prepare(`SELECT DISTINCT web_order_id FROM stock_reservations WHERE tenant_id = ? AND item_id IN (${chunk.map(() => '?').join(', ')}) AND web_order_id IS NOT NULL`).all(tenantId, ...chunk)) orderIds.add(String(row.web_order_id));
     }
     if (!orderIds.size) return [];
     const candidates = getMany(tenantId, [...orderIds].slice(0, EXPORT_LIMIT)).filter((order) => order.status === 'nieuw' && order.backorderSince && !order.backorderReadyAt && pickable(order));
