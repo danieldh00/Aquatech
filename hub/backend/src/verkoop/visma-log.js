@@ -80,7 +80,7 @@ function createVismaLog(db) {
   function list(tenantId, { limit = DEFAULT_PAGE, before = '', onlyErrors = false } = {}) {
     const pageSize = Math.min(MAX_PAGE, Math.max(1, Math.floor(Number(limit)) || DEFAULT_PAGE));
     const [beforeTime, beforeId] = String(before || '').split('|');
-    const paged = Boolean(beforeTime && beforeId);
+    const paged = Boolean(beforeTime && beforeId && /^\d{4}-\d{2}-\d{2}/.test(beforeTime) && Number.isFinite(Date.parse(beforeTime)));
     const limitArgs = [pageSize + 1];
     let rows;
     if (onlyErrors && paged) rows = prepare(`SELECT ${COLUMNS} FROM visma_log WHERE tenant_id = ? AND ok = 0 AND (created_at < ? OR (created_at = ? AND id < ?)) ORDER BY created_at DESC, id DESC LIMIT ?`).all(tenantId, beforeTime, beforeTime, beforeId, ...limitArgs);
