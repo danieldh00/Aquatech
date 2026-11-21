@@ -17,6 +17,12 @@ test('werkorders: listAsync geeft hetzelfde als list, met filters en tenant-isol
   const user = { id: owner.user ? owner.user.id : owner.id, tenant_id: main };
   const unlinked = workOrders.createReceived(user, { title: 'Zonder klant' });
   const linked = workOrders.createReceived(user, { title: 'Met klant' }, { customerId: customer.id });
+  // Een klant ziet een werkorder via een niet-concept-offerte aan zijn account.
+  const quoteId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  db.prepare(`INSERT INTO quotes (id, tenant_id, owner_id, number, status, title, data, created_at, updated_at, customer_id)
+    VALUES (?, ?, ?, 'O2026-0001', 'akkoord', 'Offerte', '{}', ?, ?, ?)`).run(quoteId, main, user.id, now, now, customer.id);
+  db.prepare('UPDATE work_orders SET quote_id = ? WHERE id = ?').run(quoteId, linked.id);
   /**
    * Gesorteerde id's van een lijst werkorders.
    * @param {object[]} items De werkorders.
@@ -30,5 +36,9 @@ test('werkorders: listAsync geeft hetzelfde als list, met filters en tenant-isol
   const unknown = crypto.randomUUID();
   assert.deepStrictEqual(await workOrders.listAsync(main, { quoteId: unknown }), workOrders.list(main, { quoteId: unknown }));
   assert.deepStrictEqual(await workOrders.listAsync(main, { customerId: unknown }), []);
-  assert.deepStrictEqual(await workOrders.listAsync(main, { customerId: customer.id }), workOrders.list(main, { customerId: customer.id }));
+  const forCustomer = await workOrders.listAsync(main, { customerId: customer.id });
+  assert.deepStrictEqual(ids(forCustomer), [linked.id]);
+  assert.ok(forCustomer[0].data, 'het klantportaal krijgt de data erbij');
+  assert.deepStrictEqual(forCustomer, workOrders.list(main, { customerId: customer.id }));
+  assert.deepStrictEqual(ids(await workOrders.listAsync(main, { quoteId })), [linked.id]);
 });
