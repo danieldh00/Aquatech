@@ -45,9 +45,16 @@ test('limiet per ontvanger: mislukte verzending telt niet, de zesde mail wordt g
     assert.deepStrictEqual([refused.status, refused.body.error], [429, 'recipient_limited']);
     assert.strictEqual(sent.length, 5);
 
+    // Parallelle verzoeken kunnen niet langs de limiet: voor een nieuw adres gaan er hoogstens 5 mails door.
+    const otherQuote = (await kees.post('/app/api/quotes', { data: { title: 'Tuin 2', customer: { name: 'Fam. B', email: 'b@klant.test' }, lines: [{ section: 'overig', description: 'Post', qty: 1, price: 10 }] } })).body.id;
+    const parallel = await Promise.all(Array.from({ length: 12 }, () => kees.post(`/app/api/quotes/${otherQuote}/send`, { to: 'b@klant.test', url: URL_OK })));
+    assert.strictEqual(parallel.filter((answer) => answer.status === 200).length, 5);
+    assert.strictEqual(parallel.filter((answer) => answer.status === 429).length, 7);
+    assert.strictEqual(sent.length, 10);
+
     const bulk = (await kees.post('/app/api/quotes-bulk/send', { ids: [quoteId], url: URL_OK })).body;
     assert.deepStrictEqual([bulk.sent.length, bulk.skipped[0].reason], [0, 'Naar dit e-mailadres is het afgelopen uur al vaak gemaild.']);
-    assert.strictEqual(sent.length, 5);
+    assert.strictEqual(sent.length, 10);
   } finally {
     server.close();
   }
