@@ -4,6 +4,7 @@
 const test = require('node:test');
 const { after } = test;
 const assert = require('node:assert');
+const crypto = require('node:crypto');
 const fs = require('fs');
 const path = require('path');
 const { createApp } = require('../src/server');
@@ -291,7 +292,7 @@ test('Beheer krijgt ook van een onvolledig opgeslagen versie alle blokken met li
   const tenantId = db.prepare('SELECT id FROM tenants ORDER BY created_at LIMIT 1').get().id;
   const partial = JSON.stringify({ hero: { title: 'Oud' } });
   db.prepare('INSERT INTO shop_content (id, tenant_id, key, draft, published, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
-    .run('oud-site', tenantId, 'site', partial, partial, new Date().toISOString());
+    .run(crypto.randomUUID(), tenantId, 'site', partial, partial, new Date().toISOString());
   const { body } = await admin.get('/app/api/admin/shop-content');
   for (const version of [body.site.draft, body.site.published]) {
     assert.strictEqual(version.hero.title, 'Oud');

@@ -60,16 +60,19 @@ test('stilstand, trage en mislukte taken en bewakingsincidenten komen in het log
   } finally { close(); }
 });
 
+const OLD_WARN_ID = '00000000-0000-4000-8000-0000000000d1';
+const OLD_ERROR_ID = '00000000-0000-4000-8000-0000000000d2';
+
 test('het onderhoud ruimt oude logregels op volgens de bewaartermijn van de omgeving', async () => {
   const { db, app, main, close } = await setup();
   try {
     const old = new Date(Date.now() - 20 * 86400000).toISOString();
     const insert = db.prepare("INSERT INTO app_logs (id, tenant_id, scope, created_at, level, source, message) VALUES (?, ?, 'tenant', ?, ?, 'traag', 'oud')");
-    insert.run('oud-warn', main, old, 'warn');
-    insert.run('oud-fout', main, old, 'error');
+    insert.run(OLD_WARN_ID, main, old, 'warn');
+    insert.run(OLD_ERROR_ID, main, old, 'error');
     app.locals.maintenance();
     const left = db.prepare('SELECT id FROM app_logs WHERE tenant_id = ?').all(main).map((row) => row.id);
-    assert.ok(!left.includes('oud-warn'), 'waarschuwing na 14 dagen weg');
-    assert.ok(left.includes('oud-fout'), 'fout blijft 30 dagen');
+    assert.ok(!left.includes(OLD_WARN_ID), 'waarschuwing na 14 dagen weg');
+    assert.ok(left.includes(OLD_ERROR_ID), 'fout blijft 30 dagen');
   } finally { close(); }
 });

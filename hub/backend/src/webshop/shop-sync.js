@@ -196,7 +196,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
   function writeLinks(tenantId, links, timestamp, staleBefore) {
     if (!links.length) return;
     prepare(`UPDATE stock_items i SET shop_product_id = v.product_id, shop_error = v.error, shop_synced_at = ?
-      FROM unnest(?::text[], ?::text[], ?::text[]) AS v(id, product_id, error)
+      FROM unnest(?::uuid[], ?::text[], ?::text[]) AS v(id, product_id, error)
       WHERE i.tenant_id = ? AND i.id = v.id
         AND (i.shop_product_id IS DISTINCT FROM v.product_id OR COALESCE(i.shop_error, '') <> v.error OR i.shop_synced_at IS NULL OR i.shop_synced_at < ?)`)
       .run(timestamp, links.map((link) => link.itemId), links.map((link) => link.productId), links.map((link) => link.error), tenantId, staleBefore);
@@ -338,9 +338,9 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
       }
       if (unlinkedIds.length) {
         prepare(`UPDATE stock_items SET shop_product_id = NULL, shop_price_seen = NULL, shop_stock_seen = NULL, shop_dirty = 0,
-          shop_error = 'Niet (meer) gevonden in de webshop.' WHERE tenant_id = ? AND id = ANY(?::text[])`).run(tenantId, unlinkedIds);
+          shop_error = 'Niet (meer) gevonden in de webshop.' WHERE tenant_id = ? AND id = ANY(?::uuid[])`).run(tenantId, unlinkedIds);
       }
-      if (managedIds.length) prepare('UPDATE stock_items SET stock_managed = 1 WHERE tenant_id = ? AND id = ANY(?::text[]) AND stock_managed = 0').run(tenantId, managedIds);
+      if (managedIds.length) prepare('UPDATE stock_items SET stock_managed = 1 WHERE tenant_id = ? AND id = ANY(?::uuid[]) AND stock_managed = 0').run(tenantId, managedIds);
       writeLinks(tenantId, links, timestamp, staleBefore);
     });
 
@@ -373,7 +373,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
       // Alleen artikelen die écht anders zijn (of al lang niet bijgewerkt) worden geschreven: een ongewijzigde ronde schrijft niets.
       if (confirmed.length) {
         prepare(`UPDATE stock_items i SET shop_price_seen = v.price_seen, shop_stock_seen = v.stock_seen, shop_dirty = 0, shop_error = '', shop_synced_at = ?
-          FROM unnest(?::text[], ?::numeric[], ?::numeric[]) AS v(id, price_seen, stock_seen)
+          FROM unnest(?::uuid[], ?::numeric[], ?::numeric[]) AS v(id, price_seen, stock_seen)
           WHERE i.tenant_id = ? AND i.id = v.id
             AND (i.shop_dirty <> 0 OR COALESCE(i.shop_error, '') <> '' OR i.shop_price_seen IS DISTINCT FROM v.price_seen
               OR i.shop_stock_seen IS DISTINCT FROM v.stock_seen OR i.shop_synced_at IS NULL OR i.shop_synced_at < ?)`)
@@ -382,7 +382,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
       }
       if (failed.length) {
         prepare(`UPDATE stock_items i SET shop_dirty = 1, shop_error = v.error
-          FROM unnest(?::text[], ?::text[]) AS v(id, error) WHERE i.tenant_id = ? AND i.id = v.id`)
+          FROM unnest(?::uuid[], ?::text[]) AS v(id, error) WHERE i.tenant_id = ? AND i.id = v.id`)
           .run(failed.map((entry) => entry.itemId), failed.map((entry) => entry.error), tenantId);
       }
     });

@@ -1,6 +1,7 @@
 // Foto's bij werkorders (versleuteld opgeslagen, EXIF eruit) en het klantdossier.
 const test = require('node:test');
 const assert = require('node:assert');
+const crypto = require('node:crypto');
 const { createApp } = require('../src/server');
 const { createPdokFake } = require('./helpers/pdok-fake');
 const { openDb } = require('../src/database/db');
@@ -286,7 +287,7 @@ test('API: maximaal aantal foto\'s per werkorder en grote foto via de eigen limi
     const row = db.prepare('SELECT * FROM work_order_photos WHERE id = ?').get(id);
     const ins = db.prepare(`INSERT INTO work_order_photos (id, tenant_id, work_order_id, uploaded_by, kind, caption, customer_visible, mime, width, height, size, taken_at, image, thumb, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-    for (let i = 0; i < 99; i++) ins.run(`x${i}`, row.tenant_id, row.work_order_id, null, 'voor', '', 1, row.mime, 1, 1, 1, null, 'f1:a:b:c', 'f1:a:b:c', row.created_at);
+    for (let i = 0; i < 99; i++) ins.run(crypto.randomUUID(), row.tenant_id, row.work_order_id, null, 'voor', '', 1, row.mime, 1, 1, 1, null, 'f1:a:b:c', 'f1:a:b:c', row.created_at);
     const response = await kees.post(`/app/api/workorders/${wo.id}/photos`, { image: fakeJpeg().toString('base64') });
     assert.strictEqual(response.status, 409);
     assert.strictEqual(response.body.error, 'too_many_photos');

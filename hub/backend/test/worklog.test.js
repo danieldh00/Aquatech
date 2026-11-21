@@ -182,22 +182,27 @@ test('API: uren en materiaal boeken, eigen regels, collega alleen met planning, 
   }
 });
 
+/** Vaste uuid's van de gebruiker en de werkorder in de voorraadkoppeling. */
+const USER_ID = '00000000-0000-4000-8000-0000000000a1';
+const WORK_ORDER_ID = '00000000-0000-4000-8000-0000000000a2';
+
 test('voorraadkoppeling: hook bij boeken, wijzigen en verwijderen; afboeking in stock_movement_id', () => {
   const db = openDb();
   const store = createStore(db);
   const tid = store.ensureTenant().id;
   const ts = new Date().toISOString();
-  db.prepare("INSERT INTO users (id, tenant_id, username, display_name, role, kind, password_hash, created_at) VALUES ('u1', ?, 'kees', 'Kees', 'installateur', 'account', '', ?)").run(tid, ts);
+  db.prepare("INSERT INTO users (id, tenant_id, username, display_name, role, kind, password_hash, created_at) VALUES (?, ?, 'kees', 'Kees', 'installateur', 'account', '', ?)").run(USER_ID, tid, ts);
   db.prepare(`INSERT INTO work_orders (id, tenant_id, owner_id, number, status, title, customer, address, data, created_at, updated_at)
-    VALUES ('w1', ?, 'u1', 'WO-2026-0001', 'bezig', 'Klus', 'Klant', '', '{}', ?, ?)`).run(tid, ts, ts);
+    VALUES (?, ?, ?, 'WO-2026-0001', 'bezig', 'Klus', 'Klant', '', '{}', ?, ?)`).run(WORK_ORDER_ID, tid, USER_ID, ts, ts);
   const calls = [];
+  const movementIds = ['00000000-0000-4000-8000-0000000000b1', '00000000-0000-4000-8000-0000000000b2'];
   const log = createWorkLogStore(db);
-  log.hook((tenantId, row, user) => { calls.push([row.code, row.qty, row.deleted, user.id]); return row.deleted ? null : `mut-${calls.length}`; });
-  const who = { actor: { id: 'u1' }, forUser: { id: 'u1', displayName: 'Kees' } };
-  const out = log.addMaterial(tid, 'w1', { usedOn: '2026-05-01', code: 'SPR-1', description: 'Sproeier', qty: 3 }, who);
-  assert.strictEqual(out.entry.stockMovementId, 'mut-1');
-  assert.strictEqual(log.updateMaterial(tid, out.entry.id, { qty: 2 }, who).entry.stockMovementId, 'mut-2');
-  assert.deepStrictEqual(log.usedByCode(tid, 'w1'), { 'SPR-1': 2 });
-  assert.ok(log.removeMaterial(tid, out.entry.id, { id: 'u1' }));
-  assert.deepStrictEqual(calls, [['SPR-1', 3, false, 'u1'], ['SPR-1', 2, false, 'u1'], ['SPR-1', 2, true, 'u1']]);
+  log.hook((tenantId, row, user) => { calls.push([row.code, row.qty, row.deleted, user.id]); return row.deleted ? null : movementIds[calls.length - 1]; });
+  const who = { actor: { id: USER_ID }, forUser: { id: USER_ID, displayName: 'Kees' } };
+  const out = log.addMaterial(tid, WORK_ORDER_ID, { usedOn: '2026-05-01', code: 'SPR-1', description: 'Sproeier', qty: 3 }, who);
+  assert.strictEqual(out.entry.stockMovementId, movementIds[0]);
+  assert.strictEqual(log.updateMaterial(tid, out.entry.id, { qty: 2 }, who).entry.stockMovementId, movementIds[1]);
+  assert.deepStrictEqual(log.usedByCode(tid, WORK_ORDER_ID), { 'SPR-1': 2 });
+  assert.ok(log.removeMaterial(tid, out.entry.id, { id: USER_ID }));
+  assert.deepStrictEqual(calls, [['SPR-1', 3, false, USER_ID], ['SPR-1', 2, false, USER_ID], ['SPR-1', 2, true, USER_ID]]);
 });

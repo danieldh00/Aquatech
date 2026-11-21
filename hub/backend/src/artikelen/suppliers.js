@@ -163,7 +163,7 @@ function createSupplierStore(db) {
    * @returns {boolean} true als de naam bezet is.
    */
   function nameTaken(tenantId, name, exceptId = '') {
-    return Boolean(prepare('SELECT id FROM suppliers WHERE tenant_id = ? AND LOWER(name) = LOWER(?) AND id <> ?').get(tenantId, name, exceptId));
+    return Boolean(prepare('SELECT id FROM suppliers WHERE tenant_id = ? AND LOWER(name) = LOWER(?) AND id::text <> ?').get(tenantId, name, exceptId));
   }
 
   /**

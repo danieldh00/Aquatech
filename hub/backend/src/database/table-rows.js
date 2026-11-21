@@ -8,6 +8,7 @@
 // tenant in de AAD) gaan ongewijzigd mee. De hoofdsleutel blijft dus nodig.
 const crypto = require('crypto');
 const { listTables, tableColumns, schemaVersion, deferForeignKeys } = require('./db');
+const { UUID_COLUMNS, legacyUuid } = require('./pgschema');
 
 const BATCH = 200;
 // Tabellen met grote rijen (foto's) in kleinere porties, zodat het geheugen klein blijft.
@@ -26,6 +27,7 @@ function describe(db) {
     const primaryKey = keyColumns.map((column) => column.name);
     tables[name] = {
       columns: columnInfo.map((column) => column.name),
+      required: columnInfo.filter((column) => column.notnull).map((column) => column.name),
       order: primaryKey.length ? primaryKey : columnInfo.map((column) => column.name),
       keyed: primaryKey.length > 0,
     };
@@ -160,6 +162,7 @@ async function importLines(db, lines, options = {}) {
   let currentTable = '';
   let positions = [];
   let splitReservationOwner = false;
+  let uuidAt = [];
   db.exec('BEGIN');
   try {
     if (options.deferForeignKeys) deferForeignKeys(db);
@@ -182,6 +185,9 @@ async function importLines(db, lines, options = {}) {
         // Reserveringen uit een back-up van vóór migratie 96 hadden één kolom: `order:<id>` voor een webshopbestelling.
         splitReservationOwner = parsed.table === 'stock_reservations' && !parsed.columns.includes('web_order_id') && positions.some((entry) => entry.column === 'work_order_id');
         const columnNames = positions.map((entry) => entry.column);
+        // Id's uit een back-up van vóór migratie 97 zijn tekst: niet-uuid-waarden krijgen dezelfde afgeleide uuid als in de migratie.
+        const uuidColumns = UUID_COLUMNS[parsed.table] || [];
+        uuidAt = [...positions.map((entry) => (uuidColumns.includes(entry.column) ? (target.required.includes(entry.column) ? 'required' : true) : false)), ...(splitReservationOwner ? [true] : [])];
         if (splitReservationOwner) columnNames.push('web_order_id');
         insert = db.prepare(`INSERT INTO ${parsed.table} (${columnNames.join(', ')}) VALUES (${columnNames.map(() => '?').join(', ')})`);
         currentTable = parsed.table;
@@ -196,7 +202,7 @@ async function importLines(db, lines, options = {}) {
         values.push(owner.startsWith('order:') ? owner.slice(6) : null);
         if (owner.startsWith('order:')) values[ownerAt] = null;
       }
-      insert.run(...values);
+      insert.run(...values.map((value, index) => (uuidAt[index] ? legacyUuid(value, uuidAt[index] === 'required') : value)));
       counts[currentTable]++;
     }
     if (!header) throw new Error('Lege back-up.');

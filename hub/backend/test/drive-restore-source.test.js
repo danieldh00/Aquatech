@@ -46,7 +46,7 @@ async function start() {
   const store = createStore(db);
   const tenantId = store.ensureTenant().id;
   const { user: baas } = await store.createAccount(tenantId, { username: 'baas', role: 'beheerder', password: PW }, { platformAdmin: true });
-  db.prepare("INSERT INTO quotes (id, tenant_id, owner_id, number, status, title, customer, total_excl, total_incl, data, created_at, updated_at) VALUES ('qa', ?, ?, 'O2026-0001', 'concept', 'Tuin', 'Jansen', 200, 242, ?, ?, ?)").run(tenantId, baas.id, JSON.stringify(LINES), NOW, NOW);
+  db.prepare("INSERT INTO quotes (id, tenant_id, owner_id, number, status, title, customer, total_excl, total_incl, data, created_at, updated_at) VALUES ('00000000-0000-4000-8000-0a0400000001', ?, ?, 'O2026-0001', 'concept', 'Tuin', 'Jansen', 200, 242, ?, ?, ?)").run(tenantId, baas.id, JSON.stringify(LINES), NOW, NOW);
   const google = await createGoogleFake();
   const app = createApp({ secret: SECRET, db, loginDelayMs: 0, env: { MULTITENANCY: '1' }, backupDir: dir, googleFetch: google.fetchImpl });
   const { server, base } = await listen(app);
@@ -89,15 +89,15 @@ test('een back-up die alleen op Drive staat is te doorzoeken, te bekijken en ter
     assert.ok(first >= 1);
 
     // Regel verwijderen en vanaf Drive terugzetten.
-    world.db.prepare("UPDATE quotes SET data = ? WHERE id = 'qa'").run(JSON.stringify({ lines: [LINES.lines[0]] }));
-    const target = { backup: source, kind: 'quote', id: 'qa', keys: ['l2'] };
+    world.db.prepare("UPDATE quotes SET data = ? WHERE id = '00000000-0000-4000-8000-0a0400000001'").run(JSON.stringify({ lines: [LINES.lines[0]] }));
+    const target = { backup: source, kind: 'quote', id: '00000000-0000-4000-8000-0a0400000001', keys: ['l2'] };
     const view = await world.baas.post(`${BASE}/restore/lines/preview`, target);
     assert.deepStrictEqual(view.body.lines.map((line) => [line.key, line.state]), [['l1', 'gelijk'], ['l2', 'ontbreekt']]);
     assert.strictEqual(downloads(), first, 'de bewaarde kopie wordt hergebruikt, niet opnieuw gedownload');
     assert.strictEqual((await world.baas.post(`${BASE}/restore/lines/apply`, { ...target, password: 'Fout-wachtwoord-2026!' })).status, 401);
     const done = await world.baas.post(`${BASE}/restore/lines/apply`, { ...target, password: PW });
     assert.strictEqual(done.status, 200, done.text);
-    assert.strictEqual(JSON.parse(world.db.prepare("SELECT data FROM quotes WHERE id = 'qa'").get().data).lines.length, 2);
+    assert.strictEqual(JSON.parse(world.db.prepare("SELECT data FROM quotes WHERE id = '00000000-0000-4000-8000-0a0400000001'").get().data).lines.length, 2);
     assert.ok(done.body.safetyBackup && fs.existsSync(path.join(world.dir, done.body.safetyBackup)), 'veiligheidsback-up gemaakt');
     const audit = world.db.prepare("SELECT detail FROM audit WHERE action = 'backup_regels_teruggezet'").all();
     assert.ok(audit.some((row) => String(row.detail).includes(source)), 'het auditlog noemt de bron');

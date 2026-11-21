@@ -86,6 +86,9 @@ function sanitizeFinalPlan(raw, width, height) {
   return { areas, elements, metersPerPixel: scale > 0 && scale < 100 ? scale : null };
 }
 
+/** Kleinste uuid: startpunt van het doorlopen op id (een lege tekst is geen geldige uuid). */
+const NIL_UUID = '00000000-0000-0000-0000-000000000000';
+
 /**
  * Maakt de opslag voor AI-herkenningen en geleerde kleuren.
  * @param {object} db De database.
@@ -234,7 +237,7 @@ function createRecognitionStore(db) {
    */
   function corpusRows(tenantId, { afterId = '', limit = 20 } = {}) {
     const rows = prepare(`SELECT id, plan_id, corpus_width, corpus_height, corpus_image, corpus_final FROM plan_recognitions
-      WHERE tenant_id = ? AND corpus_image <> '' AND id > ? ORDER BY id LIMIT ?`).all(tenantId, String(afterId), Math.max(1, Math.min(100, Number(limit) || 20)));
+      WHERE tenant_id = ? AND corpus_image <> '' AND id > ? ORDER BY id LIMIT ?`).all(tenantId, String(afterId) || NIL_UUID, Math.max(1, Math.min(100, Number(limit) || 20)));
     const result = [];
     for (const row of rows) {
       let finalPlan;

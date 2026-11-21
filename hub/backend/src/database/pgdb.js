@@ -45,6 +45,15 @@ class DatabaseError extends Error {
   }
 }
 
+const { toleratesInvalidUuid } = require('./pg-pool');
+
+/**
+ * Is dit de fout van PostgreSQL voor een waarde die geen geldige UUID is?
+ * @param {Error} error De fout.
+ * @returns {boolean} true bij code 22P02 voor het type uuid.
+ */
+const isInvalidUuid = (error) => error instanceof DatabaseError && error.code === '22P02' && /type uuid/.test(error.message);
+
 // Eén verbinding (werkthread) per database-URL per proces; elk geopend
 // schema gebruikt die verbinding met een eigen search_path.
 const bridges = new Map();
@@ -208,6 +217,39 @@ class PgDatabase {
   }
 
   /**
+   * Leesquery: een waarde die geen UUID is (bijvoorbeeld een verzonnen id in een adres) kan nooit bij een uuid-kolom
+   * passen. Buiten een transactie geeft dat daarom geen rijen in plaats van een fout (in een transactie is de
+   * transactie na de fout toch onbruikbaar, dus daar blijft de fout).
+   * @param {string} sql SQL met $1, $2, ...
+   * @param {Array} params De parameters.
+   * @returns {{ rows: object[], rowCount: number }} Het resultaat.
+   */
+  readQuery(sql, params) {
+    try {
+      return this.query(sql, params);
+    } catch (error) {
+      if (isInvalidUuid(error) && !this.bridge.inTransaction && toleratesInvalidUuid(sql)) return { rows: [], rowCount: 0 };
+      throw error;
+    }
+  }
+
+  /**
+   * Schrijfquery: een UPDATE of DELETE op een waarde die geen UUID is wijzigt niets (buiten een transactie); een
+   * INSERT met zo'n waarde blijft een fout, zodat er nooit stilletjes iets niet wordt opgeslagen.
+   * @param {string} sql SQL met $1, $2, ...
+   * @param {Array} params De parameters.
+   * @returns {{ rows: object[], rowCount: number }} Het resultaat.
+   */
+  writeQuery(sql, params) {
+    try {
+      return this.query(sql, params);
+    } catch (error) {
+      if (isInvalidUuid(error) && !this.bridge.inTransaction && toleratesInvalidUuid(sql)) return { rows: [], rowCount: 0 };
+      throw error;
+    }
+  }
+
+  /**
    * De SQL voor PostgreSQL ($1, $2, ...) bij SQL met ?-parameters; de omzetting wordt onthouden (ook voor db.async).
    * @param {string} sql SQL met ?-parameters.
    * @returns {string} SQL met $-parameters.
@@ -235,19 +277,19 @@ class PgDatabase {
        * @param {...*} params De parameters.
        * @returns {object|undefined} De rij.
        */
-      get: (...params) => this.query(text, params).rows[0],
+      get: (...params) => this.readQuery(text, params).rows[0],
       /**
        * Alle rijen van het resultaat.
        * @param {...*} params De parameters.
        * @returns {object[]} De rijen.
        */
-      all: (...params) => this.query(text, params).rows,
+      all: (...params) => this.readQuery(text, params).rows,
       /**
        * Voert een wijziging uit.
        * @param {...*} params De parameters.
        * @returns {{ changes: number }} Aantal gewijzigde rijen.
        */
-      run: (...params) => ({ changes: this.query(text, params).rowCount }),
+      run: (...params) => ({ changes: this.writeQuery(text, params).rowCount }),
     };
   }
 
@@ -257,7 +299,14 @@ class PgDatabase {
    * @returns {void}
    */
   exec(sql) {
-    this.bridge.call({ op: 'exec', schema: this.schema, scope: this.tenantRls ? scopeKey() : '', sql: String(sql).replace(/^\s*BEGIN\s+IMMEDIATE\b/i, 'BEGIN') });
+    const text = String(sql).replace(/^\s*BEGIN\s+IMMEDIATE\b/i, 'BEGIN');
+    const ends = /^\s*(COMMIT|ROLLBACK|END)\b/i.test(text);
+    try {
+      this.bridge.call({ op: 'exec', schema: this.schema, scope: this.tenantRls ? scopeKey() : '', sql: text });
+    } finally {
+      if (ends) this.bridge.inTransaction = false;
+    }
+    if (/^\s*BEGIN\b/i.test(text)) this.bridge.inTransaction = true;
   }
 
   /**
@@ -453,7 +502,7 @@ BEGIN
       FROM information_schema.tables tb WHERE tb.table_schema = current_schema() AND tb.table_type = 'BASE TABLE' LOOP
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = current_schema() AND tablename = t.tablename AND policyname = 'aquatech_tenant') THEN
       IF t.scoped THEN
-        EXECUTE format($p$CREATE POLICY aquatech_tenant ON %I TO ${APP_ROLE} USING (tenant_id = ANY (string_to_array(current_setting('aquatech.tenants', true), ',')))$p$, t.tablename);
+        EXECUTE format($p$CREATE POLICY aquatech_tenant ON %I TO ${APP_ROLE} USING (tenant_id::text = ANY (string_to_array(current_setting('aquatech.tenants', true), ',')))$p$, t.tablename);
       ELSE
         EXECUTE format('CREATE POLICY aquatech_tenant ON %I TO ${APP_ROLE} USING (true)', t.tablename);
       END IF;
@@ -522,4 +571,4 @@ function dropSchemas(url, prefix) {
   }
 }
 
-module.exports = { stripNul, openPg, openScratch, dropScratch, pgConfig, pgVersion, toPgParams, dropSchemas, DatabaseError, PgDatabase };
+module.exports = { isInvalidUuid, toleratesInvalidUuid, stripNul, openPg, openScratch, dropScratch, pgConfig, pgVersion, toPgParams, dropSchemas, DatabaseError, PgDatabase };

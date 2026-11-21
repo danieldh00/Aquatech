@@ -6,6 +6,11 @@ const { createStore } = require('../src/platform/store');
 const { createStockStore } = require('../src/artikelen/stock');
 const { importLines } = require('../src/database/table-rows');
 
+/** Vaste uuid's van de werkorder, de bestelling en een onbekende order. */
+const WORK_ORDER_ID = '00000000-0000-4000-8000-0000000000a1';
+const WEB_ORDER_ID = '00000000-0000-4000-8000-0000000000a2';
+const UNKNOWN_ID = '00000000-0000-4000-8000-0000000000ff';
+
 /**
  * Maakt een omgeving met een artikel, een werkorder en een webshopbestelling.
  * @returns {{ db: object, tenantId: string, itemId: string, workOrderId: string }} De opzet.
@@ -17,9 +22,9 @@ function scene() {
   const owner = store.createCustomer(tenantId, { displayName: 'Eigenaar' }).user;
   const item = createStockStore(db).create(tenantId, { id: null, display_name: 'Test' }, { code: 'A-1', name: 'Artikel' }).item;
   const now = '2026-11-21T10:00:00Z';
-  db.prepare("INSERT INTO work_orders (id, tenant_id, owner_id, number, status, data, created_at, updated_at) VALUES ('wo-a', ?, ?, 'W-A', 'open', '{}', ?, ?)").run(tenantId, owner.id, now, now);
-  db.prepare("INSERT INTO web_orders (id, tenant_id, number, status, customer_name, email, total, data, created_at, updated_at) VALUES ('web-a', ?, 'B-A', 'nieuw', 'Klant', 'k@example.nl', 1, '{}', ?, ?)").run(tenantId, now, now);
-  return { db, tenantId, itemId: item.id, workOrderId: 'wo-a' };
+  db.prepare("INSERT INTO work_orders (id, tenant_id, owner_id, number, status, data, created_at, updated_at) VALUES (?, ?, ?, 'W-A', 'open', '{}', ?, ?)").run(WORK_ORDER_ID, tenantId, owner.id, now, now);
+  db.prepare("INSERT INTO web_orders (id, tenant_id, number, status, customer_name, email, total, data, created_at, updated_at) VALUES (?, ?, 'B-A', 'nieuw', 'Klant', 'k@example.nl', 1, '{}', ?, ?)").run(WEB_ORDER_ID, tenantId, now, now);
+  return { db, tenantId, itemId: item.id, workOrderId: WORK_ORDER_ID };
 }
 
 test('een reservering heeft precies één eigenaar en verwijst naar een bestaande order', () => {
@@ -32,21 +37,21 @@ test('een reservering heeft precies één eigenaar en verwijst naar een bestaand
    */
   const put = (workOrderId, webOrderId) => db.prepare('INSERT INTO stock_reservations (tenant_id, work_order_id, web_order_id, item_id, qty, updated_at) VALUES (?, ?, ?, ?, 1, ?)').run(tenantId, workOrderId, webOrderId, itemId, '2026-11-21T10:00:00Z');
   assert.throws(() => put(null, null), /one_owner|check/i, 'zonder eigenaar mag niet');
-  assert.throws(() => put('wo-a', 'web-a'), /one_owner|check/i, 'twee eigenaars mag niet');
-  assert.throws(() => put('bestaat-niet', null), /foreign key|fkey|violates/i, 'een onbekende werkorder mag niet');
-  assert.throws(() => put(null, 'bestaat-niet'), /foreign key|fkey|violates/i, 'een onbekende bestelling mag niet');
-  put('wo-a', null);
-  assert.throws(() => put('wo-a', null), /unique|duplicate/i, 'een artikel eenmaal per werkorder');
+  assert.throws(() => put(WORK_ORDER_ID, WEB_ORDER_ID), /one_owner|check/i, 'twee eigenaars mag niet');
+  assert.throws(() => put(UNKNOWN_ID, null), /foreign key|fkey|violates/i, 'een onbekende werkorder mag niet');
+  assert.throws(() => put(null, UNKNOWN_ID), /foreign key|fkey|violates/i, 'een onbekende bestelling mag niet');
+  put(WORK_ORDER_ID, null);
+  assert.throws(() => put(WORK_ORDER_ID, null), /unique|duplicate/i, 'een artikel eenmaal per werkorder');
 });
 
 test('een reservering verdwijnt mee met haar order', () => {
   const { db, tenantId, itemId } = scene();
   const stock = createStockStore(db);
-  stock.reserveOrder(tenantId, 'web-a', [{ itemId, qty: 2 }]);
-  db.prepare('INSERT INTO stock_reservations (tenant_id, work_order_id, item_id, qty, updated_at) VALUES (?, ?, ?, 1, ?)').run(tenantId, 'wo-a', itemId, '2026-11-21T10:00:00Z');
+  stock.reserveOrder(tenantId, WEB_ORDER_ID, [{ itemId, qty: 2 }]);
+  db.prepare('INSERT INTO stock_reservations (tenant_id, work_order_id, item_id, qty, updated_at) VALUES (?, ?, ?, 1, ?)').run(tenantId, WORK_ORDER_ID, itemId, '2026-11-21T10:00:00Z');
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_reservations').get().n, 2);
-  db.prepare("DELETE FROM web_orders WHERE id = 'web-a'").run();
-  db.prepare("DELETE FROM work_orders WHERE id = 'wo-a'").run();
+  db.prepare("DELETE FROM web_orders WHERE id = ?").run(WEB_ORDER_ID);
+  db.prepare("DELETE FROM work_orders WHERE id = ?").run(WORK_ORDER_ID);
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_reservations').get().n, 0);
 });
 
@@ -54,7 +59,7 @@ test('een back-up van vóór migratie 96 (order:<id> in work_order_id) wordt ges
   const { db, tenantId, itemId } = scene();
   const header = JSON.stringify({ format: 'aquatech-backup', version: 2, schemaVersion: 1 });
   const columns = JSON.stringify({ table: 'stock_reservations', columns: ['tenant_id', 'work_order_id', 'item_id', 'qty', 'updated_at'] });
-  const rows = [[tenantId, 'order:web-a', itemId, 3, '2026-11-21T10:00:00Z'], [tenantId, 'wo-a', itemId, 1, '2026-11-21T10:00:00Z']].map((row) => JSON.stringify(row));
+  const rows = [[tenantId, `order:${WEB_ORDER_ID}`, itemId, 3, '2026-11-21T10:00:00Z'], [tenantId, WORK_ORDER_ID, itemId, 1, '2026-11-21T10:00:00Z']].map((row) => JSON.stringify(row));
   // Alleen de reserveringen komen uit het bestand; de orders bestaan al in deze database.
   /**
    * De regels van het nagebootste bestand, één voor één.
@@ -64,5 +69,35 @@ test('een back-up van vóór migratie 96 (order:<id> in work_order_id) wordt ges
   db.prepare('DELETE FROM stock_reservations').run();
   await importLines(db, lines());
   const stored = db.prepare('SELECT work_order_id, web_order_id, qty FROM stock_reservations ORDER BY qty').all();
-  assert.deepStrictEqual(stored.map((row) => [row.work_order_id, row.web_order_id, Number(row.qty)]), [['wo-a', null, 1], [null, 'web-a', 3]]);
+  assert.deepStrictEqual(stored.map((row) => [row.work_order_id, row.web_order_id, Number(row.qty)]), [[WORK_ORDER_ID, null, 1], [null, WEB_ORDER_ID, 3]]);
+});
+
+test('een back-up van vóór migratie 97 met tekst-id\'s wordt met dezelfde afgeleide uuid\'s teruggezet', async () => {
+  const { db, tenantId } = scene();
+  const header = JSON.stringify({ format: 'aquatech-backup', version: 2, schemaVersion: 90 });
+  const columns = JSON.stringify({ table: 'suppliers', columns: ['id', 'tenant_id', 'name', 'archived', 'created_at', 'updated_at'] });
+  const rows = [['oude-leverancier', tenantId, 'Oud BV', 0, '2026-11-21T10:00:00Z', '2026-11-21T10:00:00Z']].map((row) => JSON.stringify(row));
+  /**
+   * De regels van het nagebootste bestand, één voor één.
+   * @returns {AsyncGenerator<string>} De regels.
+   */
+  async function* lines() { for (const line of [header, columns, ...rows]) yield line; }
+  await importLines(db, lines());
+  const { legacyUuid } = require('../src/database/pgschema');
+  assert.strictEqual(db.prepare('SELECT id FROM suppliers WHERE tenant_id = ?').get(tenantId).id, legacyUuid('oude-leverancier'));
+});
+
+test('een back-up van vóór migratie 97 met een lege tekst in een verplichte id-kolom krijgt een afgeleide uuid, geen NULL', async () => {
+  const { db, tenantId } = scene();
+  const header = JSON.stringify({ format: 'aquatech-backup', version: 2, schemaVersion: 90 });
+  const columns = JSON.stringify({ table: 'suppliers', columns: ['id', 'tenant_id', 'name', 'archived', 'created_at', 'updated_at'] });
+  const rows = [['', tenantId, 'Leeg id BV', 0, '2026-11-21T10:00:00Z', '2026-11-21T10:00:00Z']].map((row) => JSON.stringify(row));
+  /**
+   * De regels van het nagebootste bestand, één voor één.
+   * @returns {AsyncGenerator<string>} De regels.
+   */
+  async function* lines() { for (const line of [header, columns, ...rows]) yield line; }
+  await importLines(db, lines());
+  const { legacyUuid } = require('../src/database/pgschema');
+  assert.strictEqual(db.prepare('SELECT id FROM suppliers WHERE tenant_id = ?').get(tenantId).id, legacyUuid('', true));
 });

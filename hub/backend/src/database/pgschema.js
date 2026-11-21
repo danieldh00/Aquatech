@@ -212,6 +212,145 @@ CREATE TABLE shop_sync (
 
 // Migraties na het basisschema: PG_MIGRATIONS[0] is migratie
 // PG_BASE_VERSION + 1, enzovoort. Alleen toevoegen, nooit aanpassen.
+/**
+ * Kolommen die in migratie 97 van tekst naar UUID gaan (primaire sleutels en verwijzingen). Bewust tekst gebleven:
+ * id's van buiten (WooCommerce, Mollie, Visma), `invoices.shop_order_id` (`web:<bestelling>` of een externe waarde),
+ * `client_id` (sleutel van de offline wachtrij), `request_id`, `step_id` en `material_id`.
+ */
+const UUID_COLUMNS = {
+  account_tokens: ['id', 'tenant_id', 'user_id'],
+  ai_usage: ['id', 'tenant_id', 'user_id'],
+  app_logs: ['id', 'tenant_id'],
+  audit: ['id', 'tenant_id', 'user_id'],
+  debtors: ['customer_id', 'id', 'tenant_id'],
+  history: ['id', 'plan_id', 'tenant_id', 'user_id'],
+  impersonations: ['admin_id', 'grant_id', 'id', 'tenant_id', 'user_id'],
+  invoice_payments: ['id', 'invoice_id', 'tenant_id'],
+  invoice_reminders: ['id', 'invoice_id', 'tenant_id'],
+  invoices: ['created_by', 'customer_id', 'debtor_id', 'id', 'quote_id', 'tenant_id', 'work_order_id'],
+  item_images: ['id', 'tenant_id'],
+  item_packagings: ['id', 'item_id', 'tenant_id'],
+  item_suppliers: ['id', 'item_id', 'supplier_id', 'tenant_id'],
+  item_text_drafts: ['created_by', 'id', 'item_id', 'tenant_id'],
+  monitor_incidents: ['id', 'tenant_id'],
+  news: ['author_id', 'id', 'tenant_id'],
+  oauth_grants: ['id', 'tenant_id', 'user_id'],
+  plan_recognitions: ['id', 'plan_id', 'tenant_id', 'user_id'],
+  plans: ['id', 'owner_id', 'reviewed_by', 'tenant_id'],
+  purchase_order_lines: ['id', 'item_id', 'order_id', 'tenant_id'],
+  purchase_orders: ['id', 'supplier_id', 'tenant_id'],
+  purchase_proposal_dismissals: ['item_id', 'tenant_id'],
+  quotes: ['customer_id', 'id', 'order_id', 'owner_id', 'plan_id', 'tenant_id'],
+  roles: ['tenant_id'],
+  season_reminders_sent: ['id', 'tenant_id', 'user_id'],
+  service_request_photos: ['id', 'request_id', 'tenant_id'],
+  service_requests: ['customer_id', 'handled_by', 'id', 'installation_id', 'tenant_id', 'work_order_id'],
+  sessions: ['tenant_id', 'user_id'],
+  settings: ['tenant_id', 'updated_by'],
+  shop_content: ['id', 'published_by', 'tenant_id', 'updated_by'],
+  shop_funnel_days: ['tenant_id'],
+  shop_images: ['created_by', 'id', 'tenant_id'],
+  shop_products: ['tenant_id'],
+  shop_search_misses: ['tenant_id'],
+  shop_sync: ['tenant_id'],
+  sprinkler_library: ['id', 'tenant_id', 'updated_by'],
+  stock_alerts: ['id', 'tenant_id'],
+  stock_cost_entries: ['id', 'item_id', 'layer_id', 'movement_id', 'tenant_id'],
+  stock_cost_prices: ['id', 'item_id', 'tenant_id', 'user_id'],
+  stock_count_entries: ['count_id', 'id', 'line_id', 'tenant_id', 'user_id'],
+  stock_count_lines: ['count_id', 'counted_by', 'id', 'item_id', 'movement_id', 'tenant_id'],
+  stock_counts: ['closed_by', 'created_by', 'id', 'tenant_id'],
+  stock_items: ['id', 'image_id', 'parent_id', 'tenant_id'],
+  stock_layers: ['id', 'item_id', 'movement_id', 'tenant_id'],
+  stock_merges: ['created_by', 'id', 'parent_id', 'tenant_id'],
+  stock_movements: ['id', 'item_id', 'tenant_id', 'user_id', 'work_order_id'],
+  stock_reservations: ['item_id', 'tenant_id', 'web_order_id', 'work_order_id'],
+  stock_units: ['id', 'tenant_id'],
+  suppliers: ['id', 'tenant_id'],
+  support_grants: ['id', 'tenant_id', 'user_id'],
+  tenants: ['id', 'parent_id'],
+  users: ['id', 'tenant_id'],
+  visma_log: ['id', 'tenant_id'],
+  web_order_slips: ['order_id', 'tenant_id'],
+  web_orders: ['id', 'tenant_id', 'user_id'],
+  web_returns: ['id', 'order_id', 'tenant_id', 'user_id'],
+  web_sale_lines: ['id', 'item_id', 'movement_id', 'order_id', 'tenant_id'],
+  work_order_hours: ['created_by', 'id', 'tenant_id', 'user_id', 'work_order_id'],
+  work_order_materials: ['created_by', 'id', 'stock_movement_id', 'tenant_id', 'user_id', 'work_order_id'],
+  work_order_offers: ['created_by', 'id', 'received_work_order_id', 'receiver_tenant_id', 'tenant_id', 'to_tenant_id', 'work_order_id'],
+  work_order_photos: ['id', 'tenant_id', 'uploaded_by', 'work_order_id'],
+  work_orders: ['assignee_id', 'customer_id', 'id', 'owner_id', 'plan_id', 'quote_id', 'tenant_id'],
+};
+
+/**
+ * SQL van migratie 97: kolommen uit UUID_COLUMNS gaan van tekst naar uuid. Waarden die al een UUID zijn blijven gelijk;
+ * een andere waarde (zou niet moeten voorkomen) krijgt in elke kolom dezelfde afgeleide UUID (md5), zodat verwijzingen
+ * kloppen, en een lege tekst in een kolom die leeg mag zijn wordt NULL. Eerst gaan de foreign keys en de tenantpolicies
+ * weg; de keys komen daarna terug, de policies maakt pgdb.js bij het opstarten opnieuw aan (nu met uuid).
+ * @returns {string} De SQL.
+ */
+function uuidMigrationSql() {
+  const spec = JSON.stringify(UUID_COLUMNS).replace(/'/g, "''");
+  return `
+  DO $uuid$
+  DECLARE
+    spec jsonb := '${spec}';
+    entry record;
+    target text;
+    found record;
+    restore text[] := '{}';
+    statement text;
+    uuid_pattern text := '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
+    source text;
+    blank_default boolean;
+  BEGIN
+    FOR found IN SELECT tablename FROM pg_policies WHERE schemaname = current_schema() AND policyname = 'aquatech_tenant' LOOP
+      EXECUTE format('DROP POLICY aquatech_tenant ON %I', found.tablename);
+    END LOOP;
+    FOR found IN SELECT conrelid::regclass::text AS table_name, conname, pg_get_constraintdef(oid) AS definition
+        FROM pg_constraint WHERE contype = 'f' AND connamespace = current_schema()::regnamespace LOOP
+      restore := restore || format('ALTER TABLE %s ADD CONSTRAINT %I %s', found.table_name, found.conname, found.definition);
+      EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', found.table_name, found.conname);
+    END LOOP;
+    FOR entry IN SELECT key AS table_name, value AS columns FROM jsonb_each(spec) LOOP
+      FOR target IN SELECT jsonb_array_elements_text(entry.columns) LOOP
+        SELECT CASE WHEN c.is_nullable = 'YES' OR c.column_default = '''''::text' THEN format('NULLIF(%I, '''')', target) ELSE format('%I', target) END,
+               c.column_default = '''''::text'
+          INTO source, blank_default
+          FROM information_schema.columns c
+          WHERE c.table_schema = current_schema() AND c.table_name = entry.table_name AND c.column_name = target;
+        IF blank_default THEN
+          EXECUTE format('ALTER TABLE %I ALTER COLUMN %I DROP DEFAULT, ALTER COLUMN %I DROP NOT NULL', entry.table_name, target, target);
+        END IF;
+        EXECUTE format('ALTER TABLE %I ALTER COLUMN %I TYPE uuid USING (CASE WHEN %s ~ %L THEN %s::uuid ELSE md5(%L || %s)::uuid END)',
+          entry.table_name, target, source, uuid_pattern, source, 'aquatech-uuid:', source);
+      END LOOP;
+    END LOOP;
+    FOREACH statement IN ARRAY restore LOOP
+      EXECUTE statement;
+    END LOOP;
+  END
+  $uuid$;
+  `;
+}
+
+const UUID_TEXT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * De uuid-waarde van een id uit een back-up van vóór migratie 97, op dezelfde manier als de migratie: een uuid blijft gelijk,
+ * lege tekst wordt NULL en een andere tekst krijgt een vaste, afgeleide uuid (md5), zodat verwijzingen blijven kloppen.
+ * @param {*} value De waarde uit de back-up.
+ * @param {boolean} [required] Waar bij een NOT NULL-kolom: een lege tekst krijgt dan ook een afgeleide uuid i.p.v. NULL.
+ * @returns {*} De waarde voor een uuid-kolom.
+ */
+function legacyUuid(value, required = false) {
+  if (typeof value !== 'string') return value;
+  if (value === '' && !required) return null;
+  if (UUID_TEXT.test(value)) return value;
+  const hex = require('crypto').createHash('md5').update(`aquatech-uuid:${value}`).digest('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 const PG_MIGRATIONS = [
   // 13: planning en klantlink van werkorders.
   `
@@ -1668,6 +1807,8 @@ const PG_MIGRATIONS = [
   CREATE UNIQUE INDEX stock_reservations_work_order ON stock_reservations (tenant_id, work_order_id, item_id) WHERE work_order_id IS NOT NULL;
   CREATE UNIQUE INDEX stock_reservations_web_order ON stock_reservations (tenant_id, web_order_id, item_id) WHERE web_order_id IS NOT NULL;
   `,
+  // 97: alle id's en verwijzingen naar id's worden uuid (zie UUID_COLUMNS), met echte foreign keys die weer terugkomen.
+  uuidMigrationSql(),
 ];
 
-module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };
+module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS, UUID_COLUMNS, legacyUuid };

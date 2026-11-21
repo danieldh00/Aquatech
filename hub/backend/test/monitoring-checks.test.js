@@ -2,13 +2,15 @@
 // ok, waarschuwing, fout en overslaan, de drempels, de cache van dure externe controles en geen geheimen in meldingen.
 const test = require('node:test');
 const assert = require('node:assert');
+const { randomUUID } = require('node:crypto');
 const { openDb } = require('../src/database/db');
 const { createMonitoringChecks, thresholdsOf, DEFAULT_THRESHOLDS } = require('../src/platform/monitoring-checks');
 const { createErrorCounter } = require('../src/platform/error-report');
 
 const NOW = Date.parse('2026-11-13T12:00:00Z');
 const HOUR = 3600 * 1000;
-const TENANT = 't1';
+const TENANT = '00000000-0000-4000-8000-00000000b001';
+const SECOND_TENANT = '00000000-0000-4000-8000-00000000b002';
 
 /**
  * Zoekt een controle op sleutel en voert hem uit.
@@ -222,8 +224,7 @@ test('mollie: uit = overslaan, sleutel geweigerd = fout, onbereikbaar = waarschu
 
 test('visma: aanmeldfout, herhaalde fouten, hersteld en tenant-filter', async () => {
   const db = openDb();
-  for (const [id, slug] of [[TENANT, 'a'], ['t2', 'b']]) db.prepare("INSERT INTO tenants (id, slug, name, created_at) VALUES (?, ?, ?, '2026-01-01')").run(id, slug, slug);
-  let sequence = 0;
+  for (const [id, slug] of [[TENANT, 'a'], [SECOND_TENANT, 'b']]) db.prepare("INSERT INTO tenants (id, slug, name, created_at) VALUES (?, ?, ?, '2026-01-01')").run(id, slug, slug);
   /**
    * Voegt een regel aan het Visma-logboek toe.
    * @param {*} tenantId De omgeving.
@@ -236,7 +237,7 @@ test('visma: aanmeldfout, herhaalde fouten, hersteld en tenant-filter', async ()
    */
   const log = (tenantId, kind, ok, hoursAgo, reference = '', repeat = 1) => db.prepare(
     'INSERT INTO visma_log (id, tenant_id, created_at, last_at, kind, ok, reference, message, repeat_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-  ).run(`l${sequence++}`, tenantId, new Date(NOW - hoursAgo * HOUR).toISOString(), new Date(NOW - hoursAgo * HOUR).toISOString(), kind, ok ? 1 : 0, reference, 'fout', repeat);
+  ).run(randomUUID(), tenantId, new Date(NOW - hoursAgo * HOUR).toISOString(), new Date(NOW - hoursAgo * HOUR).toISOString(), kind, ok ? 1 : 0, reference, 'fout', repeat);
   const checks = createMonitoringChecks({ db, visma: { connected: (id) => id === TENANT }, runtimeStats: false });
   assert.deepStrictEqual(await runCheck(checks, 'visma'), { ok: true });
   log(TENANT, 'factuur', false, 2, 'F1', 3);
@@ -245,7 +246,7 @@ test('visma: aanmeldfout, herhaalde fouten, hersteld en tenant-filter', async ()
   assert.deepStrictEqual(await runCheck(checks, 'visma'), { ok: true }, 'daarna gelukt voor hetzelfde onderdeel');
   log(TENANT, 'aanmelding', false, 0.5);
   assert.strictEqual((await runCheck(checks, 'visma')).severity, 'fout');
-  const other = await checks.find((check) => check.key === 'visma').run({ tenantId: 't2', scope: 'tenant', config: {}, now: () => NOW });
+  const other = await checks.find((check) => check.key === 'visma').run({ tenantId: SECOND_TENANT, scope: 'tenant', config: {}, now: () => NOW });
   assert.deepStrictEqual(other, { skip: true });
 });
 
@@ -273,8 +274,7 @@ test('webshop: nooit gesynchroniseerd, fout, te oud en ok', async () => {
 
 test('ai: zonder sleutel overslaan, sleutel geweigerd = fout, drie mislukte aanroepen = waarschuwing, tenant-filter', async () => {
   const db = openDb();
-  for (const [id, slug] of [[TENANT, 'a'], ['t2', 'b']]) db.prepare("INSERT INTO tenants (id, slug, name, created_at) VALUES (?, ?, ?, '2026-01-01')").run(id, slug, slug);
-  let sequence = 0;
+  for (const [id, slug] of [[TENANT, 'a'], [SECOND_TENANT, 'b']]) db.prepare("INSERT INTO tenants (id, slug, name, created_at) VALUES (?, ?, ?, '2026-01-01')").run(id, slug, slug);
   /**
    * Voegt een AI-aanroep toe aan de gebruikslog.
    * @param {*} tenantId De omgeving.
@@ -284,13 +284,13 @@ test('ai: zonder sleutel overslaan, sleutel geweigerd = fout, drie mislukte aanr
    */
   const usage = (tenantId, status, minutesAgo) => db.prepare(
     "INSERT INTO ai_usage (id, tenant_id, feature, model, status, created_at) VALUES (?, ?, 'plan_analyse', 'm', ?, ?)",
-  ).run(`u${sequence++}`, tenantId, status, new Date(NOW - minutesAgo * 60000).toISOString());
+  ).run(randomUUID(), tenantId, status, new Date(NOW - minutesAgo * 60000).toISOString());
   let key = '';
   const checks = createMonitoringChecks({ db, settingsFor: () => settingsOf({ anthropicApiKey: key }), runtimeStats: false });
   assert.deepStrictEqual(await runCheck(checks, 'ai'), { skip: true });
   key = 'sk-ant-xxxxxxxx';
   assert.deepStrictEqual(await runCheck(checks, 'ai'), { ok: true });
-  usage('t2', 'auth', 1);
+  usage(SECOND_TENANT, 'auth', 1);
   assert.deepStrictEqual(await runCheck(checks, 'ai'), { ok: true }, 'andere omgeving telt niet mee');
   for (const minutes of [30, 20, 10]) usage(TENANT, 'api_error', minutes);
   assert.strictEqual((await runCheck(checks, 'ai')).severity, 'waarschuwing');

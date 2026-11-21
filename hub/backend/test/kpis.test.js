@@ -2,6 +2,7 @@
 const test = require('node:test');
 const express = require('express');
 const assert = require('node:assert');
+const { randomUUID } = require('node:crypto');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { buildKpis, weekOf, registerKpiRoutes } = require('../src/platform/kpis');
@@ -41,7 +42,7 @@ function setup() {
    */
   const invoice = (tenantId, number, { status, kind = 'factuur', due, total }) => db.prepare(
     'INSERT INTO invoices (id, tenant_id, number, status, kind, invoice_date, due_date, total, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-  ).run(`${tenantId}-${number}`, tenantId, number, status, kind, '2026-10-01', due, total, '{}', '2026-10-01', '2026-10-01');
+  ).run(randomUUID(), tenantId, number, status, kind, '2026-10-01', due, total, '{}', '2026-10-01', '2026-10-01');
   invoice(mainId, 'F1', { status: 'definitief', due: '2026-11-01', total: 121 });
   invoice(mainId, 'F2', { status: 'definitief', due: '2026-12-01', total: 242 });
   invoice(mainId, 'F3', { status: 'betaald', due: '2026-11-01', total: 500 });
@@ -60,7 +61,7 @@ function setup() {
    */
   const quote = (tenantId, owner, number, status, total, deletedAt = null) => db.prepare(
     'INSERT INTO quotes (id, tenant_id, owner_id, number, status, total_excl, data, created_at, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-  ).run(`${tenantId}-${number}`, tenantId, owner, number, status, total, '{}', '2026-11-01', '2026-11-01', deletedAt);
+  ).run(randomUUID(), tenantId, owner, number, status, total, '{}', '2026-11-01', '2026-11-01', deletedAt);
   quote(mainId, mainUser, 'O1', 'verzonden', 1000);
   quote(mainId, mainUser, 'O2', 'verzonden', 500);
   quote(mainId, mainUser, 'O3', 'verzonden', 99, '2026-11-02');
@@ -77,7 +78,7 @@ function setup() {
    */
   const workOrder = (tenantId, owner, number, status, planned) => db.prepare(
     'INSERT INTO work_orders (id, tenant_id, owner_id, number, status, planned_date, assignee_id, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-  ).run(`${tenantId}-${number}`, tenantId, owner, number, status, planned, owner, '{}', '2026-11-01', '2026-11-01');
+  ).run(randomUUID(), tenantId, owner, number, status, planned, owner, '{}', '2026-11-01', '2026-11-01');
   workOrder(mainId, mainUser, 'W1', 'gepland', '2026-11-16');
   workOrder(mainId, mainUser, 'W2', 'bezig', '2026-11-22');
   workOrder(mainId, mainUser, 'W3', 'gepland', '2026-11-23');
@@ -166,10 +167,10 @@ test('periodes en nieuwe kengetallen rekenen per omgeving', () => {
   assert.deepStrictEqual(rangeOf('30dagen', TODAY), { from: '2026-10-21', to: '2026-11-19' });
   assert.deepStrictEqual(rangeOf('jaar', TODAY), { from: '2026-01-01', to: '2026-12-31' });
   const { db, mainId, otherId } = setup();
-  db.prepare("INSERT INTO invoices (id, tenant_id, number, status, kind, invoice_date, due_date, subtotal, total, data, created_at, updated_at) VALUES ('v1', ?, 'V1', 'definitief', 'factuur', '2026-11-05', '2026-12-05', 100, 121, '{}', '2026-11-05', '2026-11-05')").run(mainId);
-  db.prepare("INSERT INTO web_orders (id, tenant_id, number, status, customer_name, email, total, data, created_at, updated_at) VALUES ('w1', ?, 'W1', 'nieuw', 'A', 'a@example.nl', 50, '{}', '2026-11-10T10:00:00.000Z', '2026-11-10T10:00:00.000Z')").run(mainId);
-  db.prepare("INSERT INTO web_orders (id, tenant_id, number, status, customer_name, email, total, data, created_at, updated_at) VALUES ('w2', ?, 'W2', 'geannuleerd', 'B', 'b@example.nl', 70, '{}', '2026-11-11T10:00:00.000Z', '2026-11-11T10:00:00.000Z')").run(mainId);
-  db.prepare("INSERT INTO web_orders (id, tenant_id, number, status, customer_name, email, total, data, created_at, updated_at) VALUES ('w3', ?, 'W3', 'nieuw', 'C', 'c@example.nl', 999, '{}', '2026-11-10T10:00:00.000Z', '2026-11-10T10:00:00.000Z')").run(otherId);
+  db.prepare("INSERT INTO invoices (id, tenant_id, number, status, kind, invoice_date, due_date, subtotal, total, data, created_at, updated_at) VALUES ('00000000-0000-4000-8000-0000000000c1', ?, 'V1', 'definitief', 'factuur', '2026-11-05', '2026-12-05', 100, 121, '{}', '2026-11-05', '2026-11-05')").run(mainId);
+  db.prepare("INSERT INTO web_orders (id, tenant_id, number, status, customer_name, email, total, data, created_at, updated_at) VALUES ('00000000-0000-4000-8000-0000000000c2', ?, 'W1', 'nieuw', 'A', 'a@example.nl', 50, '{}', '2026-11-10T10:00:00.000Z', '2026-11-10T10:00:00.000Z')").run(mainId);
+  db.prepare("INSERT INTO web_orders (id, tenant_id, number, status, customer_name, email, total, data, created_at, updated_at) VALUES ('00000000-0000-4000-8000-0000000000c3', ?, 'W2', 'geannuleerd', 'B', 'b@example.nl', 70, '{}', '2026-11-11T10:00:00.000Z', '2026-11-11T10:00:00.000Z')").run(mainId);
+  db.prepare("INSERT INTO web_orders (id, tenant_id, number, status, customer_name, email, total, data, created_at, updated_at) VALUES ('00000000-0000-4000-8000-0000000000c4', ?, 'W3', 'nieuw', 'C', 'c@example.nl', 999, '{}', '2026-11-10T10:00:00.000Z', '2026-11-10T10:00:00.000Z')").run(otherId);
   const admin = { rights: ['beheer', 'facturen', 'offertes', 'werkorders', 'voorraad'] };
   const tiles = buildKpis({ user: admin, tenantId: mainId }, { db, today: TODAY, config: ALL_ON });
   const byKey = Object.fromEntries(tiles.map((tile) => [tile.key, tile]));

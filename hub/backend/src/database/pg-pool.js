@@ -86,6 +86,14 @@ async function prepareClient(client, schema, scope) {
 }
 
 /**
+ * Zegt of een statement bij een ongeldig uuid geen rijen mag opleveren: lezen, wijzigen en verwijderen wel
+ * (er is dan niets dat past), een INSERT nooit (een foute waarde moet daar een fout blijven).
+ * @param {string} sql De SQL.
+ * @returns {boolean} Waar als een ongeldig uuid als "niets gevonden" telt.
+ */
+const toleratesInvalidUuid = (sql) => /^\s*(SELECT|WITH|UPDATE|DELETE)\b/i.test(sql) && !/\bINSERT\b/i.test(sql);
+
+/**
  * Maakt db.async voor een database in PostgreSQL: get/all/run(sql, ...params) via de pool. De SQL heeft ?-parameters
  * (?-parameters) en gaat door dezelfde omzetting als db.prepare (db.pgText).
  * @param {{ url: string, config: object, db: object, toPgValue: Function, DatabaseError: Function }} options
@@ -146,6 +154,20 @@ function createPoolAsync({ url, config, db, toPgValue, DatabaseError }) {
       }
     }
   };
+  /**
+   * Leesquery waarbij een waarde die geen UUID is (kan nooit bij een uuid-kolom passen) geen rijen geeft in plaats van een fout.
+   * @param {string} sql De SQL met ?-parameters.
+   * @param {Array} params De parameters.
+   * @returns {Promise<{ rows: object[], rowCount: number }>} Het resultaat.
+   */
+  const readOrEmpty = async (sql, params) => {
+    try {
+      return await query(sql, params);
+    } catch (error) {
+      if (error instanceof DatabaseError && error.code === '22P02' && /type uuid/.test(error.message) && toleratesInvalidUuid(sql)) return { rows: [], rowCount: 0 };
+      throw error;
+    }
+  };
   return {
     pooled: true,
     size: POOL_SIZE,
@@ -155,21 +177,21 @@ function createPoolAsync({ url, config, db, toPgValue, DatabaseError }) {
      * @param {...*} params De parameters.
      * @returns {Promise<object|undefined>} De rij.
      */
-    get: async (sql, ...params) => (await query(sql, params)).rows[0],
+    get: async (sql, ...params) => (await readOrEmpty(sql, params)).rows[0],
     /**
      * Alle rijen van het resultaat.
      * @param {string} sql De SQL met ?-parameters.
      * @param {...*} params De parameters.
      * @returns {Promise<object[]>} De rijen.
      */
-    all: async (sql, ...params) => (await query(sql, params)).rows,
+    all: async (sql, ...params) => (await readOrEmpty(sql, params)).rows,
     /**
      * Voert een wijziging uit (één statement, meteen vastgelegd).
      * @param {string} sql De SQL met ?-parameters.
      * @param {...*} params De parameters.
      * @returns {Promise<{ changes: number }>} Aantal gewijzigde rijen.
      */
-    run: async (sql, ...params) => ({ changes: (await query(sql, params)).rowCount }),
+    run: async (sql, ...params) => ({ changes: (await readOrEmpty(sql, params)).rowCount }),
   };
 }
 
@@ -183,4 +205,4 @@ async function closePools() {
   await Promise.all(open.map((pool) => pool.end().catch(() => {})));
 }
 
-module.exports = { createPoolAsync, closePools, POOL_SIZE };
+module.exports = { toleratesInvalidUuid, createPoolAsync, closePools, POOL_SIZE };

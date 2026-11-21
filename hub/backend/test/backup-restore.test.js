@@ -34,14 +34,14 @@ async function world() {
    * @returns {void}
    */
   const ins = (sql, ...args) => db.prepare(sql).run(...args);
-  ins("INSERT INTO quotes (id, tenant_id, owner_id, number, status, title, customer, total_excl, total_incl, data, created_at, updated_at) VALUES ('q1', ?, ?, 'O2026-0001', 'concept', 'Tuin Jansen', 'Jansen', 100, 121, ?, ?, ?)", tenantId, piet.id, JSON.stringify({ lines: [{ code: 'A', qty: 1 }], note: 'oud' }), NOW, NOW);
-  ins("INSERT INTO quotes (id, tenant_id, owner_id, number, status, title, customer, total_excl, total_incl, data, created_at, updated_at, acceptance) VALUES ('q2', ?, ?, 'O2026-0002', 'akkoord', 'Vergrendeld', 'Piet', 10, 12, ?, ?, ?, ?)", tenantId, owner.id, JSON.stringify({ lines: [] }), NOW, NOW, JSON.stringify({ at: NOW }));
-  ins("INSERT INTO work_orders (id, tenant_id, owner_id, number, status, title, customer, address, data, created_at, updated_at) VALUES ('w1', ?, ?, 'WO-2026-0001', 'open', 'Aanleg', 'Jansen', 'Dorpsstraat 1', '{}', ?, ?)", tenantId, owner.id, NOW, NOW);
-  ins("INSERT INTO work_order_hours (id, tenant_id, work_order_id, user_name, work_date, start_time, end_time, break_minutes, minutes, kind, step_id, note, created_at, updated_at) VALUES ('h1', ?, 'w1', 'Jan', '2026-11-01', '08:00', '12:00', 0, 240, 'werk', '', '', ?, ?)", tenantId, NOW, NOW);
-  ins("INSERT INTO web_orders (id, tenant_id, number, status, customer_name, email, total, data, created_at, updated_at) VALUES ('o1', ?, 'WEB-2026-0001', 'nieuw', 'Klant', 'k@example.nl', 50, '{}', ?, ?)", tenantId, NOW, NOW);
-  ins("INSERT INTO stock_items (id, tenant_id, code, name, on_hand, created_at, updated_at, sale_price) VALUES ('s1', ?, 'SPR-1', 'Sproeier', 7, ?, ?, 4.5)", tenantId, NOW, NOW);
-  ins("INSERT INTO item_packagings (id, tenant_id, item_id, code, name, factor, created_at) VALUES ('p1', ?, 's1', 'DOOS', 'Doos 10', 10, ?)", tenantId, NOW);
-  ins("INSERT INTO quotes (id, tenant_id, owner_id, number, status, title, customer, total_excl, total_incl, data, created_at, updated_at) VALUES ('qx', ?, ?, 'O-ANDER-1', 'concept', 'Andere omgeving', 'X', 1, 1, '{}', ?, ?)", otherTenantId, owner.id, NOW, NOW);
+  ins("INSERT INTO quotes (id, tenant_id, owner_id, number, status, title, customer, total_excl, total_incl, data, created_at, updated_at) VALUES ('00000000-0000-4000-8000-0a0100000001', ?, ?, 'O2026-0001', 'concept', 'Tuin Jansen', 'Jansen', 100, 121, ?, ?, ?)", tenantId, piet.id, JSON.stringify({ lines: [{ code: 'A', qty: 1 }], note: 'oud' }), NOW, NOW);
+  ins("INSERT INTO quotes (id, tenant_id, owner_id, number, status, title, customer, total_excl, total_incl, data, created_at, updated_at, acceptance) VALUES ('00000000-0000-4000-8000-0a0100000002', ?, ?, 'O2026-0002', 'akkoord', 'Vergrendeld', 'Piet', 10, 12, ?, ?, ?, ?)", tenantId, owner.id, JSON.stringify({ lines: [] }), NOW, NOW, JSON.stringify({ at: NOW }));
+  ins("INSERT INTO work_orders (id, tenant_id, owner_id, number, status, title, customer, address, data, created_at, updated_at) VALUES ('00000000-0000-4000-8000-0a0100000004', ?, ?, 'WO-2026-0001', 'open', 'Aanleg', 'Jansen', 'Dorpsstraat 1', '{}', ?, ?)", tenantId, owner.id, NOW, NOW);
+  ins("INSERT INTO work_order_hours (id, tenant_id, work_order_id, user_name, work_date, start_time, end_time, break_minutes, minutes, kind, step_id, note, created_at, updated_at) VALUES ('00000000-0000-4000-8000-0a0100000005', ?, '00000000-0000-4000-8000-0a0100000004', 'Jan', '2026-11-01', '08:00', '12:00', 0, 240, 'werk', '', '', ?, ?)", tenantId, NOW, NOW);
+  ins("INSERT INTO web_orders (id, tenant_id, number, status, customer_name, email, total, data, created_at, updated_at) VALUES ('00000000-0000-4000-8000-0a0100000006', ?, 'WEB-2026-0001', 'nieuw', 'Klant', 'k@example.nl', 50, '{}', ?, ?)", tenantId, NOW, NOW);
+  ins("INSERT INTO stock_items (id, tenant_id, code, name, on_hand, created_at, updated_at, sale_price) VALUES ('00000000-0000-4000-8000-0a0100000007', ?, 'SPR-1', 'Sproeier', 7, ?, ?, 4.5)", tenantId, NOW, NOW);
+  ins("INSERT INTO item_packagings (id, tenant_id, item_id, code, name, factor, created_at) VALUES ('00000000-0000-4000-8000-0a0100000008', ?, '00000000-0000-4000-8000-0a0100000007', 'DOOS', 'Doos 10', 10, ?)", tenantId, NOW);
+  ins("INSERT INTO quotes (id, tenant_id, owner_id, number, status, title, customer, total_excl, total_incl, data, created_at, updated_at) VALUES ('00000000-0000-4000-8000-0a0100000003', ?, ?, 'O-ANDER-1', 'concept', 'Andere omgeving', 'X', 1, 1, '{}', ?, ?)", otherTenantId, owner.id, NOW, NOW);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aquatech-restore-'));
   const vault = createVault(crypto.randomBytes(32));
   const made = await createBackup({ db, dir, vault });
@@ -73,17 +73,17 @@ test('openen: verkeerde sleutel of onbekende naam wordt geweigerd en er blijft n
 test('zoeken: toont de stand per record en blijft in de eigen omgeving', async () => {
   const scene = await world();
   try {
-    scene.db.prepare("DELETE FROM quotes WHERE id = 'q1'").run();
-    scene.db.prepare("UPDATE quotes SET title = 'Anders' WHERE id = 'q2'").run();
+    scene.db.prepare("DELETE FROM quotes WHERE id = '00000000-0000-4000-8000-0a0100000001'").run();
+    scene.db.prepare("UPDATE quotes SET title = 'Anders' WHERE id = '00000000-0000-4000-8000-0a0100000002'").run();
     await withBackup(scene, ({ backup, current, context }) => {
       const found = restore.listRecords({ backup, current, context, kind: 'quote' });
-      assert.deepStrictEqual(found.items.map((item) => [item.id, item.state]).sort(), [['q1', 'ontbreekt'], ['q2', 'gewijzigd']]);
-      assert.ok(!found.items.some((item) => item.id === 'qx'), 'andere omgeving is onzichtbaar');
-      assert.deepStrictEqual(restore.listRecords({ backup, current, context, kind: 'quote', query: 'jansen' }).items.map((item) => item.id), ['q1']);
+      assert.deepStrictEqual(found.items.map((item) => [item.id, item.state]).sort(), [['00000000-0000-4000-8000-0a0100000001', 'ontbreekt'], ['00000000-0000-4000-8000-0a0100000002', 'gewijzigd']]);
+      assert.ok(!found.items.some((item) => item.id === '00000000-0000-4000-8000-0a0100000003'), 'andere omgeving is onzichtbaar');
+      assert.deepStrictEqual(restore.listRecords({ backup, current, context, kind: 'quote', query: 'jansen' }).items.map((item) => item.id), ['00000000-0000-4000-8000-0a0100000001']);
       assert.deepStrictEqual(restore.listRecords({ backup, current, context, kind: 'quote', query: '%' }).items, [], 'een procent is geen jokerteken');
       assert.throws(() => restore.listRecords({ backup, current, context, kind: 'bestaat-niet' }), /Onbekende soort/);
       // Een record van een andere omgeving is ook niet via het id op te vragen.
-      assert.strictEqual(restore.preview({ backup, current, context, kind: 'quote', id: 'qx' }).state, 'niet_in_back-up');
+      assert.strictEqual(restore.preview({ backup, current, context, kind: 'quote', id: '00000000-0000-4000-8000-0a0100000003' }).state, 'niet_in_back-up');
     });
   } finally { scene.cleanup(); }
 });
@@ -91,17 +91,17 @@ test('zoeken: toont de stand per record en blijft in de eigen omgeving', async (
 test('een verwijderd record komt terug met zijn onderliggende rijen; opnieuw terugzetten doet niets', async () => {
   const scene = await world();
   try {
-    scene.db.prepare("DELETE FROM work_order_hours WHERE work_order_id = 'w1'").run();
-    scene.db.prepare("DELETE FROM work_orders WHERE id = 'w1'").run();
+    scene.db.prepare("DELETE FROM work_order_hours WHERE work_order_id = '00000000-0000-4000-8000-0a0100000004'").run();
+    scene.db.prepare("DELETE FROM work_orders WHERE id = '00000000-0000-4000-8000-0a0100000004'").run();
     await withBackup(scene, ({ backup, current, context }) => {
-      const plan = restore.preview({ backup, current, context, kind: 'work_order', id: 'w1' });
+      const plan = restore.preview({ backup, current, context, kind: 'work_order', id: '00000000-0000-4000-8000-0a0100000004' });
       assert.strictEqual(plan.state, 'ontbreekt');
       assert.deepStrictEqual(plan.children.find((child) => child.table === 'work_order_hours'), { table: 'work_order_hours', inBackup: 1, missing: 1 });
-      const out = restore.applyRestore({ backup, current, context, kind: 'work_order', items: [{ id: 'w1' }] });
+      const out = restore.applyRestore({ backup, current, context, kind: 'work_order', items: [{ id: '00000000-0000-4000-8000-0a0100000004' }] });
       assert.strictEqual(out.results[0].status, 'hersteld');
-      assert.strictEqual(scene.db.prepare("SELECT title FROM work_orders WHERE id = 'w1'").get().title, 'Aanleg');
-      assert.strictEqual(scene.db.prepare("SELECT minutes FROM work_order_hours WHERE id = 'h1'").get().minutes, 240);
-      assert.strictEqual(restore.applyRestore({ backup, current, context, kind: 'work_order', items: [{ id: 'w1' }] }).results[0].status, 'overgeslagen');
+      assert.strictEqual(scene.db.prepare("SELECT title FROM work_orders WHERE id = '00000000-0000-4000-8000-0a0100000004'").get().title, 'Aanleg');
+      assert.strictEqual(scene.db.prepare("SELECT minutes FROM work_order_hours WHERE id = '00000000-0000-4000-8000-0a0100000005'").get().minutes, 240);
+      assert.strictEqual(restore.applyRestore({ backup, current, context, kind: 'work_order', items: [{ id: '00000000-0000-4000-8000-0a0100000004' }] }).results[0].status, 'overgeslagen');
     });
   } finally { scene.cleanup(); }
 });
@@ -110,16 +110,16 @@ test('status en nummer gaan nooit per veld terug (de vergrendeling is niet te om
   const scene = await world();
   try {
     await withBackup(scene, ({ backup, current, context }) => {
-      scene.db.prepare("UPDATE quotes SET status = 'verzonden', number = 'O2026-0099' WHERE id = 'q1'").run();
-      const plan = restore.preview({ backup, current, context, kind: 'quote', id: 'q1' });
+      scene.db.prepare("UPDATE quotes SET status = 'verzonden', number = 'O2026-0099' WHERE id = '00000000-0000-4000-8000-0a0100000001'").run();
+      const plan = restore.preview({ backup, current, context, kind: 'quote', id: '00000000-0000-4000-8000-0a0100000001' });
       assert.ok(!plan.fields.includes('status') && !plan.fields.includes('number'), 'niet aangeboden');
-      const out = restore.applyRestore({ backup, current, context, kind: 'quote', items: [{ id: 'q1', fields: ['status', 'number'] }] });
+      const out = restore.applyRestore({ backup, current, context, kind: 'quote', items: [{ id: '00000000-0000-4000-8000-0a0100000001', fields: ['status', 'number'] }] });
       assert.strictEqual(out.results[0].status, 'overgeslagen');
-      assert.deepStrictEqual({ ...scene.db.prepare("SELECT status, number FROM quotes WHERE id = 'q1'").get() }, { status: 'verzonden', number: 'O2026-0099' });
+      assert.deepStrictEqual({ ...scene.db.prepare("SELECT status, number FROM quotes WHERE id = '00000000-0000-4000-8000-0a0100000001'").get() }, { status: 'verzonden', number: 'O2026-0099' });
       // Een klantkoppeling terugzetten zou de offerte zichtbaar maken in het portaal van een andere klant.
-      scene.db.prepare("UPDATE quotes SET customer_id = ? WHERE id = 'q1'").run(scene.piet.id);
-      assert.ok(!restore.preview({ backup, current, context, kind: 'quote', id: 'q1' }).fields.includes('customer_id'));
-      assert.strictEqual(restore.applyRestore({ backup, current, context, kind: 'quote', items: [{ id: 'q1', fields: ['customer_id'] }] }).results[0].status, 'overgeslagen');
+      scene.db.prepare("UPDATE quotes SET customer_id = ? WHERE id = '00000000-0000-4000-8000-0a0100000001'").run(scene.piet.id);
+      assert.ok(!restore.preview({ backup, current, context, kind: 'quote', id: '00000000-0000-4000-8000-0a0100000001' }).fields.includes('customer_id'));
+      assert.strictEqual(restore.applyRestore({ backup, current, context, kind: 'quote', items: [{ id: '00000000-0000-4000-8000-0a0100000001', fields: ['customer_id'] }] }).results[0].status, 'overgeslagen');
     });
   } finally { scene.cleanup(); }
 });
@@ -127,18 +127,18 @@ test('status en nummer gaan nooit per veld terug (de vergrendeling is niet te om
 test('een gewijzigd record: alleen de gekozen velden gaan terug, ook één sleutel uit data', async () => {
   const scene = await world();
   try {
-    scene.db.prepare("UPDATE quotes SET title = 'Nieuwe titel', data = ? WHERE id = 'q1'").run(JSON.stringify({ lines: [{ code: 'B', qty: 9 }], note: 'nieuw', extra: 1 }));
+    scene.db.prepare("UPDATE quotes SET title = 'Nieuwe titel', data = ? WHERE id = '00000000-0000-4000-8000-0a0100000001'").run(JSON.stringify({ lines: [{ code: 'B', qty: 9 }], note: 'nieuw', extra: 1 }));
     await withBackup(scene, ({ backup, current, context }) => {
-      const plan = restore.preview({ backup, current, context, kind: 'quote', id: 'q1' });
+      const plan = restore.preview({ backup, current, context, kind: 'quote', id: '00000000-0000-4000-8000-0a0100000001' });
       assert.deepStrictEqual(plan.fields.sort(), ['data.extra', 'data.lines', 'data.note', 'title']);
       assert.deepStrictEqual(plan.diffs.find((diff) => diff.field === 'data.lines').backup, [{ code: 'A', qty: 1 }]);
-      const out = restore.applyRestore({ backup, current, context, kind: 'quote', items: [{ id: 'q1', fields: ['data.lines', 'data.extra'] }] });
+      const out = restore.applyRestore({ backup, current, context, kind: 'quote', items: [{ id: '00000000-0000-4000-8000-0a0100000001', fields: ['data.lines', 'data.extra'] }] });
       assert.strictEqual(out.results[0].status, 'bijgewerkt');
-      const row = scene.db.prepare("SELECT title, data FROM quotes WHERE id = 'q1'").get();
+      const row = scene.db.prepare("SELECT title, data FROM quotes WHERE id = '00000000-0000-4000-8000-0a0100000001'").get();
       assert.strictEqual(row.title, 'Nieuwe titel', 'niet gekozen = ongemoeid');
       assert.deepStrictEqual(JSON.parse(row.data), { lines: [{ code: 'A', qty: 1 }], note: 'nieuw' }, 'regels terug, extra weg, notitie ongemoeid');
       // Een veld dat niet in het voorbeeld stond kan niet worden meegestuurd.
-      assert.strictEqual(restore.applyRestore({ backup, current, context, kind: 'quote', items: [{ id: 'q1', fields: ['owner_id', 'tenant_id'] }] }).results[0].status, 'overgeslagen');
+      assert.strictEqual(restore.applyRestore({ backup, current, context, kind: 'quote', items: [{ id: '00000000-0000-4000-8000-0a0100000001', fields: ['owner_id', 'tenant_id'] }] }).results[0].status, 'overgeslagen');
     });
   } finally { scene.cleanup(); }
 });
@@ -146,19 +146,19 @@ test('een gewijzigd record: alleen de gekozen velden gaan terug, ook één sleut
 test('vergrendeld, bestelling en voorraad: nooit overschreven; gevoelige velden en de stand blijven', async () => {
   const scene = await world();
   try {
-    scene.db.prepare("UPDATE quotes SET title = 'Gewijzigd' WHERE id = 'q2'").run();
-    scene.db.prepare("UPDATE web_orders SET status = 'verzonden' WHERE id = 'o1'").run();
-    scene.db.prepare("UPDATE stock_items SET on_hand = 99, name = 'Nieuwe naam' WHERE id = 's1'").run();
+    scene.db.prepare("UPDATE quotes SET title = 'Gewijzigd' WHERE id = '00000000-0000-4000-8000-0a0100000002'").run();
+    scene.db.prepare("UPDATE web_orders SET status = 'verzonden' WHERE id = '00000000-0000-4000-8000-0a0100000006'").run();
+    scene.db.prepare("UPDATE stock_items SET on_hand = 99, name = 'Nieuwe naam' WHERE id = '00000000-0000-4000-8000-0a0100000007'").run();
     scene.db.prepare("UPDATE users SET password_hash = 'nieuwe-hash' WHERE id = ?").run(scene.owner.id);
     await withBackup(scene, ({ backup, current, context }) => {
-      assert.match(restore.preview({ backup, current, context, kind: 'quote', id: 'q2' }).blocked, /geaccordeerd/);
-      assert.match(restore.preview({ backup, current, context, kind: 'web_order', id: 'o1' }).blocked, /nooit overschreven/);
-      assert.strictEqual(restore.applyRestore({ backup, current, context, kind: 'web_order', items: [{ id: 'o1', fields: ['status'] }] }).results[0].status, 'geblokkeerd');
-      assert.strictEqual(scene.db.prepare("SELECT status FROM web_orders WHERE id = 'o1'").get().status, 'verzonden');
-      const stock = restore.preview({ backup, current, context, kind: 'stock_item', id: 's1' });
+      assert.match(restore.preview({ backup, current, context, kind: 'quote', id: '00000000-0000-4000-8000-0a0100000002' }).blocked, /geaccordeerd/);
+      assert.match(restore.preview({ backup, current, context, kind: 'web_order', id: '00000000-0000-4000-8000-0a0100000006' }).blocked, /nooit overschreven/);
+      assert.strictEqual(restore.applyRestore({ backup, current, context, kind: 'web_order', items: [{ id: '00000000-0000-4000-8000-0a0100000006', fields: ['status'] }] }).results[0].status, 'geblokkeerd');
+      assert.strictEqual(scene.db.prepare("SELECT status FROM web_orders WHERE id = '00000000-0000-4000-8000-0a0100000006'").get().status, 'verzonden');
+      const stock = restore.preview({ backup, current, context, kind: 'stock_item', id: '00000000-0000-4000-8000-0a0100000007' });
       assert.deepStrictEqual(stock.fields, ['name'], 'on_hand wordt niet eens aangeboden');
-      restore.applyRestore({ backup, current, context, kind: 'stock_item', items: [{ id: 's1', fields: ['name', 'on_hand'] }] });
-      assert.deepStrictEqual({ ...scene.db.prepare("SELECT name, on_hand FROM stock_items WHERE id = 's1'").get() }, { name: 'Sproeier', on_hand: 99 });
+      restore.applyRestore({ backup, current, context, kind: 'stock_item', items: [{ id: '00000000-0000-4000-8000-0a0100000007', fields: ['name', 'on_hand'] }] });
+      assert.deepStrictEqual({ ...scene.db.prepare("SELECT name, on_hand FROM stock_items WHERE id = '00000000-0000-4000-8000-0a0100000007'").get() }, { name: 'Sproeier', on_hand: 99 });
       assert.deepStrictEqual(restore.listRecords({ backup, current, context, kind: 'customer' }).items.filter((item) => item.id === scene.owner.id), [], 'een beheerder is geen klant');
     });
   } finally { scene.cleanup(); }
@@ -167,16 +167,16 @@ test('vergrendeld, bestelling en voorraad: nooit overschreven; gevoelige velden 
 test('een verwijderd artikel komt terug zonder voorraadstand en met zijn verpakkingen; een nummer dat intussen is vergeven blokkeert', async () => {
   const scene = await world();
   try {
-    scene.db.prepare("DELETE FROM item_packagings WHERE id = 'p1'").run();
-    scene.db.prepare("DELETE FROM stock_items WHERE id = 's1'").run();
-    scene.db.prepare("INSERT INTO stock_items (id, tenant_id, code, name, created_at, updated_at) VALUES ('s9', ?, 'SPR-1', 'Ander artikel', ?, ?)").run(scene.tenantId, NOW, NOW);
+    scene.db.prepare("DELETE FROM item_packagings WHERE id = '00000000-0000-4000-8000-0a0100000008'").run();
+    scene.db.prepare("DELETE FROM stock_items WHERE id = '00000000-0000-4000-8000-0a0100000007'").run();
+    scene.db.prepare("INSERT INTO stock_items (id, tenant_id, code, name, created_at, updated_at) VALUES ('00000000-0000-4000-8000-0a0100000009', ?, 'SPR-1', 'Ander artikel', ?, ?)").run(scene.tenantId, NOW, NOW);
     await withBackup(scene, ({ backup, current, context }) => {
-      assert.match(restore.preview({ backup, current, context, kind: 'stock_item', id: 's1' }).blocked, /SPR-1 is intussen/);
-      scene.db.prepare("DELETE FROM stock_items WHERE id = 's9'").run();
-      const out = restore.applyRestore({ backup, current, context, kind: 'stock_item', items: [{ id: 's1' }] });
+      assert.match(restore.preview({ backup, current, context, kind: 'stock_item', id: '00000000-0000-4000-8000-0a0100000007' }).blocked, /SPR-1 is intussen/);
+      scene.db.prepare("DELETE FROM stock_items WHERE id = '00000000-0000-4000-8000-0a0100000009'").run();
+      const out = restore.applyRestore({ backup, current, context, kind: 'stock_item', items: [{ id: '00000000-0000-4000-8000-0a0100000007' }] });
       assert.strictEqual(out.results[0].status, 'hersteld');
-      assert.strictEqual(scene.db.prepare("SELECT on_hand FROM stock_items WHERE id = 's1'").get().on_hand, 0, 'de stand komt uit boekingen, niet uit de back-up');
-      assert.strictEqual(scene.db.prepare("SELECT COUNT(*) AS n FROM item_packagings WHERE item_id = 's1'").get().n, 1);
+      assert.strictEqual(scene.db.prepare("SELECT on_hand FROM stock_items WHERE id = '00000000-0000-4000-8000-0a0100000007'").get().on_hand, 0, 'de stand komt uit boekingen, niet uit de back-up');
+      assert.strictEqual(scene.db.prepare("SELECT COUNT(*) AS n FROM item_packagings WHERE item_id = '00000000-0000-4000-8000-0a0100000007'").get().n, 1);
     });
   } finally { scene.cleanup(); }
 });
@@ -184,13 +184,13 @@ test('een verwijderd artikel komt terug zonder voorraadstand en met zijn verpakk
 test('een record dat naar iets verwijst dat niet meer bestaat wordt gemeld, en een fout draait alles terug', async () => {
   const scene = await world();
   try {
-    scene.db.prepare("DELETE FROM quotes WHERE id = 'q1'").run();
+    scene.db.prepare("DELETE FROM quotes WHERE id = '00000000-0000-4000-8000-0a0100000001'").run();
     scene.db.prepare('DELETE FROM users WHERE id = ?').run(scene.piet.id);
     await withBackup(scene, ({ backup, current, context }) => {
-      const plan = restore.preview({ backup, current, context, kind: 'quote', id: 'q1' });
+      const plan = restore.preview({ backup, current, context, kind: 'quote', id: '00000000-0000-4000-8000-0a0100000001' });
       assert.match(plan.blocked, /users-record .* dat niet meer bestaat/);
-      assert.strictEqual(restore.applyRestore({ backup, current, context, kind: 'quote', items: [{ id: 'q1' }] }).results[0].status, 'geblokkeerd');
-      assert.strictEqual(scene.db.prepare("SELECT COUNT(*) AS n FROM quotes WHERE id = 'q1'").get().n, 0);
+      assert.strictEqual(restore.applyRestore({ backup, current, context, kind: 'quote', items: [{ id: '00000000-0000-4000-8000-0a0100000001' }] }).results[0].status, 'geblokkeerd');
+      assert.strictEqual(scene.db.prepare("SELECT COUNT(*) AS n FROM quotes WHERE id = '00000000-0000-4000-8000-0a0100000001'").get().n, 0);
       assert.throws(() => restore.applyRestore({ backup, current, context, kind: 'quote', items: [] }), /minstens één/);
     });
   } finally { scene.cleanup(); }
@@ -210,35 +210,35 @@ test('API: alleen hoofdbeheerders, wachtwoord nodig, verse back-up vooraf en een
   const { server, base } = await listen(app);
   const URL = '/app/api/admin/backups/restore';
   try {
-    db.prepare("INSERT INTO quotes (id, tenant_id, owner_id, number, status, title, customer, total_excl, total_incl, data, created_at, updated_at) VALUES ('q1', ?, ?, 'O1', 'concept', 'Terug te zetten', 'Jansen', 1, 1, '{}', ?, ?)").run(tenantId, baas.id, NOW, NOW);
+    db.prepare("INSERT INTO quotes (id, tenant_id, owner_id, number, status, title, customer, total_excl, total_incl, data, created_at, updated_at) VALUES ('00000000-0000-4000-8000-0a0100000001', ?, ?, 'O1', 'concept', 'Terug te zetten', 'Jansen', 1, 1, '{}', ?, ?)").run(tenantId, baas.id, NOW, NOW);
     assert.strictEqual((await createClient(base).get(`${URL}/kinds`)).status, 401);
     const tweede = createClient(base);
     await tweede.post('/app/api/auth/login', { username: 'tweede', password: PW });
     assert.strictEqual((await tweede.get(`${URL}/kinds`)).status, 403);
-    assert.strictEqual((await tweede.post(`${URL}/apply`, { backup: 'x', kind: 'quote', items: [{ id: 'q1' }], password: PW })).status, 403);
+    assert.strictEqual((await tweede.post(`${URL}/apply`, { backup: 'x', kind: 'quote', items: [{ id: '00000000-0000-4000-8000-0a0100000001' }], password: PW })).status, 403);
 
     const admin = createClient(base);
     await admin.post('/app/api/auth/login', { username: 'baas', password: PW });
     assert.ok((await admin.get(`${URL}/kinds`)).body.kinds.some((kind) => kind.kind === 'quote'));
     const made = (await admin.post('/app/api/admin/backups')).body;
-    db.prepare("DELETE FROM quotes WHERE id = 'q1'").run();
+    db.prepare("DELETE FROM quotes WHERE id = '00000000-0000-4000-8000-0a0100000001'").run();
 
     assert.strictEqual((await admin.get(`${URL}/records?backup=../x&kind=quote`)).status, 404);
     assert.strictEqual((await admin.get(`${URL}/records?backup=${made.name}&kind=bestaat-niet`)).status, 400);
     const records = (await admin.get(`${URL}/records?backup=${made.name}&kind=quote&q=terug`)).body;
-    assert.deepStrictEqual(records.items.map((item) => [item.id, item.state]), [['q1', 'ontbreekt']]);
-    const previews = (await admin.post(`${URL}/preview`, { backup: made.name, kind: 'quote', ids: ['q1'] })).body.previews;
+    assert.deepStrictEqual(records.items.map((item) => [item.id, item.state]), [['00000000-0000-4000-8000-0a0100000001', 'ontbreekt']]);
+    const previews = (await admin.post(`${URL}/preview`, { backup: made.name, kind: 'quote', ids: ['00000000-0000-4000-8000-0a0100000001'] })).body.previews;
     assert.strictEqual(previews[0].state, 'ontbreekt');
     assert.strictEqual(previews[0].blocked, '');
 
-    const body = { backup: made.name, kind: 'quote', items: [{ id: 'q1' }] };
+    const body = { backup: made.name, kind: 'quote', items: [{ id: '00000000-0000-4000-8000-0a0100000001' }] };
     assert.strictEqual((await admin.post(`${URL}/apply`, { ...body, password: 'fout' })).status, 401);
-    assert.strictEqual(db.prepare("SELECT COUNT(*) AS n FROM quotes WHERE id = 'q1'").get().n, 0, 'met een fout wachtwoord gebeurt er niets');
+    assert.strictEqual(db.prepare("SELECT COUNT(*) AS n FROM quotes WHERE id = '00000000-0000-4000-8000-0a0100000001'").get().n, 0, 'met een fout wachtwoord gebeurt er niets');
     const done = await admin.post(`${URL}/apply`, { ...body, password: PW });
     assert.strictEqual(done.status, 200);
     assert.strictEqual(done.body.results[0].status, 'hersteld');
     assert.ok(done.body.safetyBackup && fs.existsSync(path.join(dir, done.body.safetyBackup)), 'verse back-up vooraf');
-    assert.strictEqual(db.prepare("SELECT title FROM quotes WHERE id = 'q1'").get().title, 'Terug te zetten');
+    assert.strictEqual(db.prepare("SELECT title FROM quotes WHERE id = '00000000-0000-4000-8000-0a0100000001'").get().title, 'Terug te zetten');
     const actions = (await admin.get('/app/api/admin/audit')).body.items.map((entry) => entry.action);
     assert.ok(actions.includes('backup_teruggezet') && actions.includes('backup_terugzetten_wachtwoord_fout'));
     assert.deepStrictEqual(fs.readdirSync(dir).filter((name) => name.startsWith('.restore-')), []);

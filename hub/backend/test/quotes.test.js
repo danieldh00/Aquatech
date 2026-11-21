@@ -114,6 +114,7 @@ test('opschonen: onbekende tarieven, te lange teksten en rommel', () => {
 
 // ---------- API ----------
 const SECRET = 'z'.repeat(64);
+const PLAN_ID = '00000000-0000-4000-8000-0000000000b1';
 // Een echte (kleine) PNG als handtekening.
 const SIGNATURE = signaturePng();
 
@@ -142,7 +143,7 @@ test('API: offertes aanmaken, nummeren, afschermen en verwijderen', async () => 
     assert.strictEqual((await createClient(base).post('/app/api/quotes', { data: {} })).status, 401);
     const piet = await as('piet'), kees = await as('kees'), baas = await as('baas');
     const year = new Date().getFullYear();
-    const data = { title: 'Beregening tuin', date: `${year}-03-01`, customer: { name: 'Fam. Jansen' }, planId: 'plan-1',
+    const data = { title: 'Beregening tuin', date: `${year}-03-01`, customer: { name: 'Fam. Jansen' }, planId: PLAN_ID,
       lines: [{ section: 'materiaal', description: 'Sproeier', qty: 4, price: 10, vat: 21 }, { section: 'arbeid', description: 'Montage', qty: 2, price: 50, vat: 21 }] };
     const first = await piet.post('/app/api/quotes', { data });
     assert.strictEqual(first.status, 201);
@@ -166,7 +167,7 @@ test('API: offertes aanmaken, nummeren, afschermen en verwijderen', async () => 
     assert.strictEqual((await klaas.get(`/app/api/quotes/${first.body.id}`)).status, 404);
     assert.strictEqual((await klaas.put(`/app/api/quotes/${first.body.id}`, { status: 'akkoord' })).status, 403);
     assert.deepStrictEqual((await klaas.get('/app/api/quotes?all=1')).body.items, []);
-    assert.strictEqual((await piet.get('/app/api/quotes?plan=plan-1')).body.items.length, 1);
+    assert.strictEqual((await piet.get(`/app/api/quotes?plan=${PLAN_ID}`)).body.items.length, 1);
 
     const upd = await piet.put(`/app/api/quotes/${first.body.id}`, { status: 'verzonden', data: { ...data, discountPct: 10 } });
     assert.strictEqual(upd.body.status, 'verzonden');

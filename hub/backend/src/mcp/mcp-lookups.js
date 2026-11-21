@@ -137,7 +137,7 @@ function createMcpLookups(db, { today = () => new Date().toISOString().slice(0, 
    */
   function openInvoices(tenantId, { onlyLate = false, limit = 20 } = {}) {
     const day = today();
-    const all = prepare(`SELECT ${GROUP_KEY} AS group_key, MAX(customer_id) AS customer_id, MAX(customer_name) AS customer_name, COUNT(*) AS invoice_count,
+    const all = prepare(`SELECT ${GROUP_KEY} AS group_key, MAX(customer_id::text) AS customer_id, MAX(customer_name) AS customer_name, COUNT(*) AS invoice_count,
         SUM(total) AS open_total, SUM(CASE WHEN kind = 'factuur' AND due_date < ? THEN total ELSE 0 END) AS late_total,
         MIN(CASE WHEN kind = 'factuur' THEN due_date END) AS oldest_due
       FROM invoices WHERE tenant_id = ? AND status = 'definitief' GROUP BY ${GROUP_KEY}`).all(day, tenantId)

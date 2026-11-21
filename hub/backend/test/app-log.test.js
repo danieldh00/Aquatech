@@ -5,8 +5,8 @@ const assert = require('node:assert');
 const { openDb } = require('../src/database/db');
 const { createAppLog, cleanText, cleanData } = require('../src/platform/app-log');
 
-const MAIN = 'main';
-const OTHER = 'other';
+const MAIN = '00000000-0000-4000-8000-0000000000b1';
+const OTHER = '00000000-0000-4000-8000-0000000000b2';
 
 /**
  * Maakt een database met twee omgevingen en een logboek met een nepklok.

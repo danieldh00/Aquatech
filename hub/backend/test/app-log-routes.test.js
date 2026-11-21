@@ -8,8 +8,9 @@ const { createAppLog } = require('../src/platform/app-log');
 const { registerAppLogRoutes } = require('../src/platform/app-log-routes');
 const { createClient, listen } = require('./helpers/http-client');
 
-const MAIN = 'tenant-hoofd';
-const OTHER = 'tenant-ander';
+const MAIN = '00000000-0000-4000-8000-0000000000b1';
+const OTHER = '00000000-0000-4000-8000-0000000000b2';
+const USER_ID = '00000000-0000-4000-8000-0000000000c1';
 
 /**
  * Bouwt een testserver met een logboek met voorbeeldregels in twee omgevingen.
@@ -28,7 +29,7 @@ async function setup() {
   appLog.flush();
   const app = express();
   app.use((req, _res, next) => {
-    req.user = { id: req.headers['x-user'] || 'u1', rights: String(req.headers['x-rights'] || 'beheer').split(',') };
+    req.user = { id: req.headers['x-user'] || USER_ID, rights: String(req.headers['x-rights'] || 'beheer').split(',') };
     req.tenantId = req.headers['x-tenant'] || MAIN;
     req.platform = req.headers['x-platform'] === '1';
     next();

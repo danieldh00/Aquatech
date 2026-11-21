@@ -214,7 +214,7 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
    * @returns {{ ids: string[], next: string|null }} De id's en het cursor-id voor de volgende portie (null = klaar).
    */
   function thumbCandidates(tenantId, after = '') {
-    const rows = prepare(`SELECT id FROM item_images WHERE tenant_id = ? AND thumb IS NULL AND id > ? ORDER BY id LIMIT ${THUMB_PAGE_SIZE}`).all(tenantId, String(after || ''));
+    const rows = prepare(`SELECT id FROM item_images WHERE tenant_id = ? AND thumb IS NULL AND id::text > ? ORDER BY id::text LIMIT ${THUMB_PAGE_SIZE}`).all(tenantId, String(after || ''));
     return { ids: rows.map((row) => row.id), next: rows.length === THUMB_PAGE_SIZE ? rows[rows.length - 1].id : null };
   }
 
@@ -303,7 +303,7 @@ function createItemImageStore(db, { vault, fetchImpl = null, resolveHost = publi
    * @returns {Promise<{ processed: number, imported: number, reused: number, stored: number, failed: { code: string, itemId: string, url: string, reason: string, convert: boolean }[], next: string|null, pending: number }>} Het resultaat; `stored` = hoeveel nieuwe afbeeldingen er echt zijn bewaard (imported en reused tellen artikelen); `next` is het cursor-id voor de volgende portie of null als alles gehad is.
    */
   async function importFromShop(tenantId, { after = '' } = {}) {
-    const rows = prepare(`SELECT i.id, i.code, p.image ${CANDIDATES_SQL} AND i.id > ? ORDER BY i.id LIMIT ${IMPORT_PAGE_SIZE}`).all(tenantId, String(after || ''));
+    const rows = prepare(`SELECT i.id, i.code, p.image ${CANDIDATES_SQL} AND i.id::text > ? ORDER BY i.id::text LIMIT ${IMPORT_PAGE_SIZE}`).all(tenantId, String(after || ''));
     const known = new Map(prepare('SELECT id, source_url FROM item_images WHERE tenant_id = ? AND source_url IS NOT NULL').all(tenantId).map((row) => [row.source_url, row.id]));
     const byUrl = new Map();
     for (const row of rows) byUrl.set(row.image, [...(byUrl.get(row.image) || []), row]);

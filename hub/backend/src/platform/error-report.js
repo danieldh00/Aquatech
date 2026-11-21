@@ -312,6 +312,8 @@ function createErrorReport({ debugFor, log = (line, detail) => console.error(lin
     res.locals.errorCause = error;
     if (error && error.type === 'entity.parse.failed') return res.status(400).json({ error: 'invalid_json', message: 'Ongeldige JSON: het verzoek kon niet worden gelezen.' });
     if (error && error.type === 'entity.too.large') return res.status(413).json({ error: 'too_large', message: 'Het verzoek is te groot (bijvoorbeeld een te grote afbeelding).' });
+    // Een id in het verzoek dat geen UUID is (in een transactie, waar de database niet stilletjes geen rijen kon geven): bestaat niet.
+    if (error && error.code === '22P02' && /type uuid/.test(String(error.message))) return res.status(404).json({ error: 'not_found', message: 'Niet gevonden.' });
     const errorId = newErrorId();
     res.locals.errorId = errorId;
     try { counter.add(); } catch { /* tellen mag de foutafhandeling nooit breken */ }

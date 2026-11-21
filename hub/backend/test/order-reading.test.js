@@ -93,12 +93,12 @@ test('inlezen: route koppelt aan artikelen, schrijft niets en kent limieten en r
     assert.strictEqual((await baas.post('/app/api/purchase-orders/read', { file: `data:application/pdf;base64,${Buffer.from('<html>').toString('base64')}` })).status, 400);
     // Een leverancier die niet bij deze organisatie hoort (ook die van een andere) wordt nooit gekozen.
     const other = store.createTenant({ name: 'Groen BV', slug: 'groen' }).tenant;
-    db.prepare("INSERT INTO suppliers (id, tenant_id, name, contact_name, email, phone, address, notes, archived, created_at, updated_at) VALUES ('vreemde-leverancier', ?, 'Tuintechniek', '', '', '', '', '', 0, '2026-01-01', '2026-01-01')").run(other.id);
-    const foreign = await baas.post('/app/api/purchase-orders/read', { file: FILE, supplierId: 'vreemde-leverancier' });
+    db.prepare("INSERT INTO suppliers (id, tenant_id, name, contact_name, email, phone, address, notes, archived, created_at, updated_at) VALUES ('00000000-0000-4000-8000-0000000000f1', ?, 'Tuintechniek', '', '', '', '', '', 0, '2026-01-01', '2026-01-01')").run(other.id);
+    const foreign = await baas.post('/app/api/purchase-orders/read', { file: FILE, supplierId: '00000000-0000-4000-8000-0000000000f1' });
     assert.strictEqual(foreign.status, 200);
     assert.strictEqual(foreign.body.supplier, null);
     // Het formulier mag de leverancier van een andere organisatie ook niet gebruiken.
-    assert.strictEqual((await baas.post('/app/api/purchase-orders', { supplierId: 'vreemde-leverancier', lines: [] })).status, 404);
+    assert.strictEqual((await baas.post('/app/api/purchase-orders', { supplierId: '00000000-0000-4000-8000-0000000000f1', lines: [] })).status, 404);
     assert.strictEqual(calls.count, 2);
     const klant = await as('klant');
     assert.strictEqual((await klant.post('/app/api/purchase-orders/read', { file: FILE })).status, 403);

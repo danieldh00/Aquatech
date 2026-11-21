@@ -30,8 +30,8 @@ async function addProduct(world, code) {
  * @returns {string} Het id van de omgeving.
  */
 function tenantOf(db) {
-  db.prepare("INSERT INTO tenants (id, slug, name, created_at) VALUES ('t', 'hoofd', 'Hoofd', '2026-01-01')").run();
-  return 't';
+  db.prepare("INSERT INTO tenants (id, slug, name, created_at) VALUES ('00000000-0000-4000-8000-0a0600000001', 'hoofd', 'Hoofd', '2026-01-01')").run();
+  return '00000000-0000-4000-8000-0a0600000001';
 }
 
 /**
