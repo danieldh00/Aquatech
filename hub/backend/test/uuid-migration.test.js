@@ -65,3 +65,11 @@ test('legacyUuid: hetzelfde afleiden als de migratie, een uuid blijft gelijk en 
   assert.strictEqual(legacyUuid(null), null);
   assert.strictEqual(legacyUuid('oude-tenant'), derived('oude-tenant'));
 });
+
+test('een INSERT … RETURNING met een ongeldig uuid blijft een fout, een SELECT geeft niets', async () => {
+  const { toleratesInvalidUuid } = require('../src/database/pg-pool');
+  assert.equal(toleratesInvalidUuid('SELECT id FROM users WHERE id = ?'), true);
+  assert.equal(toleratesInvalidUuid('UPDATE users SET name = ? WHERE id = ? RETURNING id'), true);
+  assert.equal(toleratesInvalidUuid('INSERT INTO users (id) VALUES (?) RETURNING id'), false);
+  assert.equal(toleratesInvalidUuid('WITH x AS (INSERT INTO users (id) VALUES (?) RETURNING id) SELECT * FROM x'), false);
+});

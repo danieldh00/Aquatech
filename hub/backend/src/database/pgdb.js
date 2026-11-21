@@ -45,6 +45,8 @@ class DatabaseError extends Error {
   }
 }
 
+const { toleratesInvalidUuid } = require('./pg-pool');
+
 /**
  * Is dit de fout van PostgreSQL voor een waarde die geen geldige UUID is?
  * @param {Error} error De fout.
@@ -226,7 +228,7 @@ class PgDatabase {
     try {
       return this.query(sql, params);
     } catch (error) {
-      if (isInvalidUuid(error) && !this.bridge.inTransaction) return { rows: [], rowCount: 0 };
+      if (isInvalidUuid(error) && !this.bridge.inTransaction && toleratesInvalidUuid(sql)) return { rows: [], rowCount: 0 };
       throw error;
     }
   }
@@ -242,7 +244,7 @@ class PgDatabase {
     try {
       return this.query(sql, params);
     } catch (error) {
-      if (isInvalidUuid(error) && !this.bridge.inTransaction && /^\s*(UPDATE|DELETE)\b/i.test(sql)) return { rows: [], rowCount: 0 };
+      if (isInvalidUuid(error) && !this.bridge.inTransaction && toleratesInvalidUuid(sql)) return { rows: [], rowCount: 0 };
       throw error;
     }
   }
@@ -569,4 +571,4 @@ function dropSchemas(url, prefix) {
   }
 }
 
-module.exports = { isInvalidUuid, stripNul, openPg, openScratch, dropScratch, pgConfig, pgVersion, toPgParams, dropSchemas, DatabaseError, PgDatabase };
+module.exports = { isInvalidUuid, toleratesInvalidUuid, stripNul, openPg, openScratch, dropScratch, pgConfig, pgVersion, toPgParams, dropSchemas, DatabaseError, PgDatabase };
