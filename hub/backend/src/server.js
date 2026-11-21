@@ -2698,7 +2698,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
      * @param {string} since Tijdstip (ISO).
      * @returns {?{ id: string, number: string }} De offerte, of niets.
      */
-    findRecent: (tenantId, ownerId, marker, since) => database.prepare("SELECT id, number FROM quotes WHERE tenant_id = ? AND owner_id = ? AND deleted_at IS NULL AND created_at > ? AND data LIKE ? LIMIT 1").get(tenantId, String(ownerId), since, `%${marker}%`) || null,
+    findRecent: (tenantId, ownerId, marker, since) => database.prepare("SELECT id, number FROM quotes WHERE tenant_id = ? AND owner_id = ? AND deleted_at IS NULL AND created_at > ? AND data::text LIKE ? LIMIT 1").get(tenantId, String(ownerId), since, `%${marker}%`) || null,
     settingsFor: (id) => settingsFor(id), mailerFor, mailBody,
   });
   /**
