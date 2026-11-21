@@ -146,6 +146,20 @@ function createPoolAsync({ url, config, db, toPgValue, DatabaseError }) {
       }
     }
   };
+  /**
+   * Leesquery waarbij een waarde die geen UUID is (kan nooit bij een uuid-kolom passen) geen rijen geeft in plaats van een fout.
+   * @param {string} sql De SQL met ?-parameters.
+   * @param {Array} params De parameters.
+   * @returns {Promise<{ rows: object[], rowCount: number }>} Het resultaat.
+   */
+  const readOrEmpty = async (sql, params) => {
+    try {
+      return await query(sql, params);
+    } catch (error) {
+      if (error instanceof DatabaseError && error.code === '22P02' && /type uuid/.test(error.message)) return { rows: [], rowCount: 0 };
+      throw error;
+    }
+  };
   return {
     pooled: true,
     size: POOL_SIZE,
@@ -155,14 +169,14 @@ function createPoolAsync({ url, config, db, toPgValue, DatabaseError }) {
      * @param {...*} params De parameters.
      * @returns {Promise<object|undefined>} De rij.
      */
-    get: async (sql, ...params) => (await query(sql, params)).rows[0],
+    get: async (sql, ...params) => (await readOrEmpty(sql, params)).rows[0],
     /**
      * Alle rijen van het resultaat.
      * @param {string} sql De SQL met ?-parameters.
      * @param {...*} params De parameters.
      * @returns {Promise<object[]>} De rijen.
      */
-    all: async (sql, ...params) => (await query(sql, params)).rows,
+    all: async (sql, ...params) => (await readOrEmpty(sql, params)).rows,
     /**
      * Voert een wijziging uit (één statement, meteen vastgelegd).
      * @param {string} sql De SQL met ?-parameters.

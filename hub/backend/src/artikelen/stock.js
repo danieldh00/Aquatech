@@ -241,7 +241,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    */
   function reservationsOf(tenantId, itemId = null) {
     const args = [tenantId];
-    let sql = `SELECT r.item_id, COALESCE(r.work_order_id, 'order:' || r.web_order_id) AS work_order_id, r.qty, r.updated_at, COALESCE(w.number, o.number) AS number,
+    let sql = `SELECT r.item_id, COALESCE(r.work_order_id::text, 'order:' || r.web_order_id) AS work_order_id, r.qty, r.updated_at, COALESCE(w.number, o.number) AS number,
         COALESCE(w.title, CASE WHEN o.id IS NULL THEN NULL ELSE 'Webshopbestelling' END) AS title, COALESCE(w.customer, o.customer_name) AS customer,
         COALESCE(w.status, o.status) AS status, w.planned_date, i.code, i.name, i.unit
       FROM stock_reservations r JOIN stock_items i ON i.id = r.item_id
@@ -1345,7 +1345,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     if (!needed.size) return [];
     const ids = [...needed.keys()];
     const rows = prepare(`SELECT i.id, i.name, i.on_hand, i.stock_managed,
-        (SELECT COALESCE(SUM(r.qty), 0) FROM stock_reservations r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id AND COALESCE(r.work_order_id, 'order:' || r.web_order_id) <> ?) AS reserved
+        (SELECT COALESCE(SUM(r.qty), 0) FROM stock_reservations r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id AND COALESCE(r.work_order_id::text, 'order:' || r.web_order_id) <> ?) AS reserved
       FROM stock_items i WHERE i.tenant_id = ? AND i.id IN (${ids.map(() => '?').join(', ')})`).all(String(ownKey), tenantId, ...ids);
     return rows
       .filter((itemRow) => itemRow.stock_managed === undefined || Number(itemRow.stock_managed))
