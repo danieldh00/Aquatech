@@ -1,5 +1,6 @@
 // Interne notitie per offerte: bewaard en getoond voor medewerkers, nooit voor de klant (portaal, openbare link, document),
 // en overgenomen naar de werkorder (alleen medewerkers).
+const { stableStringify } = require('../src/platform/stable-json');
 const test = require('node:test');
 const { after } = test;
 const assert = require('node:assert');
@@ -111,6 +112,6 @@ test('het akkoordbewijs (contentHash) wordt berekend zonder interne notities', a
   assert.ok(stored.acceptance.contentHash, 'er is een hash');
   const { internalNote, ...rest } = stored.data;
   const customerData = { ...rest, lines: stored.data.lines.map(({ note, noteChecked, ...line }) => line) };
-  const expected = crypto.createHash('sha256').update(JSON.stringify({ number: stored.number, data: customerData, totals: QuoteCore.totals(customerData) })).digest('hex');
+  const expected = crypto.createHash('sha256').update(stableStringify({ number: stored.number, data: customerData, totals: QuoteCore.totals(customerData) })).digest('hex');
   assert.strictEqual(stored.acceptance.contentHash, expected);
 });

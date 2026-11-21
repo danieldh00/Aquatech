@@ -83,6 +83,8 @@ const STATUSES = Object.keys(Core.STATUSES);
  */
 const currentTimestamp = () => new Date().toISOString();
 
+const { stableStringify } = require('../platform/stable-json');
+
 /**
  * SHA-256 van een tekst.
  * @param {string} text De tekst.
@@ -486,7 +488,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
       totalExcl: totals.net, totalIncl: totals.total,
       // De betaaltermijn waarmee de klant akkoord ging (ook onderdeel van de inhoud hieronder).
       paymentDays: data.paymentDays === undefined ? null : data.paymentDays,
-      contentHash: sha256(JSON.stringify({ number: quoteRow.number, data: withoutInternalNotes(data), totals })),
+      contentHash: sha256(stableStringify({ number: quoteRow.number, data: withoutInternalNotes(data), totals })),
     };
     return transaction(db, () => {
       const current = prepare('SELECT status, CASE WHEN acceptance IS NULL THEN 0 ELSE 1 END AS accepted FROM quotes WHERE id = ?').get(quoteRow.id);
