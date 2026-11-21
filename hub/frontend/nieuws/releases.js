@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.32.3',
+      date: '2026-11-22',
+      title: 'Offertemails: limiet per ontvanger',
+      items: [
+        { text: 'Binnen één organisatie gaan naar één e-mailadres hoogstens 5 offertemails per uur, zodat een klant niet overspoeld wordt.', for: ['offertes'] },
+      ],
+    },
+    {
       version: '1.32.2',
       date: '2026-11-21',
       title: 'Database: id\'s en verwijzingen zijn echte uuid\'s',

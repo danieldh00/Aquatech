@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.32.3
+
+Offertes versturen (losse mail en bulk) reserveert per ontvangend e-mailadres vooraf een plek (atomair, dus ook bij parallelle verzoeken) en geeft die terug bij een mislukte verzending (`beveiliging/recipient-limit.js`, 5 per uur per organisatie, in het geheugen); daarboven 429 `recipient_limited` bij de losse mail en een overgeslagen regel bij bulk. Bovenop de bestaande limiet per gebruiker.
+
 ## 1.32.2
 
 - Migratie 97: alle id's en verwijzingen naar id's (197 kolommen in 62 tabellen, o.a. tenant, gebruiker, plan, offerte, factuur, werkorder, bestelling en artikel) gaan van tekst naar het type uuid. Kleinere tabellen en indexen, en de database weigert nu een verwijzing naar iets wat geen id is. Waarden die al een uuid zijn blijven gelijk; een andere waarde (zou niet moeten voorkomen) krijgt in elke kolom dezelfde afgeleide uuid, zodat verwijzingen blijven kloppen. Bewust tekst gebleven: id's van buiten (WooCommerce, Mollie, Visma), `invoices.shop_order_id`, `client_id` van de offline wachtrij, `request_id`, `step_id` en `material_id`.
