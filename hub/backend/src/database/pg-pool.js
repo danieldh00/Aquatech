@@ -191,7 +191,7 @@ function createPoolAsync({ url, config, db, toPgValue, DatabaseError }) {
      * @param {...*} params De parameters.
      * @returns {Promise<{ changes: number }>} Aantal gewijzigde rijen.
      */
-    run: async (sql, ...params) => ({ changes: (await query(sql, params)).rowCount }),
+    run: async (sql, ...params) => ({ changes: (await readOrEmpty(sql, params)).rowCount }),
   };
 }
 

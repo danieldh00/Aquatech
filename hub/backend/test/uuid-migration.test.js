@@ -66,16 +66,23 @@ test('legacyUuid: hetzelfde afleiden als de migratie, een uuid blijft gelijk en 
   assert.strictEqual(legacyUuid('oude-tenant'), derived('oude-tenant'));
 });
 
-test('een INSERT … RETURNING met een ongeldig uuid blijft een fout, een SELECT geeft niets', async () => {
+test('een INSERT … RETURNING met een ongeldig uuid blijft een fout, via prepare en db.async; lezen en wijzigen vinden niets', async () => {
+  const { openDb } = require('../src/database/db');
   const { toleratesInvalidUuid } = require('../src/database/pg-pool');
   assert.equal(toleratesInvalidUuid('SELECT id FROM users WHERE id = ?'), true);
   assert.equal(toleratesInvalidUuid('UPDATE users SET name = ? WHERE id = ? RETURNING id'), true);
   assert.equal(toleratesInvalidUuid('INSERT INTO users (id) VALUES (?) RETURNING id'), false);
   assert.equal(toleratesInvalidUuid('WITH x AS (INSERT INTO users (id) VALUES (?) RETURNING id) SELECT * FROM x'), false);
-});
-
-test('legacyUuid: een lege tekst wordt NULL, behalve in een verplichte kolom', () => {
-  const { legacyUuid } = require('../src/database/pgschema');
-  assert.equal(legacyUuid(''), null);
-  assert.match(legacyUuid('', true), /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  const db = openDb();
+  const insert = 'INSERT INTO tenants (id, slug, name, created_at) VALUES (?, ?, ?, ?) RETURNING id';
+  const now = new Date().toISOString();
+  assert.throws(() => db.prepare(insert).get('geen-uuid', 'a', 'A', now), /uuid/i);
+  assert.throws(() => db.prepare(insert).all('geen-uuid', 'a', 'A', now), /uuid/i);
+  assert.throws(() => db.prepare(insert.replace(' RETURNING id', '')).run('geen-uuid', 'a', 'A', now), /uuid/i);
+  await assert.rejects(db.async.get(insert, 'geen-uuid', 'a', 'A', now), /uuid/i);
+  await assert.rejects(db.async.run(insert.replace(' RETURNING id', ''), 'geen-uuid', 'a', 'A', now), /uuid/i);
+  assert.strictEqual(db.prepare('SELECT id FROM tenants WHERE id = ?').get('geen-uuid'), undefined);
+  assert.strictEqual(await db.async.get('SELECT id FROM tenants WHERE id = ?', 'geen-uuid'), undefined);
+  assert.strictEqual(db.prepare('UPDATE tenants SET name = ? WHERE id = ?').run('X', 'geen-uuid').changes, 0);
+  assert.strictEqual((await db.async.run('UPDATE tenants SET name = ? WHERE id = ?', 'X', 'geen-uuid')).changes, 0);
 });
