@@ -73,3 +73,9 @@ test('een INSERT … RETURNING met een ongeldig uuid blijft een fout, een SELECT
   assert.equal(toleratesInvalidUuid('INSERT INTO users (id) VALUES (?) RETURNING id'), false);
   assert.equal(toleratesInvalidUuid('WITH x AS (INSERT INTO users (id) VALUES (?) RETURNING id) SELECT * FROM x'), false);
 });
+
+test('legacyUuid: een lege tekst wordt NULL, behalve in een verplichte kolom', () => {
+  const { legacyUuid } = require('../src/database/pgschema');
+  assert.equal(legacyUuid(''), null);
+  assert.match(legacyUuid('', true), /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+});
