@@ -73,7 +73,7 @@ async function withBackup(scene, callback) {
  * @returns {number} Het aantal.
  */
 function reserved(scene) {
-  const row = scene.db.prepare("SELECT COALESCE(SUM(qty), 0) AS qty FROM stock_reservations WHERE tenant_id = ? AND work_order_id = 'order:ow1'").get(scene.tenantId);
+  const row = scene.db.prepare("SELECT COALESCE(SUM(qty), 0) AS qty FROM stock_reservations WHERE tenant_id = ? AND web_order_id = 'ow1'").get(scene.tenantId);
   return Number(row.qty);
 }
 

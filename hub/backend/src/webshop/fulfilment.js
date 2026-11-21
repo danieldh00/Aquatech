@@ -96,15 +96,15 @@ function createFulfilment(db) {
       for (const row of prepare(`SELECT id, on_hand, stock_managed FROM stock_items WHERE tenant_id = ? AND id IN (${marks})`).all(tenantId, ...chunk)) {
         items.set(String(row.id), { onHand: Number(row.on_hand) || 0, managed: row.stock_managed === undefined || row.stock_managed === null || Boolean(Number(row.stock_managed)) });
       }
-      for (const row of prepare(`SELECT item_id, SUM(qty) AS qty FROM stock_reservations WHERE tenant_id = ? AND item_id IN (${marks}) AND work_order_id NOT LIKE 'order:%' GROUP BY item_id`).all(tenantId, ...chunk)) {
+      for (const row of prepare(`SELECT item_id, SUM(qty) AS qty FROM stock_reservations WHERE tenant_id = ? AND item_id IN (${marks}) AND web_order_id IS NULL GROUP BY item_id`).all(tenantId, ...chunk)) {
         workOrderReserved.set(String(row.item_id), Number(row.qty) || 0);
       }
-      const reservations = prepare(`SELECT r.item_id, r.qty, r.work_order_id, o.created_at, o.number FROM stock_reservations r
-        JOIN web_orders o ON o.tenant_id = r.tenant_id AND o.id = substr(r.work_order_id, 7)
-        WHERE r.tenant_id = ? AND r.item_id IN (${marks}) AND r.work_order_id LIKE 'order:%' AND o.status = 'nieuw'`).all(tenantId, ...chunk);
+      const reservations = prepare(`SELECT r.item_id, r.qty, r.web_order_id, o.created_at, o.number FROM stock_reservations r
+        JOIN web_orders o ON o.tenant_id = r.tenant_id AND o.id = r.web_order_id
+        WHERE r.tenant_id = ? AND r.item_id IN (${marks}) AND r.web_order_id IS NOT NULL AND o.status = 'nieuw'`).all(tenantId, ...chunk);
       for (const row of reservations) {
         const queue = queues.get(String(row.item_id)) || [];
-        queue.push({ orderId: String(row.work_order_id).slice(6), qty: Number(row.qty) || 0, createdAt: row.created_at, number: row.number });
+        queue.push({ orderId: String(row.web_order_id), qty: Number(row.qty) || 0, createdAt: row.created_at, number: row.number });
         queues.set(String(row.item_id), queue);
       }
       const lines = prepare(`SELECT l.item_id, l.qty, l.received_qty, p.expected_date FROM purchase_order_lines l

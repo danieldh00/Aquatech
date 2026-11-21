@@ -1653,6 +1653,21 @@ const PG_MIGRATIONS = [
   ALTER TABLE invoices ADD CONSTRAINT invoices_data_object CHECK (jsonb_typeof(data) = 'object');
   ALTER TABLE quotes ADD CONSTRAINT quotes_data_object CHECK (jsonb_typeof(data) = 'object');
   `,
+  // 96: een reservering hoort bij een werkorder óf een webshopbestelling. Voorheen stond beide in één tekstkolom (`order:<id>` voor een bestelling), zonder verwijzing. Nu hebben ze elk een eigen kolom met een echte verwijzing (verdwijnt mee met de order), en een controle dat er precies één is gevuld. Reserveringen waarvan de order niet (meer) bestaat zijn zinloos en worden eerst verwijderd.
+  `
+  DELETE FROM stock_reservations r
+    WHERE (r.work_order_id LIKE 'order:%' AND NOT EXISTS (SELECT 1 FROM web_orders o WHERE o.tenant_id = r.tenant_id AND o.id = substr(r.work_order_id, 7)))
+       OR (r.work_order_id NOT LIKE 'order:%' AND NOT EXISTS (SELECT 1 FROM work_orders w WHERE w.tenant_id = r.tenant_id AND w.id = r.work_order_id));
+  ALTER TABLE stock_reservations ADD COLUMN web_order_id TEXT;
+  UPDATE stock_reservations SET web_order_id = substr(work_order_id, 7), work_order_id = NULL WHERE work_order_id LIKE 'order:%';
+  ALTER TABLE stock_reservations DROP CONSTRAINT stock_reservations_pkey;
+  ALTER TABLE stock_reservations ALTER COLUMN work_order_id DROP NOT NULL;
+  ALTER TABLE stock_reservations ADD CONSTRAINT stock_reservations_work_order_fkey FOREIGN KEY (work_order_id) REFERENCES work_orders(id) ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE;
+  ALTER TABLE stock_reservations ADD CONSTRAINT stock_reservations_web_order_fkey FOREIGN KEY (web_order_id) REFERENCES web_orders(id) ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE;
+  ALTER TABLE stock_reservations ADD CONSTRAINT stock_reservations_one_owner CHECK (num_nonnulls(work_order_id, web_order_id) = 1);
+  CREATE UNIQUE INDEX stock_reservations_work_order ON stock_reservations (tenant_id, work_order_id, item_id) WHERE work_order_id IS NOT NULL;
+  CREATE UNIQUE INDEX stock_reservations_web_order ON stock_reservations (tenant_id, web_order_id, item_id) WHERE web_order_id IS NOT NULL;
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

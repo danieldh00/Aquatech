@@ -274,7 +274,9 @@ test('voorstellen: een backorder (reservering groter dan de voorraad) geeft een 
     await kees.put(`/app/api/stock/items/${item.id}/suppliers`, { suppliers: [{ supplierId: supplier.id, orderQty: 1, preferred: true }] });
     assert.deepStrictEqual(writes(await refresh(kees)), ZEROS);
     // Een bestelling reserveert 5 terwijl er 2 liggen: 3 tekort.
-    db.prepare('INSERT INTO stock_reservations (tenant_id, work_order_id, item_id, qty, updated_at) VALUES (?, ?, ?, ?, ?)').run(main, 'order:test', item.id, 5, new Date().toISOString());
+    const now = new Date().toISOString();
+    db.prepare("INSERT INTO web_orders (id, tenant_id, number, status, customer_name, email, total, data, created_at, updated_at) VALUES ('test', ?, 'B-T1', 'nieuw', 'Klant', 'klant@example.nl', 10, '{}', ?, ?)").run(main, now, now);
+    db.prepare('INSERT INTO stock_reservations (tenant_id, web_order_id, item_id, qty, updated_at) VALUES (?, ?, ?, ?, ?)').run(main, 'test', item.id, 5, now);
     assert.deepStrictEqual(writes(await refresh(kees)), { created: 1, updated: 0, removed: 0 });
     assert.deepStrictEqual((await proposals(kees)).orders[0].lines.map((line) => [line.code, line.qty, line.unitCost]), [['SPROEIER', 3, 4]]);
   } finally {

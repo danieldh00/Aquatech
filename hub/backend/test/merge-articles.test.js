@@ -277,6 +277,8 @@ test('samenvoeging terugdraaien zonder logboek (samengevoegd voor 1.5.9) en met 
   assert.deepStrictEqual(stock.unmergePreview(tenantId, again.parentId).variants.map((variant) => variant.outcome), ['los', 'los', 'weg', 'gearchiveerd']);
   // Een reservering op een later bijgemaakte variant blokkeert het terugdraaien.
   const plain = added.item.variants.find((variant) => variant.values.Maat === '25 mm');
+  const owner = createStore(db).createCustomer(tenantId, { displayName: 'Eigenaar' }).user;
+  db.prepare("INSERT INTO work_orders (id, tenant_id, owner_id, number, status, data, created_at, updated_at) VALUES ('wo-1', ?, ?, 'W-1', 'open', '{}', ?, ?)").run(tenantId, owner.id, '2026-11-04T10:00:00Z', '2026-11-04T10:00:00Z');
   db.prepare('INSERT INTO stock_reservations (tenant_id, work_order_id, item_id, qty, updated_at) VALUES (?, ?, ?, 1, ?)').run(tenantId, 'wo-1', plain.id, '2026-11-04T10:00:00Z');
   assert.ok(stock.unmergePreview(tenantId, again.parentId).blocked);
   assert.strictEqual(stock.unmergeVariants(tenantId, again.parentId).status, 409);

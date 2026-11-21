@@ -159,6 +159,7 @@ async function importLines(db, lines, options = {}) {
   let insert = null;
   let currentTable = '';
   let positions = [];
+  let splitReservationOwner = false;
   db.exec('BEGIN');
   try {
     if (options.deferForeignKeys) deferForeignKeys(db);
@@ -178,13 +179,24 @@ async function importLines(db, lines, options = {}) {
         if (!target) continue;
         // Alleen de kolommen die in beide bestaan, op hun plek in de regels van de export.
         positions = parsed.columns.map((column, index) => ({ column, index })).filter((entry) => target.columns.includes(entry.column));
-        insert = db.prepare(`INSERT INTO ${parsed.table} (${positions.map((entry) => entry.column).join(', ')}) VALUES (${positions.map(() => '?').join(', ')})`);
+        // Reserveringen uit een back-up van vóór migratie 96 hadden één kolom: `order:<id>` voor een webshopbestelling.
+        splitReservationOwner = parsed.table === 'stock_reservations' && !parsed.columns.includes('web_order_id') && positions.some((entry) => entry.column === 'work_order_id');
+        const columnNames = positions.map((entry) => entry.column);
+        if (splitReservationOwner) columnNames.push('web_order_id');
+        insert = db.prepare(`INSERT INTO ${parsed.table} (${columnNames.join(', ')}) VALUES (${columnNames.map(() => '?').join(', ')})`);
         currentTable = parsed.table;
         counts[currentTable] = 0;
         continue;
       }
       if (!insert) continue;
-      insert.run(...positions.map((entry) => parsed[entry.index]));
+      const values = positions.map((entry) => parsed[entry.index]);
+      if (splitReservationOwner) {
+        const ownerAt = positions.findIndex((entry) => entry.column === 'work_order_id');
+        const owner = String(values[ownerAt] ?? '');
+        values.push(owner.startsWith('order:') ? owner.slice(6) : null);
+        if (owner.startsWith('order:')) values[ownerAt] = null;
+      }
+      insert.run(...values);
       counts[currentTable]++;
     }
     if (!header) throw new Error('Lege back-up.');

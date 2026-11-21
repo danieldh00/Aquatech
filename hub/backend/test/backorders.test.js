@@ -113,7 +113,7 @@ test('deels verzenden: de rest blijft op backorder, de voorraad en reservering v
   assert.strictEqual(shipped.body.order.lines[0].shippedQty, 4);
   assert.strictEqual(shipped.body.order.shipments.length, 1);
   assert.strictEqual(db.prepare("SELECT on_hand FROM stock_items WHERE code = 'BUS'").get().on_hand, 0);
-  assert.strictEqual(Number(db.prepare("SELECT SUM(qty) AS n FROM stock_reservations WHERE work_order_id = ?").get(`order:${id}`).n), 6, 'de reservering krimpt tot de backorder');
+  assert.strictEqual(Number(db.prepare("SELECT SUM(qty) AS n FROM stock_reservations WHERE web_order_id = ?").get(id).n), 6, 'de reservering krimpt tot de backorder');
   assert.strictEqual(db.prepare("SELECT COUNT(*) AS n FROM invoices").get().n, 0, 'nog geen factuur zolang niet alles is geleverd');
   const mail = await until(() => mailsWith(sent, /Een deel van je bestelling/)[0]);
   assert.match(mail.text, /4 × Sproeier/);
@@ -153,7 +153,7 @@ test('een ontvangst maakt de backorder leverbaar: markering, Te picken, nieuwe p
   assert.strictEqual(done.body.order.shipments.length, 2);
   assert.strictEqual(done.body.order.backorderReadyAt, null);
   assert.strictEqual(db.prepare("SELECT on_hand FROM stock_items WHERE code = 'BUS'").get().on_hand, 0);
-  assert.strictEqual(db.prepare("SELECT COUNT(*) AS n FROM stock_reservations WHERE work_order_id = ?").get(`order:${id}`).n, 0, 'geen reservering meer');
+  assert.strictEqual(db.prepare("SELECT COUNT(*) AS n FROM stock_reservations WHERE web_order_id = ?").get(id).n, 0, 'geen reservering meer');
   await until(() => db.prepare('SELECT COUNT(*) AS n FROM invoices').get().n === 1);
   const shippedMail = await until(() => mailsWith(sent, /is onderweg|staat klaar/).filter((message) => !/Een deel/.test(message.subject))[0]);
   assert.match(shippedMail.text, /6 × Sproeier/);
