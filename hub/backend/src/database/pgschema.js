@@ -334,6 +334,22 @@ function uuidMigrationSql() {
   `;
 }
 
+const UUID_TEXT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * De uuid-waarde van een id uit een back-up van vóór migratie 97, op dezelfde manier als de migratie: een uuid blijft gelijk,
+ * lege tekst wordt NULL en een andere tekst krijgt een vaste, afgeleide uuid (md5), zodat verwijzingen blijven kloppen.
+ * @param {*} value De waarde uit de back-up.
+ * @returns {*} De waarde voor een uuid-kolom.
+ */
+function legacyUuid(value) {
+  if (typeof value !== 'string') return value;
+  if (value === '') return null;
+  if (UUID_TEXT.test(value)) return value;
+  const hex = require('crypto').createHash('md5').update(`aquatech-uuid:${value}`).digest('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 const PG_MIGRATIONS = [
   // 13: planning en klantlink van werkorders.
   `
@@ -1794,4 +1810,4 @@ const PG_MIGRATIONS = [
   uuidMigrationSql(),
 ];
 
-module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };
+module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS, UUID_COLUMNS, legacyUuid };

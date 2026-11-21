@@ -55,3 +55,13 @@ test('migratie 97: bestaande gegevens blijven kloppen, verwijzingen blijven werk
     if (PG_MIGRATIONS[PG_MIGRATIONS.length - 1] !== last) PG_MIGRATIONS.push(last);
   }
 });
+
+test('legacyUuid: hetzelfde afleiden als de migratie, een uuid blijft gelijk en lege tekst wordt NULL', () => {
+  const { legacyUuid } = require('../src/database/pgschema');
+  const given = crypto.randomUUID();
+  assert.strictEqual(legacyUuid(given), given);
+  assert.strictEqual(legacyUuid(given.toUpperCase()), given.toUpperCase());
+  assert.strictEqual(legacyUuid(''), null);
+  assert.strictEqual(legacyUuid(null), null);
+  assert.strictEqual(legacyUuid('oude-tenant'), derived('oude-tenant'));
+});

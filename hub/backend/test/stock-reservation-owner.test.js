@@ -71,3 +71,18 @@ test('een back-up van vóór migratie 96 (order:<id> in work_order_id) wordt ges
   const stored = db.prepare('SELECT work_order_id, web_order_id, qty FROM stock_reservations ORDER BY qty').all();
   assert.deepStrictEqual(stored.map((row) => [row.work_order_id, row.web_order_id, Number(row.qty)]), [[WORK_ORDER_ID, null, 1], [null, WEB_ORDER_ID, 3]]);
 });
+
+test('een back-up van vóór migratie 97 met tekst-id\'s wordt met dezelfde afgeleide uuid\'s teruggezet', async () => {
+  const { db, tenantId } = scene();
+  const header = JSON.stringify({ format: 'aquatech-backup', version: 2, schemaVersion: 90 });
+  const columns = JSON.stringify({ table: 'suppliers', columns: ['id', 'tenant_id', 'name', 'archived', 'created_at', 'updated_at'] });
+  const rows = [['oude-leverancier', tenantId, 'Oud BV', 0, '2026-11-21T10:00:00Z', '2026-11-21T10:00:00Z']].map((row) => JSON.stringify(row));
+  /**
+   * De regels van het nagebootste bestand, één voor één.
+   * @returns {AsyncGenerator<string>} De regels.
+   */
+  async function* lines() { for (const line of [header, columns, ...rows]) yield line; }
+  await importLines(db, lines());
+  const { legacyUuid } = require('../src/database/pgschema');
+  assert.strictEqual(db.prepare('SELECT id FROM suppliers WHERE tenant_id = ?').get(tenantId).id, legacyUuid('oude-leverancier'));
+});
