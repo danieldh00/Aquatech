@@ -126,9 +126,11 @@ test('opvolging: opnieuw mailen start opnieuw, oude offertes blijven met rust, m
      * @returns {Promise<object>} De offerte.
      */
     const sendQuote = async (client, title) => {
-      const data = { title, customer: { name: 'Klant', email: 'klant@voorbeeld.test' }, lines: [{ section: 'materiaal', description: 'Sproeier', qty: 1, unit: 'st', price: 20, vat: 21 }] };
+      // Elke offerte krijgt een eigen adres: per adres geldt een uurlimiet (maximaal 5 offertemails).
+      const address = `klant-${title.toLowerCase().replace(/[^a-z]+/g, '-')}@voorbeeld.test`;
+      const data = { title, customer: { name: 'Klant', email: address }, lines: [{ section: 'materiaal', description: 'Sproeier', qty: 1, unit: 'st', price: 20, vat: 21 }] };
       const quote = (await client.post('/app/api/quotes', { data })).body;
-      assert.strictEqual((await client.post(`/app/api/quotes/${quote.id}/send`, { to: 'klant@voorbeeld.test', url: SHARE_URL })).status, 200);
+      assert.strictEqual((await client.post(`/app/api/quotes/${quote.id}/send`, { to: address, url: SHARE_URL })).status, 200);
       return quote;
     };
     assert.strictEqual((await anne.put('/app/api/admin/settings', { quoteFollowUp: { enabled: true, afterDays: 7, maxReminders: 1 } })).status, 200);
@@ -137,7 +139,7 @@ test('opvolging: opnieuw mailen start opnieuw, oude offertes blijven met rust, m
     const resent = await sendQuote(anne, 'Opnieuw gemaild');
     const before = sent.length;
     assert.strictEqual((await app.locals.quoteFollowUpAll(later(8)))[main].sent, 1);
-    assert.strictEqual((await anne.post(`/app/api/quotes/${resent.id}/send`, { to: 'klant@voorbeeld.test', url: SHARE_URL })).status, 200);
+    assert.strictEqual((await anne.post(`/app/api/quotes/${resent.id}/send`, { to: 'klant-opnieuw-gemaild@voorbeeld.test', url: SHARE_URL })).status, 200);
     assert.strictEqual(db.prepare('SELECT followup_count FROM quotes WHERE id = ?').get(resent.id).followup_count, 0);
     assert.strictEqual((await app.locals.quoteFollowUpAll(later(9)))[main].sent, 1);
     assert.strictEqual(sent.filter((message) => /Herinnering/.test(message.subject)).length, 2);

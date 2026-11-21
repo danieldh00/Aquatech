@@ -12,6 +12,7 @@ const { renderMail, mailStyleOf } = require('../platform/mail-layout');
 const { preferencesOf } = require('../platform/store');
 const { requireVerifiedAddress } = require('../platform/address-lookup');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
+const { createRecipientLimit } = require('../beveiliging/recipient-limit');
 const { stableStringify } = require('../platform/stable-json');
 const { linkExpired } = require('../platform/public-links');
 const { sanitizeDocumentLayout } = require('./document-layout');
@@ -1122,9 +1123,11 @@ function registerQuoteRoutes(app, ctx) {
     res.json(quote);
   });
 
-  // Versturen per e-mail met de link (maakt de link zo nodig aan).
+  /** Hoeveel offertemails één e-mailadres per uur kan krijgen, over alle medewerkers en beide verstuurroutes samen (een plek wordt vooraf gereserveerd en bij een mislukte verzending teruggegeven). */
+  const recipientLimit = createRecipientLimit({ windowMs: 60 * 60 * 1000, max: 5 });
   /** Hoeveel losse mails per uur een gebruiker via deze route mag versturen (de bulkroute heeft een eigen limiet). */
   const quoteSendLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, keyFn: (req) => `quoteSendLimiter:${req.user.tenant_id}|${req.user.id}` });
+  // Versturen per e-mail met de link (maakt de link zo nodig aan).
   app.post('/api/quotes/:id/send', requireJson, requireQuotes, quoteSendLimiter, async (req, res) => {
     const { to, subject, message, url } = req.body || {};
     const list = String(to || '').split(/[,;\s]+/).filter(Boolean);
@@ -1132,7 +1135,9 @@ function registerQuoteRoutes(app, ctx) {
     const settings = settingsOf(req);
     const mailer = mailerFor(settings);
     if (!mailer.configured()) return res.status(409).json({ error: 'not_configured', message: 'Er is geen mailserver ingesteld (Beheer → Integraties → E-mail).' });
+    if (!recipientLimit.take(req.user.tenant_id, list)) return res.status(429).json({ error: 'recipient_limited', message: 'Naar een van deze e-mailadressen is het afgelopen uur al vaak gemaild. Probeer het later opnieuw.' });
     const shared = quotes.share(req.user, req.params.id, pinShareBase(settings, url));
+    if (shared.error) recipientLimit.release(req.user.tenant_id, list);
     if (shared.error === 'invalid_url') return res.status(400).json({ error: 'invalid_url', message: 'Ongeldig adres voor de link.' });
     if (shared.error) return notFound(res);
     const quote = shared.quote;
@@ -1146,6 +1151,7 @@ function registerQuoteRoutes(app, ctx) {
       });
     } catch (error) {
       console.warn(`Offerte ${quote.number} niet verstuurd: ${error.code || ''} ${error.message}`);
+      recipientLimit.release(req.user.tenant_id, list);
       return withCause(res, error).status(502).json({ error: 'send_failed', message: mailFailure(error) });
     }
     quotes.markSent(quote.id, list.join(', '));
@@ -1183,8 +1189,9 @@ function registerQuoteRoutes(app, ctx) {
       const email = String(current.data?.customer?.email || '').trim();
       if (current.acceptance || current.order || !['concept', 'verzonden'].includes(current.status)) { skipped.push({ id, number: label, reason: 'Is al beantwoord, omgezet of afgesloten.' }); continue; }
       if (!validEmail(email)) { skipped.push({ id, number: label, reason: 'Geen geldig e-mailadres bij de klant.' }); continue; }
+      if (!recipientLimit.take(req.user.tenant_id, [email])) { skipped.push({ id, number: label, reason: 'Naar dit e-mailadres is het afgelopen uur al vaak gemaild.' }); continue; }
       const shared = quotes.share(req.user, id, pinShareBase(settings, req.body.url));
-      if (shared.error) { skipped.push({ id, number: label, reason: 'Niet gevonden.' }); continue; }
+      if (shared.error) { recipientLimit.release(req.user.tenant_id, [email]); skipped.push({ id, number: label, reason: 'Niet gevonden.' }); continue; }
       const quote = shared.quote;
       const language = quote.data && quote.data.language;
       /**
@@ -1210,6 +1217,7 @@ function registerQuoteRoutes(app, ctx) {
         });
       } catch (error) {
         console.warn(`Offerte ${quote.number} niet verstuurd: ${error.code || ''} ${error.message}`);
+        recipientLimit.release(req.user.tenant_id, [email]);
         if (current.status === 'concept') quotes.restoreDraft(req.tenantId, quote.id);
         skipped.push({ id, number: quote.number, reason: mailFailure(error) });
         continue;
