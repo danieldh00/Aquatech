@@ -165,11 +165,22 @@ function toPgParams(sql) {
 }
 
 /**
+ * Haalt NUL-tekens uit tekst: PostgreSQL weigert ze in tekst, en in JSON (jsonb) ook de schrijfwijze \\u0000.
+ * Een even aantal backslashes ervoor betekent een gewone backslash in de tekst en blijft staan.
+ * @param {string} text De parametertekst.
+ * @returns {string} De tekst zonder NUL-tekens.
+ */
+function stripNul(text) {
+  if (!text.includes('\u0000') && !text.includes('\\u0000')) return text;
+  return text.replace(/\u0000/g, '').replace(/(?<!\\)((?:\\\\)*)\\u0000/g, '$1');
+}
+
+/**
  * Zet een parameterwaarde om voor pg: undefined wordt null, BigInt wordt tekst.
  * @param {*} value De waarde.
  * @returns {*} De waarde voor pg.
  */
-const toPgValue = (value) => (value === undefined ? null : typeof value === 'bigint' ? value.toString() : value);
+const toPgValue = (value) => (value === undefined ? null : typeof value === 'bigint' ? value.toString() : typeof value === 'string' ? stripNul(value) : value);
 
 class PgDatabase {
   /**
@@ -511,4 +522,4 @@ function dropSchemas(url, prefix) {
   }
 }
 
-module.exports = { openPg, openScratch, dropScratch, pgConfig, pgVersion, toPgParams, dropSchemas, DatabaseError, PgDatabase };
+module.exports = { stripNul, openPg, openScratch, dropScratch, pgConfig, pgVersion, toPgParams, dropSchemas, DatabaseError, PgDatabase };

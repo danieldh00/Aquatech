@@ -1642,6 +1642,17 @@ const PG_MIGRATIONS = [
   ALTER TABLE work_orders ALTER COLUMN viewed_at TYPE TIMESTAMPTZ USING migrate_ts(viewed_at);
   DROP FUNCTION migrate_ts(TEXT);
   `,
+  // 95: het gegevensveld van bestellingen, werkorders, facturen en offertes wordt JSONB (gecontroleerd op geldige JSON, sneller te doorzoeken, kleiner in de back-up). De pg-driver geeft jsonb als JSON-tekst terug (database/pg-types.js), dus de code merkt niets; de SQL cast de kolom al naar jsonb. Een regel met ongeldige JSON, of een gegevensveld dat geen object is, laat de migratie stoppen in plaats van gegevens te verliezen.
+  `
+  ALTER TABLE web_orders ALTER COLUMN data TYPE JSONB USING data::jsonb;
+  ALTER TABLE work_orders ALTER COLUMN data TYPE JSONB USING data::jsonb;
+  ALTER TABLE invoices ALTER COLUMN data TYPE JSONB USING data::jsonb;
+  ALTER TABLE quotes ALTER COLUMN data TYPE JSONB USING data::jsonb;
+  ALTER TABLE web_orders ADD CONSTRAINT web_orders_data_object CHECK (jsonb_typeof(data) = 'object');
+  ALTER TABLE work_orders ADD CONSTRAINT work_orders_data_object CHECK (jsonb_typeof(data) = 'object');
+  ALTER TABLE invoices ADD CONSTRAINT invoices_data_object CHECK (jsonb_typeof(data) = 'object');
+  ALTER TABLE quotes ADD CONSTRAINT quotes_data_object CHECK (jsonb_typeof(data) = 'object');
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS };

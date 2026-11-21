@@ -1237,8 +1237,8 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
    * @returns {string[]} De id's van de bestellingen.
    */
   function unpaidOnline(tenantId, before, limit = 100, skip = 0, { withoutReminder = false } = {}) {
-    const reminderFilter = withoutReminder ? " AND data NOT LIKE '%\"reminderAt\"%'" : '';
-    return prepare("SELECT id FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND created_at < ? AND data LIKE '%\"payment\":\"online\"%' AND data NOT LIKE '%\"status\":\"betaald\"%'" + reminderFilter + " ORDER BY created_at, id LIMIT ? OFFSET ?")
+    const reminderFilter = withoutReminder ? " AND NOT COALESCE(jsonb_exists(data->'pay', 'reminderAt'), false)" : '';
+    return prepare("SELECT id FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND created_at < ? AND data->>'payment' = 'online' AND COALESCE(data->'pay'->>'status', '') <> 'betaald'" + reminderFilter + " ORDER BY created_at, id LIMIT ? OFFSET ?")
       .all(tenantId, String(before), Math.max(1, Math.floor(limit)), Math.max(0, Math.floor(skip))).map((row) => row.id);
   }
 
@@ -1261,7 +1261,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
     }
     const dayAgo = new Date(Date.parse(now) - 24 * 3600 * 1000).toISOString();
     const recent = new Date(Date.parse(now) - 14 * 24 * 3600 * 1000).toISOString();
-    const rows = prepare("SELECT data FROM web_orders WHERE tenant_id = ? AND lower(email) = ? AND created_at > ? AND data LIKE '%\"reminderAt\"%'").all(tenantId, address, recent);
+    const rows = prepare("SELECT data FROM web_orders WHERE tenant_id = ? AND lower(email) = ? AND created_at > ? AND jsonb_exists(data->'pay', 'reminderAt')").all(tenantId, address, recent);
     return !rows.some((row) => {
       const reminderAt = (JSON.parse(row.data).pay || {}).reminderAt;
       return typeof reminderAt === 'string' && reminderAt > dayAgo;
@@ -1280,7 +1280,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
    */
   function releaseExpired(tenantId, now = currentTimestamp()) {
     // Per pagina van 500 bladeren tot er 500 verlopen zijn: niet-verlopen bestellingen verdringen verlopen dan niet.
-    const page = prepare(`SELECT id, data FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND data LIKE '%"reservedUntil"%' AND data NOT LIKE '%"reservationReleasedAt"%' AND data NOT LIKE '%"payment":"online"%' ORDER BY created_at, id LIMIT 500 OFFSET ?`);
+    const page = prepare(`SELECT id, data FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND jsonb_exists(data, 'reservedUntil') AND NOT jsonb_exists(data, 'reservationReleasedAt') AND COALESCE(data->>'payment', '') <> 'online' ORDER BY created_at, id LIMIT 500 OFFSET ?`);
     const candidates = [];
     for (let offset = 0; candidates.length < 500; offset += 500) {
       const rows = page.all(tenantId, offset);

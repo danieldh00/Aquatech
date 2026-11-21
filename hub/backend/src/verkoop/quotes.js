@@ -12,6 +12,7 @@ const { renderMail, mailStyleOf } = require('../platform/mail-layout');
 const { preferencesOf } = require('../platform/store');
 const { requireVerifiedAddress } = require('../platform/address-lookup');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
+const { stableStringify } = require('../platform/stable-json');
 const { linkExpired } = require('../platform/public-links');
 const { sanitizeDocumentLayout } = require('./document-layout');
 const { sanitizeQuoteTemplates, upsertTemplate, MAX_TEMPLATES, MAX_TEMPLATE_LINES } = require('./quote-templates');
@@ -486,7 +487,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
       totalExcl: totals.net, totalIncl: totals.total,
       // De betaaltermijn waarmee de klant akkoord ging (ook onderdeel van de inhoud hieronder).
       paymentDays: data.paymentDays === undefined ? null : data.paymentDays,
-      contentHash: sha256(JSON.stringify({ number: quoteRow.number, data: withoutInternalNotes(data), totals })),
+      contentHash: sha256(stableStringify({ number: quoteRow.number, data: withoutInternalNotes(data), totals })),
     };
     return transaction(db, () => {
       const current = prepare('SELECT status, CASE WHEN acceptance IS NULL THEN 0 ELSE 1 END AS accepted FROM quotes WHERE id = ?').get(quoteRow.id);
