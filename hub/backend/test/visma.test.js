@@ -468,7 +468,7 @@ test('visma: logboek via de API – verbinden, doorsturen, fouten, verbreken, re
     const rest = (await baas.get(`/app/api/visma/log?limit=100&before=${encodeURIComponent(page.next)}`)).body;
     assert.strictEqual(page.items.length + rest.items.length, log.items.length);
     // Een ongeldige cursor is geen databasefout: de lijst begint gewoon vooraan.
-    assert.strictEqual((await baas.get(`/app/api/visma/log?before=${encodeURIComponent('nu|abc')}`)).status, 200);
+    assert.strictEqual((await baas.get(`/app/api/visma/log?before=${encodeURIComponent('2026-02-31T10:00:00Z|abc')}`)).status, 200);
     // Geen geheimen in het logboek.
     const raw = JSON.stringify(db.prepare('SELECT actor, reference, message FROM visma_log').all());
     for (const secret of ['heel-geheim-secret', 'refresh-geheim', 'acc-1']) assert.ok(!raw.includes(secret), secret);

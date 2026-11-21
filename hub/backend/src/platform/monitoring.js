@@ -14,6 +14,7 @@
 const crypto = require('crypto');
 const { redact } = require('./error-report');
 const { asSystem } = require('../database/tenant-scope');
+const { isInstant } = require('./instants');
 const { sanitizeMonitoring, composeNotice, createNotifier, MONITORING_DEFAULTS, cleanHttpsUrl } = require('./monitoring-notify');
 
 /** Kolommen van een incident die de bewaking zelf leest. */
@@ -124,8 +125,7 @@ function createIncidentStore({ db }) {
     const params = [tenantId];
     if (state === 'open' || state === 'opgelost') { filters.push('state = ?'); params.push(state); }
     if (scope === 'platform' || scope === 'tenant') { filters.push('scope = ?'); params.push(scope); }
-    const beforeMs = typeof before === 'string' ? Date.parse(before.slice(0, 40)) : NaN;
-    if (Number.isFinite(beforeMs)) { filters.push('last_at < ?'); params.push(before.slice(0, 40)); }
+    if (isInstant(before)) { filters.push('last_at < ?'); params.push(before); }
     const count = Math.min(MAX_LIST, Math.max(1, Math.floor(Number(limit)) || 50));
     return prepare(`SELECT ${INCIDENT_COLUMNS} FROM monitor_incidents WHERE tenant_id = ?${filters.map((filter) => ` AND ${filter}`).join('')} ORDER BY last_at DESC, id DESC LIMIT ${count}`).all(...params);
   }

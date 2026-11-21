@@ -12,6 +12,7 @@ const crypto = require('crypto');
 const { redact } = require('./error-report');
 const { asSystem } = require('../database/tenant-scope');
 const { transaction } = require('../database/db');
+const { isInstant } = require('./instants');
 
 const LEVELS = ['info', 'warn', 'error'];
 const MAX_MESSAGE = 500;
@@ -277,12 +278,6 @@ function createAppLog({ db, mainTenantId, flushMs = 2000, batchSize = 50, perMin
     if (wanted.length) { where.push(`level IN (${wanted.map(() => '?').join(', ')})`); args.push(...wanted); }
     if (source) { where.push('source = ?'); args.push(String(source).slice(0, 40)); }
     // Een tijdstip dat geen tijdstip is (uit de zoekopdracht) wordt genegeerd: de kolom is een echt tijdstip en weigert tekst.
-    /**
-     * Is dit tekst die als tijdstip te lezen is?
-     * @param {*} text De waarde uit de zoekopdracht.
-     * @returns {boolean} Waar bij een ISO-datum of -tijdstip.
-     */
-    const isInstant = (text) => typeof text === 'string' && /^\d{4}-\d{2}-\d{2}/.test(text) && Number.isFinite(Date.parse(text));
     if (isInstant(from)) { where.push('created_at >= ?'); args.push(from); }
     if (isInstant(to)) { where.push('created_at <= ?'); args.push(to); }
     const text = String(search || '').trim().slice(0, 100);
