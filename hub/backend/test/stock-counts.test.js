@@ -270,3 +270,16 @@ test('telstaat en telformulier als PDF: rechten, andere organisatie, en het blan
   for (let attempt = 0; attempt < 12 && !limited; attempt += 1) limited = (await world.admin.get(`/app/api/stock-counts/${count.id}/telformulier.pdf`)).status === 429;
   assert.ok(limited, 'de pdf-routes hebben een eigen, strakke limiet');
 });
+
+test('tellen met verpakkingen: de teller krijgt naam en factor als invoerhulp, nooit een prijs', async () => {
+  const world = await countWorld();
+  const url = `/app/api/stock/items/${world.ids.PIJP}/packagings`;
+  const saved = await world.admin.put(url, { packagings: [{ code: 'bundel', name: 'Bundel', factor: 10, salePrice: 55, businessPrice: 50, ean: '', audience: 'iedereen' }, { code: 'pal', name: 'Pallet', factor: 100, salePrice: '', businessPrice: '', ean: '', audience: 'iedereen' }] });
+  assert.strictEqual(saved.status, 200, JSON.stringify(saved.body));
+  const count = (await world.admin.post('/app/api/stock-counts', { kind: 'tussentijds' })).body.count;
+  const lines = (await world.picker.get(`/app/api/orderpick/counts/${count.id}/lines?location=A-2`)).body.lines;
+  assert.deepStrictEqual(lines[0].packagings, [{ name: 'Bundel', factor: 10 }, { name: 'Pallet', factor: 100 }]);
+  const other = (await world.picker.get(`/app/api/orderpick/counts/${count.id}/lines?location=A-10`)).body.lines;
+  assert.deepStrictEqual(other[0].packagings, [], 'een artikel zonder verpakking krijgt een lege lijst');
+  assert.ok(!JSON.stringify(lines).includes('salePrice') && !JSON.stringify(lines).includes('55'), 'geen prijzen voor de teller');
+});

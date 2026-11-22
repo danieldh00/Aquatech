@@ -146,16 +146,44 @@
       <div class="op-name">${esc(line.name)}</div>
       <div class="op-code">${esc(line.code)}${line.ean ? ` · ${esc(line.ean)}` : ''}</div>
       <p class="op-scanstate ${css}">${esc(text)}</p>
+      ${(line.packagings || []).map((pack, index) => `<div class="op-qty">
+        <input class="ct-pack" data-index="${index}" type="number" inputmode="numeric" min="0" step="1" value="" placeholder="Aantal" aria-label="Aantal ${esc(pack.name)}">
+        <span class="of">× ${esc(pack.name)} (${esc(pack.factor)}${line.unit ? ` ${esc(line.unit)}` : ''})</span>
+      </div>`).join('')}
       <div class="op-qty">
-        <input id="ct-qty" type="number" inputmode="decimal" min="0" step="any" value="" placeholder="Aantal" aria-label="Getelde hoeveelheid${line.unit ? ` (${esc(line.unit)})` : ''}">
+        <input id="ct-qty" type="number" inputmode="decimal" min="0" step="any" value="" placeholder="${(line.packagings || []).length ? 'Losse stuks' : 'Aantal'}" aria-label="Getelde hoeveelheid${line.unit ? ` (${esc(line.unit)})` : ''}">
         <span class="of">${esc(line.unit || '')}</span>
       </div>
+      ${(line.packagings || []).length ? '<p class="muted" id="ct-total" style="margin:0 0 8px"></p>' : ''}
       <div class="op-actions">
         <button type="button" class="btn big primary" id="ct-save"${state.busy ? ' disabled' : ''}>Opslaan</button>
         <button type="button" class="btn big" id="ct-zero"${state.busy ? ' disabled' : ''}>Niets aanwezig (0)</button>
       </div>`;
     const input = $('#ct-qty');
     if (input && window.matchMedia && matchMedia('(pointer: fine)').matches && !feedback) input.focus();
+  }
+
+  /**
+   * Leest de ingevulde verpakkingen en losse stuks van de open regel en rekent ze om naar één totaal.
+   * @param {object} line De regel met zijn verpakkingen.
+   * @returns {number|null} Het totaal, of null als er niets of iets ongeldigs is ingevuld.
+   */
+  function enteredTotal(line) {
+    const packs = (line.packagings || []).map((pack, index) => {
+      const field = document.querySelector(`.ct-pack[data-index="${index}"]`);
+      return { factor: pack.factor, count: field ? field.value : '' };
+    });
+    const input = $('#ct-qty');
+    return Core.totalOf(input && input.value, packs);
+  }
+
+  /** Toont het totaal van losse stuks en verpakkingen onder de invoer. */
+  function showTotal() {
+    const line = currentLine();
+    const element = $('#ct-total');
+    if (!line || !element) return;
+    const total = enteredTotal(line);
+    element.textContent = total === null ? '' : `Totaal: ${total}${line.unit ? ` ${line.unit}` : ''}`;
   }
 
   /** Tekent de lijst met alle regels van de locatie (tikken opent een regel). */
@@ -205,7 +233,7 @@
     const line = currentLine();
     if (!line || state.busy || !state.count) return;
     const input = $('#ct-qty');
-    const qty = fixed !== null ? fixed : Core.parseQuantity(input && input.value);
+    const qty = fixed !== null ? fixed : (line.packagings || []).length ? enteredTotal(line) : Core.parseQuantity(input && input.value);
     if (qty === null) { toast('Vul het getelde aantal in (0 of meer).', true); if (input) input.focus(); return; }
     const key = `${line.id}:${qty}`;
     if (!state.pendingKeys[key]) state.pendingKeys[key] = Core.newClientId(window.crypto);
@@ -238,6 +266,7 @@
   // ---------- Opstarten ----------
   /** Koppelt de knoppen en invoervelden (één keer, via delegatie op de vaste vakken). */
   function bind() {
+    document.addEventListener('input', (event) => { if (event.target && event.target.classList && (event.target.classList.contains('ct-pack') || event.target.id === 'ct-qty')) showTotal(); });
     document.addEventListener('click', (event) => {
       const mode = event.target.closest && event.target.closest('.op-mode');
       if (mode && mode.dataset.mode === 'count' && $('#ct-list').hidden && $('#ct-location').hidden) showList();
@@ -266,7 +295,7 @@
       else if (event.target.id === 'ct-zero') save(0);
     });
     $('#ct-current').addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' && event.target.id === 'ct-qty') { event.preventDefault(); save(null); }
+      if (event.key === 'Enter' && (event.target.id === 'ct-qty' || (event.target.classList && event.target.classList.contains('ct-pack')))) { event.preventDefault(); save(null); }
     });
     $('#ct-lines').addEventListener('click', (event) => {
       const row = event.target.closest('[data-id]');
