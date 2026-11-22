@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.32.5
+
+Orderpick: een bestelling openen zet een eigen geschiedenisregel (`pushState`, `?id=`); `onPopState` toont bij terug de lijst en bij vooruit weer de bestelling. Het afronden van een pick vervangt de regel zoals voorheen (geen terugkeer naar een afgeronde bestelling). Tabbladen Ontvangen en Tellen blijven buiten deze wijziging. Test in `orderpick-modes.test.js`.
+
 ## 1.32.4
 
 Doorlichtingspunt 13 (synchrone databasebrug afbouwen), vervolg: `workorders.listAsync` voert de lijstquery van `GET /api/workorders` uit via `db.async` (pool bij PostgreSQL), zodat een grote werkorderlijst de hoofdthread niet vasthoudt. `list` blijft voor de overige aanroepers (portaal, AI-koppeling); beide delen één querybouwer (`listQuery`) en één omzetting (`workOrdersFromRows`).

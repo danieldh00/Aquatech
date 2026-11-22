@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.32.5',
+      date: '2026-11-22',
+      title: 'Orderpick: terugknop gaat naar de lijst',
+      items: [
+        { text: 'De terugknop van je telefoon of browser brengt je in een bestelling nu terug naar de lijst met bestellingen, in plaats van de app te verlaten.', for: ['orderpick'] },
+      ],
+    },
+    {
       version: '1.32.4',
       date: '2026-11-22',
       title: 'Werkorderlijst laadt via de pool',
