@@ -57,6 +57,9 @@
     // Orderpick: de lijst en de regels van een bestelling (zonder prijzen en adressen), zodat een picker in een hal zonder bereik door kan.
     /^api\/orderpick\/orders$/,
     /^api\/orderpick\/orders\/[A-Za-z0-9-]{1,64}$/,
+    // Voorraadtelling: de lopende telling en de blinde regels per locatie (nooit verwachte aantallen of prijzen).
+    /^api\/orderpick\/counts\/open$/,
+    /^api\/orderpick\/counts\/[A-Za-z0-9-]{1,64}\/lines\?location=[A-Za-z0-9%._~!'()*-]{0,600}$/,
   ];
   /**
    * Geeft aan of een adres offline beschikbaar mag zijn.
@@ -75,6 +78,8 @@
     { methods: ['PATCH'], pattern: new RegExp(`^api/workorders/${ID}/photos/${ID}$`) },
     // Een gepickte bestelling afmelden zonder verbinding; pakbon en label volgen online.
     { methods: ['POST'], pattern: new RegExp(`^api/orderpick/orders/${ID}/pick$`) },
+    // Een getelde regel van de voorraadtelling (de ingave heeft een eigen clientId, dus nooit dubbel).
+    { methods: ['POST'], pattern: new RegExp(`^api/orderpick/counts/${ID}/lines/${ID}/count$`) },
   ];
   /**
    * Geeft aan of een wijziging in de offline wachtrij mag.

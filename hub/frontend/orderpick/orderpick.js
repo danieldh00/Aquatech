@@ -736,6 +736,6 @@
   }
 
   // De hulpmiddelen die receiving.js (goederenontvangst op dezelfde pagina) hergebruikt; `ready` is klaar zodra het eerste scherm staat.
-  window.OrderpickUi = { toast, vibrate, beep, esc, when, api, startCamera, stopCamera, showPickList: showList, openOrder, allowed: false, owner: '' };
+  window.OrderpickUi = { toast, vibrate, beep, esc, when, api, readStored, writeStored, startCamera, stopCamera, showPickList: showList, openOrder, allowed: false, owner: '' };
   window.OrderpickUi.ready = init();
 })();

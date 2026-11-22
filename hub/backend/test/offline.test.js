@@ -22,12 +22,12 @@ const HEADERS = Core.HEADERS;
 
 test('offline-core: alleen werkordergegevens komen in de cache', () => {
   for (const ok of ['api/me', 'api/config', 'api/my-day', 'api/my-day?date=2026-10-21&all=1', 'api/workorders', 'api/workorders/abc-123',
-    'api/workorders/abc-123/photos', 'api/workorders/abc-123/worklog', 'api/workorders/abc/photos/def?thumb=1', 'api/workorder-staff', 'api/quote-profile', 'api/orderpick/orders', 'api/orderpick/orders/abc-123']) {
+    'api/workorders/abc-123/photos', 'api/workorders/abc-123/worklog', 'api/workorders/abc/photos/def?thumb=1', 'api/workorder-staff', 'api/quote-profile', 'api/orderpick/orders', 'api/orderpick/orders/abc-123', 'api/orderpick/counts/open', 'api/orderpick/counts/abc-123/lines?location=A%201', 'api/orderpick/counts/abc-123/lines?location=', `api/orderpick/counts/abc-123/lines?location=${encodeURIComponent("Rek (oud) 2* !'")}`]) {
     assert.ok(Core.cacheable(ok), ok);
   }
   for (const no of ['api/quotes', 'api/quotes/1', 'api/admin/users', 'api/portal', 'api/workorders/abc/photos/def', 'api/plans', 'api/workorders?quote=1',
     'api/workorders/../admin/users', 'api/dossiers', 'api/platform/tenants', 'api/me/x',
-    'api/orderpick/orders?x=1', 'api/orderpick/orders/abc/packing-slip', 'api/orderpick/orders/abc/pick', 'api/orderpick/orders/../../admin/users']) {
+    'api/orderpick/orders?x=1', 'api/orderpick/orders/abc/packing-slip', 'api/orderpick/orders/abc/pick', 'api/orderpick/orders/../../admin/users', 'api/stock-counts', 'api/orderpick/counts/abc/lines', 'api/orderpick/counts/abc/lines?location=a&x=1', 'api/orderpick/counts/../open']) {
     assert.ok(!Core.cacheable(no), no);
   }
 });
@@ -55,6 +55,10 @@ test('offline-core: alleen het afmelden van een pick mag in de wachtrij, pakbon 
   assert.ok(!Core.queueable('api/orderpick/orders/abc-123/shipments/s1/label', 'POST'), 'label online');
   assert.ok(!Core.queueable('api/orderpick/orders/abc-123/shipments/s1/packing-slip', 'POST'));
   assert.ok(!Core.queueable('api/orderpick/orders/a/b/pick', 'POST'));
+  assert.ok(Core.queueable('api/orderpick/counts/c-1/lines/l-1/count', 'POST'), 'tellen offline');
+  assert.ok(!Core.queueable('api/orderpick/counts/c-1/lines/l-1/count', 'GET'));
+  assert.ok(!Core.queueable('api/stock-counts/c-1/close', 'POST'), 'afsluiten online');
+  assert.ok(!Core.queueable('api/orderpick/counts/c-1/lines/l-1/count/x', 'POST'));
   assert.strictEqual(Core.classify(409, { error: 'changed' }), 'failed', 'een gewijzigde bestelling blijft in het paneel staan');
   const sw = fs.readFileSync(path.join(FRONT, 'sw.js'), 'utf8');
   assert.match(sw, /PRECACHE_PAGES = \[[^\]]*'orderpick\/'/);
@@ -329,4 +333,14 @@ test('werkorder: offline wijziging op een oude basis geeft 409 conflict, met de 
   } finally {
     server.close();
   }
+});
+
+test('offline.js: listKnown geeft null zonder antwoord van de service worker, counting.js gooit dan niets weg', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const offline = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'shared', 'offline.js'), 'utf8');
+  assert.match(offline, /listKnown, prefetch/, 'listKnown is beschikbaar');
+  assert.match(offline, /Array\.isArray\(out\.items\) \? out\.items : null/, 'zonder antwoord null, niet een lege lijst');
+  const counting = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'orderpick', 'counting.js'), 'utf8');
+  assert.match(counting, /listKnown\(\);\s*\n\s*if \(!items\) return;/, 'reconcileWaiting slaat over zonder antwoord');
 });
