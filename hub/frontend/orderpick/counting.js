@@ -105,6 +105,10 @@
   async function loadList() {
     const out = await Ui.api('counts/open');
     state.count = out.count;
+    // Wachtende ingaven van een telling die niet meer loopt (afgesloten of geannuleerd) horen nergens meer bij.
+    const waiting = Ui.readStored('counts_queued') || [];
+    const current = waiting.filter((entry) => out.count && entry.countId === out.count.id);
+    if (current.length !== waiting.length) Ui.writeStored('counts_queued', current.length ? current : null);
     renderLocations();
     // Alle locaties alvast ophalen, zodat tellen ook zonder verbinding door kan (hal zonder bereik).
     if (window.AquatechOffline && out.count) {
