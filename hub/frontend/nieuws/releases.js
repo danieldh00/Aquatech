@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.32.9',
+      date: '2026-11-22',
+      title: 'Beregeningsplanner: controle en indienen in een eigen bestand',
+      items: [],
+    },
+    {
       version: '1.32.8',
       date: '2026-11-22',
       title: 'Beheer: herinneringen en etiketten in eigen bestanden',
