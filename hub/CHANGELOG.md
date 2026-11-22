@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.32.4
+
+Doorlichtingspunt 13 (synchrone databasebrug afbouwen), vervolg: `workorders.listAsync` voert de lijstquery van `GET /api/workorders` uit via `db.async` (pool bij PostgreSQL), zodat een grote werkorderlijst de hoofdthread niet vasthoudt. `list` blijft voor de overige aanroepers (portaal, AI-koppeling); beide delen één querybouwer (`listQuery`) en één omzetting (`workOrdersFromRows`).
+
 ## 1.32.3
 
 Offertes versturen (losse mail en bulk) reserveert per ontvangend e-mailadres vooraf een plek (atomair, dus ook bij parallelle verzoeken) en geeft die terug bij een mislukte verzending (`beveiliging/recipient-limit.js`, 5 per uur per organisatie, in het geheugen); daarboven 429 `recipient_limited` bij de losse mail en een overgeslagen regel bij bulk. Bovenop de bestaande limiet per gebruiker.

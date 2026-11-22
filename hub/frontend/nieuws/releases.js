@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.32.4',
+      date: '2026-11-22',
+      title: 'Werkorderlijst laadt via de pool',
+      items: [],
+    },
+    {
       version: '1.32.3',
       date: '2026-11-22',
       title: 'Offertemails: limiet per ontvanger',
