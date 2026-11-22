@@ -74,4 +74,6 @@ test('totalOf: losse stuks plus verpakkingen keer hun factor, leeg is geen 0', (
   assert.strictEqual(Core.totalOf('x', [{ factor: 12, count: '2' }]), null);
   assert.strictEqual(Core.totalOf('', [{ factor: 12, count: '-1' }]), null);
   assert.strictEqual(Core.totalOf('', [{ factor: 0, count: '2' }]), null);
+  assert.strictEqual(Core.totalOf('', [{ factor: 100, count: '1.5' }]), null, 'een half pallet is een tikfout');
+  assert.strictEqual(Core.totalOf('2.5', [{ factor: 12, count: '1' }]), 14.5, 'losse stuks mogen wel een decimaal zijn');
 });

@@ -37,7 +37,8 @@
     for (const pack of packs || []) {
       if (String(pack.count === null || pack.count === undefined ? '' : pack.count).trim() === '') continue;
       const count = parseQuantity(pack.count);
-      if (count === null || !Number.isFinite(Number(pack.factor)) || Number(pack.factor) < 1) return null;
+      // Een aantal verpakkingen is een geheel getal: een half pallet of een tikfout (1.5) wordt geweigerd.
+      if (count === null || !Number.isInteger(count) || !Number.isFinite(Number(pack.factor)) || Number(pack.factor) < 1) return null;
       total += count * Number(pack.factor);
       filled = true;
     }
