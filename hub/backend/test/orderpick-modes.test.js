@@ -21,6 +21,8 @@ function fakeElement(selector) {
       if (key in target) return target[key];
       if (key === 'classList') return { add() {}, remove() {}, toggle() {}, contains: () => false };
       if (key === 'closest') return () => null;
+      // Bewaart luisteraars, zodat een test op een knop kan klikken.
+      if (key === 'addEventListener') return (type, handler) => { (target.listeners = target.listeners || {})[type] = (target.listeners[type] || []).concat(handler); };
       return () => {};
     },
     set(target, key, value) { target[key] = value; return true; },
@@ -79,7 +81,12 @@ async function loadPage() {
        * @param {string} _title Titel (niet gebruikt).
        * @param {string} url Het nieuwe adres.
        */
-      pushState(_state, _title, url) { pushed.push(String(url)); setAddress(url); },
+      pushState(state, _title, url) { pushed.push(String(url)); sandbox.history.state = state; setAddress(url); },
+      state: null,
+      /**
+       * Gaat een geschiedenisregel terug zoals de browser: de eigen regel verdwijnt en popstate volgt.
+       */
+      back() { sandbox.history.state = null; setAddress('/app/orderpick/'); for (const handler of windowListeners.popstate || []) handler({}); },
     },
     localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     /**
@@ -177,6 +184,13 @@ test('de terugknop van de browser gaat van een bestelling terug naar de lijst', 
   popState();
   await new Promise((resolve) => setTimeout(resolve, 5));
   assert.deepStrictEqual(visible(), ['#op-list']);
+  // De knop Terug in de app gebruikt dezelfde geschiedenisregel (geen dubbele lijstregel).
+  await open('order-1');
+  assert.deepStrictEqual(visible(), ['#op-order']);
+  for (const handler of sandbox.document.querySelector('#op-back').listeners.click) handler({});
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.deepStrictEqual(visible(), ['#op-list']);
+  assert.strictEqual(sandbox.history.state, null, 'de eigen geschiedenisregel is weg (terug, niet een extra lijstregel)');
   // Vooruit: de bestelling gaat weer open.
   sandbox.location.search = '?id=order-1';
   popState();

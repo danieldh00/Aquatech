@@ -223,6 +223,15 @@
     if (!orderId && (!$('#op-order').hidden || !$('#op-done').hidden)) showList();
   }
 
+  /**
+   * De knop Terug in de bestelling: heeft het openen een eigen geschiedenisregel gezet, dan gaat het scherm een regel terug (zo blijft de geschiedenis netjes en toont onPopState de lijst); anders (directe link) toont het de lijst.
+   * @returns {void}
+   */
+  function leaveOrder() {
+    if (history.state && history.state.orderId) history.back();
+    else showList();
+  }
+
   /** Toont alleen de lijst. */
   function showList() {
     stopCamera();
@@ -651,7 +660,7 @@
       const row = event.target.closest('[data-shipment]');
       if (button && row) makeDocument(button, row.dataset.order, row.dataset.shipment, button.dataset.doc);
     });
-    $('#op-back').addEventListener('click', showList);
+    $('#op-back').addEventListener('click', leaveOrder);
     $('#op-scan').addEventListener('keydown', (event) => {
       if (event.key !== 'Enter') return;
       event.preventDefault();
