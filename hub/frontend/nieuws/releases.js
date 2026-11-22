@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.33.0',
+      date: '2026-11-22',
+      title: 'Voorraad tellen werkt ook zonder verbinding',
+      items: [
+        { text: 'Tellers kunnen in de orderpick-app ook tellen waar geen bereik is: de ingaven wachten op het toestel en worden verstuurd zodra er weer verbinding is.', for: ['orderpick'] },
+      ],
+    },
+    {
       version: '1.32.9',
       date: '2026-11-22',
       title: 'Beregeningsplanner: controle en indienen in een eigen bestand',

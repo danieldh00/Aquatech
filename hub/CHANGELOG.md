@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.33.0
+
+Offline tellen voor de voorraadtelling: `shared/offline-core.js` cachet `api/orderpick/counts/open` en de blinde regels per locatie (`CACHEABLE`) en zet de ingave `POST api/orderpick/counts/:id/lines/:lineId/count` in de offline wachtrij (`QUEUEABLE`; de ingave heeft een eigen `clientId`). `orderpick/counting.js` haalt alle locaties van de lopende telling alvast op, toont een ingave zonder verbinding als geteld met de aantekening "wacht op verbinding" (bewaard op het toestel, per gebruiker en omgeving) en zet bij het versturen of weggooien de echte stand terug. Afsluiten, hertellen en beheer blijven online. Tests: `offline.test.js` uitgebreid; in een echte browser met de service worker (offline tellen, daarna online: server heeft de ingave, geen consolefouten).
+
 ## 1.32.9
 
 Opschoning van `frontend/beregening/js/app.js` (2582 regels): het blok Controle en indienen (controlebalk, tekening indienen, goedkeuren en het leren van een herkenning, ruim 280 regels) staat nu in `beregening/js/app-controle.js`, dat de methoden op `App` zet (`Object.assign`). `app.js` geeft de gedeelde hulpmiddelen mee via `App.helpers`; `index.html` laadt `app-controle.js` na `app.js`. Geen gedrag veranderd: in een echte browser vergeleken met de vorige versie (zelfde methoden aanwezig, planner en tekenen-zonder-account laden zonder consolefouten).
