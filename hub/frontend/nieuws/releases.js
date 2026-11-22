@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.32.6',
+      date: '2026-11-22',
+      title: 'Voorraadtelling: tellen met verpakkingen',
+      items: [
+        { text: 'Bij het tellen van een artikel met verpakkingen (bijvoorbeeld bundels of pallets) vul je het aantal per verpakking in, naast losse stuks. De app rekent het totaal voor je uit.', for: ['orderpick'] },
+      ],
+    },
+    {
       version: '1.32.5',
       date: '2026-11-22',
       title: 'Orderpick: terugknop gaat naar de lijst',
