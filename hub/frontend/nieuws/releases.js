@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.32.8',
+      date: '2026-11-22',
+      title: 'Beheer: herinneringen en etiketten in eigen bestanden',
+      items: [],
+    },
+    {
       version: '1.32.7',
       date: '2026-11-22',
       title: 'Facturen: Visma-scherm in een eigen bestand',

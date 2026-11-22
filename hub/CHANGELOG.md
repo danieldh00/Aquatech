@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.32.8
+
+Opschoning van `frontend/beheer/beheer.js`: de schermen Seizoensherinneringen, Betalingsherinneringen (`beheer/herinneringen.js`) en Etiketsjablonen (`beheer/etiketten.js`) staan nu in eigen bestanden (ruim 160 regels uit beheer.js). `index.html` laadt ze vóór `beheer.js`. Geen gedrag veranderd: in een echte browser vergeleken met de vorige versie (zelfde weergave, toevoegen van een etiketsjabloon werkt, geen consolefouten).
+
 ## 1.32.7
 
 Opschoning van `frontend/facturen/facturen.js` (1514 regels): het Visma-scherm (verbinden, app-gegevens, bediening, overzicht en logboek, ruim 350 regels) staat nu in `facturen/visma.js` als fabriek `window.Facturen.createVisma(context)`; `facturen.js` geeft de gedeelde hulpfuncties en de stand mee en gebruikt `loadVisma`, `setupVisma` en `vismaReturn`. De pagina laadt `visma.js` vóór `facturen.js`. Geen gedrag veranderd: dezelfde weergave en dezelfde API-aanroepen (handmatig vergeleken met de vorige versie in een echte browser: Visma-tabblad zonder fouten).
