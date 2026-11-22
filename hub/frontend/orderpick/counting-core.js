@@ -116,5 +116,20 @@
    */
   const locationName = (location) => location || 'Geen locatie';
 
-  return { MAX_QTY, parseQuantity, totalOf, findLine, nextOpenLine, summarize, countBody, newClientId, locationName };
+  /**
+   * Bepaalt welke wachtende ingaven bewaard blijven: alleen wat nog in de offline wachtrij staat (of na `startedAt` is toegevoegd, want de lijst
+   * van de wachtrij is dan misschien verouderd). Wat er niet meer staat is verstuurd, weggegooid of door de server afgewezen.
+   * @param {{ queueId: string, lineId: string, at: number }[]} entries De bewaarde wachtende ingaven.
+   * @param {Set<string>} pendingIds Ids van items die nog wachten in de wachtrij.
+   * @param {number} startedAt Moment waarop de wachtrij werd opgevraagd.
+   * @returns {{ kept: object[], dropped: object[] }} De ingaven die blijven en die vervallen.
+   */
+  function reconcileWaiting(entries, pendingIds, startedAt) {
+    const kept = [];
+    const dropped = [];
+    for (const entry of entries) (pendingIds.has(entry.queueId) || entry.at >= startedAt ? kept : dropped).push(entry);
+    return { kept, dropped };
+  }
+
+  return { MAX_QTY, reconcileWaiting, parseQuantity, totalOf, findLine, nextOpenLine, summarize, countBody, newClientId, locationName };
 });

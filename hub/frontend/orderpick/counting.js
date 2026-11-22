@@ -99,8 +99,8 @@
     const pending = new Set((await window.AquatechOffline.list()).filter((item) => item.state === 'pending').map((item) => item.id));
     // Opnieuw lezen na het wachten: intussen kan er een ingave bij gekomen zijn (ook in een ander tabblad).
     const all = Ui.readStored('counts_queued') || [];
-    const kept = all.filter((entry) => pending.has(entry.queueId) || entry.at >= startedAt);
-    if (kept.length === all.length) return;
+    const { kept, dropped } = Core.reconcileWaiting(all, pending, startedAt);
+    if (!dropped.length) return;
     Ui.writeStored('counts_queued', kept.length ? kept : null);
     const waiting = new Set(waitingEntries().map((entry) => entry.lineId));
     state.lines = state.lines.map((line) => (line.queued && !waiting.has(line.id) ? { ...line, status: 'open', countedQty: null, queued: false } : line));

@@ -77,3 +77,15 @@ test('totalOf: losse stuks plus verpakkingen keer hun factor, leeg is geen 0', (
   assert.strictEqual(Core.totalOf('', [{ factor: 100, count: '1.5' }]), null, 'een half pallet is een tikfout');
   assert.strictEqual(Core.totalOf('2.5', [{ factor: 12, count: '1' }]), 14.5, 'losse stuks mogen wel een decimaal zijn');
 });
+
+test('reconcileWaiting: een afgewezen of weggegooide ingave vervalt, een nieuwe of nog wachtende blijft', () => {
+  const entries = [
+    { queueId: 'a', lineId: 'l1', at: 100 },
+    { queueId: 'b', lineId: 'l2', at: 100 },
+    { queueId: 'c', lineId: 'l3', at: 500 },
+  ];
+  const out = Core.reconcileWaiting(entries, new Set(['a']), 400);
+  assert.deepStrictEqual(out.kept.map((entry) => entry.queueId), ['a', 'c'], 'wachtend en pas toegevoegd blijven');
+  assert.deepStrictEqual(out.dropped.map((entry) => entry.queueId), ['b'], 'afgewezen of weggegooid vervalt');
+  assert.deepStrictEqual(Core.reconcileWaiting([], new Set(), 0), { kept: [], dropped: [] });
+});
