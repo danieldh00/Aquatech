@@ -334,3 +334,13 @@ test('werkorder: offline wijziging op een oude basis geeft 409 conflict, met de 
     server.close();
   }
 });
+
+test('offline.js: listKnown geeft null zonder antwoord van de service worker, counting.js gooit dan niets weg', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const offline = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'shared', 'offline.js'), 'utf8');
+  assert.match(offline, /listKnown, prefetch/, 'listKnown is beschikbaar');
+  assert.match(offline, /Array\.isArray\(out\.items\) \? out\.items : null/, 'zonder antwoord null, niet een lege lijst');
+  const counting = fs.readFileSync(path.join(__dirname, '..', '..', 'frontend', 'orderpick', 'counting.js'), 'utf8');
+  assert.match(counting, /listKnown\(\);\s*\n\s*if \(!items\) return;/, 'reconcileWaiting slaat over zonder antwoord');
+});

@@ -90,6 +90,16 @@
   }
 
   /**
+   * Wijzigingen in de wachtrij, of null als de service worker niet antwoordt (dan weet je niets en gooi je niets weg).
+   * @param {object} [filter] Extra velden voor de vraag aan de service worker.
+   * @returns {Promise<object[]|null>} De items, of null zonder antwoord.
+   */
+  async function listKnown(filter = {}) {
+    const out = await ask({ type: 'list', ...filter });
+    return out && Array.isArray(out.items) ? out.items : null;
+  }
+
+  /**
    * Gegevens alvast ophalen zodat ze offline klaarstaan (de service worker
    * bewaart ze). Alleen met verbinding en als offline werken mag.
    * @param {string[]} urls Adressen om op te halen (hoogstens 40).
@@ -267,5 +277,5 @@
     else start();
   }
 
-  root.AquatechOffline = { supported, headers, status: refresh, flush, list, prefetch, on };
+  root.AquatechOffline = { supported, headers, status: refresh, flush, list, listKnown, prefetch, on };
 })(window);

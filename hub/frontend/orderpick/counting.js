@@ -96,7 +96,9 @@
   async function reconcileWaiting() {
     if (!window.AquatechOffline || !(Ui.readStored('counts_queued') || []).length) return;
     const startedAt = Date.now();
-    const pending = new Set((await window.AquatechOffline.list()).filter((item) => item.state === 'pending').map((item) => item.id));
+    const items = await window.AquatechOffline.listKnown();
+    if (!items) return; // geen antwoord van de service worker: niets weggooien
+    const pending = new Set(items.filter((item) => item.state === 'pending').map((item) => item.id));
     // Opnieuw lezen na het wachten: intussen kan er een ingave bij gekomen zijn (ook in een ander tabblad).
     const all = Ui.readStored('counts_queued') || [];
     const { kept, dropped } = Core.reconcileWaiting(all, pending, startedAt);
