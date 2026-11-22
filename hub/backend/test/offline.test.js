@@ -22,7 +22,7 @@ const HEADERS = Core.HEADERS;
 
 test('offline-core: alleen werkordergegevens komen in de cache', () => {
   for (const ok of ['api/me', 'api/config', 'api/my-day', 'api/my-day?date=2026-10-21&all=1', 'api/workorders', 'api/workorders/abc-123',
-    'api/workorders/abc-123/photos', 'api/workorders/abc-123/worklog', 'api/workorders/abc/photos/def?thumb=1', 'api/workorder-staff', 'api/quote-profile', 'api/orderpick/orders', 'api/orderpick/orders/abc-123', 'api/orderpick/counts/open', 'api/orderpick/counts/abc-123/lines?location=A%201', 'api/orderpick/counts/abc-123/lines?location=']) {
+    'api/workorders/abc-123/photos', 'api/workorders/abc-123/worklog', 'api/workorders/abc/photos/def?thumb=1', 'api/workorder-staff', 'api/quote-profile', 'api/orderpick/orders', 'api/orderpick/orders/abc-123', 'api/orderpick/counts/open', 'api/orderpick/counts/abc-123/lines?location=A%201', 'api/orderpick/counts/abc-123/lines?location=', `api/orderpick/counts/abc-123/lines?location=${encodeURIComponent("Rek (oud) 2* !'")}`]) {
     assert.ok(Core.cacheable(ok), ok);
   }
   for (const no of ['api/quotes', 'api/quotes/1', 'api/admin/users', 'api/portal', 'api/workorders/abc/photos/def', 'api/plans', 'api/workorders?quote=1',

@@ -59,7 +59,7 @@
     /^api\/orderpick\/orders\/[A-Za-z0-9-]{1,64}$/,
     // Voorraadtelling: de lopende telling en de blinde regels per locatie (nooit verwachte aantallen of prijzen).
     /^api\/orderpick\/counts\/open$/,
-    /^api\/orderpick\/counts\/[A-Za-z0-9-]{1,64}\/lines\?location=[A-Za-z0-9%._~-]{0,300}$/,
+    /^api\/orderpick\/counts\/[A-Za-z0-9-]{1,64}\/lines\?location=[A-Za-z0-9%._~!'()*-]{0,600}$/,
   ];
   /**
    * Geeft aan of een adres offline beschikbaar mag zijn.
