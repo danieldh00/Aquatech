@@ -211,6 +211,18 @@
       </div>`).join('');
   }
 
+  /**
+   * Volgt de terugknop (en vooruitknop) van de browser: van een bestelling of de afrondingsstand terug naar de lijst, en vooruit weer naar de bestelling.
+   * @returns {void}
+   */
+  function onPopState() {
+    const orderId = new URLSearchParams(location.search).get('id');
+    const otherMode = location.hash === '#tellen' || location.hash === '#ontvangst' || new URLSearchParams(location.search).has('ontvangst');
+    if (otherMode) return;
+    if (orderId && (!state.order || state.order.id !== orderId)) { openOrder(orderId).catch(() => {}); return; }
+    if (!orderId && (!$('#op-order').hidden || !$('#op-done').hidden)) showList();
+  }
+
   /** Toont alleen de lijst. */
   function showList() {
     stopCamera();
@@ -243,7 +255,9 @@
     $('#op-list').hidden = true;
     $('#op-done').hidden = true;
     $('#op-order').hidden = false;
-    history.replaceState(null, '', `?id=${encodeURIComponent(id)}`);
+    // Een eigen geschiedenisregel: de terugknop van de browser of telefoon gaat zo terug naar de lijst (zie onPopState).
+    const orderAddress = `?id=${encodeURIComponent(id)}`;
+    if (location.search !== orderAddress) history.pushState({ orderId: id }, '', orderAddress);
     $('#op-title').textContent = state.order.number;
     $('#op-meta').textContent = [state.order.shippingLabel, state.order.pickup ? 'afhalen' : '', state.order.dropshipping ? 'dropshipping (eigen pakbon van de klant)' : ''].filter(Boolean).join(' · ');
     renderOrder();
@@ -700,6 +714,7 @@
     state.owner = window.AquatechCommon.ownerOf(me) || 'onbekend';
     Object.assign(window.OrderpickUi, { allowed: true, owner: state.owner, rights: me.rights || [] });
     bind();
+    window.addEventListener('popstate', onPopState);
     // Goederenontvangst (receiving.js) neemt het scherm over met #ontvangst of ?ontvangst=<inkooporder>.
     if (!id && (location.hash === '#tellen' || location.hash === '#ontvangst' || new URLSearchParams(location.search).has('ontvangst'))) return;
     if (id) {
@@ -712,6 +727,6 @@
   }
 
   // De hulpmiddelen die receiving.js (goederenontvangst op dezelfde pagina) hergebruikt; `ready` is klaar zodra het eerste scherm staat.
-  window.OrderpickUi = { toast, vibrate, beep, esc, when, api, startCamera, stopCamera, showPickList: showList, allowed: false, owner: '' };
+  window.OrderpickUi = { toast, vibrate, beep, esc, when, api, startCamera, stopCamera, showPickList: showList, openOrder, allowed: false, owner: '' };
   window.OrderpickUi.ready = init();
 })();
