@@ -86,7 +86,7 @@ function appointmentOf(workOrderRow, data) {
  * Maakt de opslag voor werkorders en de afspraaklink.
  * @param {object} db De database.
  * @param {{ vault?: object, staffRoles?: Function, customerScopeOf?: Function }} [options] Kluis voor het token; rollen die een werkorder kunnen uitvoeren (per tenant); (tenantId) => { tenantIds, roleKeys } = waar de klanten van een omgeving wonen en welke rollen klant zijn (voor `autoLink`).
- * @returns {object} list, get, day, quoteOf, staff, create, createReceived, update, schedule, share, unshare, markSent, byToken, markViewed, shareLink, publicView, respond, remove, purge, nextNumber, autoLink en countUnlinked.
+ * @returns {object} list, listAsync, get, day, quoteOf, staff, create, createReceived, update, schedule, share, unshare, markSent, byToken, markViewed, shareLink, publicView, respond, remove, purge, nextNumber, autoLink en countUnlinked.
  */
 function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['beheerder', 'installateur'], customerScopeOf = () => null } = {}) {
   /**
@@ -164,21 +164,52 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
     OR EXISTS (SELECT 1 FROM service_requests sr WHERE sr.tenant_id = w.tenant_id AND sr.work_order_id = w.id AND sr.customer_id = ?))`;
 
   /**
+   * Bouwt de lijstquery van de werkorders (gedeeld door list en listAsync).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ quoteId?: string, customerId?: string }} filters Alleen van die offerte; alleen van dat klantaccount.
+   * @returns {{ sql: string, args: Array, customerId: string|null }} De query, de parameters en het klantaccount.
+   */
+  function listQuery(tenantId, { quoteId = null, customerId = null } = {}) {
+    const args = [tenantId];
+    let sql = `${LIST_SELECT} WHERE w.tenant_id = ? AND w.deleted_at IS NULL`;
+    if (quoteId) { sql += ' AND w.quote_id = ?'; args.push(String(quoteId)); }
+    if (customerId) { sql += OF_CUSTOMER; args.push(String(customerId), String(customerId)); }
+    return { sql: `${sql} ORDER BY w.updated_at DESC`, args, customerId };
+  }
+
+  /**
+   * Zet de rijen van de lijstquery om naar werkorders (voor een klant met de data erbij).
+   * @param {object[]} rows De rijen van listQuery.
+   * @param {string|null} customerId Het klantaccount als de lijst voor een klant is.
+   * @returns {object[]} De werkorders.
+   */
+  const workOrdersFromRows = (rows, customerId) => rows.map((workOrderRow) => {
+    const out = toWorkOrder(workOrderRow, false);
+    if (customerId) out.data = JSON.parse(workOrderRow.data);
+    return out;
+  });
+
+  /**
    * Alle werkorders van de omgeving, laatst gewijzigd eerst.
    * @param {string} tenantId Id van de omgeving.
    * @param {{ quoteId?: string, customerId?: string }} [filters] Alleen van die offerte; alleen van dat klantaccount, met de data erbij (het klantportaal toont daaruit de oplevering).
    * @returns {object[]} De werkorders.
    */
-  function list(tenantId, { quoteId = null, customerId = null } = {}) {
-    const args = [tenantId];
-    let sql = `${LIST_SELECT} WHERE w.tenant_id = ? AND w.deleted_at IS NULL`;
-    if (quoteId) { sql += ' AND w.quote_id = ?'; args.push(String(quoteId)); }
-    if (customerId) { sql += OF_CUSTOMER; args.push(String(customerId), String(customerId)); }
-    return prepare(`${sql} ORDER BY w.updated_at DESC`).all(...args).map((workOrderRow) => {
-      const out = toWorkOrder(workOrderRow, false);
-      if (customerId) out.data = JSON.parse(workOrderRow.data);
-      return out;
-    });
+  function list(tenantId, filters = {}) {
+    const query = listQuery(tenantId, filters);
+    return workOrdersFromRows(prepare(query.sql).all(...query.args), query.customerId);
+  }
+
+  /**
+   * Zelfde als list, maar via db.async: een trage lijstquery houdt de hoofdthread niet vast (zonder pool synchroon).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ quoteId?: string, customerId?: string }} [filters] Zie list.
+   * @returns {Promise<object[]>} De werkorders.
+   */
+  async function listAsync(tenantId, filters = {}) {
+    if (!db.async) return list(tenantId, filters);
+    const query = listQuery(tenantId, filters);
+    return workOrdersFromRows(await db.async.all(query.sql, ...query.args), query.customerId);
   }
 
   /**
@@ -639,7 +670,7 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
     });
   }
 
-  return { list, get, day, quoteOf, staff, create, createReceived, update, schedule, share, unshare, markSent, byToken, markViewed, shareLink, publicView, respond, remove, purge, nextNumber, autoLink, countUnlinked };
+  return { list, listAsync, get, day, quoteOf, staff, create, createReceived, update, schedule, share, unshare, markSent, byToken, markViewed, shareLink, publicView, respond, remove, purge, nextNumber, autoLink, countUnlinked };
 }
 
 /**
@@ -792,12 +823,12 @@ function registerWorkOrderRoutes(app, ctx) {
   });
 
   // Alle werkorders van de omgeving (de ploeg werkt samen); ?quote=<id> voor één offerte.
-  app.get('/api/workorders', requireWo, (req, res) => {
+  app.get('/api/workorders', requireWo, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     const marks = outsourcingOf(tenantOf(req));
     // Geboekte uren en materiaalregels per werkorder (één query, zie worklog.js).
     const logged = loggedOf(tenantOf(req));
-    res.json({ items: workorders.list(tenantOf(req), { quoteId: req.query.quote || null }).map((workOrder) => ({ ...workOrder, outsourcing: marks[workOrder.id] || null, logged: logged[workOrder.id] || null })) });
+    res.json({ items: (await workorders.listAsync(tenantOf(req), { quoteId: req.query.quote || null })).map((workOrder) => ({ ...workOrder, outsourcing: marks[workOrder.id] || null, logged: logged[workOrder.id] || null })) });
   });
 
   app.get('/api/workorders/:id', requireWo, (req, res) => {
