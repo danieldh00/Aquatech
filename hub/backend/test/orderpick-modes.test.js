@@ -21,6 +21,8 @@ function fakeElement(selector) {
       if (key in target) return target[key];
       if (key === 'classList') return { add() {}, remove() {}, toggle() {}, contains: () => false };
       if (key === 'closest') return () => null;
+      // Bewaart luisteraars, zodat een test op een knop kan klikken.
+      if (key === 'addEventListener') return (type, handler) => { (target.listeners = target.listeners || {})[type] = (target.listeners[type] || []).concat(handler); };
       return () => {};
     },
     set(target, key, value) { target[key] = value; return true; },
@@ -49,17 +51,50 @@ async function loadPage() {
      */
     addEventListener(type, handler) { (listeners[type] = listeners[type] || []).push(handler); },
   };
+  const pushed = [];
+  /**
+   * Zet pad, zoekdeel en hash van de nagebootste pagina volgens een adres.
+   * @param {string} url Het adres, bijvoorbeeld '?id=1' of '/app/orderpick/#tellen'.
+   */
+  const setAddress = (url) => {
+    const [beforeHash, hash] = String(url).split('#');
+    const [pathPart, search] = beforeHash.split('?');
+    if (pathPart) sandbox.location.pathname = pathPart;
+    sandbox.location.search = search ? `?${search}` : '';
+    sandbox.location.hash = hash ? `#${hash}` : '';
+  };
   const sandbox = {
     document, console, URLSearchParams, Promise, setTimeout, clearTimeout, setInterval, clearInterval, Date, Math, JSON, Number, String, Array, Object,
     navigator: {},
     location: { pathname: '/app/orderpick/', search: '', hash: '' },
-    history: { replaceState(_state, _title, url) { const [, hash] = String(url).split('#'); sandbox.location.hash = hash ? `#${hash}` : ''; } },
+    history: {
+      /**
+       * Zet het adres zoals de browser (zonder nieuwe geschiedenisregel).
+       * @param {*} _state Bewaarde stand (niet gebruikt).
+       * @param {string} _title Titel (niet gebruikt).
+       * @param {string} url Het nieuwe adres.
+       */
+      replaceState(_state, _title, url) { setAddress(url); },
+      /**
+       * Zet het adres zoals de browser en onthoudt de nieuwe geschiedenisregel.
+       * @param {*} _state Bewaarde stand (niet gebruikt).
+       * @param {string} _title Titel (niet gebruikt).
+       * @param {string} url Het nieuwe adres.
+       */
+      pushState(state, _title, url) { pushed.push(String(url)); sandbox.history.state = state; setAddress(url); },
+      state: null,
+      /**
+       * Gaat een geschiedenisregel terug zoals de browser: de eigen regel verdwijnt en popstate volgt.
+       */
+      back() { sandbox.history.state = null; setAddress('/app/orderpick/'); for (const handler of windowListeners.popstate || []) handler({}); },
+    },
     localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
     /**
-     * Geeft een lege lijst terug voor elk verzoek.
+     * Geeft een lege lijst terug, behalve voor bestelling order-1.
+     * @param {string} url Het adres van het verzoek.
      * @returns {Promise<object>} Het nagebootste antwoord.
      */
-    fetch: async () => ({ ok: true, status: 200, json: async () => ({ items: [], orders: [] }), headers: { get: () => '' } }),
+    fetch: async (url) => ({ ok: true, status: 200, json: async () => (/orders\/order-1/.test(String(url)) ? { order: { id: 'order-1', number: 'B-1', shipmentCount: 0, lines: [{ index: 0, ready: 1, scanCodes: ['X1'] }] } } : { items: [], orders: [] }), headers: { get: () => '' } }),
     AquatechAccount: { load: async () => ({ user: { kind: 'account' }, rights: ['orderpick'] }) },
     AquatechCommon: { ownerOf: () => 'test@live', onReturn() {}, statusMessage: (status) => `fout ${status}` },
     AquatechOffline: { headers: () => ({}), prefetch: async () => {}, on() {}, pending: async () => [] },
@@ -99,7 +134,11 @@ async function loadPage() {
     sandbox.location.hash = hash;
     for (const handler of windowListeners.hashchange || []) handler();
   };
-  return { clickMode, navigateHash, visible, sandbox };
+  /**
+   * Roept de luisteraars van de terugknop van de browser aan (het adres is dan al terug gezet).
+   */
+  const popState = () => { for (const handler of windowListeners.popstate || []) handler({}); };
+  return { clickMode, navigateHash, popState, pushed, visible, sandbox };
 }
 
 test('wisselen tussen Picken, Ontvangen en Tellen toont steeds precies één scherm', async () => {
@@ -130,4 +169,31 @@ test('een zijbalklink naar #ontvangst of #tellen op dezelfde pagina opent dat ta
   navigateHash('#tellen');
   await new Promise((resolve) => setTimeout(resolve, 5));
   assert.deepStrictEqual(visible(), ['#ct-list']);
+});
+
+test('de terugknop van de browser gaat van een bestelling terug naar de lijst', async () => {
+  const { sandbox, popState, pushed, visible } = await loadPage();
+  // Een bestelling openen zet een eigen geschiedenisregel.
+  const open = sandbox.OrderpickUi.openOrder;
+  assert.strictEqual(typeof open, 'function');
+  await open('order-1');
+  assert.deepStrictEqual(pushed, ['?id=order-1']);
+  assert.deepStrictEqual(visible(), ['#op-order']);
+  // Terug: het adres is weer het pad zonder ?id.
+  sandbox.location.search = '';
+  popState();
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.deepStrictEqual(visible(), ['#op-list']);
+  // De knop Terug in de app gebruikt dezelfde geschiedenisregel (geen dubbele lijstregel).
+  await open('order-1');
+  assert.deepStrictEqual(visible(), ['#op-order']);
+  for (const handler of sandbox.document.querySelector('#op-back').listeners.click) handler({});
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.deepStrictEqual(visible(), ['#op-list']);
+  assert.strictEqual(sandbox.history.state, null, 'de eigen geschiedenisregel is weg (terug, niet een extra lijstregel)');
+  // Vooruit: de bestelling gaat weer open.
+  sandbox.location.search = '?id=order-1';
+  popState();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepStrictEqual(visible(), ['#op-order']);
 });

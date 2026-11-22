@@ -211,6 +211,27 @@
       </div>`).join('');
   }
 
+  /**
+   * Volgt de terugknop (en vooruitknop) van de browser: van een bestelling of de afrondingsstand terug naar de lijst, en vooruit weer naar de bestelling.
+   * @returns {void}
+   */
+  function onPopState() {
+    const orderId = new URLSearchParams(location.search).get('id');
+    const otherMode = location.hash === '#tellen' || location.hash === '#ontvangst' || new URLSearchParams(location.search).has('ontvangst');
+    if (otherMode) return;
+    if (orderId && (!state.order || state.order.id !== orderId)) { openOrder(orderId).catch(() => {}); return; }
+    if (!orderId && (!$('#op-order').hidden || !$('#op-done').hidden)) showList();
+  }
+
+  /**
+   * De knop Terug in de bestelling: heeft het openen een eigen geschiedenisregel gezet, dan gaat het scherm een regel terug (zo blijft de geschiedenis netjes en toont onPopState de lijst); anders (directe link) toont het de lijst.
+   * @returns {void}
+   */
+  function leaveOrder() {
+    if (history.state && history.state.orderId) history.back();
+    else showList();
+  }
+
   /** Toont alleen de lijst. */
   function showList() {
     stopCamera();
@@ -243,7 +264,9 @@
     $('#op-list').hidden = true;
     $('#op-done').hidden = true;
     $('#op-order').hidden = false;
-    history.replaceState(null, '', `?id=${encodeURIComponent(id)}`);
+    // Een eigen geschiedenisregel: de terugknop van de browser of telefoon gaat zo terug naar de lijst (zie onPopState).
+    const orderAddress = `?id=${encodeURIComponent(id)}`;
+    if (location.search !== orderAddress) history.pushState({ orderId: id }, '', orderAddress);
     $('#op-title').textContent = state.order.number;
     $('#op-meta').textContent = [state.order.shippingLabel, state.order.pickup ? 'afhalen' : '', state.order.dropshipping ? 'dropshipping (eigen pakbon van de klant)' : ''].filter(Boolean).join(' · ');
     renderOrder();
@@ -637,7 +660,7 @@
       const row = event.target.closest('[data-shipment]');
       if (button && row) makeDocument(button, row.dataset.order, row.dataset.shipment, button.dataset.doc);
     });
-    $('#op-back').addEventListener('click', showList);
+    $('#op-back').addEventListener('click', leaveOrder);
     $('#op-scan').addEventListener('keydown', (event) => {
       if (event.key !== 'Enter') return;
       event.preventDefault();
@@ -700,6 +723,7 @@
     state.owner = window.AquatechCommon.ownerOf(me) || 'onbekend';
     Object.assign(window.OrderpickUi, { allowed: true, owner: state.owner, rights: me.rights || [] });
     bind();
+    window.addEventListener('popstate', onPopState);
     // Goederenontvangst (receiving.js) neemt het scherm over met #ontvangst of ?ontvangst=<inkooporder>.
     if (!id && (location.hash === '#tellen' || location.hash === '#ontvangst' || new URLSearchParams(location.search).has('ontvangst'))) return;
     if (id) {
@@ -712,6 +736,6 @@
   }
 
   // De hulpmiddelen die receiving.js (goederenontvangst op dezelfde pagina) hergebruikt; `ready` is klaar zodra het eerste scherm staat.
-  window.OrderpickUi = { toast, vibrate, beep, esc, when, api, startCamera, stopCamera, showPickList: showList, allowed: false, owner: '' };
+  window.OrderpickUi = { toast, vibrate, beep, esc, when, api, startCamera, stopCamera, showPickList: showList, openOrder, allowed: false, owner: '' };
   window.OrderpickUi.ready = init();
 })();
