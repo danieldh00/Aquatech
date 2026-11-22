@@ -20,6 +20,32 @@
   }
 
   /**
+   * Rekent losse stuks en verpakkingen (aantal x factor) om naar het totaal in de basiseenheid.
+   * @param {*} loose De losse stuks (leeg = geen).
+   * @param {{ factor: number, count: * }[]} packs De verpakkingen met het geteld aantal (leeg = geen).
+   * @returns {number|null} Het totaal, of null als er niets is ingevuld of iets ongeldigs (een lege invoer is niet 0).
+   */
+  function totalOf(loose, packs) {
+    let total = 0;
+    let filled = false;
+    const looseQty = parseQuantity(loose);
+    if (String(loose === null || loose === undefined ? '' : loose).trim() !== '') {
+      if (looseQty === null) return null;
+      total += looseQty;
+      filled = true;
+    }
+    for (const pack of packs || []) {
+      if (String(pack.count === null || pack.count === undefined ? '' : pack.count).trim() === '') continue;
+      const count = parseQuantity(pack.count);
+      if (count === null || !Number.isFinite(Number(pack.factor)) || Number(pack.factor) < 1) return null;
+      total += count * Number(pack.factor);
+      filled = true;
+    }
+    if (!filled) return null;
+    return total > MAX_QTY ? null : Math.round(total * 1000) / 1000;
+  }
+
+  /**
    * Zoekt de regel die bij een gescande code hoort (EAN of artikelcode); een regel die nog geteld moet worden gaat voor.
    * @param {{ id: string, code: string, ean: string, status: string }[]} lines De regels van de locatie.
    * @param {string} scanned De gescande of ingetypte code.
@@ -89,5 +115,5 @@
    */
   const locationName = (location) => location || 'Geen locatie';
 
-  return { MAX_QTY, parseQuantity, findLine, nextOpenLine, summarize, countBody, newClientId, locationName };
+  return { MAX_QTY, parseQuantity, totalOf, findLine, nextOpenLine, summarize, countBody, newClientId, locationName };
 });

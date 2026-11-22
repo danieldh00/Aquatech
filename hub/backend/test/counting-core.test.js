@@ -64,3 +64,14 @@ test('het telscherm is blind: de bestanden kennen geen verwacht aantal of prijs'
     assert.ok(!/expected|verwacht|price|prijs|unitCost|onHand/i.test(source), `${file} noemt een verwacht aantal of een prijs`);
   }
 });
+
+test('totalOf: losse stuks plus verpakkingen keer hun factor, leeg is geen 0', () => {
+  assert.strictEqual(Core.totalOf('', []), null);
+  assert.strictEqual(Core.totalOf('', [{ factor: 12, count: '' }]), null);
+  assert.strictEqual(Core.totalOf('5', []), 5);
+  assert.strictEqual(Core.totalOf('3', [{ factor: 12, count: '2' }, { factor: 100, count: '1' }]), 127);
+  assert.strictEqual(Core.totalOf('', [{ factor: 12, count: '0' }]), 0, 'een ingevulde 0 is wel een telling');
+  assert.strictEqual(Core.totalOf('x', [{ factor: 12, count: '2' }]), null);
+  assert.strictEqual(Core.totalOf('', [{ factor: 12, count: '-1' }]), null);
+  assert.strictEqual(Core.totalOf('', [{ factor: 0, count: '2' }]), null);
+});

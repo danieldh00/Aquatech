@@ -397,6 +397,23 @@ function createStockCounts(db, { stock }) {
   }
 
   /**
+   * De actieve verpakkingen (naam en factor, nooit prijzen) van een aantal artikelen, als invoerhulp bij het tellen (aantal dozen x factor). Een query.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string[]} itemIds Id's van de artikelen.
+   * @returns {Map<string, { name: string, factor: number }[]>} Per artikel de verpakkingen, kleinste factor eerst.
+   */
+  function packagingsByItem(tenantId, itemIds) {
+    const result = new Map();
+    if (!itemIds.length) return result;
+    const rows = prepare(`SELECT item_id, name, factor FROM item_packagings WHERE tenant_id = ? AND active = 1 AND item_id = ANY(?::uuid[]) ORDER BY item_id, factor, name`).all(tenantId, [...new Set(itemIds)]);
+    for (const packagingRow of rows) {
+      if (!result.has(packagingRow.item_id)) result.set(packagingRow.item_id, []);
+      result.get(packagingRow.item_id).push({ name: packagingRow.name, factor: Number(packagingRow.factor) });
+    }
+    return result;
+  }
+
+  /**
    * De regels van één locatie voor de tellers (blind), van een lopende telling.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van de telling.
@@ -407,7 +424,9 @@ function createStockCounts(db, { stock }) {
     const row = findCount(tenantId, id);
     if (!row) return { error: 'Telling niet gevonden.', code: 'not_found', status: 404 };
     if (row.status !== 'tellen') return { error: 'Deze telling loopt niet meer.', code: 'closed', status: 409 };
-    return { lines: lineRows(tenantId, row.id, cleanText(location, 60)).map(blindOf) };
+    const rows = lineRows(tenantId, row.id, cleanText(location, 60));
+    const packagings = packagingsByItem(tenantId, rows.map((lineRow) => lineRow.item_id));
+    return { lines: rows.map((lineRow) => ({ ...blindOf(lineRow), packagings: packagings.get(lineRow.item_id) || [] })) };
   }
 
   /**
