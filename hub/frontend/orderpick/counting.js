@@ -88,6 +88,27 @@
     renderLocation();
   }
 
+  /**
+   * Haalt ingaven weg die niet meer in de wachtrij wachten (door de server afgewezen of weggegooid) en zet hun regels weer open,
+   * zodat de teller niet denkt dat iets is opgeslagen wat de server nooit heeft ontvangen.
+   * @returns {Promise<void>}
+   */
+  async function reconcileWaiting() {
+    if (!window.AquatechOffline || !(Ui.readStored('counts_queued') || []).length) return;
+    const startedAt = Date.now();
+    const pending = new Set((await window.AquatechOffline.list()).filter((item) => item.state === 'pending').map((item) => item.id));
+    // Opnieuw lezen na het wachten: intussen kan er een ingave bij gekomen zijn (ook in een ander tabblad).
+    const all = Ui.readStored('counts_queued') || [];
+    const kept = all.filter((entry) => pending.has(entry.queueId) || entry.at >= startedAt);
+    if (kept.length === all.length) return;
+    Ui.writeStored('counts_queued', kept.length ? kept : null);
+    const waiting = new Set(waitingEntries().map((entry) => entry.lineId));
+    state.lines = state.lines.map((line) => (line.queued && !waiting.has(line.id) ? { ...line, status: 'open', countedQty: null, queued: false } : line));
+    if (state.count && !$('#ct-location').hidden) renderLocation();
+    else if (state.count && !$('#ct-list').hidden) renderLocations();
+    toast('Een ingave is niet verstuurd (afgewezen of weggegooid). Tel die regel opnieuw.', true);
+  }
+
   // ---------- Overzicht van de locaties ----------
   /** Toont de lijst met locaties van de lopende telling en laadt hem opnieuw. */
   function showList() {
@@ -159,6 +180,7 @@
       return;
     }
     if (run !== state.run) return;
+    await reconcileWaiting().catch(() => {});
     state.location = locationText;
     state.lines = applyWaiting(out.lines);
     const first = Core.nextOpenLine(state.lines);
@@ -385,6 +407,7 @@
     if (!Ui.allowed) return;
     bind();
     if (window.AquatechOffline) window.AquatechOffline.on('synced', onQueueEvent);
+    if (window.AquatechOffline) window.AquatechOffline.on('status', () => { reconcileWaiting().catch(() => {}); });
     if (location.hash === '#tellen') showList();
   }
 
