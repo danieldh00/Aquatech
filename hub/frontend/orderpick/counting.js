@@ -33,6 +33,61 @@
     if (window.AquatechNav && window.AquatechNav.refresh) window.AquatechNav.refresh();
   }
 
+  // ---------- Zonder verbinding ----------
+  /**
+   * De ingaven van deze telling die nog op verbinding wachten (bewaard op dit toestel).
+   * @returns {{ countId: string, lineId: string, qty: number, queueId: string, at: number }[]} De wachtende ingaven.
+   */
+  const waitingEntries = () => (Ui.readStored('counts_queued') || []).filter((entry) => !state.count || entry.countId === state.count.id);
+
+  /**
+   * Zet de ingaven die nog op verbinding wachten als geteld op de regels (de gecachte lijst kent ze nog niet).
+   * @param {object[]} lines De regels van de locatie.
+   * @returns {object[]} Dezelfde regels, de wachtende gemarkeerd met `queued`.
+   */
+  function applyWaiting(lines) {
+    const waiting = waitingEntries();
+    return lines.map((line) => {
+      const entry = waiting.find((candidate) => candidate.lineId === line.id);
+      return entry ? { ...line, status: 'geteld', countedQty: entry.qty, queued: true } : line;
+    });
+  }
+
+  /**
+   * Onthoudt een ingave die in de offline wachtrij staat.
+   * @param {string} lineId Id van de regel.
+   * @param {number} qty Het getelde aantal.
+   * @param {string} queueId Id in de wachtrij.
+   */
+  function rememberWaiting(lineId, qty, queueId) {
+    const others = (Ui.readStored('counts_queued') || []).filter((entry) => !(entry.countId === state.count.id && entry.lineId === lineId));
+    Ui.writeStored('counts_queued', [...others, { countId: state.count.id, lineId, qty, queueId, at: Date.now() }]);
+  }
+
+  /**
+   * Verwerkt een bericht van de offline wachtrij: een verstuurde (of weggegooide) ingave is niet langer wachtend en de regel krijgt zijn echte stand.
+   * @param {{ discarded: boolean, id: string, item: { id: string, url: string }, body: object }} message Het bericht van de service worker.
+   */
+  function onQueueEvent(message) {
+    const all = Ui.readStored('counts_queued') || [];
+    if (!all.length) return;
+    const queueId = message.discarded ? message.id : message.item && /\/count$/.test(message.item.url || '') ? message.item.id : null;
+    if (!queueId || !all.some((entry) => entry.queueId === queueId)) return;
+    const remaining = all.filter((entry) => entry.queueId !== queueId);
+    Ui.writeStored('counts_queued', remaining.length ? remaining : null);
+    if (!state.count || $('#ct-location').hidden) return;
+    if (message.body && message.body.line) {
+      // Verstuurd: de regel krijgt zijn echte stand van de server.
+      const at = state.lines.findIndex((line) => line.id === message.body.line.id);
+      if (at >= 0) state.lines[at] = message.body.line;
+    } else {
+      // Weggegooid: een regel die niet meer wacht, is weer open.
+      const waiting = new Set(waitingEntries().map((entry) => entry.lineId));
+      state.lines = state.lines.map((line) => (line.queued && !waiting.has(line.id) ? { ...line, status: 'open', countedQty: null, queued: false } : line));
+    }
+    renderLocation();
+  }
+
   // ---------- Overzicht van de locaties ----------
   /** Toont de lijst met locaties van de lopende telling en laadt hem opnieuw. */
   function showList() {
@@ -51,6 +106,10 @@
     const out = await Ui.api('counts/open');
     state.count = out.count;
     renderLocations();
+    // Alle locaties alvast ophalen, zodat tellen ook zonder verbinding door kan (hal zonder bereik).
+    if (window.AquatechOffline && out.count) {
+      window.AquatechOffline.prefetch(out.count.locations.map((entry) => `api/orderpick/counts/${encodeURIComponent(out.count.id)}/lines?location=${encodeURIComponent(entry.location)}`), '../');
+    }
   }
 
   /** Tekent de locaties met hun voortgang (of een melding als er geen telling loopt). */
@@ -63,7 +122,8 @@
       return;
     }
     $('#ct-title').textContent = `Telling ${count.number}`;
-    $('#ct-note').textContent = `Peildatum ${count.referenceDate}. Kies een locatie en tel wat je daar ziet: je ziet niet hoeveel er volgens de administratie ligt.`;
+    const waiting = waitingEntries().length;
+    $('#ct-note').textContent = `Peildatum ${count.referenceDate}. Kies een locatie en tel wat je daar ziet: je ziet niet hoeveel er volgens de administratie ligt.${waiting ? ` ${waiting} ingave${waiting === 1 ? '' : 'n'} wacht${waiting === 1 ? '' : 'en'} op verbinding en word${waiting === 1 ? 't' : 'en'} daarna verstuurd.` : ''}`;
     $('#ct-locations').innerHTML = count.locations.map((entry, index) => {
       const open = entry.total - entry.counted;
       return `<button type="button" class="op-order" data-index="${esc(index)}">
@@ -96,7 +156,7 @@
     }
     if (run !== state.run) return;
     state.location = locationText;
-    state.lines = out.lines;
+    state.lines = applyWaiting(out.lines);
     const first = Core.nextOpenLine(state.lines);
     state.currentId = first ? first.id : null;
     state.feedback = null;
@@ -192,7 +252,7 @@
       let mark = '○';
       let css = '';
       let right = '';
-      if (line.status === 'geteld') { mark = '✓'; css = ' picked'; right = `${line.countedQty}${line.unit ? ` ${line.unit}` : ''}`; }
+      if (line.status === 'geteld') { mark = '✓'; css = ' picked'; right = `${line.countedQty}${line.unit ? ` ${line.unit}` : ''}${line.queued ? ' · wacht op verbinding' : ''}`; }
       else if (line.status === 'hertellen') { mark = '↻'; css = ' absent'; right = 'hertellen'; }
       return `<button type="button" class="op-line${css}${line.id === state.currentId ? ' current' : ''}" data-id="${esc(line.id)}">
         <span class="mark">${mark}</span>
@@ -240,10 +300,14 @@
     state.busy = true;
     renderCurrent();
     try {
-      const out = await Ui.api(`counts/${encodeURIComponent(state.count.id)}/lines/${encodeURIComponent(line.id)}/count`, { method: 'POST', body: Core.countBody(qty, state.pendingKeys[key]) });
+      const out = await Ui.api(`counts/${encodeURIComponent(state.count.id)}/lines/${encodeURIComponent(line.id)}/count`, { method: 'POST', body: Core.countBody(qty, state.pendingKeys[key]), offlineLabel: `Telling: ${line.name} geteld` });
       delete state.pendingKeys[key];
       const index = state.lines.findIndex((entry) => entry.id === line.id);
-      if (index >= 0 && out.line) state.lines[index] = out.line;
+      if (out.queued) {
+        // Zonder verbinding: de ingave staat in de wachtrij; de regel telt alvast als geteld.
+        rememberWaiting(line.id, qty, out.id);
+        if (index >= 0) state.lines[index] = { ...line, status: 'geteld', countedQty: qty, queued: true };
+      } else if (index >= 0 && out.line) state.lines[index] = out.line;
       vibrate(40);
       beep(true);
       const next = Core.nextOpenLine(state.lines, line.id);
@@ -316,6 +380,7 @@
     await Ui.ready;
     if (!Ui.allowed) return;
     bind();
+    if (window.AquatechOffline) window.AquatechOffline.on('synced', onQueueEvent);
     if (location.hash === '#tellen') showList();
   }
 
