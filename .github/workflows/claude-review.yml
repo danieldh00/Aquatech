@@ -31,8 +31,8 @@ concurrency:
 jobs:
   code-review:
     name: Claude code review
-    # Pull requests uit forks krijgen geen secrets; die worden niet gebruikt in dit project.
-    if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+    # Draait ook voor forks: een overgeslagen verplichte check telt als geslaagd, dus een fork-PR faalt hier expres.
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -42,6 +42,15 @@ jobs:
       id-token: write
       actions: read
     steps:
+      - name: Geen pull requests uit forks
+        env:
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ "$HEAD_REPO" != "$REPO" ]; then
+            echo "::error::Pull request uit een fork ($HEAD_REPO): handmatige review vereist. Forks krijgen geen secrets, dus geen Claude-review; zo'n PR kan niet automatisch slagen."
+            exit 1
+          fi
       - name: Controleer of de API-sleutel is ingesteld
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -66,11 +75,11 @@ jobs:
           echo "review=true" >> "$GITHUB_OUTPUT"
           echo "model=$model" >> "$GITHUB_OUTPUT"
           echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         if: steps.scope.outputs.review == 'true'
         with:
           fetch-depth: 1
-      - uses: anthropics/claude-code-action@v1
+      - uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1
         if: steps.scope.outputs.review == 'true'
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -101,6 +110,9 @@ jobs:
             Werk zuinig met beurten: begin met één `gh pr diff` en plaats al je inline opmerkingen in één keer.
             Plaats concrete bevindingen als inline opmerkingen op de regel (mcp__github_inline_comment__create_inline_comment,
             met confirmed: true) en eindig met één korte samenvattende opmerking (`gh pr comment`) met het oordeel.
+            De laatste regel van die opmerking is exact `OORDEEL: akkoord` of `OORDEEL: blokkerend`. Gebruik
+            `blokkerend` alleen bij een bevinding die vóór het mergen opgelost moet zijn (fout in gedrag, lek of
+            gegevensverlies); kleinere punten en smaak zijn `akkoord`.
             Wees specifiek en geef per bevinding het gevolg en een voorstel voor de oplossing. Geen opmerkingen over
             smaak of dingen die goed zijn. Schrijf in het Nederlands.
           claude_args: >-
@@ -116,15 +128,20 @@ jobs:
           STARTED: ${{ steps.scope.outputs.started }}
         run: |
           # Geen oordeel = rode check: de samenvattende opmerking van claude[bot] moet in deze run zijn geplaatst.
-          count=$(gh api "repos/$REPO/issues/$NUMBER/comments" --paginate --jq "[.[] | select(.user.login == \"claude[bot]\" and .created_at >= \"$STARTED\")] | length" | awk '{ total += $1 } END { print total + 0 }')
-          if [ "${count:-0}" -lt 1 ]; then
-            echo "::error::De review heeft geen oordeel op de PR geplaatst (geen opmerking van claude[bot] sinds $STARTED). Een check zonder oordeel telt niet als geslaagd."
+          # Geen oordeel = rode check; "OORDEEL: blokkerend" ook. Het oordeel staat in de laatste regel van een opmerking van claude[bot] uit deze run.
+          verdict=$(gh api "repos/$REPO/issues/$NUMBER/comments" --paginate --jq '.[] | select(.user.login == "claude[bot]" and .created_at >= env.STARTED) | .body' | grep -E '^OORDEEL: (akkoord|blokkerend)[[:space:]]*$' | tail -n 1 | tr -d '[:space:]' || true)
+          if [ -z "$verdict" ]; then
+            echo "::error::De review heeft geen oordeel ('OORDEEL: akkoord' of 'OORDEEL: blokkerend') op de PR geplaatst sinds $STARTED. Een check zonder oordeel telt niet als geslaagd."
+            exit 1
+          fi
+          if [ "$verdict" != "OORDEEL:akkoord" ]; then
+            echo "::error::De review is blokkerend. Los de opmerkingen op of beantwoord ze met een reden; een nieuwe push start de review opnieuw."
             exit 1
           fi
 
   security-review:
     name: Claude security review
-    if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -134,6 +151,15 @@ jobs:
       id-token: write
       actions: read
     steps:
+      - name: Geen pull requests uit forks
+        env:
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ "$HEAD_REPO" != "$REPO" ]; then
+            echo "::error::Pull request uit een fork ($HEAD_REPO): handmatige review vereist. Forks krijgen geen secrets, dus geen Claude-review; zo'n PR kan niet automatisch slagen."
+            exit 1
+          fi
       - name: Controleer of de API-sleutel is ingesteld
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -158,11 +184,11 @@ jobs:
           echo "review=true" >> "$GITHUB_OUTPUT"
           echo "model=$model" >> "$GITHUB_OUTPUT"
           echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         if: steps.scope.outputs.review == 'true'
         with:
           fetch-depth: 1
-      - uses: anthropics/claude-code-action@v1
+      - uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1
         if: steps.scope.outputs.review == 'true'
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -188,7 +214,9 @@ jobs:
             Gebruik `gh pr diff` en `gh pr view`. Plaats elke bevinding als inline opmerking op de regel
             (mcp__github_inline_comment__create_inline_comment, met confirmed: true) met ernst, aanvalsscenario en
             voorstel voor de oplossing, en eindig met één korte samenvattende opmerking (`gh pr comment`).
-            Geen bevindingen: één regel dat er niets is gevonden. Schrijf in het Nederlands.
+            Geen bevindingen: één regel dat er niets is gevonden. De laatste regel van die opmerking is exact
+            `OORDEEL: akkoord` of `OORDEEL: blokkerend`; `blokkerend` bij elke bevinding die realistisch
+            uitbuitbaar is en vóór het mergen opgelost moet zijn. Schrijf in het Nederlands.
           claude_args: >-
             ${{ steps.scope.outputs.model && format('--model {0}', steps.scope.outputs.model) || '' }}
             --max-turns 40
@@ -202,8 +230,13 @@ jobs:
           STARTED: ${{ steps.scope.outputs.started }}
         run: |
           # Geen oordeel = rode check: de samenvattende opmerking van claude[bot] moet in deze run zijn geplaatst.
-          count=$(gh api "repos/$REPO/issues/$NUMBER/comments" --paginate --jq "[.[] | select(.user.login == \"claude[bot]\" and .created_at >= \"$STARTED\")] | length" | awk '{ total += $1 } END { print total + 0 }')
-          if [ "${count:-0}" -lt 1 ]; then
-            echo "::error::De review heeft geen oordeel op de PR geplaatst (geen opmerking van claude[bot] sinds $STARTED). Een check zonder oordeel telt niet als geslaagd."
+          # Geen oordeel = rode check; "OORDEEL: blokkerend" ook. Het oordeel staat in de laatste regel van een opmerking van claude[bot] uit deze run.
+          verdict=$(gh api "repos/$REPO/issues/$NUMBER/comments" --paginate --jq '.[] | select(.user.login == "claude[bot]" and .created_at >= env.STARTED) | .body' | grep -E '^OORDEEL: (akkoord|blokkerend)[[:space:]]*$' | tail -n 1 | tr -d '[:space:]' || true)
+          if [ -z "$verdict" ]; then
+            echo "::error::De review heeft geen oordeel ('OORDEEL: akkoord' of 'OORDEEL: blokkerend') op de PR geplaatst sinds $STARTED. Een check zonder oordeel telt niet als geslaagd."
+            exit 1
+          fi
+          if [ "$verdict" != "OORDEEL:akkoord" ]; then
+            echo "::error::De review is blokkerend. Los de opmerkingen op of beantwoord ze met een reden; een nieuwe push start de review opnieuw."
             exit 1
           fi
