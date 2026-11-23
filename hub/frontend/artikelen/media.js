@@ -14,15 +14,15 @@
    * @returns {string} tekst met HTML-tekens vervangen door entiteiten
    */
   const esc = (value) => String(value == null ? '' : value).replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
-  let state; let toast; let load; let openItem;
+  let state; let api; let toast; let load; let openItem;
 
   /**
    * Geeft de module wat hij van de pagina nodig heeft (gedeelde state en hulpfuncties van artikelen.js).
-   * @param {object} context state, toast, load en openItem uit artikelen.js
+   * @param {object} context state, api, toast, load en openItem uit artikelen.js
    * @returns {void}
    */
   function setup(context) {
-    ({ state, toast, load, openItem } = context);
+    ({ state, api, toast, load, openItem } = context);
   }
 
   // ---------- Mediabibliotheek ----------

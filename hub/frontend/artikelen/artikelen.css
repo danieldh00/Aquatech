@@ -16,6 +16,7 @@ table.grid tr[data-id]:hover td { background: var(--at-green-soft); }
 .pill.k-afboeking { background: var(--primary-soft); color: var(--primary-dark); }
 .pill.low { background: var(--danger, #c62828); color: #fff; }
 .linkbtn { background: none; border: 0; padding: 0; color: var(--primary); text-decoration: underline; cursor: pointer; font: inherit; }
+@media (max-width: 640px) { .linkbtn { min-height: 36px; padding: 8px 0; } }
 .i-list { max-height: 360px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 10px; margin-bottom: 10px; columns: 2 320px; }
 .i-list label { flex-direction: row !important; align-items: flex-start; gap: 6px; font-size: 13px; color: var(--text) !important; break-inside: avoid; padding: 3px 0; }
 .i-list .have { color: var(--muted); }
@@ -52,6 +53,7 @@ table.grid tr.variant td:first-child { padding-left: 34px; }
 table.grid tr.variant td { background: color-mix(in srgb, var(--at-teal) 5%, transparent); }
 table.grid .toggle { border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 14px; width: 22px; padding: 0; margin-right: 4px; }
 table.grid .toggle:hover { color: var(--at-teal); }
+@media (max-width: 640px) { table.grid .toggle { width: 36px; min-height: 36px; } }
 #d-variants { border-left: 4px solid var(--at-teal); }
 #d-variants .v-attr { align-items: flex-end; }
 #d-variants .tablewrap { margin-top: 14px; }
