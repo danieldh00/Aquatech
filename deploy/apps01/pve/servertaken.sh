@@ -525,6 +525,20 @@ hosttask_006_database_grootte_en_indexgebruik() {
   echo "Bewaard in $out."
 }
 
+# Toont wie de commit maakte, wanneer, de titel en of GitHub de handtekening verifieert, zodat de bevestiging
+# erna een bewuste keuze is (alles op master draait hier als root). Best effort: zonder antwoord van GitHub alleen een melding.
+show_ref_commit() {
+  local json author date title verified
+  json="$(curl -fsSL -m 20 "https://api.github.com/repos/danieldh00/Aquatech/commits/$TASKS_REF" 2>/dev/null || true)"
+  if [[ -z "$json" ]]; then echo "  (commitgegevens niet op te halen van GitHub; controleer de commit zelf: https://github.com/danieldh00/Aquatech/commit/$TASKS_REF)"; return 0; fi
+  author="$(grep -m1 -oE '"name": *"[^"]*"' <<<"$json" | cut -d'"' -f4)"
+  date="$(grep -m1 -oE '"date": *"[^"]*"' <<<"$json" | cut -d'"' -f4)"
+  title="$(grep -m1 -oE '"message": *"[^"\\]*' <<<"$json" | cut -d'"' -f4)"
+  verified="nee"; grep -qE '"verified": *true' <<<"$json" && verified="ja"
+  echo "  commit: $title"
+  echo "  door $author op $date; handtekening geverifieerd door GitHub: $verified"
+  echo "  https://github.com/danieldh00/Aquatech/commit/$TASKS_REF"
+}
 # Toont wat er openstaat. Uitgangscode 10 = er is iets te doen (two_step vraagt dan om bevestiging).
 remote_openstaand_check() {
   local pending
@@ -536,6 +550,7 @@ remote_openstaand_check() {
     return 0
   fi
   echo "Openstaande servertaken (uit commit ${TASKS_REF:0:10}):"
+  show_ref_commit
   for id in $pending; do echo "  - $id"; done
   return 10
 }
