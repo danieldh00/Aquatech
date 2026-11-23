@@ -14,21 +14,20 @@ const { decryptFile, keyOf } = require('../backup');
 const { listTables } = require('../database/db');
 const { importLines } = require('../database/table-rows');
 
-// Tabellen waarin een echte installatie gegevens heeft; staat er in één ervan al een rij, dan is het geen lege database meer.
-const REAL_DATA_TABLES = ['users', 'quotes', 'work_orders', 'invoices', 'web_orders', 'plans'];
+// Het enige dat een vers gemigreerde database mag bevatten: de rij van de hoofdtenant (door de eerste start aangemaakt).
+const SEED_TABLES = ['tenants'];
 
 /**
- * Telt de rijen in de tabellen die bij een echte installatie horen (alleen tabellen die bestaan).
+ * Telt de rijen in alle tabellen behalve die van een vers gemigreerde database (de hoofdtenant).
  * @param {object} db De database.
- * @returns {Object<string, number>} Alleen de tabellen met minstens één rij, met hun aantal.
+ * @returns {Object<string, number>} Alleen de tabellen met minstens één rij, met hun aantal; leeg = een lege database.
  */
 function realDataOf(db) {
-  const existing = new Set(listTables(db));
   const found = {};
-  for (const table of REAL_DATA_TABLES) {
-    if (!existing.has(table)) continue;
+  for (const table of listTables(db)) {
     const { total } = db.prepare(`SELECT COUNT(*) AS total FROM ${table}`).get();
-    if (Number(total) > 0) found[table] = Number(total);
+    const count = Number(total);
+    if (count > (SEED_TABLES.includes(table) ? 1 : 0)) found[table] = count;
   }
   return found;
 }

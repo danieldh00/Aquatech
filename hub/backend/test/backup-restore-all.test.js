@@ -2,6 +2,7 @@
 // van de Google Drive-back-up doet: alle tabellen komen identiek terug, en zonder de schakelaar weigert het.
 const test = require('node:test');
 const assert = require('node:assert');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -99,6 +100,22 @@ test('noodherstel met een verkeerde hoofdsleutel mislukt en laat de lege databas
     const backup = await createBackup({ db: source, dir, vault: createVault(Buffer.alloc(32, 7)) });
     await assert.rejects(restoreAll({ db: openDb(), file: path.join(dir, backup.name), vault: createVault(Buffer.alloc(32, 9)), env: { AQUATECH_EMERGENCY_RESTORE: '1' }, tempDir: dir, emergency: true }));
     assert.deepStrictEqual(fs.readdirSync(dir).filter((name) => name.startsWith('restore-all-')), []);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('noodherstel weigert ook een database met alleen instellingen of voorraad (geen account) en laat die ongemoeid', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aquatech-emergency-'));
+  try {
+    const vault = createVault(Buffer.alloc(32, 7));
+    const backup = await createBackup({ db: openDb(), dir, vault });
+    const target = openDb();
+    const tenantId = createStore(target).ensureTenant().id;
+    target.prepare('INSERT INTO stock_items (id, tenant_id, code, name, unit, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(crypto.randomUUID(), tenantId, 'X-1', 'Slang', 'stuk', '2026-11-23T00:00:00Z', '2026-11-23T00:00:00Z');
+    const before = fingerprint(target);
+    await assert.rejects(restoreAll({ db: target, file: path.join(dir, backup.name), vault, env: { AQUATECH_EMERGENCY_RESTORE: '1' }, tempDir: dir, emergency: true }), /alleen in een lege database.*stock_items: 1/);
+    assert.deepStrictEqual(fingerprint(target), before, 'niets gewist');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
