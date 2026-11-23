@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.33.3
+
+- Audit T-06: `update.sh` stopt de update vóór het vervangen van de container als `backup.js create` faalt (alleen exitcode 2 = oude versie kent `create` niet, of een eerste installatie zonder draaiende versie, gaat door met een waarschuwing); de huidige versie blijft draaien en run.json meldt `mislukt`. Servertaak `009-update-script-stopt-bij-mislukte-back-up` (zelfde handeling als 001) installeert het nieuwe script.
+
+## 1.33.2
+
+- Audit B-06: de controle op verplicht wachtwoord wijzigen, de no-store-kop en het 404-antwoord voor onbekende API-routes herkennen het API-pad nu hoofdletterongevoelig (`isApiPath`), dus `/API/…` omzeilt ze niet meer.
+- Audit T-04: Permissions-Policy `camera=(self)` (eigen site) in plaats van `camera=()`; de rest blijft uit.
+- Audit B-07: `accessCode` en `guestAccess` wijzigen (en resetten) mag alleen een hoofdbeheerder of wie al met de toegangscode is ingelogd; de back-uppoort laat de systeemgebruiker (toegangscode) niet meer toe. Test: `entry-hardening.test.js`.
+
 ## 1.33.1
 
 Auditpunt T-01 (1.33.0): ondersteund, getest volledig herstel vanaf de Drive-kopie.
