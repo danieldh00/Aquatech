@@ -46,8 +46,10 @@ set -euo pipefail
 
 APP_DIR="${APP_DIR:-/opt/apps/aquatech}"
 
-# ==============================================================================================================# Deel 1: draait OP DE SERVER (apps01). Het host-deel hieronder stuurt dit bestand met SERVERTAKEN_REMOTE=1 erheen.
-# ==============================================================================================================IMAGE="ghcr.io/danieldh00/aquatech"
+# =====================================================================================================================
+# Deel 1: draait OP DE SERVER (apps01). Het host-deel hieronder stuurt dit bestand met SERVERTAKEN_REMOTE=1 erheen.
+# =====================================================================================================================
+IMAGE="ghcr.io/danieldh00/aquatech"
 VERSION_RE='^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}$'
 OK_COUNT=0; WARN_COUNT=0; FAIL_COUNT=0
 
@@ -599,8 +601,10 @@ if [[ "${SERVERTAKEN_REMOTE:-}" == "1" ]]; then
   exit $?
 fi
 
-# ==============================================================================================================# Deel 2: draait OP DE PROXMOX-HOST. Zoekt apps01 en voert dit bestand daar uit.
-# ==============================================================================================================NAME="${APPS01_NAME:-apps01}"
+# =====================================================================================================================
+# Deel 2: draait OP DE PROXMOX-HOST. Zoekt apps01 en voert dit bestand daar uit.
+# =====================================================================================================================
+NAME="${APPS01_NAME:-apps01}"
 die() { echo "FOUT: $*" >&2; exit 1; }
 usage() { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
