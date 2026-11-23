@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.33.1
+
+Auditpunt T-01 (1.33.0): ondersteund, getest volledig herstel vanaf de Drive-kopie.
+- `node src/backup.js noodherstel <back-up.db.enc>` (`restoreAll({ emergency: true })`, schakelaar `AQUATECH_EMERGENCY_RESTORE=1`): zet de hele app-back-up terug in een lege database, alles of niets; weigert zodra in welke tabel dan ook rijen staan (behalve de hoofdtenant).
+- `pve/db-local.sh restore-app <bestand>` / `localdb/local-db.sh restore-app`: richt de eigen PostgreSQL in op een nieuwe server (`provision_local_db`, nu gedeeld met `migrate`), zet het terugzetten in een eenmalige app-container en start de app pas na een geslaagd herstel.
+- Draaiboek in `deploy/apps01/README.md` (hoofdsleutel uit de wachtwoordkluis, back-up met de hand uit Drive). Tests in `backup-restore-all.test.js` en `deploy-localdb.test.js`; het terugzetten deelt `restoreAll` met de wekelijkse Drive-hersteltest.
+
 ## 1.33.0
 
 Offline tellen voor de voorraadtelling: `shared/offline-core.js` cachet `api/orderpick/counts/open` en de blinde regels per locatie (`CACHEABLE`) en zet de ingave `POST api/orderpick/counts/:id/lines/:lineId/count` in de offline wachtrij (`QUEUEABLE`; de ingave heeft een eigen `clientId`). `orderpick/counting.js` haalt alle locaties van de lopende telling alvast op, toont een ingave zonder verbinding als geteld met de aantekening "wacht op verbinding" (bewaard op het toestel, per gebruiker en omgeving) en zet bij het versturen of weggooien de echte stand terug. Afsluiten, hertellen en beheer blijven online. Tests: `offline.test.js` uitgebreid; in een echte browser met de service worker (offline tellen, daarna online: server heeft de ingave, geen consolefouten).
