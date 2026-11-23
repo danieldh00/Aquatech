@@ -438,7 +438,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   aannemen alleen `previewOf` (geen klantgegevens/instructies), daarna
   `handoverOf` → `workorders.createReceived` (werkorder zonder offerte). De
   uitbesteder ziet alleen `execution` (status, planning, stappen). Werkorder-API
-  geeft `outsourcing` mee (`ctx.outsourcingOf`).
+  geeft `outsourcing` mee (`ctx.outsourcingOf`). **Open aanbod = aanvraag** (audit B-29, geen migratie): bij een aanbod aan iedereen is Aannemen een aanvraag (`request`: `receiver_tenant_id` gevuld, `received_work_order_id` leeg; `isPending`), de uitbesteder bevestigt (`approve` → `createReceived`) of wijst af (`reject`, aanvrager komt in `declined`); het voorbeeld toont daar de neutrale titel "Werkorder". Een gericht aanbod blijft direct. **Aanbieden begrensd** (B-28): 20 per organisatie per uur (429 `rate_limited`) en één aanbiedingsmail per ontvanger per werkorder (`offeredBefore`).
 - **Voorraadbeheer / Artikelen** (0.59.0; hernoemd in 1.4.0, module `frontend/artikelen/`, recht `voorraad`:
   beheerder + installateur): `backend/src/artikelen/stock.js`, tabellen `stock_items`
   (code uniek per tenant = catalogus-/stuklijstcode, `on_hand`),

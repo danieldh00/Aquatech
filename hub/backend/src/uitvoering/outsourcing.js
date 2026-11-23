@@ -13,8 +13,13 @@
 //   plan, ploeg, foto's en notities blijven bij de uitbesteder.
 // - De uitbesteder ziet daarna alleen de voortgang bij de ontvanger (status,
 //   planning, afgevinkte stappen, opleverdatum).
-// Aanbieden kan aan één organisatie of aan iedereen die opdrachten ontvangt
-// (wie het eerst accepteert, krijgt hem). Een live-omgeving werkt alleen met
+// Aanbieden kan aan één organisatie of aan iedereen die opdrachten ontvangt.
+// Bij een open aanbod (aan iedereen) is aannemen een aanvraag: de eerste
+// organisatie die aanvraagt houdt hem vast, maar krijgt pas de klantgegevens
+// als de uitbesteder haar bevestigt (audit B-29, verwerkersrelatie). Het
+// voorbeeld van een open aanbod toont een neutrale titel.
+// Aanbieden is begrensd (OFFERS_PER_HOUR) en een ontvanger krijgt per
+// werkorder hoogstens één aanbiedingsmail (audit B-28). Een live-omgeving werkt alleen met
 // live-omgevingen, een testomgeving alleen met testomgevingen.
 const { mailStyleOf } = require('../platform/mail-layout');
 const path = require('path');
@@ -51,6 +56,8 @@ const parseJson = (text, fallback) => {
 // Alleen een werkorder die nog niet in uitvoering is, kan worden uitbesteed.
 const OFFERABLE = ['open', 'gepland'];
 const MAX_FEE = 1e7;
+// Hoeveel aanbiedingen een organisatie per uur mag doen (voorkomt een mailstorm naar alle ontvangers).
+const OFFERS_PER_HOUR = 20;
 
 /**
  * Schoont de instelling outsourcing per omgeving op.
@@ -82,12 +89,14 @@ function placeOf(address) {
 /**
  * Wat een andere organisatie vóór acceptatie ziet: geen klantnaam, contactgegevens, instructies of prijzen.
  * @param {object} raw De inhoud van de werkorder.
+ * @param {{ neutralTitle?: boolean }} [options] neutralTitle: de titel wordt "Werkorder" (open aanbod).
  * @returns {object} title, place, planning, summary, hours, design, zones, steps en materials.
  */
-function previewOf(raw) {
+function previewOf(raw, { neutralTitle = false } = {}) {
   const details = Core.sanitize(raw);
   return {
-    title: details.title || 'Werkorder',
+    // Bij een open aanbod kan de titel een klantnaam of vrije tekst van de klant bevatten.
+    title: neutralTitle ? 'Werkorder' : details.title || 'Werkorder',
     place: placeOf(details.customer.address),
     plannedDate: details.plannedDate, startTime: details.startTime, endTime: details.endTime, days: details.days,
     // Zonder instructies: daar kan van alles over de klant in staan.
@@ -125,7 +134,7 @@ const F_COLS = COLS.split(', ').map((column) => `f.${column}`).join(', ');
  * Maakt de opslag voor uitbestede opdrachten.
  * @param {object} db De database.
  * @param {{ workorders: object }} stores De werkorderopslag (createReceived).
- * @returns {object} offer, outgoing, incoming, marks, withdraw, decline, accept, find, outgoingView en incomingView.
+ * @returns {object} offer, outgoing, incoming, marks, withdraw, decline, accept, request, approve, reject, offeredBefore, find, outgoingView en incomingView.
  */
 function createOutsourcingStore(db, { workorders }) {
   /**
@@ -146,6 +155,13 @@ function createOutsourcingStore(db, { workorders }) {
    * @returns {string[]} Hun tenant-id's.
    */
   const declinedOf = (offerRow) => parseJson(offerRow.declined, []);
+
+  /**
+   * Is dit een open aanbod waarvoor een organisatie aanneemt, maar dat de uitbesteder nog moet bevestigen?
+   * @param {object} offerRow De rij van het aanbod.
+   * @returns {boolean} true bij een openstaande aanvraag.
+   */
+  const isPending = (offerRow) => offerRow.status === 'aangeboden' && Boolean(offerRow.receiver_tenant_id) && !offerRow.received_work_order_id;
 
   /**
    * Stand van het werk bij de ontvanger (voor de uitbesteder).
@@ -175,6 +191,7 @@ function createOutsourcingStore(db, { workorders }) {
       receiverName: offerRow.receiver_name, message: offerRow.message, fee: offerRow.fee, preview: parseJson(offerRow.preview, {}),
       createdAt: offerRow.created_at, createdBy: offerRow.created_by_name, respondedAt: offerRow.responded_at, respondedBy: offerRow.responded_by_name,
       reason: offerRow.reason, declinedCount: declinedOf(offerRow).length, execution: execution(offerRow),
+      pending: isPending(offerRow), requestedAt: isPending(offerRow) ? offerRow.responded_at : null, requestedBy: isPending(offerRow) ? offerRow.responded_by_name : '',
     };
   }
 
@@ -186,7 +203,7 @@ function createOutsourcingStore(db, { workorders }) {
    */
   function incomingView(offerRow, tenantId) {
     let myStatus = offerRow.status;
-    if (offerRow.receiver_tenant_id === tenantId) myStatus = 'geaccepteerd';
+    if (offerRow.receiver_tenant_id === tenantId) myStatus = offerRow.received_work_order_id ? 'geaccepteerd' : 'aangevraagd';
     else if (offerRow.status === 'aangeboden' && declinedOf(offerRow).includes(tenantId)) myStatus = 'afgewezen';
     const mine = offerRow.receiver_tenant_id === tenantId;
     return {
@@ -218,7 +235,7 @@ function createOutsourcingStore(db, { workorders }) {
    * @param {string} tenantId Id van de uitbesteder.
    * @param {string} workOrderId Id van de werkorder.
    * @param {object} input toTenantId (null = iedereen), toName, message, fee en fromName.
-   * @returns {{ offer: object }|{ error: string, status?: string }} Het aanbod, of de fout not_found, status of active.
+   * @returns {{ offer: object }|{ error: string, status?: string }} Het aanbod, of de fout not_found, status, active of rate_limited.
    */
   function offer(user, tenantId, workOrderId, input) {
     return transaction(db, () => {
@@ -226,11 +243,14 @@ function createOutsourcingStore(db, { workorders }) {
       if (!workOrder) return { error: 'not_found' };
       if (!OFFERABLE.includes(workOrder.status)) return { error: 'status', status: workOrder.status };
       if (activeFor(tenantId, workOrder.id)) return { error: 'active' };
+      const sinceHour = new Date(Date.now() - 3600 * 1000).toISOString();
+      const recent = prepare('SELECT COUNT(*) AS total FROM work_order_offers WHERE tenant_id = ? AND created_at > ?').get(tenantId, sinceHour);
+      if (Number(recent?.total) >= OFFERS_PER_HOUR) return { error: 'rate_limited' };
       const id = crypto.randomUUID();
       const timestamp = currentTimestamp();
       prepare(`INSERT INTO work_order_offers (id, tenant_id, work_order_id, to_tenant_id, status, message, fee, preview, from_name, created_by, created_by_name,
           receiver_name, created_at, updated_at) VALUES (?, ?, ?, ?, 'aangeboden', ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(id, tenantId, workOrder.id, input.toTenantId || null, cleanText(input.message, 2000), input.fee ?? null, JSON.stringify(previewOf(parseJson(workOrder.data, {}))),
+        .run(id, tenantId, workOrder.id, input.toTenantId || null, cleanText(input.message, 2000), input.fee ?? null, JSON.stringify(previewOf(parseJson(workOrder.data, {}), { neutralTitle: !input.toTenantId })),
           cleanText(input.fromName, 200), user.id, cleanText(user.display_name, 120), input.toTenantId ? cleanText(input.toName, 200) : '', timestamp, timestamp);
       return { offer: outgoingView(find(id)) };
     });
@@ -256,9 +276,9 @@ function createOutsourcingStore(db, { workorders }) {
   function incoming(tenantId, environment, { active = () => true } = {}) {
     const rows = prepare(`SELECT ${F_COLS} FROM work_order_offers f JOIN tenants s ON s.id = f.tenant_id
       WHERE f.tenant_id <> ? AND s.environment = ?
-        AND ((f.status = 'aangeboden' AND (f.to_tenant_id = ? OR f.to_tenant_id IS NULL))
+        AND ((f.status = 'aangeboden' AND (f.to_tenant_id = ? OR f.to_tenant_id IS NULL) AND (f.receiver_tenant_id IS NULL OR f.receiver_tenant_id = ?))
           OR f.receiver_tenant_id = ? OR (f.status = 'afgewezen' AND f.to_tenant_id = ?))
-      ORDER BY f.created_at DESC LIMIT 200`).all(tenantId, environment, tenantId, tenantId, tenantId);
+      ORDER BY f.created_at DESC LIMIT 200`).all(tenantId, environment, tenantId, tenantId, tenantId, tenantId);
     return rows.filter((offerRow) => offerRow.receiver_tenant_id === tenantId || active(offerRow.tenant_id)).map((offerRow) => incomingView(offerRow, tenantId));
   }
 
@@ -280,7 +300,7 @@ function createOutsourcingStore(db, { workorders }) {
   function marksOf(tenantId) {
     const out = {};
     for (const offerRow of prepare(`SELECT ${COLS} FROM work_order_offers WHERE tenant_id = ? AND status IN ('aangeboden', 'geaccepteerd')`).all(tenantId)) {
-      out[offerRow.work_order_id] = { role: 'uitbesteed', offerId: offerRow.id, status: offerRow.status, partner: offerRow.receiver_name || '', direct: Boolean(offerRow.to_tenant_id), execution: execution(offerRow) };
+      out[offerRow.work_order_id] = { role: 'uitbesteed', offerId: offerRow.id, status: offerRow.status, partner: offerRow.receiver_name || '', pending: isPending(offerRow), direct: Boolean(offerRow.to_tenant_id), execution: execution(offerRow) };
     }
     for (const offerRow of prepare(`SELECT ${COLS} FROM work_order_offers WHERE receiver_tenant_id = ? AND received_work_order_id IS NOT NULL`).all(tenantId)) {
       out[offerRow.received_work_order_id] = { role: 'aangenomen', offerId: offerRow.id, status: offerRow.status, partner: offerRow.from_name, fee: offerRow.fee, message: offerRow.message };
@@ -310,11 +330,13 @@ function createOutsourcingStore(db, { workorders }) {
    * haar niet; een aanbod dat al weg is, is closed.
    * @param {object|null} offerRow De rij van het aanbod.
    * @param {string} tenantId Id van de ontvangende omgeving.
-   * @returns {string|null} 'not_found', 'closed' of null als reageren mag.
+   * @returns {string|null} 'not_found', 'closed', 'pending' (al aangevraagd door deze omgeving) of null als reageren mag.
    */
   function problemFor(offerRow, tenantId) {
     if (!offerRow || offerRow.tenant_id === tenantId || (offerRow.to_tenant_id && offerRow.to_tenant_id !== tenantId) || declinedOf(offerRow).includes(tenantId)) return 'not_found';
-    return offerRow.status === 'aangeboden' ? null : 'closed';
+    if (offerRow.status !== 'aangeboden') return 'closed';
+    // Een andere organisatie heeft al aangevraagd (en wacht op bevestiging), of wij zelf.
+    return offerRow.receiver_tenant_id ? (offerRow.receiver_tenant_id === tenantId ? 'pending' : 'closed') : null;
   }
 
   /**
@@ -329,9 +351,13 @@ function createOutsourcingStore(db, { workorders }) {
     return transaction(db, () => {
       const offerRow = find(id);
       const problem = problemFor(offerRow, tenantId);
-      if (problem) return { error: problem };
+      if (problem && problem !== 'pending') return { error: problem };
       const timestamp = currentTimestamp();
-      if (offerRow.to_tenant_id) {
+      if (problem === 'pending') {
+        // Eigen aanvraag intrekken: het open aanbod staat weer voor anderen open.
+        prepare(`UPDATE work_order_offers SET receiver_tenant_id = NULL, receiver_name = '', responded_by_name = '', responded_at = NULL, declined = ?, updated_at = ? WHERE tenant_id = ? AND id = ?`)
+          .run(JSON.stringify([...declinedOf(offerRow), tenantId].slice(-500)), timestamp, offerRow.tenant_id, offerRow.id);
+      } else if (offerRow.to_tenant_id) {
         prepare(`UPDATE work_order_offers SET status = 'afgewezen', responded_by_name = ?, responded_at = ?, reason = ?, updated_at = ? WHERE id = ?`)
           .run(cleanText(user.display_name, 120), timestamp, cleanText(reason, 1000), timestamp, offerRow.id);
       } else {
@@ -347,13 +373,14 @@ function createOutsourcingStore(db, { workorders }) {
    * @param {string} tenantId Id van de ontvangende omgeving.
    * @param {string} id Id van het aanbod.
    * @param {{ receiverName: string }} receiver Naam van de ontvangende organisatie.
-   * @returns {{ row: object, workOrder: object }|{ error: string }} De rij en de nieuwe werkorder, of de fout not_found, closed of gone.
+   * @returns {{ row: object, workOrder: object }|{ error: string }} De rij en de nieuwe werkorder, of de fout not_found, closed, gone of confirmation_required (open aanbod: eerst aanvragen).
    */
   function accept(user, tenantId, id, { receiverName }) {
     return transaction(db, () => {
       const offerRow = find(id);
       const problem = problemFor(offerRow, tenantId);
       if (problem) return { error: problem };
+      if (!offerRow.to_tenant_id) return { error: 'confirmation_required' };
       const source = offerable(offerRow.tenant_id, offerRow.work_order_id);
       if (!source || !OFFERABLE.includes(source.status)) return { error: 'gone' };
       const workOrder = workorders.createReceived({ ...user, tenant_id: tenantId }, handoverOf(parseJson(source.data, {})));
@@ -365,7 +392,100 @@ function createOutsourcingStore(db, { workorders }) {
     });
   }
 
-  return { offer, outgoing, incoming, marks, withdraw, decline, accept, find, outgoingView, incomingView };
+  /**
+   * Vraagt een open aanbod aan: de organisatie houdt het vast tot de uitbesteder bevestigt of afwijst.
+   * Er gaan nog geen klantgegevens over.
+   * @param {object} user Wie het doet.
+   * @param {string} tenantId Id van de aanvragende omgeving.
+   * @param {string} id Id van het aanbod.
+   * @param {{ receiverName: string }} receiver Naam van de aanvragende organisatie.
+   * @returns {{ row: object }|{ error: string }} De bijgewerkte rij, of de fout not_found, closed, pending of direct.
+   */
+  function request(user, tenantId, id, { receiverName }) {
+    return transaction(db, () => {
+      const offerRow = find(id);
+      const problem = problemFor(offerRow, tenantId);
+      if (problem) return { error: problem };
+      if (offerRow.to_tenant_id) return { error: 'direct' };
+      const timestamp = currentTimestamp();
+      prepare(`UPDATE work_order_offers SET receiver_tenant_id = ?, receiver_name = ?, responded_by_name = ?, responded_at = ?, updated_at = ?
+          WHERE tenant_id = ? AND id = ? AND receiver_tenant_id IS NULL`)
+        .run(tenantId, cleanText(receiverName, 200), cleanText(user.display_name, 120), timestamp, timestamp, offerRow.tenant_id, offerRow.id);
+      const row = find(offerRow.id);
+      return row.receiver_tenant_id === tenantId ? { row } : { error: 'closed' };
+    });
+  }
+
+  /**
+   * Het account dat de aanvraag deed (op naam in de ontvangende omgeving), anders de oudste actieve beheerder daar.
+   * @param {string} tenantId Id van de ontvangende omgeving.
+   * @param {string} displayName Naam die bij de aanvraag is vastgelegd.
+   * @returns {{ id: string }|null} Het account, of null.
+   */
+  function ownerFor(tenantId, displayName) {
+    return prepare("SELECT id FROM users WHERE tenant_id = ? AND display_name = ? AND kind = 'account' AND disabled = 0 ORDER BY created_at LIMIT 1").get(tenantId, displayName)
+      || prepare("SELECT id FROM users WHERE tenant_id = ? AND role = 'beheerder' AND kind = 'account' AND disabled = 0 ORDER BY created_at LIMIT 1").get(tenantId) || null;
+  }
+
+  /**
+   * De uitbesteder bevestigt een aanvraag: de ontvanger krijgt een eigen werkorder met de gegevens van dat moment.
+   * @param {object} user Wie het doet (bij de uitbesteder).
+   * @param {string} tenantId Id van de uitbesteder.
+   * @param {string} id Id van het aanbod.
+   * @returns {{ row: object, workOrder: object }|{ error: string }} De rij en de nieuwe werkorder, of de fout not_found, status, gone of no_owner.
+   */
+  function approve(user, tenantId, id) {
+    return transaction(db, () => {
+      const offerRow = find(id);
+      if (!offerRow || offerRow.tenant_id !== tenantId) return { error: 'not_found' };
+      if (!isPending(offerRow)) return { error: 'status' };
+      const source = offerable(offerRow.tenant_id, offerRow.work_order_id);
+      if (!source || !OFFERABLE.includes(source.status)) return { error: 'gone' };
+      const owner = ownerFor(offerRow.receiver_tenant_id, offerRow.responded_by_name);
+      if (!owner) return { error: 'no_owner' };
+      const workOrder = workorders.createReceived({ id: owner.id, tenant_id: offerRow.receiver_tenant_id }, handoverOf(parseJson(source.data, {})));
+      const timestamp = currentTimestamp();
+      prepare(`UPDATE work_order_offers SET status = 'geaccepteerd', received_work_order_id = ?, responded_at = ?, updated_at = ? WHERE tenant_id = ? AND id = ?`)
+        .run(workOrder.id, timestamp, timestamp, offerRow.tenant_id, offerRow.id);
+      return { row: find(offerRow.id), workOrder };
+    });
+  }
+
+  /**
+   * De uitbesteder wijst een aanvraag af: het open aanbod staat weer open voor anderen, behalve voor de afgewezen organisatie.
+   * @param {string} tenantId Id van de uitbesteder.
+   * @param {string} id Id van het aanbod.
+   * @param {string} reason Toelichting (hooguit 1000 tekens).
+   * @returns {{ row: object, requesterId: string, requesterName: string }|{ error: string }} De rij en wie was afgewezen, of de fout not_found of status.
+   */
+  function reject(tenantId, id, reason) {
+    return transaction(db, () => {
+      const offerRow = find(id);
+      if (!offerRow || offerRow.tenant_id !== tenantId) return { error: 'not_found' };
+      if (!isPending(offerRow)) return { error: 'status' };
+      const timestamp = currentTimestamp();
+      prepare(`UPDATE work_order_offers SET receiver_tenant_id = NULL, receiver_name = '', responded_by_name = '', responded_at = NULL, declined = ?, updated_at = ? WHERE tenant_id = ? AND id = ?`)
+        .run(JSON.stringify([...declinedOf(offerRow), offerRow.receiver_tenant_id].slice(-500)), timestamp, offerRow.tenant_id, offerRow.id);
+      return { row: find(offerRow.id), requesterId: offerRow.receiver_tenant_id, requesterName: offerRow.receiver_name, reason: cleanText(reason, 1000) };
+    });
+  }
+
+  /**
+   * Is dit werkorder-aanbod al eerder aangeboden aan (of via een open aanbod ook aan) deze ontvanger?
+   * Voor het mailen: een ontvanger krijgt per werkorder hoogstens één aanbiedingsmail.
+   * @param {string} tenantId Id van de uitbesteder.
+   * @param {string} workOrderId Id van de werkorder.
+   * @param {string|null} toTenantId De ontvanger van het nieuwe aanbod, null = iedereen.
+   * @returns {boolean} true als eerder al gemaild is.
+   */
+  function offeredBefore(tenantId, workOrderId, toTenantId) {
+    const row = toTenantId
+      ? prepare('SELECT 1 AS found FROM work_order_offers WHERE tenant_id = ? AND work_order_id = ? AND (to_tenant_id IS NULL OR to_tenant_id = ?) LIMIT 1').get(tenantId, String(workOrderId), toTenantId)
+      : prepare('SELECT 1 AS found FROM work_order_offers WHERE tenant_id = ? AND work_order_id = ? AND to_tenant_id IS NULL LIMIT 1').get(tenantId, String(workOrderId));
+    return Boolean(row);
+  }
+
+  return { offer, outgoing, incoming, marks, withdraw, decline, accept, request, approve, reject, offeredBefore, find, outgoingView, incomingView };
 }
 
 /**
@@ -484,15 +604,18 @@ function registerOutsourcingRoutes(app, ctx) {
     if (!list.length) return res.status(409).json({ error: 'no_partners', message: 'Er zijn nog geen organisaties die opdrachten ontvangen.' });
     const target = toTenantId ? list.find((partner) => partner.id === toTenantId) : null;
     if (toTenantId && !target) return res.status(400).json({ error: 'invalid_partner', message: 'Deze organisatie ontvangt geen opdrachten.' });
+    // Wie al eens een aanbod voor deze werkorder kreeg, krijgt geen tweede mail (intrekken en opnieuw aanbieden herhaalt de mailronde niet).
+    const alreadyMailed = outsourcing.offeredBefore(tenantId, body.workOrderId, target ? target.id : null);
     const out = outsourcing.offer(req.user, tenantId, body.workOrderId, {
       toTenantId, toName: target?.name, message: body.message, fee: fee === null ? null : Math.round(fee * 100) / 100, fromName: nameOf(tenantId),
     });
     if (out.error === 'not_found') return res.status(404).json({ error: 'not_found', message: 'Werkorder niet gevonden.' });
     if (out.error === 'status') return res.status(409).json({ error: 'status', message: 'Alleen een werkorder met status Nieuw of Gepland kan worden uitbesteed.' });
     if (out.error === 'active') return res.status(409).json({ error: 'active', message: 'Deze werkorder is al uitbesteed of aangeboden.' });
+    if (out.error === 'rate_limited') return res.status(429).json({ error: 'rate_limited', message: 'Je hebt het maximum aantal aanbiedingen per uur bereikt. Probeer het later opnieuw.' });
     audit(req, 'opdracht_aangeboden', { offerId: out.offer.id, workOrderId: out.offer.workOrderId, aan: target ? target.name : 'iedereen' });
     const preview = out.offer.preview;
-    mail(tenantId, target ? [target.id] : list.map((partner) => partner.id), `Opdracht aangeboden door ${nameOf(tenantId)}`, [
+    if (!alreadyMailed) mail(tenantId, target ? [target.id] : list.map((partner) => partner.id), `Opdracht aangeboden door ${nameOf(tenantId)}`, [
       `${nameOf(tenantId)} biedt een opdracht aan${target ? ' aan uw organisatie' : ' aan organisaties die opdrachten ontvangen'}: ${preview.title}${preview.place ? ` in ${preview.place}` : ''}.`,
       out.offer.message,
       'Bekijk het aanbod en neem het aan in de module Uitbesteden.',
@@ -531,9 +654,23 @@ function registerOutsourcingRoutes(app, ctx) {
   app.post('/api/outsourcing/offers/:id/accept', requireJson, requireOut, (req, res) => {
     const access = respondable(req, res);
     if (!access) return;
+    // Open aanbod (aan iedereen): eerst een aanvraag die de uitbesteder bevestigt; pas dan gaan de klantgegevens over.
+    if (!access.offerRow.to_tenant_id) {
+      const asked = outsourcing.request(req.user, access.tenantId, access.offerRow.id, { receiverName: nameOf(access.tenantId) });
+      if (asked.error === 'not_found') return notFound(res);
+      if (asked.error === 'pending') return res.json({ offer: outsourcing.incomingView(outsourcing.find(access.offerRow.id), access.tenantId), requested: true });
+      if (asked.error) return closed(res);
+      audit(req, 'opdracht_aangevraagd', { offerId: access.offerRow.id, van: access.offerRow.from_name });
+      audit(req, 'opdracht_aangevraagd', { offerId: access.offerRow.id, workOrderId: access.offerRow.work_order_id, door: nameOf(access.tenantId) }, null, access.offerRow.tenant_id);
+      mail(access.tenantId, [access.offerRow.tenant_id], `Aanvraag voor uw opdracht van ${nameOf(access.tenantId)}`, [
+        `${nameOf(access.tenantId)} wil uw opdracht "${outsourcing.outgoingView(asked.row).preview.title}" aannemen.`,
+        'Bevestig of wijs de aanvraag af in de module Uitbesteden. Pas na uw bevestiging krijgt deze organisatie de klantgegevens.',
+      ]);
+      return res.json({ offer: outsourcing.incomingView(asked.row, access.tenantId), requested: true });
+    }
     const out = outsourcing.accept(req.user, access.tenantId, access.offerRow.id, { receiverName: nameOf(access.tenantId) });
     if (out.error === 'not_found') return notFound(res);
-    if (out.error === 'closed') return closed(res);
+    if (out.error === 'closed' || out.error === 'confirmation_required') return closed(res);
     if (out.error === 'gone') return res.status(409).json({ error: 'gone', message: 'De werkorder is bij de uitbesteder niet meer beschikbaar.' });
     audit(req, 'opdracht_aangenomen', { offerId: access.offerRow.id, workOrderId: out.workOrder.id, number: out.workOrder.number, van: access.offerRow.from_name });
     audit(req, 'opdracht_aangenomen', { offerId: access.offerRow.id, workOrderId: access.offerRow.work_order_id, door: nameOf(access.tenantId) }, null, access.offerRow.tenant_id);
@@ -542,6 +679,40 @@ function registerOutsourcingRoutes(app, ctx) {
       'De voortgang ziet u in de module Uitbesteden en bij de werkorder.',
     ]);
     res.json({ offer: outsourcing.incomingView(out.row, access.tenantId), workOrder: out.workOrder });
+  });
+
+  app.post('/api/outsourcing/offers/:id/approve', requireJson, requireOut, (req, res) => {
+    const tenantId = tenantOf(req);
+    const offerRow = outsourcing.find(req.params.id);
+    if (!offerRow || offerRow.tenant_id !== tenantId) return notFound(res);
+    const receiverId = offerRow.receiver_tenant_id;
+    if (receiverId && (!tenantActive(receiverId) || !settingsOf(receiverId).receive || envOf(receiverId) !== envOf(tenantId))) {
+      return res.status(409).json({ error: 'receiver_unavailable', message: 'Deze organisatie ontvangt geen opdrachten meer. Wijs de aanvraag af.' });
+    }
+    const out = outsourcing.approve(req.user, tenantId, offerRow.id);
+    if (out.error === 'not_found') return notFound(res);
+    if (out.error === 'status') return res.status(409).json({ error: 'status', message: 'Er staat geen aanvraag open voor dit aanbod.' });
+    if (out.error === 'gone') return res.status(409).json({ error: 'gone', message: 'De werkorder is niet meer beschikbaar (al in uitvoering of verwijderd).' });
+    if (out.error) return res.status(409).json({ error: out.error, message: 'De aanvraag kan niet worden bevestigd: er is geen actief account bij de ontvanger.' });
+    audit(req, 'opdracht_bevestigd', { offerId: offerRow.id, workOrderId: offerRow.work_order_id, aan: out.row.receiver_name });
+    audit(req, 'opdracht_bevestigd', { offerId: offerRow.id, workOrderId: out.workOrder.id, number: out.workOrder.number, van: nameOf(tenantId) }, null, receiverId);
+    mail(tenantId, [receiverId], `Opdracht bevestigd door ${nameOf(tenantId)}`, [
+      `${nameOf(tenantId)} heeft uw aanvraag voor "${outsourcing.outgoingView(out.row).preview.title}" bevestigd. U vindt de opdracht als werkorder ${out.workOrder.number}.`,
+    ]);
+    res.json(outsourcing.outgoingView(out.row));
+  });
+
+  app.post('/api/outsourcing/offers/:id/reject', requireJson, requireOut, (req, res) => {
+    const tenantId = tenantOf(req);
+    const out = outsourcing.reject(tenantId, req.params.id, req.body?.reason);
+    if (out.error === 'not_found') return notFound(res);
+    if (out.error) return res.status(409).json({ error: 'status', message: 'Er staat geen aanvraag open voor dit aanbod.' });
+    audit(req, 'opdracht_aanvraag_afgewezen', { offerId: out.row.id, workOrderId: out.row.work_order_id, aan: out.requesterName });
+    mail(tenantId, [out.requesterId], `Aanvraag niet bevestigd door ${nameOf(tenantId)}`, [
+      `${nameOf(tenantId)} heeft uw aanvraag voor een opdracht niet bevestigd.`,
+      out.reason ? `Toelichting: ${out.reason}` : '',
+    ]);
+    res.json(outsourcing.outgoingView(out.row));
   });
 
   app.post('/api/outsourcing/offers/:id/decline', requireJson, requireOut, (req, res) => {

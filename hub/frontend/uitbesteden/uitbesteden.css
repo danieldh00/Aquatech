@@ -25,6 +25,6 @@
 .offer table.mini td.num { text-align: right; white-space: nowrap; }
 .offer-actions { margin-top: 12px; }
 
-.pill.of-aangeboden { background: var(--primary-soft); color: var(--primary-dark); }
+.pill.of-aangeboden, .pill.of-aangevraagd { background: var(--primary-soft); color: var(--primary-dark); }
 .pill.of-geaccepteerd { background: var(--at-green-soft); color: var(--at-green-dark); }
 .pill.of-afgewezen, .pill.of-ingetrokken { background: var(--line); color: var(--muted); }

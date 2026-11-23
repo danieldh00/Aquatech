@@ -14,15 +14,16 @@ const PW = 'Tuin-Plan-2026!';
 
 /**
  * Hoofdtenant met beheerder en installateur, organisaties voor uitbesteden, plus een testserver.
+ * @param {{ mailerFor?: Function }} [options] mailerFor: vervangt de mailverzending (voor tests die mails tellen).
  * @returns {Promise<object>} db, server, base, as (inloggen), baas, orgs en main.
  */
-async function setup() {
+async function setup({ mailerFor } = {}) {
   const db = openDb();
   const store = createStore(db);
   const main = store.ensureTenant().id;
   await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
   await store.createAccount(main, { username: 'kees', displayName: 'Kees', role: 'installateur', password: PW });
-  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, addressFetch: createPdokFake().fetchImpl, secret: SECRET, db }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, addressFetch: createPdokFake().fetchImpl, secret: SECRET, db, ...(mailerFor ? { mailerFor } : {}) }));
   const as = createLogin(base, { password: PW });
   const baas = await as('baas');
   const orgs = {};
@@ -169,8 +170,42 @@ test('uitbesteden: open aanbod, afwijzen, intrekken en alleen tussen live-omgevi
     assert.strictEqual((await piet.get('/app/api/outsourcing')).body.incoming[0].myStatus, 'afgewezen');
     assert.strictEqual((await piet.post(`/app/api/outsourcing/offers/${offer.id}/accept`)).status, 404, 'na afwijzen niet meer aan te nemen');
     assert.strictEqual((await bram.get('/app/api/outsourcing')).body.incoming[0].myStatus, 'aangeboden');
-    assert.strictEqual((await bram.post(`/app/api/outsourcing/offers/${offer.id}/accept`)).status, 200);
-    assert.strictEqual((await baas.get('/app/api/outsourcing')).body.outgoing[0].receiverName, 'Blauw BV');
+    // Aannemen van een open aanbod is een aanvraag: nog geen werkorder en geen klantgegevens.
+    const asked = await bram.post(`/app/api/outsourcing/offers/${offer.id}/accept`);
+    assert.strictEqual(asked.status, 200, JSON.stringify(asked.body));
+    assert.strictEqual(asked.body.requested, true);
+    assert.strictEqual(asked.body.offer.myStatus, 'aangevraagd');
+    assert.ok(!JSON.stringify(asked.body).includes('Jansen'));
+    assert.deepStrictEqual((await bram.get('/app/api/workorders')).body.items, [], 'nog geen werkorder bij de aanvrager');
+    assert.strictEqual(offer.preview.title, 'Werkorder', 'open aanbod: neutrale titel');
+    // Vastgehouden: andere organisaties zien het open aanbod niet meer.
+    assert.deepStrictEqual((await piet.get('/app/api/outsourcing')).body.incoming, []);
+    let pendingRow = (await baas.get('/app/api/outsourcing')).body.outgoing.find((row) => row.id === offer.id);
+    assert.deepStrictEqual([pendingRow.status, pendingRow.pending, pendingRow.receiverName], ['aangeboden', true, 'Blauw BV']);
+    // Alleen de uitbesteder bevestigt.
+    assert.strictEqual((await bram.post(`/app/api/outsourcing/offers/${offer.id}/approve`)).status, 404);
+    // De aanvrager trekt in en iemand anders... Groen heeft afgewezen, dus alleen Blauw kan opnieuw aanvragen.
+    assert.strictEqual((await bram.post(`/app/api/outsourcing/offers/${offer.id}/decline`, {})).status, 200);
+    pendingRow = (await baas.get('/app/api/outsourcing')).body.outgoing.find((row) => row.id === offer.id);
+    assert.deepStrictEqual([pendingRow.pending, pendingRow.receiverName], [false, '']);
+    assert.strictEqual((await bram.post(`/app/api/outsourcing/offers/${offer.id}/accept`)).status, 404, 'zelf ingetrokken: niet opnieuw');
+    // Afwijzen door de uitbesteder zet het aanbod terug bij anderen.
+    const offer4 = (await baas.post('/app/api/outsourcing/offers', { workOrderId: (await acceptedWorkOrder(baas)).id })).body;
+    assert.strictEqual((await piet.post(`/app/api/outsourcing/offers/${offer4.id}/accept`)).status, 200);
+    assert.strictEqual((await baas.post(`/app/api/outsourcing/offers/${offer4.id}/reject`, { reason: 'Liever een ander' })).status, 200);
+    assert.strictEqual((await piet.get('/app/api/outsourcing')).body.incoming.find((row) => row.id === offer4.id).myStatus, 'afgewezen');
+    assert.strictEqual((await bram.get('/app/api/outsourcing')).body.incoming.find((row) => row.id === offer4.id).myStatus, 'aangeboden');
+    assert.strictEqual((await baas.post(`/app/api/outsourcing/offers/${offer4.id}/reject`, {})).status, 409, 'geen aanvraag meer');
+    // Bevestigen: nu krijgt de aanvrager de werkorder met klantgegevens.
+    assert.strictEqual((await bram.post(`/app/api/outsourcing/offers/${offer4.id}/accept`)).status, 200);
+    const approved = await baas.post(`/app/api/outsourcing/offers/${offer4.id}/approve`, {});
+    assert.strictEqual(approved.status, 200, JSON.stringify(approved.body));
+    assert.strictEqual(approved.body.status, 'geaccepteerd');
+    const received = (await bram.get('/app/api/workorders')).body.items;
+    assert.strictEqual(received.length, 1);
+    assert.strictEqual(received[0].customer, 'Fam. Jansen');
+    assert.strictEqual((await bram.get('/app/api/outsourcing')).body.incoming.find((row) => row.id === offer4.id).myStatus, 'geaccepteerd');
+    assert.strictEqual((await baas.post(`/app/api/outsourcing/offers/${offer4.id}/approve`, {})).status, 409, 'al bevestigd');
 
     // Gericht aanbod afwijzen en intrekken.
     const wo2 = await acceptedWorkOrder(baas);
@@ -197,6 +232,32 @@ test('uitbesteden: open aanbod, afwijzen, intrekken en alleen tussen live-omgevi
     // Een uitgeschakelde organisatie is geen partner meer.
     await baas.patch(`/app/api/platform/tenants/${orgs.blauw.id}`, { disabled: true });
     assert.deepStrictEqual((await baas.get('/app/api/outsourcing')).body.partners.map((partner) => partner.name), ['Groen BV']);
+  } finally {
+    server.close();
+  }
+});
+
+test('uitbesteden: aanbiedingen per uur begrensd en per ontvanger één mail per werkorder', async () => {
+  const sent = [];
+  const { server, as, baas, orgs, db } = await setup({ mailerFor: () => ({ configured: () => true, send: async (message) => { sent.push(message); } }) });
+  try {
+    const piet = await as('piet', 'groen');
+    await baas.put('/app/api/admin/settings', { outsourcing: { send: true } });
+    await piet.put('/app/api/admin/settings', { outsourcing: { receive: true }, quoteProfile: { email: 'groen@voorbeeld.nl' } });
+    const wo = await acceptedWorkOrder(baas);
+    // Intrekken en opnieuw aanbieden mag, maar na 20 aanbiedingen in een uur is het genoeg.
+    for (let round = 0; round < 20; round += 1) {
+      const made = await baas.post('/app/api/outsourcing/offers', { workOrderId: wo.id, toTenantId: orgs.groen.id });
+      assert.strictEqual(made.status, 201, `ronde ${round}: ${JSON.stringify(made.body)}`);
+      assert.strictEqual((await baas.del(`/app/api/outsourcing/offers/${made.body.id}`)).status, 200);
+    }
+    const blocked = await baas.post('/app/api/outsourcing/offers', { workOrderId: wo.id, toTenantId: orgs.groen.id });
+    assert.strictEqual(blocked.status, 429);
+    assert.strictEqual(blocked.body.error, 'rate_limited');
+    assert.strictEqual(sent.filter((message) => message.to === 'groen@voorbeeld.nl').length, 1, 'één mail per ontvanger per werkorder, ook na intrekken en opnieuw aanbieden');
+    // Een ander uur: oude aanbiedingen tellen niet meer mee.
+    await db.prepare("UPDATE work_order_offers SET created_at = created_at - interval '2 hours'").run();
+    assert.strictEqual((await baas.post('/app/api/outsourcing/offers', { workOrderId: wo.id, toTenantId: orgs.groen.id })).status, 201);
   } finally {
     server.close();
   }
