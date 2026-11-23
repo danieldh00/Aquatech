@@ -431,6 +431,13 @@ function migratePg(db) {
       version = PG_BASE_VERSION;
     }
     if (version < PG_BASE_VERSION) throw new Error(`Onbekende schemaversie ${version} in PostgreSQL.`);
+    // Een database die nieuwer is dan deze code (bijv. na een terugval naar een oudere versie) wordt niet stil
+    // geaccepteerd: migraties zijn niet altijd alleen toevoegingen, dus oude code kan er fout op schrijven.
+    // Alleen bewust te omzeilen met AQUATECH_ALLOW_NEWER_SCHEMA=1 (bijv. voor alleen lezen of een noodgeval).
+    const newest = PG_BASE_VERSION + PG_MIGRATIONS.length;
+    if (version > newest && process.env.AQUATECH_ALLOW_NEWER_SCHEMA !== '1') {
+      throw new Error(`database nieuwer dan de code: schemaversie ${version}, deze versie kent tot ${newest}. Herstel een back-up of start de nieuwere versie (AQUATECH_ALLOW_NEWER_SCHEMA=1 slaat deze controle over).`);
+    }
     for (let step = version; step < PG_BASE_VERSION + PG_MIGRATIONS.length; step++) {
       db.exec(PG_MIGRATIONS[step - PG_BASE_VERSION]);
       db.prepare('UPDATE schema_version SET version = ?').run(step + 1);
