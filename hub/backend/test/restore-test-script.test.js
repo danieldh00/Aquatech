@@ -341,3 +341,10 @@ test('een oude dump zonder HMAC geeft een opmerking, geen fout', () => {
   assert.strictEqual(latest.state, 'waarschuwing');
   assert.match(latest.message, /nog geen integriteitscontrole/);
 });
+
+test('een lege HMAC-bestand telt niet als geldig', () => {
+  const env = install({ policy: dueNow() });
+  fs.writeFileSync(path.join(env.appDir, 'backups', 'postgres', 'aquatech-20261120-023000.dump.enc.hmac'), '\n');
+  assert.strictEqual(env.run().status, 1);
+  assert.strictEqual(readStatus(env.statusDir).runs[0].state, 'mislukt');
+});

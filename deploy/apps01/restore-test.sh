@@ -201,7 +201,7 @@ INTEGRITY_NOTE=""
 if [[ -f "$BACKUP_FILE.hmac" && ! -L "$BACKUP_FILE.hmac" ]]; then
   mac_key="$( { printf 'aquatech-dump-hmac\n'; cat "$KEY_FILE"; } | sha256sum | cut -d' ' -f1)"
   mac_now="$(openssl dgst -sha256 -mac HMAC -macopt "hexkey:$mac_key" -r "$BACKUP_FILE" | cut -d' ' -f1)"
-  [[ "$mac_now" == "$(tr -d '[:space:]' < "$BACKUP_FILE.hmac")" ]] \
+  [[ -n "$mac_now" && "$mac_now" == "$(tr -d '[:space:]' < "$BACKUP_FILE.hmac")" ]] \
     || finish mislukt "De integriteitscontrole (HMAC) van de back-up klopt niet: het bestand is gewijzigd of beschadigd, of de hoofdsleutel is anders."
 else
   INTEGRITY_NOTE="Deze back-up heeft nog geen integriteitscontrole (.hmac; van vóór die maatregel). "

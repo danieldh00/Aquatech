@@ -415,7 +415,7 @@ cmd_restore() {
     local mac_key mac_now
     mac_key="$( { printf 'aquatech-dump-hmac\n'; cat secrets/master-key; } | sha256sum | cut -d' ' -f1)"
     mac_now="$(openssl dgst -sha256 -mac HMAC -macopt "hexkey:$mac_key" -r "$file" | cut -d' ' -f1)"
-    [[ "$mac_now" == "$(tr -d '[:space:]' < "$file.hmac")" ]] || die "Integriteitscontrole (HMAC) van de back-up klopt niet: bestand gewijzigd of beschadigd; niets teruggezet."
+    [[ -n "$mac_now" && "$mac_now" == "$(tr -d '[:space:]' < "$file.hmac")" ]] || die "Integriteitscontrole (HMAC) van de back-up klopt niet: bestand gewijzigd of beschadigd; niets teruggezet."
   else
     log "Waarschuwing: deze back-up heeft geen .hmac (van vóór de integriteitscontrole); alleen ontsleutelen is gecontroleerd."
   fi
