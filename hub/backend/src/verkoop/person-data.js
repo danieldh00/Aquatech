@@ -447,19 +447,13 @@ function registerPersonDataRoutes(app, ctx) {
       res.status(429).json({ error: 'locked', message: 'Te veel verkeerde pogingen. Probeer het over een kwartier opnieuw.' });
       return false;
     }
-    /**
-     * Telt een mislukte poging.
-     * @returns {void}
-     */
-    const fail = () => {
-      const current = entry && entry.reset > Date.now() ? entry : { count: 0, reset: Date.now() + FAIL_WINDOW_MS };
-      current.count += 1;
-      failures.set(key, current);
-    };
+    // De poging telt vóór de (trage) controle, zodat gelijktijdige verzoeken de grens niet allemaal passeren; bij succes gaat de teller terug.
+    const current = entry && entry.reset > Date.now() ? entry : { count: 0, reset: Date.now() + FAIL_WINDOW_MS };
+    current.count += 1;
+    failures.set(key, current);
     const account = store.getUser(req.user.id);
     const password = String(req.body?.password ?? '').slice(0, 200);
     if (!account || !account.password_hash || !(await verifyPassword(password, account.password_hash))) {
-      fail();
       audit(req, 'klant_wissen_wachtwoord_fout', {});
       res.status(401).json({ error: 'wrong_password', message: 'Je wachtwoord klopt niet.' });
       return false;
@@ -467,8 +461,7 @@ function registerPersonDataRoutes(app, ctx) {
     if (twoFactor) {
       const second = twoFactor.check(account, String(req.body?.totp ?? '').slice(0, 40));
       if (!second.ok) {
-        if (second.missing) { res.status(401).json({ error: 'totp_required', message: 'Vul de code uit je authenticator-app in.' }); return false; }
-        fail();
+        if (second.missing) { current.count -= 1; res.status(401).json({ error: 'totp_required', message: 'Vul de code uit je authenticator-app in.' }); return false; }
         audit(req, 'klant_wissen_wachtwoord_fout', { via: 'tweestaps' });
         res.status(401).json({ error: 'totp_wrong', message: 'De code klopt niet.' });
         return false;
