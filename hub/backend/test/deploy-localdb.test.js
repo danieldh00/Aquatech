@@ -107,3 +107,12 @@ test('migrate en restore-app delen dezelfde inrichting van de eigen database', (
   assert.strictEqual(script.split('provision_local_db\n').length - 1, 2, 'aanroepen in migrate en restore-app');
   assert.match(script, /provision_local_db\(\) \{[\s\S]*postgres-password[\s\S]*CREATE ROLE aquatech_app[\s\S]*unset app_password\n\}/);
 });
+
+test('voorbeeld-compose en Dockerfile: geen standaardwachtwoord, wel een gezondheidscontrole in het image', () => {
+  const root = path.join(__dirname, '..', '..', '..');
+  const compose = fs.readFileSync(path.join(root, 'docker-compose.yml'), 'utf8');
+  assert.doesNotMatch(compose, /aquatech-lokaal/, 'geen publiek bekend standaardwachtwoord');
+  assert.match(compose, /\$\{POSTGRES_PASSWORD:\?/, 'POSTGRES_PASSWORD is verplicht');
+  const dockerfile = fs.readFileSync(path.join(root, 'hub', 'Dockerfile'), 'utf8');
+  assert.match(dockerfile, /^HEALTHCHECK /m);
+});

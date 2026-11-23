@@ -25,7 +25,7 @@ services:
       - WAN_IP=${WAN_IP:-}
       # PostgreSQL is de enige database (zonder deze regel start de app niet). Standaard de container hieronder;
       # een eigen server kan met DATABASE_URL in .env. Beter als Docker-secret via DATABASE_URL_FILE (zie DOCS.md).
-      - DATABASE_URL=${DATABASE_URL:-postgres://aquatech:${POSTGRES_PASSWORD:-aquatech-lokaal}@postgres:5432/aquatech?sslmode=disable}
+      - DATABASE_URL=${DATABASE_URL:-postgres://aquatech:${POSTGRES_PASSWORD:?Stel POSTGRES_PASSWORD in via .env}@postgres:5432/aquatech?sslmode=disable}
       # Hoofdsleutel als Docker-secret (aanbevolen, zie DOCS.md > Beveiliging):
       # - AQUATECH_MASTER_KEY_FILE=/run/secrets/master-key
     volumes:
@@ -64,7 +64,7 @@ services:
     environment:
       - POSTGRES_USER=aquatech
       - POSTGRES_DB=aquatech
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-aquatech-lokaal}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Stel POSTGRES_PASSWORD in via .env}
     volumes:
       - aquatech-postgres:/var/lib/postgresql/data
     healthcheck:

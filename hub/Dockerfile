@@ -25,5 +25,9 @@ EXPOSE 3300
 ENV DATA_DIR=/data
 VOLUME /data
 
+# Gezondheidscontrole in het image zelf (ook zonder compose): /api/health moet antwoorden.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3300)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
 # De database is PostgreSQL: zonder DATABASE_URL (of DATABASE_URL_FILE) start de app niet.
 CMD ["node", "src/server.js"]
