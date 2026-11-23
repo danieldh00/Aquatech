@@ -12,7 +12,7 @@ const MOLLIE_STATES = { paid: 'betaald', open: 'open', pending: 'open', authoriz
 /**
  * Maakt de betaalfuncties voor facturen.
  * @param {{ db: object, invoices: object, mollie: object, settingsFor: Function, linkKey?: Buffer, log?: object }} deps De database, de factuuropslag, de Mollie-client, de instellingen per omgeving en de sleutel voor de betaallinks (zonder sleutel geen links).
- * @returns {{ enabled: Function, payableState: Function, start: Function, sync: Function, onPaid: Function, listOwn: Function, own: Function, paymentsOf: Function, linkFor: Function, publicLinkCheck: Function, appUrl: Function }} De functies.
+ * @returns {{ enabled: Function, payableState: Function, start: Function, sync: Function, onPaid: Function, onPaidAfterCredit: Function, listOwn: Function, own: Function, paymentsOf: Function, linkFor: Function, publicLinkCheck: Function, appUrl: Function }} De functies.
  */
 function createInvoicePayments({ db, invoices, mollie, settingsFor, linkKey = null, log = console }) {
   const paidHooks = [];
@@ -35,6 +35,14 @@ function createInvoicePayments({ db, invoices, mollie, settingsFor, linkKey = nu
    * @returns {void}
    */
   const onPaid = (hook) => { paidHooks.push(hook); };
+  const afterCreditHooks = [];
+  /**
+   * Registreert een haak voor een betaling die binnenkomt op een factuur die intussen gecrediteerd is: het geld is binnen, de factuur
+   * blijft openstaand en iemand moet terugbetalen. Eén keer per betaling (bij de overgang van de betaling naar betaald).
+   * @param {Function} hook Functie (tenantId, invoice, payment); fouten worden alleen gelogd.
+   * @returns {void}
+   */
+  const onPaidAfterCredit = (hook) => { afterCreditHooks.push(hook); };
 
   /**
    * Of online betalen van facturen kan in deze omgeving (aan, sleutel en webadres kloppen).
@@ -110,8 +118,8 @@ function createInvoicePayments({ db, invoices, mollie, settingsFor, linkKey = nu
     const state = MOLLIE_STATES[payment.status] || 'open';
     if (state === 'betaald') {
       const paidAt = payment.paidAt || new Date().toISOString();
-      prepare("UPDATE invoice_payments SET status = 'betaald', paid_at = ?, method = ? WHERE tenant_id = ? AND mollie_id = ? AND status <> 'betaald'")
-        .run(paidAt, payment.method || '', tenantId, payment.id);
+      const turnedPaid = prepare("UPDATE invoice_payments SET status = 'betaald', paid_at = ?, method = ? WHERE tenant_id = ? AND mollie_id = ? AND status <> 'betaald'")
+        .run(paidAt, payment.method || '', tenantId, payment.id).changes > 0;
       // Ook als de rij al betaald was: staat de factuur nog open (een eerdere verwerking viel halverwege weg), dan herstelt deze aanroep dat.
       // De controle op de status en setPaid draaien synchroon achter elkaar (geen await ertussen), dus gelijktijdige aanroepen maken de factuur maar één keer betaald.
       let becamePaid = false;
@@ -119,13 +127,15 @@ function createInvoicePayments({ db, invoices, mollie, settingsFor, linkKey = nu
       // Een betaling die vóór de creditering is gestart: de rij blijft betaald (het geld is zichtbaar in invoice_payments), maar de gecrediteerde factuur wordt niet op betaald gezet; terugbetalen gaat met de hand.
       if (current && current.creditedAt && current.status === 'definitief') {
         log.warn(`Betaling ${payment.id} (${payment.amount}) is binnengekomen op gecrediteerde factuur ${current.number}; handmatig terugbetalen.`);
+        // Eén keer melden (auditregel, Bewaking): alleen bij de overgang van deze betaling naar betaald, niet bij elke herhaalde webhook.
+        if (turnedPaid) runHooks(afterCreditHooks, tenantId, current, payment);
         return { becamePaid: false, status: 'betaald', afterCredit: true };
       }
       if (current && current.status === 'definitief') {
         const out = invoices.setPaid(tenantId, invoice.id, true, paidAt.slice(0, 10));
         becamePaid = Boolean(out && out.invoice);
       }
-      if (becamePaid) runPaidHooks(tenantId, invoices.get(tenantId, invoice.id), payment);
+      if (becamePaid) runHooks(paidHooks, tenantId, invoices.get(tenantId, invoice.id), payment);
       return { becamePaid, status: 'betaald' };
     }
     if (state === 'mislukt') prepare("UPDATE invoice_payments SET status = 'mislukt' WHERE tenant_id = ? AND mollie_id = ? AND status = 'open'").run(tenantId, payment.id);
@@ -133,14 +143,15 @@ function createInvoicePayments({ db, invoices, mollie, settingsFor, linkKey = nu
   }
 
   /**
-   * Start de haken na een betaling; een fout in een haak houdt de rest niet tegen.
+   * Start een rij haken na een betaling; een fout in een haak houdt de rest niet tegen.
+   * @param {Function[]} hooks De haken.
    * @param {string} tenantId Id van de omgeving.
-   * @param {object} invoice De betaalde factuur.
+   * @param {object} invoice De factuur.
    * @param {object} payment De betaling.
    * @returns {void}
    */
-  function runPaidHooks(tenantId, invoice, payment) {
-    for (const hook of paidHooks) {
+  function runHooks(hooks, tenantId, invoice, payment) {
+    for (const hook of hooks) {
       try { Promise.resolve(hook(tenantId, invoice, payment)).catch((error) => log.warn(`Na betalen van factuur ${invoice.number}: ${error.message}`)); } catch (error) { log.warn(`Na betalen van factuur ${invoice.number}: ${error.message}`); }
     }
   }
@@ -262,7 +273,7 @@ function createInvoicePayments({ db, invoices, mollie, settingsFor, linkKey = nu
     return { invoice };
   }
 
-  return { enabled, payableState, start, sync, onPaid, listOwn, own, paymentsOf, linkFor, publicLinkCheck, appUrl };
+  return { enabled, payableState, start, sync, onPaid, onPaidAfterCredit, listOwn, own, paymentsOf, linkFor, publicLinkCheck, appUrl };
 }
 
 module.exports = { createInvoicePayments };

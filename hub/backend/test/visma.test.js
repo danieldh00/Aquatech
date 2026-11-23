@@ -7,12 +7,14 @@ const { createApp } = require('../src/server');
 const { createPdokFake } = require('./helpers/pdok-fake');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
-const { splitAddress, invoiceBody, sanitizeVismaApp, sanitizeVisma, describeConnection, SCOPES } = require('../src/verkoop/visma');
+const { splitAddress, invoiceBody, sanitizeVismaApp, sanitizeVisma, describeConnection, redirectFrom, SCOPES } = require('../src/verkoop/visma');
 const { createVismaLog } = require('../src/verkoop/visma-log');
 const { listen, createLogin } = require('./helpers/http-client');
 
 const SECRET = 's'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
+/** De redirect URI die de tests bij Visma registreren. */
+const REDIRECT = 'https://hub.voorbeeld.test/app/api/visma/callback';
 const ART = { producten: '11111111-1111-1111-1111-111111111111', arbeid: '22222222-2222-2222-2222-222222222222' };
 const TERMS = '33333333-3333-3333-3333-333333333333';
 
@@ -141,8 +143,13 @@ async function finalInvoice(client, customer, lines) {
 test('visma: adres splitsen, instellingen saneren, factuur opbouwen', () => {
   assert.deepStrictEqual(splitAddress('Kerkstraat 12\n8071cd Nunspeet'), { address1: 'Kerkstraat 12', address2: '', postal: '8071 CD', city: 'Nunspeet', country: 'NL' });
   assert.deepStrictEqual(splitAddress('Postbus 1\nAfdeling X\n1000 Brussel\nBE'), { address1: 'Postbus 1', address2: 'Afdeling X', postal: '1000', city: 'Brussel', country: 'BE' });
-  assert.strictEqual(sanitizeVismaApp({ redirectUri: 'http://evil.test/api/visma/callback' }).redirectUri, 'https://aquatech.den-hollander.com/api/visma/callback');
-  assert.strictEqual(sanitizeVismaApp({ redirectUri: 'https://x.test/pre/api/visma/callback?a=1' }).redirectUri, 'https://x.test/pre/api/visma/callback');
+  // Geen vaste standaard meer (T-15): een adres zonder https of buiten /app/ wordt leeg, een geldig adres blijft (zonder query).
+  assert.strictEqual(sanitizeVismaApp({ redirectUri: 'http://evil.test/app/api/visma/callback' }).redirectUri, '');
+  assert.strictEqual(sanitizeVismaApp({ redirectUri: 'https://aquatech.den-hollander.com/api/visma/callback' }).redirectUri, '', 'het oude adres buiten /app bestaat niet meer');
+  assert.strictEqual(sanitizeVismaApp({}).redirectUri, '');
+  assert.strictEqual(sanitizeVismaApp({ redirectUri: 'https://x.test/pre/app/api/visma/callback?a=1' }).redirectUri, 'https://x.test/pre/app/api/visma/callback');
+  assert.strictEqual(redirectFrom('https://shop.voorbeeld.test/'), 'https://shop.voorbeeld.test/app/api/visma/callback');
+  assert.strictEqual(redirectFrom(''), '');
   assert.strictEqual(sanitizeVismaApp({ environment: 'iets' }).environment, 'sandbox');
   const conf = sanitizeVisma({ articles: { 'producten:21': ART.producten, 'onzin:21': ART.arbeid, 'arbeid:21': 'geen-guid' }, autoSync: 'ja' });
   assert.deepStrictEqual(conf.articles, { 'producten:21': ART.producten });
@@ -176,6 +183,19 @@ test('visma: app instellen (hoofdbeheerder), verbinden, doorsturen, token vernie
     assert.strictEqual(put.status, 200, JSON.stringify(put.body));
     assert.strictEqual(put.body.secretSet, true);
     assert.ok(!put.text.includes('heel-geheim'));
+    // Zonder redirect URI en zonder webadres kan verbinden niet; een ongeldige redirect URI wordt afgekeurd (T-15).
+    assert.strictEqual(put.body.defaultRedirect, '');
+    const noRedirect = await baas.post('/app/api/visma/connect', {});
+    assert.strictEqual(noRedirect.status, 409, JSON.stringify(noRedirect.body));
+    assert.match(noRedirect.body.message, /redirect URI/);
+    const badRedirect = await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', redirectUri: 'https://hub.voorbeeld.test/api/visma/callback' });
+    assert.strictEqual(badRedirect.status, 400);
+    assert.strictEqual(badRedirect.body.field, 'redirectUri');
+    // Met het webadres uit Beheer volgt de redirect URI daaruit.
+    assert.strictEqual((await baas.put('/app/api/admin/settings', { shopPayment: { publicUrl: 'https://shop.voorbeeld.test' } })).status, 200);
+    assert.strictEqual((await baas.get('/app/api/visma/app')).body.defaultRedirect, 'https://shop.voorbeeld.test/app/api/visma/callback');
+    assert.strictEqual(new URL((await baas.post('/app/api/visma/connect', {})).body.url).searchParams.get('redirect_uri'), 'https://shop.voorbeeld.test/app/api/visma/callback');
+    assert.strictEqual((await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', redirectUri: REDIRECT })).status, 200);
     // Via Beheer > Instellingen kunnen de Visma-velden niet.
     for (const field of ['visma', 'vismaRefreshToken', 'vismaApp', 'vismaClientSecret']) {
       assert.strictEqual((await baas.put('/app/api/admin/settings', { [field]: field === 'visma' || field === 'vismaApp' ? {} : 'abcdefghij' })).status, 400, field);
@@ -186,6 +206,7 @@ test('visma: app instellen (hoofdbeheerder), verbinden, doorsturen, token vernie
     const url = new URL(start.body.url);
     assert.strictEqual(url.origin, 'https://identity-sandbox.test.vismaonline.com');
     assert.strictEqual(url.searchParams.get('client_id'), 'aquatech-test');
+    assert.strictEqual(url.searchParams.get('redirect_uri'), REDIRECT);
     assert.match(url.searchParams.get('scope'), /offline_access/);
     const wrong = await baas.get('/app/api/visma/callback?code=goede-code&state=verkeerd');
     assert.match(wrong.location, /visma=fout&reden=invalid_state/);
@@ -277,7 +298,7 @@ test('visma: automatisch doorsturen alleen als het aan staat, vanaf de gekozen d
   const { app, server, as, visma } = await setup();
   try {
     const baas = await as('baas');
-    await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', clientSecret: 'heel-geheim-secret' });
+    await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', clientSecret: 'heel-geheim-secret', redirectUri: REDIRECT });
     await connect(baas);
     await baas.put('/app/api/visma/settings', { articles: { 'producten:21': ART.producten }, termsOfPaymentId: TERMS });
     const old = (await baas.post('/app/api/invoices', { data: { date: '2026-01-05', customer: { name: 'Oud' }, lines: [{ description: 'X', qty: 1, price: 1 }] } })).body;
@@ -301,7 +322,7 @@ test('visma: rechten en scheiding tussen organisaties', async () => {
   const { server, as } = await setup();
   try {
     const baas = await as('baas');
-    await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', clientSecret: 'heel-geheim-secret' });
+    await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', clientSecret: 'heel-geheim-secret', redirectUri: REDIRECT });
     await connect(baas);
     const inv = await finalInvoice(baas, { name: 'Jan' }, [{ description: 'X', qty: 1, price: 1 }]);
     const kees = await as('kees');
@@ -319,7 +340,7 @@ test('visma: rechten en scheiding tussen organisaties', async () => {
     assert.strictEqual((await piet.get('/app/api/visma/app')).body.secretSet, false);
     assert.strictEqual((await piet.post(`/app/api/visma/invoices/${inv.id}`, {})).status, 404);
     // Groen BV heeft een eigen app: een eigen client ID, dat de app van Aquatech niet raakt.
-    const own = await piet.put('/app/api/visma/app', { clientId: 'groen-app', environment: 'production', clientSecret: 'ander-geheim-secret' });
+    const own = await piet.put('/app/api/visma/app', { clientId: 'groen-app', environment: 'production', clientSecret: 'ander-geheim-secret', redirectUri: REDIRECT });
     assert.strictEqual(own.status, 200, JSON.stringify(own.body));
     assert.strictEqual(own.body.app.clientId, 'groen-app');
     assert.ok(!own.text.includes('ander-geheim'));
@@ -328,13 +349,13 @@ test('visma: rechten en scheiding tussen organisaties', async () => {
     assert.strictEqual((await baas.get('/app/api/visma/app')).body.app.clientId, 'aquatech-test', 'Aquatech ongewijzigd');
     // Bij een bestaande verbinding kan de app pas na verbreken worden gewijzigd (de tokens horen bij de oude app).
     await connect(baas);
-    const blocked = await baas.put('/app/api/visma/app', { clientId: 'andere-app', clientSecret: 'nieuw-geheim-secret' });
+    const blocked = await baas.put('/app/api/visma/app', { clientId: 'andere-app', clientSecret: 'nieuw-geheim-secret', redirectUri: REDIRECT });
     assert.strictEqual(blocked.status, 409);
     assert.strictEqual(blocked.body.error, 'disconnect_first');
     assert.strictEqual((await baas.get('/app/api/visma/app')).body.app.clientId, 'aquatech-test');
     assert.strictEqual((await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', environment: 'sandbox' })).status, 200, 'zelfde app opslaan mag');
     assert.strictEqual((await baas.post('/app/api/visma/disconnect', {})).status, 200);
-    assert.strictEqual((await baas.put('/app/api/visma/app', { clientId: 'andere-app', clientSecret: 'nieuw-geheim-secret' })).status, 200);
+    assert.strictEqual((await baas.put('/app/api/visma/app', { clientId: 'andere-app', clientSecret: 'nieuw-geheim-secret', redirectUri: REDIRECT })).status, 200);
     assert.strictEqual((await piet.get('/app/api/visma')).body.environment, 'production');
   } finally {
     server.close();
@@ -422,7 +443,7 @@ test('visma: logboek via de API – verbinden, doorsturen, fouten, verbreken, re
   try {
     const baas = await as('baas');
     const kees = await as('kees');
-    await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', clientSecret: 'heel-geheim-secret' });
+    await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', clientSecret: 'heel-geheim-secret', redirectUri: REDIRECT });
     // Verbinden mislukt (verkeerde state) en lukt daarna: beide staan in het logboek, de toestemmingen zijn die van Visma.
     assert.match((await baas.get('/app/api/visma/callback?code=goede-code&state=verkeerd')).location, /visma=fout/);
     await connect(baas);
@@ -492,7 +513,7 @@ test('visma: bediening – pauzeren, onderdelen aan/uit, klanten niet aanmaken e
   try {
     const baas = await as('baas');
     const kees = await as('kees');
-    await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', clientSecret: 'heel-geheim-secret' });
+    await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', clientSecret: 'heel-geheim-secret', redirectUri: REDIRECT });
     await connect(baas);
     await baas.put('/app/api/visma/settings', { articles: { 'producten:21': ART.producten }, termsOfPaymentId: TERMS, autoSync: true, since: '2020-01-01' });
     const known = await finalInvoice(baas, { name: 'Jan', email: 'jan@voorbeeld.test' }, [{ description: 'Sproeier', qty: 1, price: 10 }]);
@@ -599,7 +620,7 @@ test('visma: pauze of onderdeel uit tijdens het aanmaken van de klant houdt de f
   const { server, as, visma } = await setup();
   try {
     const baas = await as('baas');
-    await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', clientSecret: 'heel-geheim-secret' });
+    await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', clientSecret: 'heel-geheim-secret', redirectUri: REDIRECT });
     await connect(baas);
     await baas.put('/app/api/visma/settings', { articles: { 'producten:21': ART.producten }, termsOfPaymentId: TERMS });
 
@@ -639,7 +660,7 @@ test('visma: tijdens het verbreken start er niets nieuws naar Visma en is het in
   const { server, as, visma } = await setup();
   try {
     const baas = await as('baas');
-    await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', clientSecret: 'heel-geheim-secret' });
+    await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', clientSecret: 'heel-geheim-secret', redirectUri: REDIRECT });
     await connect(baas);
     await baas.put('/app/api/visma/settings', { articles: { 'producten:21': ART.producten }, termsOfPaymentId: TERMS });
     const invoice = await finalInvoice(baas, { name: 'Jan', email: 'jan@voorbeeld.test' }, [{ description: 'Sproeier', qty: 1, price: 10 }]);
@@ -677,7 +698,7 @@ test('visma: wijzigen van de app-gegevens komt in het logboek, zonder het secret
   const { server, as } = await setup();
   try {
     const baas = await as('baas');
-    assert.strictEqual((await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', environment: 'sandbox', clientSecret: 'heel-geheim-secret' })).status, 200);
+    assert.strictEqual((await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', environment: 'sandbox', clientSecret: 'heel-geheim-secret', redirectUri: REDIRECT })).status, 200);
     const entries = (await baas.get('/app/api/visma/log?limit=100')).body.items.filter((entry) => entry.kind === 'instelling');
     assert.strictEqual(entries.length, 1);
     assert.match(entries[0].message, /clientId/);
@@ -686,7 +707,7 @@ test('visma: wijzigen van de app-gegevens komt in het logboek, zonder het secret
     assert.strictEqual(entries[0].actor, 'Baas');
     assert.strictEqual(entries[0].source, 'handmatig');
     // Ongewijzigd opslaan geeft geen nieuwe regel.
-    await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', environment: 'sandbox' });
+    await baas.put('/app/api/visma/app', { clientId: 'aquatech-test', environment: 'sandbox', redirectUri: REDIRECT });
     assert.strictEqual((await baas.get('/app/api/visma/log?limit=100')).body.items.filter((entry) => entry.kind === 'instelling').length, 1);
   } finally {
     server.close();

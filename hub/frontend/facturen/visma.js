@@ -165,7 +165,9 @@
       formElement.clientSecret.placeholder = data.secretSet ? 'Ingevuld; laat leeg om te behouden' : 'Nog niet ingevuld';
       formElement.clearSecret.checked = false;
       $('#vi-app-clear').hidden = !data.secretSet;
-      $('#vi-app-hint').textContent = `Registreer precies deze redirect URI bij Visma (standaard ${data.defaultRedirect}). Andere adressen moeten met https beginnen en op /api/visma/callback eindigen.`;
+      $('#vi-app-hint').textContent = data.defaultRedirect
+        ? `Registreer precies deze redirect URI bij Visma. Laat je het veld leeg, dan geldt ${data.defaultRedirect} (uit het webadres bij Beheer → Webshop → Betalen). Een eigen adres begint met https en eindigt op /app/api/visma/callback.`
+        : 'Vul de redirect URI in die je bij Visma registreert: hij begint met https en eindigt op /app/api/visma/callback. Er is nog geen webadres ingevuld bij Beheer → Webshop → Betalen, dus er is geen standaard.';
     }
 
     /** Toont de stand van de Visma-koppeling en de knoppen die erbij horen. */

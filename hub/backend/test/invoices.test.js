@@ -193,3 +193,93 @@ test('facturen: rechten en scheiding tussen organisaties', async () => {
     server.close();
   }
 });
+
+test('facturen: crediteren kan nooit meer dan de factuur, de voorraad komt één keer terug (T-02)', async () => {
+  const { db, server, as } = await setup();
+  try {
+    const baas = await as('baas');
+    const item = (await baas.post('/app/api/stock/items', { code: 'ZAND', name: 'Straatzand', unit: 'zak', salePrice: 7.5, onHand: 10 })).body;
+    /**
+     * De voorraadstand van het artikel.
+     * @returns {Promise<number>} De stand.
+     */
+    const onHand = async () => (await baas.get(`/app/api/stock/items/${item.id}`)).body.onHand;
+    const draft = (await baas.post('/app/api/invoices', { data: { customer: { name: 'Balieklant' }, lines: [{ code: 'ZAND', description: 'Straatzand', qty: 3, price: 7.5 }] } })).body;
+    const invoice = (await baas.post(`/app/api/invoices/${draft.id}/finalize`, {})).body;
+    assert.strictEqual(await onHand(), 7);
+
+    // Eerste credit: gedeeltelijk (1 van de 3).
+    const first = (await baas.post(`/app/api/invoices/${invoice.id}/credit`, {})).body;
+    assert.deepStrictEqual(first.data.lines.map((line) => line.qty), [-3]);
+    await baas.put(`/app/api/invoices/${first.id}`, { data: { ...first.data, lines: [{ ...first.data.lines[0], qty: -1 }] } });
+    assert.strictEqual((await baas.post(`/app/api/invoices/${first.id}/finalize`, {})).status, 200);
+    assert.strictEqual(await onHand(), 8);
+
+    // Tweede credit begint met wat er nog over is; verhogen boven het restant wordt geweigerd bij definitief maken.
+    const second = (await baas.post(`/app/api/invoices/${invoice.id}/credit`, {})).body;
+    assert.deepStrictEqual(second.data.lines.map((line) => line.qty), [-2]);
+    await baas.put(`/app/api/invoices/${second.id}`, { data: { ...second.data, lines: [{ ...second.data.lines[0], qty: -3 }] } });
+    const tooMuch = await baas.post(`/app/api/invoices/${second.id}/finalize`, {});
+    assert.strictEqual(tooMuch.status, 409, JSON.stringify(tooMuch.body));
+    assert.match(tooMuch.body.message, /nog te crediteren/);
+    assert.strictEqual(await onHand(), 8, 'een geweigerde credit boekt niets terug');
+    // Zelfde bedrag maar meer stuks van het artikel (lagere prijs): ook geweigerd, anders komt er te veel voorraad terug.
+    await baas.put(`/app/api/invoices/${second.id}`, { data: { ...second.data, lines: [{ ...second.data.lines[0], qty: -5, price: 1 }] } });
+    const tooMany = await baas.post(`/app/api/invoices/${second.id}/finalize`, {});
+    assert.strictEqual(tooMany.status, 409);
+    assert.match(tooMany.body.message, /artikel ZAND/);
+    await baas.put(`/app/api/invoices/${second.id}`, { data: { ...second.data, lines: [{ ...second.data.lines[0], qty: -2 }] } });
+    assert.strictEqual((await baas.post(`/app/api/invoices/${second.id}/finalize`, {})).status, 200);
+    assert.strictEqual(await onHand(), 10);
+
+    // Alles is gecrediteerd: geen nieuwe creditfactuur en de voorraad blijft staan.
+    const third = await baas.post(`/app/api/invoices/${invoice.id}/credit`, {});
+    assert.strictEqual(third.status, 409);
+    assert.match(third.body.message, /al volledig gecrediteerd/);
+    assert.strictEqual(await onHand(), 10);
+    assert.strictEqual(Number(db.prepare("SELECT COUNT(*) AS n FROM invoices WHERE credit_of = ?").get(invoice.id).n), 2);
+  } finally {
+    server.close();
+  }
+});
+
+test('facturen: een concept-credit dat blijft liggen kan niet meer definitief als de factuur intussen volledig gecrediteerd is', async () => {
+  const { db, server, as } = await setup();
+  try {
+    const baas = await as('baas');
+    const draft = (await baas.post('/app/api/invoices', { data: { customer: { name: 'Klant' }, lines: [{ description: 'Advies', qty: 2, price: 50 }] } })).body;
+    const invoice = (await baas.post(`/app/api/invoices/${draft.id}/finalize`, {})).body;
+    const credit = (await baas.post(`/app/api/invoices/${invoice.id}/credit`, {})).body;
+    // Een tweede concept-credit (zoals de webshop er een maakt bij een retour) naast het open concept.
+    const tenantId = db.prepare('SELECT tenant_id FROM invoices WHERE id = ?').get(invoice.id).tenant_id;
+    const copyId = require('node:crypto').randomUUID();
+    db.prepare(`INSERT INTO invoices (id, tenant_id, kind, credit_of, customer_name, invoice_date, due_date, subtotal, vat_total, total, data, status, created_at, updated_at)
+      SELECT ?, tenant_id, kind, credit_of, customer_name, invoice_date, due_date, subtotal, vat_total, total, data, status, created_at, updated_at FROM invoices WHERE tenant_id = ? AND id = ?`).run(copyId, tenantId, credit.id);
+    assert.strictEqual((await baas.post(`/app/api/invoices/${credit.id}/finalize`, {})).status, 200);
+    const late = await baas.post(`/app/api/invoices/${copyId}/finalize`, {});
+    assert.strictEqual(late.status, 409, JSON.stringify(late.body));
+    assert.match(late.body.message, /al volledig gecrediteerd/);
+  } finally {
+    server.close();
+  }
+});
+
+test('facturen: betaald en weer openstaand zetten komt in het auditlogboek (B-19)', async () => {
+  const { db, server, as } = await setup();
+  try {
+    const baas = await as('baas');
+    const draft = (await baas.post('/app/api/invoices', { data: { customer: { name: 'Klant' }, lines: [{ description: 'Advies', qty: 1, price: 50 }] } })).body;
+    const invoice = (await baas.post(`/app/api/invoices/${draft.id}/finalize`, {})).body;
+    assert.strictEqual((await baas.post(`/app/api/invoices/${invoice.id}/paid`, { paid: true, date: '2026-11-01' })).body.status, 'betaald');
+    // Zonder online betaling hoeft terugzetten geen bevestiging.
+    assert.strictEqual((await baas.post(`/app/api/invoices/${invoice.id}/paid`, { paid: false })).body.status, 'definitief');
+    // Nogmaals openstaand zetten verandert niets en geeft geen tweede regel.
+    await baas.post(`/app/api/invoices/${invoice.id}/paid`, { paid: false });
+    const rows = db.prepare("SELECT action, detail FROM audit WHERE action IN ('factuur_betaald', 'factuur_onbetaald') ORDER BY created_at").all();
+    assert.deepStrictEqual(rows.map((row) => row.action), ['factuur_betaald', 'factuur_onbetaald']);
+    const detail = typeof rows[0].detail === 'string' ? JSON.parse(rows[0].detail) : rows[0].detail;
+    assert.deepStrictEqual([detail.number, detail.date], [invoice.number, '2026-11-01']);
+  } finally {
+    server.close();
+  }
+});

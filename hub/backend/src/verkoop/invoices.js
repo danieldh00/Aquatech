@@ -258,6 +258,82 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
     return out;
   }
   /**
+   * De sleutel waarmee een creditregel bij een regel van de oorspronkelijke factuur past: artikelcode, omschrijving, prijs en btw.
+   * @param {object} line De factuurregel.
+   * @returns {string} De sleutel.
+   */
+  const creditLineKey = (line) => [String(line.code || '').toUpperCase(), String(line.description || '').trim(), Core.round2(line.price), Number(line.vatRate) || 0].join('|');
+
+  /**
+   * Wat er bij een factuur al definitief gecrediteerd is: het bedrag en de aantallen per artikelcode en per regel.
+   * @param {string} tenantId Id van de tenant.
+   * @param {string} originalId Id van de oorspronkelijke factuur.
+   * @param {string} [exceptId] Een creditfactuur die niet meetelt (degene die nu definitief wordt).
+   * @returns {{ total: number, byCode: Map<string, number>, byLine: Map<string, number> }} Het gecrediteerde bedrag (positief) en de gecrediteerde aantallen (positief).
+   */
+  function creditedSoFar(tenantId, originalId, exceptId = '') {
+    const rows = prepare("SELECT id, total, data FROM invoices WHERE tenant_id = ? AND credit_of = ? AND kind = 'credit' AND status <> 'concept'").all(tenantId, String(originalId));
+    const out = { total: 0, byCode: new Map(), byLine: new Map() };
+    for (const credit of rows) {
+      if (credit.id === exceptId) continue;
+      out.total = Core.round2(out.total - Number(credit.total));
+      addCreditLines(out, JSON.parse(credit.data).lines);
+    }
+    return out;
+  }
+
+  /**
+   * Telt de regels van een creditfactuur op bij de gecrediteerde aantallen (een negatief aantal op de credit telt positief).
+   * @param {{ byCode: Map<string, number>, byLine: Map<string, number> }} sums De tellingen tot nu toe.
+   * @param {object[]} lines De regels van de creditfactuur.
+   * @returns {void}
+   */
+  function addCreditLines(sums, lines) {
+    for (const line of lines || []) {
+      const qty = -(Number(line.qty) || 0);
+      const code = String(line.code || '').toUpperCase();
+      if (code) sums.byCode.set(code, (sums.byCode.get(code) || 0) + qty);
+      const key = creditLineKey(line);
+      sums.byLine.set(key, (sums.byLine.get(key) || 0) + qty);
+    }
+  }
+
+  /**
+   * Controleert of een creditfactuur definitief mag worden: samen met de eerdere definitieve credits niet meer dan het bedrag
+   * van de oorspronkelijke factuur en per artikel niet meer dan er gefactureerd is. Vergrendelt de oorspronkelijke factuur
+   * voor de duur van de transactie, zodat twee credits niet tegelijk langs de controle komen.
+   * @param {string} tenantId Id van de tenant.
+   * @param {object} row De rij van de creditfactuur (id, credit_of, total).
+   * @param {object} data De inhoud van de creditfactuur.
+   * @returns {string} De melding, of een lege tekst als het mag.
+   */
+  function creditProblem(tenantId, row, data) {
+    const original = prepare('SELECT id, number, total, data FROM invoices WHERE tenant_id = ? AND id = ? FOR UPDATE').get(tenantId, String(row.credit_of));
+    if (!original) return '';
+    const earlier = creditedSoFar(tenantId, original.id, row.id);
+    const room = Core.round2(Number(original.total) - earlier.total);
+    const wanted = Core.round2(-Number(row.total));
+    if (wanted > room + 0.005) {
+      return room <= 0.005
+        ? `Factuur ${original.number} is al volledig gecrediteerd.`
+        : `Deze creditfactuur (${wanted.toFixed(2)}) is hoger dan wat er van factuur ${original.number} nog te crediteren is (${room.toFixed(2)}).`;
+    }
+    const invoiced = new Map();
+    for (const line of JSON.parse(original.data).lines || []) {
+      const code = String(line.code || '').toUpperCase();
+      if (code) invoiced.set(code, (invoiced.get(code) || 0) + (Number(line.qty) || 0));
+    }
+    const current = { byCode: new Map(), byLine: new Map() };
+    addCreditLines(current, data.lines);
+    for (const [code, qty] of current.byCode) {
+      if (qty <= 0) continue;
+      const left = (invoiced.get(code) || 0) - (earlier.byCode.get(code) || 0);
+      if (qty > left + 1e-6) return `Van artikel ${code} staat meer op deze creditfactuur (${qty}) dan er van factuur ${original.number} nog te crediteren is (${Math.max(0, left)}).`;
+    }
+    return '';
+  }
+
+  /**
    * Definitief maken in één transactie: nummer, voorraad (bij een losse
    * verkoop), debiteur en vastleggen. Een creditfactuur boekt alleen terug wat
    * de oorspronkelijke factuur heeft afgeboekt.
@@ -276,6 +352,11 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
       const data = JSON.parse(row.data);
       if (!data.customer.name.trim()) return { error: 'Vul de naam van de klant in.', field: 'customer', status: 400 };
       if (!data.lines.length) return { error: 'Een factuur zonder regels kan niet definitief worden.', field: 'lines', status: 400 };
+      // Een creditfactuur mag samen met de eerdere definitieve credits nooit boven de oorspronkelijke factuur uitkomen (T-02).
+      if (row.kind === 'credit' && row.credit_of) {
+        const problem = creditProblem(tenantId, row, data);
+        if (problem) return { error: problem, status: 409 };
+      }
       const number = nextNumber(tenantId, settings.prefix, data.date.slice(0, 4));
       const timestamp = currentTimestamp();
       let booked = 0;
@@ -315,19 +396,39 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
    * @param {string} id Id van de factuur.
    * @param {boolean} paid Betaald of niet.
    * @param {string} [date] Betaaldatum (JJJJ-MM-DD); zonder = nu.
-   * @returns {{ invoice: object }|{ error: string, status: number }|null} De factuur, een fout, of null.
+   * @param {{ confirmOnline?: boolean }} [options] confirmOnline: een online betaalde factuur toch terugzetten op openstaand.
+   * @returns {{ invoice: object, changed: boolean }|{ error: string, status: number, code?: string }|null} De factuur (changed: de status is echt gewijzigd), een fout (code confirm_required: eerst bevestigen), of null.
    */
-  function setPaid(tenantId, id, paid, date) {
+  function setPaid(tenantId, id, paid, date, { confirmOnline = false } = {}) {
     const row = find(tenantId, id);
     if (!row) return null;
     if (row.status === 'concept') return { error: 'Maak de factuur eerst definitief.', status: 409 };
+    // Een factuur die de klant online heeft betaald gaat niet per ongeluk terug naar openstaand (B-19): dat vraagt een bevestiging.
+    if (!paid && row.status === 'betaald' && !confirmOnline && paidOnline(tenantId, row)) {
+      return { error: 'Deze factuur is online betaald (Mollie). Zet je hem terug op openstaand, dan kan de klant hem opnieuw betalen en krijgt hij weer herinneringen.', status: 409, code: 'confirm_required' };
+    }
     const paidAt = paid ? (Core.isDate(date) ? `${date}T12:00:00.000Z` : currentTimestamp()) : null;
     prepare('UPDATE invoices SET status = ?, paid_at = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(paid ? 'betaald' : 'definitief', paidAt, currentTimestamp(), tenantId, row.id);
-    return { invoice: get(tenantId, row.id) };
+    return { invoice: get(tenantId, row.id), changed: row.status !== (paid ? 'betaald' : 'definitief') };
   }
 
   /**
-   * Maakt een creditfactuur (concept) bij een definitieve factuur; een open concept wordt hergebruikt.
+   * Of er voor deze factuur een geslaagde online betaling is: via het klantportaal of de betaallink (invoice_payments), of de
+   * webshopbestelling waar de factuur bij hoort is online betaald.
+   * @param {string} tenantId Id van de tenant.
+   * @param {object} row De rij van de factuur (id, shop_order_id).
+   * @returns {boolean} True bij een geslaagde online betaling.
+   */
+  function paidOnline(tenantId, row) {
+    if (prepare("SELECT 1 AS found FROM invoice_payments WHERE tenant_id = ? AND invoice_id = ? AND status = 'betaald' LIMIT 1").get(tenantId, row.id)) return true;
+    const webOrderId = String(row.shop_order_id || '').startsWith('web:') ? String(row.shop_order_id).slice(4) : '';
+    if (!webOrderId) return false;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(webOrderId)) return false;
+    return Boolean(prepare("SELECT 1 AS found FROM web_orders WHERE tenant_id = ? AND id = ? AND data->'pay'->>'status' = 'betaald' LIMIT 1").get(tenantId, webOrderId));
+  }
+
+  /**
+   * Maakt een creditfactuur (concept) bij een definitieve factuur; een open concept wordt hergebruikt. Wat al definitief gecrediteerd is staat er niet meer op; is alles gecrediteerd, dan komt er geen nieuwe.
    * @param {string} tenantId Id van de tenant.
    * @param {object|null} user Wie het doet.
    * @param {string} id Id van de oorspronkelijke factuur.
@@ -341,8 +442,21 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
     if (original.kind === 'credit') return { error: 'Een creditfactuur kun je niet crediteren.', status: 409 };
     const openCredit = prepare("SELECT id FROM invoices WHERE tenant_id = ? AND credit_of = ? AND status = 'concept'").get(tenantId, original.id);
     if (openCredit) return { invoice: get(tenantId, openCredit.id), existing: true };
+    // Alleen wat nog niet definitief gecrediteerd is (T-02): een tweede credit begint met de resterende regels.
+    const earlier = creditedSoFar(tenantId, original.id);
+    const draft = Core.creditOf(original);
+    if (earlier.total || earlier.byLine.size) {
+      if (Core.round2(Number(original.total) - earlier.total) <= 0.005) return { error: `Factuur ${original.number} is al volledig gecrediteerd.`, status: 409 };
+      draft.lines = draft.lines.map((line) => {
+        const key = creditLineKey(line);
+        const used = Math.min(earlier.byLine.get(key) || 0, -line.qty);
+        if (used > 0) earlier.byLine.set(key, earlier.byLine.get(key) - used);
+        return { ...line, qty: line.qty + used };
+      }).filter((line) => line.qty);
+      if (!draft.lines.length) return { error: `Van factuur ${original.number} zijn alle regels al gecrediteerd.`, status: 409 };
+    }
     return {
-      invoice: create(tenantId, user, Core.creditOf(original), settings, {
+      invoice: create(tenantId, user, draft, settings, {
         workOrderId: original.workOrderId, quoteId: original.quoteId, customerId: original.customerId, kind: 'credit', creditOf: original.id, debtorId: original.debtorId,
       }),
     };
@@ -684,9 +798,16 @@ function registerInvoiceRoutes(app, ctx) {
   });
 
   app.post('/api/invoices/:id/paid', requireJson, requireInvoices, (req, res) => {
-    const out = invoices.setPaid(tenantOf(req), req.params.id, req.body && req.body.paid !== false, req.body && req.body.date);
+    const paid = Boolean(req.body && req.body.paid !== false);
+    const out = invoices.setPaid(tenantOf(req), req.params.id, paid, req.body && req.body.date, { confirmOnline: Boolean(req.body && req.body.confirm === true) });
     if (!out) return notFound(res);
+    if (out.code === 'confirm_required') return res.status(409).json({ error: 'confirm_required', message: out.error });
     if (out.error) return fail(res, out);
+    if (out.changed) {
+      audit(req, paid ? 'factuur_betaald' : 'factuur_onbetaald', {
+        invoiceId: out.invoice.id, number: out.invoice.number, ...(paid ? { date: String(out.invoice.paidAt || '').slice(0, 10) } : { onlineBetaald: Boolean(req.body && req.body.confirm === true) }),
+      });
+    }
     res.json(out.invoice);
   });
 

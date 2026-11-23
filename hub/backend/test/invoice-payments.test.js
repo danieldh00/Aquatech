@@ -341,3 +341,96 @@ test('de meldingspagina van de betaallink escapet titel en tekst', () => {
   assert.ok(!html.includes('<script>') && !html.includes('<b>'));
   assert.ok(html.includes('&lt;script&gt;') && html.includes('&amp;'));
 });
+
+test('een online betaalde factuur gaat alleen na bevestiging terug naar openstaand, met auditregels (B-19)', async () => {
+  const world = await setup({ mollie: true });
+  const { invoiceId } = await finalInvoiceFor(world, 0);
+  await world.shoppers[0].client.post(`/app/api/portal/invoices/${invoiceId}/pay`, {});
+  const [paymentId] = [...world.mollie.payments.keys()];
+  world.mollie.set(paymentId, 'paid');
+  await webhook(world, invoiceId, paymentId);
+  const refused = await world.admin.post(`/app/api/invoices/${invoiceId}/paid`, { paid: false });
+  assert.strictEqual(refused.status, 409);
+  assert.strictEqual(refused.body.error, 'confirm_required');
+  assert.match(refused.body.message, /online betaald/);
+  assert.strictEqual((await world.admin.get(`/app/api/invoices/${invoiceId}`)).body.status, 'betaald');
+  const confirmed = await world.admin.post(`/app/api/invoices/${invoiceId}/paid`, { paid: false, confirm: true });
+  assert.strictEqual(confirmed.status, 200, JSON.stringify(confirmed.body));
+  assert.strictEqual(confirmed.body.status, 'definitief');
+  const audits = world.db.prepare("SELECT action, detail FROM audit WHERE action IN ('factuur_betaald', 'factuur_onbetaald') ORDER BY created_at").all();
+  assert.deepStrictEqual(audits.map((row) => row.action), ['factuur_onbetaald']);
+  assert.strictEqual((typeof audits[0].detail === 'string' ? JSON.parse(audits[0].detail) : audits[0].detail).onlineBetaald, true);
+});
+
+test('een betaling op een intussen gecrediteerde factuur meldt zich één keer via de haak en zet de factuur niet op betaald', async () => {
+  const { createInvoicePayments } = require('../src/verkoop/invoice-payments');
+  const { createMollieFake } = require('./helpers/mollie-fake');
+  const { openDb } = require('../src/database/db');
+  const { createStore } = require('../src/platform/store');
+  const { createMollie } = require('../src/webshop/mollie');
+  const db = openDb();
+  const tenantId = createStore(db).ensureTenant().id;
+  const invoice = { id: INVOICE_ONE, number: 'F1', status: 'definitief', kind: 'factuur', total: 50, customerId: CUSTOMER, creditedAt: null };
+  let paidCalls = 0;
+  const invoices = {
+    /**
+     * De factuur.
+     * @returns {object} Een kopie.
+     */
+    get: () => ({ ...invoice }),
+    /**
+     * Telt een poging om de factuur op betaald te zetten.
+     * @returns {{ invoice: object }} De factuur.
+     */
+    setPaid: () => { paidCalls += 1; return { invoice: { ...invoice } }; },
+  };
+  const fake = createMollieFake();
+  /**
+   * Instellingen met online betalen aan.
+   * @returns {{ get: Function }} De instellingen.
+   */
+  const settingsFor = () => ({ get: (name) => (name === 'mollieApiKey' ? 'test_abcdefghij1234567' : { online: true, publicUrl: 'https://winkel.example/' }) });
+  const payments = createInvoicePayments({ db, invoices, mollie: createMollie({ fetchImpl: fake.fetchImpl }), settingsFor, log: { warn() {} } });
+  const reported = [];
+  let paidHooks = 0;
+  payments.onPaidAfterCredit((hookTenant, hookInvoice, payment) => { reported.push([hookTenant, hookInvoice.number, payment.id, payment.amount]); });
+  payments.onPaid(() => { paidHooks += 1; });
+  await payments.start(tenantId, invoice);
+  const [paymentId] = [...fake.payments.keys()];
+  // De klant staat op de betaalpagina; intussen wordt de factuur gecrediteerd en daarna betaalt hij toch.
+  invoice.creditedAt = new Date().toISOString();
+  fake.set(paymentId, 'paid');
+  const first = await payments.sync(tenantId, INVOICE_ONE, { paymentId });
+  assert.deepStrictEqual([first.becamePaid, first.afterCredit], [false, true]);
+  await payments.sync(tenantId, INVOICE_ONE, { paymentId });
+  assert.deepStrictEqual(reported, [[tenantId, 'F1', paymentId, 50]], 'één melding, ook na een tweede webhook');
+  assert.deepStrictEqual([paidCalls, paidHooks], [0, 0], 'de factuur wordt niet op betaald gezet');
+  assert.strictEqual(payments.paymentsOf(tenantId, INVOICE_ONE)[0].status, 'betaald', 'het geld blijft zichtbaar bij de factuur');
+});
+
+test('webhook en betaallink raken een factuur van een andere organisatie niet (B-12)', async () => {
+  const world = await setup({ mollie: true });
+  const own = await finalInvoiceFor(world, 0);
+  // Een definitieve factuur van de andere organisatie, met een betaling die bij Mollie op betaald staat en naar die factuur verwijst.
+  const created = await world.vreemd.post('/app/api/invoices', { data: { customer: { name: 'Vreemde klant' }, lines: [{ description: 'Werk', qty: 1, price: 100, vat: 21, group: 'producten' }] } });
+  assert.strictEqual(created.status, 201, JSON.stringify(created.body));
+  assert.strictEqual((await world.vreemd.post(`/app/api/invoices/${created.body.id}/finalize`, {})).status, 200);
+  const foreignId = created.body.id;
+  const foreignTenant = world.db.prepare('SELECT tenant_id FROM invoices WHERE id = ?').get(foreignId).tenant_id;
+  const paymentId = 'tr_vreemd0001';
+  world.db.prepare('INSERT INTO invoice_payments (id, tenant_id, invoice_id, mollie_id, status, amount, checkout_url, mode, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(randomUUID(), foreignTenant, foreignId, paymentId, 'open', 121, 'https://www.mollie.com/checkout/x', 'test', new Date().toISOString());
+  world.mollie.payments.set(paymentId, { id: paymentId, status: 'paid', mode: 'test', amount: { value: '121.00', currency: 'EUR' }, metadata: { invoiceId: foreignId }, method: 'ideal', paidAt: new Date().toISOString() });
+  assert.strictEqual((await webhook(world, foreignId, paymentId)).status, 200);
+  assert.strictEqual((await world.vreemd.get(`/app/api/invoices/${foreignId}`)).body.status, 'definitief', 'de webhook zonder inlog werkt alleen binnen de eigen omgeving');
+  assert.strictEqual(world.db.prepare('SELECT status FROM invoice_payments WHERE mollie_id = ?').get(paymentId).status, 'open');
+  // De handtekening van een eigen factuur opent geen factuur van de andere organisatie.
+  const { link } = await mailLinkOf(world, own.invoiceId);
+  const parts = link.split('/');
+  const signature = parts.pop();
+  const anonymous = createClient(world.base, { followRedirects: false });
+  assert.strictEqual((await anonymous.get(parts.slice(0, -1).concat(foreignId, signature).join('/'))).status, 404);
+  assert.strictEqual((await anonymous.get(`${parts.slice(0, -1).concat(foreignId, signature).join('/')}?teruggekeerd=1`)).status, 404);
+  // De andere organisatie ziet de factuur van de hoofdtenant niet en kan hem niet op betaald zetten.
+  assert.strictEqual((await world.vreemd.post(`/app/api/invoices/${own.invoiceId}/paid`, { paid: true })).status, 404);
+});
