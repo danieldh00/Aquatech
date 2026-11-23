@@ -457,7 +457,7 @@ cmd_restore_app() {
   # Een draaiende eigen database met gegevens blijft volledig ongemoeid: eerst kijken, vóór wachtwoorden of de app worden aangeraakt.
   if [[ "$(pg_health)" == "healthy" ]]; then
     local filled
-    filled="$(local_psql postgres -c "SELECT coalesce(sum(c), 0) FROM (SELECT (xpath('/row/c/text()', query_to_xml(format('SELECT count(*) AS c FROM %I.%I', schemaname, tablename), false, true, '')))[1]::text::bigint AS c FROM pg_tables WHERE schemaname = 'aquatech' AND tablename <> 'tenants') counts" 2>/dev/null || echo 0)"
+    filled="$(local_psql postgres -c "SELECT coalesce(sum(c), 0) FROM (SELECT (xpath('/row/c/text()', query_to_xml(format('SELECT count(*) AS c FROM %I.%I', schemaname, tablename), false, true, '')))[1]::text::bigint AS c FROM pg_tables WHERE schemaname = 'aquatech' AND tablename <> 'tenants') counts" 2>/dev/null)" || die "De eigen database kon niet worden gecontroleerd op bestaande gegevens; niets veranderd."
     [[ "$filled" == "0" ]] || die "De eigen database bevat al gegevens ($filled rijen); noodherstel is alleen voor een lege database. Niets veranderd."
   fi
   log "Eigen PostgreSQL inrichten (een bestaande database blijft ongemoeid)"
