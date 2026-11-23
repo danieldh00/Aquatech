@@ -203,7 +203,7 @@ function createOutsourcingStore(db, { workorders }) {
    */
   function incomingView(offerRow, tenantId) {
     let myStatus = offerRow.status;
-    if (offerRow.receiver_tenant_id === tenantId) myStatus = offerRow.received_work_order_id ? 'geaccepteerd' : 'aangevraagd';
+    if (offerRow.receiver_tenant_id === tenantId) myStatus = offerRow.received_work_order_id ? 'geaccepteerd' : (offerRow.status === 'aangeboden' ? 'aangevraagd' : offerRow.status);
     else if (offerRow.status === 'aangeboden' && declinedOf(offerRow).includes(tenantId)) myStatus = 'afgewezen';
     const mine = offerRow.receiver_tenant_id === tenantId;
     return {

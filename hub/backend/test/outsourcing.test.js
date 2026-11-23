@@ -189,6 +189,11 @@ test('uitbesteden: open aanbod, afwijzen, intrekken en alleen tussen live-omgevi
     pendingRow = (await baas.get('/app/api/outsourcing')).body.outgoing.find((row) => row.id === offer.id);
     assert.deepStrictEqual([pendingRow.pending, pendingRow.receiverName], [false, '']);
     assert.strictEqual((await bram.post(`/app/api/outsourcing/offers/${offer.id}/accept`)).status, 404, 'zelf ingetrokken: niet opnieuw');
+    // Trekt de uitbesteder een openstaande aanvraag in, dan toont de aanvrager 'ingetrokken' (geen aanvraag meer).
+    const offer5 = (await baas.post('/app/api/outsourcing/offers', { workOrderId: (await acceptedWorkOrder(baas)).id })).body;
+    assert.strictEqual((await bram.post(`/app/api/outsourcing/offers/${offer5.id}/accept`)).status, 200);
+    assert.strictEqual((await baas.del(`/app/api/outsourcing/offers/${offer5.id}`)).status, 200);
+    assert.strictEqual((await bram.get('/app/api/outsourcing')).body.incoming.find((row) => row.id === offer5.id).myStatus, 'ingetrokken');
     // Afwijzen door de uitbesteder zet het aanbod terug bij anderen.
     const offer4 = (await baas.post('/app/api/outsourcing/offers', { workOrderId: (await acceptedWorkOrder(baas)).id })).body;
     assert.strictEqual((await piet.post(`/app/api/outsourcing/offers/${offer4.id}/accept`)).status, 200);
