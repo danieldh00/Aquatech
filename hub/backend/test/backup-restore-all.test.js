@@ -49,3 +49,57 @@ test('restoreAll weigert zonder bekende verbindings-URL (faalt gesloten)', async
   await assert.rejects(restoreAll({ db: database, file: '/nergens', vault, env: { AQUATECH_RESTORE_TEST: '1' } }), /alleen in de wegwerpdatabase/);
   await assert.rejects(restoreAll({ db: database, file: '/nergens', vault, env: { AQUATECH_RESTORE_TEST: '1', DATABASE_URL_FILE: '/bestaat/niet' } }), /alleen in de wegwerpdatabase/);
 });
+
+test('noodherstel zet een hele back-up terug in een lege database, zonder host-controle van de hersteltest', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aquatech-emergency-'));
+  try {
+    const vault = createVault(Buffer.alloc(32, 7));
+    const source = openDb();
+    const store = createStore(source);
+    const tenantId = store.ensureTenant().id;
+    await store.createAccount(tenantId, { username: 'baas', role: 'beheerder', password: 'Tuin-Plan-2026!' }, { platformAdmin: true });
+    const backup = await createBackup({ db: source, dir, vault });
+
+    const target = openDb();
+    createStore(target).ensureTenant();
+    const result = await restoreAll({ db: target, file: path.join(dir, backup.name), vault, env: { AQUATECH_EMERGENCY_RESTORE: '1', DATABASE_URL: 'postgres://aquatech@postgres:5432/aquatech' }, tempDir: dir, emergency: true });
+    assert.ok(result.tables.users >= 1);
+    assert.deepStrictEqual(fingerprint(target), fingerprint(source));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('noodherstel weigert zonder de schakelaar', async () => {
+  await assert.rejects(restoreAll({ db: openDb(), file: '/nergens', vault: createVault(Buffer.alloc(32, 7)), env: { AQUATECH_RESTORE_TEST: '1', DATABASE_URL: 'postgres://postgres@db:5432/postgres' }, emergency: true }), /AQUATECH_EMERGENCY_RESTORE=1/);
+});
+
+test('noodherstel weigert een database waar al een account in staat en laat die ongemoeid', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aquatech-emergency-'));
+  try {
+    const vault = createVault(Buffer.alloc(32, 7));
+    const source = openDb();
+    const backup = await createBackup({ db: source, dir, vault });
+    const target = openDb();
+    const store = createStore(target);
+    const tenantId = store.ensureTenant().id;
+    await store.createAccount(tenantId, { username: 'echt', role: 'beheerder', password: 'Tuin-Plan-2026!' }, { platformAdmin: true });
+    const before = fingerprint(target);
+    await assert.rejects(restoreAll({ db: target, file: path.join(dir, backup.name), vault, env: { AQUATECH_EMERGENCY_RESTORE: '1' }, tempDir: dir, emergency: true }), /alleen in een lege database.*users: 1/);
+    assert.deepStrictEqual(fingerprint(target), before, 'niets gewist');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('noodherstel met een verkeerde hoofdsleutel mislukt en laat de lege database leeg', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aquatech-emergency-'));
+  try {
+    const source = openDb();
+    const backup = await createBackup({ db: source, dir, vault: createVault(Buffer.alloc(32, 7)) });
+    await assert.rejects(restoreAll({ db: openDb(), file: path.join(dir, backup.name), vault: createVault(Buffer.alloc(32, 9)), env: { AQUATECH_EMERGENCY_RESTORE: '1' }, tempDir: dir, emergency: true }));
+    assert.deepStrictEqual(fs.readdirSync(dir).filter((name) => name.startsWith('restore-all-')), []);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -8,6 +8,7 @@
 #   local-db.sh status     waar draait de database, groottes, back-ups
 #   local-db.sh backup     nu een versleutelde back-up maken
 #   local-db.sh restore <bestand>   een back-up terugzetten (app kort uit)
+#   local-db.sh restore-app <bestand>   noodherstel op een nieuwe server: de app-back-up uit Google Drive in een lege database
 # Opties: --yes (geen vraag; de host-wrapper vraagt zelf om bevestiging).
 #
 # Geheimen: de Supabase-URL blijft in secrets/database-url; de nieuwe wachtwoorden worden hier gemaakt en komen
@@ -153,25 +154,9 @@ install_files() {
   systemctl daemon-reload
 }
 
-# ---------- migrate ----------
-cmd_migrate() {
-  local stamp; stamp="$(date +%Y%m%d%H%M%S)"
-  command -v docker >/dev/null || die "Docker niet gevonden."
-  command -v openssl >/dev/null || die "openssl niet gevonden."
-  command -v systemctl >/dev/null || die "systemd niet gevonden."
-  [[ -f compose.yml ]] || die "compose.yml niet gevonden in $APP_DIR."
-  grep -qE '^\s*- DATABASE_URL_FILE=' compose.yml || die "De app heeft geen DATABASE_URL_FILE in compose.yml; PostgreSQL is de enige database."
-  on_local_db && die "De app draait al op de eigen PostgreSQL (COMPOSE_FILE in .env)."
-  [[ -s secrets/master-key ]] || die "secrets/master-key ontbreekt."
-  [[ "$(app_health)" == "healthy" ]] || die "De app is niet healthy; los dat eerst op."
-  local free_kb; free_kb="$(df -Pk "$APP_DIR" | awk 'NR==2{print $4}')"
-  (( free_kb >= MIN_FREE_KB )) || die "Minder dan 2 GB vrij op de schijf van $APP_DIR."
-
-  make_tmp
-  trap on_migrate_exit EXIT
-  log "Bestanden installeren"
-  install_files "$stamp"
-
+# ---------- Eigen PostgreSQL inrichten (gedeeld door migrate en restore-app) ----------
+# Maakt de wachtwoorden, start de database-container en richt de rollen in. Een bestaande database blijft ongemoeid.
+provision_local_db() {
   # Wachtwoorden: superuser van de database (alleen voor beheer, eerste start) en de app-rol.
   mkdir -p secrets pgdata
   if [[ ! -s secrets/postgres-password ]]; then ( umask 077; openssl rand -hex 32 > secrets/postgres-password ); fi
@@ -203,6 +188,28 @@ GRANT CONNECT ON DATABASE aquatech TO aquatech;
 SQL
   } | docker exec -i -e PGOPTIONS="-c client_min_messages=warning" "$PG_CONTAINER" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d aquatech >/dev/null
   unset app_password
+}
+
+# ---------- migrate ----------
+cmd_migrate() {
+  local stamp; stamp="$(date +%Y%m%d%H%M%S)"
+  command -v docker >/dev/null || die "Docker niet gevonden."
+  command -v openssl >/dev/null || die "openssl niet gevonden."
+  command -v systemctl >/dev/null || die "systemd niet gevonden."
+  [[ -f compose.yml ]] || die "compose.yml niet gevonden in $APP_DIR."
+  grep -qE '^\s*- DATABASE_URL_FILE=' compose.yml || die "De app heeft geen DATABASE_URL_FILE in compose.yml; PostgreSQL is de enige database."
+  on_local_db && die "De app draait al op de eigen PostgreSQL (COMPOSE_FILE in .env)."
+  [[ -s secrets/master-key ]] || die "secrets/master-key ontbreekt."
+  [[ "$(app_health)" == "healthy" ]] || die "De app is niet healthy; los dat eerst op."
+  local free_kb; free_kb="$(df -Pk "$APP_DIR" | awk 'NR==2{print $4}')"
+  (( free_kb >= MIN_FREE_KB )) || die "Minder dan 2 GB vrij op de schijf van $APP_DIR."
+
+  make_tmp
+  trap on_migrate_exit EXIT
+  log "Bestanden installeren"
+  install_files "$stamp"
+
+  provision_local_db
 
   # De lokale database moet leeg zijn (of de rest van een eerder mislukte poging zijn).
   local existing; existing="$(local_psql postgres -c "SELECT count(*) FROM pg_tables WHERE schemaname = 'aquatech'")"
@@ -425,6 +432,42 @@ cmd_restore() {
   log "Klaar: back-up teruggezet en app gestart."
 }
 
+# ---------- restore-app: noodherstel uit de Drive-kopie van de app-back-up ----------
+# Voor verlies van de server: een nieuwe, lege eigen database vullen met de hele app-back-up (`aquatech-*.db.enc`, door de
+# gebruiker uit Google Drive gehaald). Vereist secrets/master-key (uit de wachtwoordkluis) op de nieuwe server. De app wordt
+# pas gestart als het terugzetten slaagde: een app op een lege database toont het scherm voor de eerste beheerder.
+cmd_restore_app() {
+  local file="${1:-}" name
+  command -v docker >/dev/null || die "Docker niet gevonden."
+  command -v openssl >/dev/null || die "openssl niet gevonden."
+  command -v systemctl >/dev/null || die "systemd niet gevonden."
+  [[ -n "$file" ]] || die "Gebruik: restore-app <bestand>  (een aquatech-JJJJMMDD-UUMMSS.db.enc uit Google Drive)."
+  [[ "$file" == */* ]] || file="backups/noodherstel/$file"
+  name="$(basename "$file")"
+  [[ "$name" =~ ^aquatech-[0-9]{8}-[0-9]{6}\.db\.enc$ ]] || die "Geen app-back-up (verwacht aquatech-JJJJMMDD-UUMMSS.db.enc, niet het pg_dump-bestand): $name"
+  [[ -f "$file" && ! -L "$file" && -s "$file" ]] || die "Back-upbestand niet gevonden (of leeg): $file"
+  [[ -f compose.yml ]] || die "compose.yml niet gevonden in $APP_DIR."
+  grep -qE '^\s*- DATABASE_URL_FILE=' compose.yml || die "De app heeft geen DATABASE_URL_FILE in compose.yml."
+  [[ -s secrets/master-key ]] || die "secrets/master-key ontbreekt: zet de hoofdsleutel uit de wachtwoordkluis terug (mode 400); zonder die sleutel is de back-up onleesbaar."
+  [[ -s .env ]] || die ".env ontbreekt in $APP_DIR (AQUATECH_TAG)."
+  local free_kb; free_kb="$(df -Pk "$APP_DIR" | awk 'NR==2{print $4}')"
+  (( free_kb >= MIN_FREE_KB )) || die "Minder dan 2 GB vrij op de schijf van $APP_DIR."
+
+  log "Eigen PostgreSQL inrichten (een bestaande database blijft ongemoeid)"
+  install_files "$(date +%Y%m%d%H%M%S)"
+  provision_local_db
+  env_set COMPOSE_FILE "$COMPOSE_VALUE"
+  # De app mag tijdens het terugzetten niet draaien, en bij een mislukking niet starten (lege database = eerste-start-scherm).
+  dc_now stop aquatech >/dev/null 2>&1 || true
+  log "Terugzetten: $name"
+  if ! dc_now run --rm --no-deps -v "$PWD/$file:/in/backup.db.enc:ro" -e AQUATECH_EMERGENCY_RESTORE=1 aquatech node src/backup.js noodherstel /in/backup.db.enc; then
+    die "Noodherstel mislukte; de app is NIET gestart. Is de database niet leeg of is dit de verkeerde hoofdsleutel? Zie de melding hierboven."
+  fi
+  dc_now up -d aquatech
+  wait_health app_health 240 || die "De app werd niet healthy na het terugzetten (docker compose logs aquatech)."
+  log "Klaar: de gegevens uit $name staan terug en de app draait. Controleer daarna in de app: inloggen, Beheer > Systeem > Back-ups naar Google Drive en de wekelijkse hersteltest; maak een nieuwe back-up (db-local.sh backup)."
+}
+
 cmd_status() {
   echo "Database van de app : $(on_local_db && echo 'eigen PostgreSQL (COMPOSE_FILE in .env)' || echo 'Supabase (compose.yml)')"
   echo "App                 : $(app_health || true)"
@@ -448,6 +491,7 @@ case "$command_name" in
   rollback) cmd_rollback "${args[@]:-}" ;;
   backup)   cmd_backup ;;
   restore)  cmd_restore "${args[@]:-}" ;;
+  restore-app) cmd_restore_app "${args[@]:-}" ;;
   status)   cmd_status ;;
-  *) echo "Gebruik: local-db.sh migrate | rollback [--no-copy] | backup | restore <bestand> | status" >&2; exit 2 ;;
+  *) echo "Gebruik: local-db.sh migrate | rollback [--no-copy] | backup | restore <bestand> | restore-app <bestand> | status" >&2; exit 2 ;;
 esac
