@@ -25,7 +25,7 @@ const EUR = new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' 
 /**
  * Maakt de verzender van bestelmails.
  * @param {{ orders: object, settingsFor: Function, mailerFor: Function, mailBody: Function, guestLinkOf?: Function }} deps De bestelopslag, de instellingen per omgeving, de mailserver en de opmaak van de mail, en `guestLinkOf(tenantId, order, baseUrl)` = de persoonlijke link naar een gastbestelling (guest-orders.js; zonder geen link in de mails).
- * @returns {{ sendPlaced: Function, sendShipment: Function, sendBusinessRequest: Function, businessRequestReady: Function, mailReady: Function, sendStockAlert: Function, sendPaymentReminder: Function }} De functies.
+ * @returns {{ sendPlaced: Function, sendShipment: Function, sendBusinessRequest: Function, businessRequestReady: Function, mailReady: Function, sendStockAlert: Function, sendPaymentReminder: Function, sendLatePayment: Function }} De functies.
  */
 function createOrderMailer({ orders, settingsFor, mailerFor, mailBody, guestLinkOf = () => '' }) {
   /**
@@ -323,7 +323,33 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody, guestLink
     return true;
   }
 
-  return { sendPlaced, sendShipment, sendBusinessRequest, businessRequestReady, mailReady, sendStockAlert, sendPaymentReminder };
+  /**
+   * Meldt de klant dat zijn betaling is binnengekomen op een bestelling die al vervallen of geannuleerd was, of dat er twee keer is
+   * betaald (audit T-08, T-17): het bedrag gaat terug. Zonder mailserver of geldig adres gebeurt er niets.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} order De bestelling (email, customer, number).
+   * @param {{ reason: string, amount: number, refunded: boolean }} event Waarom (geannuleerd of dubbel), het bedrag en of het terugbetalen al is aangevraagd.
+   * @returns {Promise<boolean>} true als de mail is verstuurd.
+   */
+  async function sendLatePayment(tenantId, order, { reason, amount, refunded }) {
+    if (!validEmail(order.email)) return false;
+    const settings = settingsFor(tenantId);
+    const mailer = mailerFor(settings);
+    if (!mailer.configured()) return false;
+    const profile = settings.get('quoteProfile') || {};
+    const what = reason === 'dubbel'
+      ? `We hebben voor bestelling ${order.number} twee keer een betaling ontvangen. De tweede betaling van ${EUR.format(amount)} hoort er niet bij.`
+      : `We hebben je betaling van ${EUR.format(amount)} voor bestelling ${order.number} ontvangen, maar deze bestelling was al vervallen of geannuleerd. De bestelling wordt daarom niet geleverd.`;
+    const back = refunded
+      ? 'Het bedrag wordt automatisch teruggestort op de rekening waarmee je hebt betaald. Dat duurt meestal een paar werkdagen.'
+      : 'We storten het bedrag zo snel mogelijk terug op de rekening waarmee je hebt betaald.';
+    const more = reason === 'dubbel' ? 'Je bestelling zelf verandert niet.' : 'Wil je de artikelen toch hebben? Plaats dan een nieuwe bestelling in de webshop.';
+    const mail = mailBody(profile, [`Beste ${safeName(order.customer.name)},`, what, back, more], undefined, mailStyleOf(settings));
+    await mailer.send({ to: order.email, subject: `Je betaling voor bestelling ${order.number} wordt teruggestort`, text: mail.text, html: mail.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
+    return true;
+  }
+
+  return { sendPlaced, sendShipment, sendBusinessRequest, businessRequestReady, mailReady, sendStockAlert, sendPaymentReminder, sendLatePayment };
 }
 
 module.exports = { createOrderMailer };

@@ -348,3 +348,61 @@ test('T-08: lukt automatisch terugbetalen niet, dan blijft terugbetalen nodig en
   assert.strictEqual(orders.current().pay.refundNeeded, true);
   assert.deepStrictEqual(orders.current().pay.refunds, []);
 });
+
+/**
+ * Wacht tot een voorwaarde waar is (de stappen na een betaling lopen op de achtergrond).
+ * @param {Function} check Geeft iets waars terug als het zover is; mag een belofte geven.
+ * @returns {Promise<*>} De uitkomst van de controle.
+ */
+async function eventually(check) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const outcome = await check();
+    if (outcome) return outcome;
+    await new Promise((resolve) => { setTimeout(resolve, 50); });
+  }
+  throw new Error('De verwachte toestand is niet bereikt.');
+}
+
+test('bedrading: een mislukte bevestigingsmail na het betalen wordt in een latere ronde alsnog verstuurd (T-16)', async () => {
+  const world = await setup({ mollie: true });
+  const [customer] = world.shoppers;
+  const { id, paymentId } = await placeOnline(world, customer);
+  world.mailFailing.on = true;
+  world.mollie.set(paymentId, 'paid');
+  await webhook(world, id, paymentId);
+  const failed = await eventually(async () => { const current = await adminOrder(world, id); return current.pay.hooks && current.pay.hooks.tries && current.pay.hooks.tries.bevestiging ? current : null; });
+  assert.ok(failed.pay.hooks.pending.includes('bevestiging'), 'de bevestiging staat nog open');
+  assert.strictEqual(failed.mail.sent, false);
+  // De mailserver werkt weer; na de wachttijd haalt de uurlijkse ronde de stap in.
+  world.mailFailing.on = false;
+  const row = JSON.parse(world.db.prepare('SELECT data FROM web_orders WHERE id = ?').get(id).data);
+  const long = new Date(Date.now() - 3600 * 1000).toISOString();
+  row.pay.paidAt = long;
+  row.pay.hooks.lastTryAt = long;
+  world.db.prepare('UPDATE web_orders SET data = ? WHERE id = ?').run(JSON.stringify(row), id);
+  await world.app.locals.webPaymentsExpire();
+  const done = await eventually(async () => { const current = await adminOrder(world, id); return current.mail && current.mail.sent ? current : null; });
+  assert.ok(!done.pay.hooks.pending.includes('bevestiging'));
+  assert.ok(mailsWith(world.sent, new RegExp(done.number)).some((message) => message.to === done.email), 'de klant heeft de bevestiging alsnog');
+});
+
+test('bedrading: betaald na annuleren geeft een auditregel en een mail dat het bedrag teruggaat; de vrijgaveronde geeft voorraad vrij', async () => {
+  const world = await setup({ mollie: true });
+  const [customer] = world.shoppers;
+  const { id, paymentId } = await placeOnline(world, customer);
+  // De vrijgaveronde van elke vijf minuten geeft de voorraad vrij na de korte betaaltijd.
+  holdExpired(world, id);
+  assert.deepStrictEqual(await world.app.locals.webPaymentsRelease(), { released: 1 });
+  assert.strictEqual(reservedFor(world, id), 0);
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-orders/${id}/status`, { status: 'geannuleerd' })).status, 200);
+  world.mollie.set(paymentId, 'paid');
+  await webhook(world, id, paymentId);
+  const audit = await eventually(() => world.db.prepare("SELECT detail FROM audit WHERE action = 'webshop_betaling_teruggestort'").get());
+  const detail = typeof audit.detail === 'string' ? JSON.parse(audit.detail) : audit.detail;
+  assert.deepStrictEqual([detail.reason, detail.refunded, detail.paymentId], ['geannuleerd', true, paymentId]);
+  const [mail] = await eventually(() => { const found = mailsWith(world.sent, /wordt teruggestort/); return found.length ? found : null; });
+  assert.strictEqual(mail.to, (await adminOrder(world, id)).email);
+  assert.match(mail.text, /al vervallen of geannuleerd/);
+  assert.match(mail.text, /automatisch teruggestort/);
+  assert.strictEqual(mailsWith(world.sent, /Nieuwe webshopbestelling/).length, 0, 'geen bevestiging aan het bedrijf');
+});

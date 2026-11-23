@@ -1350,6 +1350,17 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
   }
 
   /**
+   * De bestellingen waar na een late of dubbele betaling nog geld terug moet (het automatisch terugbetalen lukte niet), voor Bewaking.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} since Tijdstip (ISO): alleen bestellingen die daarna nog zijn gewijzigd.
+   * @returns {string[]} De nummers van de bestellingen (hoogstens 20).
+   */
+  function lateRefundsNeeded(tenantId, since) {
+    return prepare("SELECT number FROM web_orders WHERE tenant_id = ? AND updated_at > ? AND data->'pay'->>'refundNeeded' = 'true' AND (data->'pay'->>'paidAfterCancel' = 'true' OR jsonb_array_length(COALESCE(data->'pay'->'duplicates', '[]'::jsonb)) > 0) ORDER BY created_at, id LIMIT 20")
+      .all(tenantId, String(since)).map((row) => row.number);
+  }
+
+  /**
    * De online bestellingen met een terugbetaling die bij Mollie is aangevraagd maar nog niet is afgerond (T-18).
    * @param {string} tenantId Id van de omgeving.
    * @param {string} since Tijdstip (ISO): alleen bestellingen die daarna nog zijn gewijzigd.
@@ -1442,7 +1453,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
     return { released };
   }
 
-  return { deliveryRulesOf, priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, countGuestSince, countOpenUnpaidGuest, unpaidAmong, guestAccessOf, attachToUser, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, holdForPayment, releaseUnpaidHolds, paidWithOpenHooks, withPendingRefunds, unpaidOnline, reminderAllowed, releaseExpired, listToPick, listUnprocessed, getMany, pickable, markPackingSlipsPrinted, setDropshippingSlip, onShipped, onCancelled, onTracking, withFulfilment, getDetailed, ship, recordShipmentLabel, setAllowPartial, listBackorders, markBackorderReady, onPartialShipped };
+  return { deliveryRulesOf, priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, countGuestSince, countOpenUnpaidGuest, unpaidAmong, guestAccessOf, attachToUser, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, holdForPayment, releaseUnpaidHolds, paidWithOpenHooks, withPendingRefunds, lateRefundsNeeded, unpaidOnline, reminderAllowed, releaseExpired, listToPick, listUnprocessed, getMany, pickable, markPackingSlipsPrinted, setDropshippingSlip, onShipped, onCancelled, onTracking, withFulfilment, getDetailed, ship, recordShipmentLabel, setAllowPartial, listBackorders, markBackorderReady, onPartialShipped };
 }
 
 /**
