@@ -446,6 +446,7 @@ cmd_restore_app() {
   name="$(basename "$file")"
   [[ "$name" =~ ^aquatech-[0-9]{8}-[0-9]{6}\.db\.enc$ ]] || die "Geen app-back-up (verwacht aquatech-JJJJMMDD-UUMMSS.db.enc, niet het pg_dump-bestand): $name"
   [[ -f "$file" && ! -L "$file" && -s "$file" ]] || die "Back-upbestand niet gevonden (of leeg): $file"
+  file="$(realpath "$file")"   # absoluut pad voor de mount (een pad met / kan al absoluut zijn)
   [[ -f compose.yml ]] || die "compose.yml niet gevonden in $APP_DIR."
   grep -qE '^\s*- DATABASE_URL_FILE=' compose.yml || die "De app heeft geen DATABASE_URL_FILE in compose.yml."
   [[ -s secrets/master-key ]] || die "secrets/master-key ontbreekt: zet de hoofdsleutel uit de wachtwoordkluis terug (mode 400); zonder die sleutel is de back-up onleesbaar."
@@ -460,7 +461,7 @@ cmd_restore_app() {
   # De app mag tijdens het terugzetten niet draaien, en bij een mislukking niet starten (lege database = eerste-start-scherm).
   dc_now stop aquatech >/dev/null 2>&1 || true
   log "Terugzetten: $name"
-  if ! dc_now run --rm --no-deps -v "$PWD/$file:/in/backup.db.enc:ro" -e AQUATECH_EMERGENCY_RESTORE=1 aquatech node src/backup.js noodherstel /in/backup.db.enc; then
+  if ! dc_now run --rm --no-deps -v "$file:/in/backup.db.enc:ro" -e AQUATECH_EMERGENCY_RESTORE=1 aquatech node src/backup.js noodherstel /in/backup.db.enc; then
     die "Noodherstel mislukte; de app is NIET gestart. Is de database niet leeg of is dit de verkeerde hoofdsleutel? Zie de melding hierboven."
   fi
   dc_now up -d aquatech
