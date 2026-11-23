@@ -6,6 +6,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
+const crypto = require('crypto');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { createApp } = require('../src/server');
@@ -60,6 +61,10 @@ function install(setupBody) {
   for (const unit of ['aquatech-restore-test.service', 'aquatech-restore-test.timer', 'aquatech-restore-test.path', 'aquatech-restore-test-drive.service', 'aquatech-restore-test-drive.path']) fs.writeFileSync(path.join(repo, 'systemd', unit), `[Unit]\nDescription=${unit}\n`);
   fs.mkdirSync(path.join(appDir, 'update', 'request'), { recursive: true });
   fs.writeFileSync(path.join(repo, 'setup-app-update.sh'), `#!/usr/bin/env bash\necho "setup met \$SETUP_REF"\n${setupBody}\n`, { mode: 0o755 });
+  // Een nep-cosign: de installatietaak haalt hem van een bestand en controleert de SHA-256 zoals bij het echte bestand.
+  const cosignSource = path.join(root, 'cosign-download');
+  fs.writeFileSync(cosignSource, '#!/usr/bin/env bash\necho cosign nep\n');
+  const cosignEnv = { COSIGN_URL: `file://${cosignSource}`, COSIGN_SHA256: crypto.createHash('sha256').update(fs.readFileSync(cosignSource)).digest('hex'), COSIGN_BIN: path.join(root, 'cosign-geinstalleerd') };
   /**
    * Draait een opdracht van het script op de "server".
    * @param {string} command Bijv. openstaand-check.
@@ -69,11 +74,11 @@ function install(setupBody) {
   const run = (command, extraEnv = {}) => {
     const out = spawnSync('bash', [SCRIPT, command], {
       encoding: 'utf8',
-      env: { PATH: `${bin}:${process.env.PATH}`, SERVERTAKEN_REMOTE: '1', APP_DIR: appDir, TASKS_BASE: `file://${path.join(root, 'repo')}`, SYSTEMD_DIR: systemdDir, FAKE_SYSTEMCTL_LOG: path.join(root, 'systemctl.log'), ...extraEnv },
+      env: { PATH: `${bin}:${process.env.PATH}`, SERVERTAKEN_REMOTE: '1', APP_DIR: appDir, TASKS_BASE: `file://${path.join(root, 'repo')}`, SYSTEMD_DIR: systemdDir, FAKE_SYSTEMCTL_LOG: path.join(root, 'systemctl.log'), ...cosignEnv, ...extraEnv },
     });
     return { status: out.status, stdout: out.stdout, stderr: out.stderr };
   };
-  return { appDir, systemdDir, root, run };
+  return { appDir, systemdDir, root, run, cosignEnv };
 }
 
 test('de lijst in de app en in het hostscript zijn gelijk, met unieke id\'s in het vaste formaat', () => {
@@ -114,6 +119,7 @@ test('hostscript: openstaand voert de taak uit, legt hem vast en doet daarna nie
   assert.ok(fs.existsSync(path.join(appDir, 'backup-gedraaid')), 'taak 004 maakt direct een back-up');
   assert.deepStrictEqual(fs.readdirSync(systemdDir).sort(), ['aquatech-restore-test-drive.path', 'aquatech-restore-test-drive.service', 'aquatech-restore-test.path', 'aquatech-restore-test.service', 'aquatech-restore-test.timer']);
   assert.match(fs.readFileSync(path.join(root, 'systemctl.log'), 'utf8'), /enable --now aquatech-restore-test\.timer aquatech-restore-test\.path aquatech-restore-test-drive\.path/);
+  assert.ok(fs.existsSync(path.join(root, 'cosign-geinstalleerd')), 'taak 011 installeert cosign');
   assert.ok(Date.parse(ledger.checkedAt) > 0);
   const again = run('openstaand-check', { TASKS_REF: REF });
   assert.strictEqual(again.status, 0);
@@ -206,4 +212,12 @@ test('API en dashboard: alleen de beheerder van de hoofdtenant, afvinken met aud
   } finally {
     server.close();
   }
+});
+
+test('hostscript: taak 011 installeert cosign niet als de SHA-256 niet klopt', () => {
+  const { root, run } = install('exit 0');
+  const out = run('openstaand-run', { TASKS_REF: REF, COSIGN_SHA256: '0'.repeat(64) });
+  assert.notStrictEqual(out.status, 0);
+  assert.match(out.stderr, /SHA-256 van cosign klopt niet/);
+  assert.ok(!fs.existsSync(path.join(root, 'cosign-geinstalleerd')), 'niets geïnstalleerd');
 });

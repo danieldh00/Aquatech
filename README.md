@@ -51,7 +51,8 @@ webserver in Docker (poort 3300) met PostgreSQL als enige database (een eigen co
   rolt zelf niets uit: het updatescript op de server pakt de aanvraag op (zie `deploy/apps01/README.md`, eenmalig
   inrichten met `setup-app-update.sh`). Onder de update-knop staat de **afvinklijst Servertaken**: wat er op de
   Proxmox-host nog moet gebeuren, met één vast commando (kopieerknop); de server vinkt gelukte taken zelf af, handmatig
-  afvinken kan ook, en het dashboard toont de open taken.
+  afvinken kan ook, en het dashboard toont de open taken. Het image wordt bij het bouwen met cosign ondertekend en `update.sh`
+  controleert die handtekening vóór een uitrol (zodra cosign op de server staat, servertaak 011; `IMAGE_SIGNATURE` in `.env`).
 - **Logboek** (Beheer > Systeem > Logboek): één plek voor fouten, trage verzoeken, stilstand van de server, mislukte taken en
   bewakingsmeldingen. Elke foutmelding in de app noemt een foutcode en verzoek-id; zoek die in het logboek (filters op niveau,
   bron, periode en tekst, Excel-export). Gebufferd en begrensd opgeslagen in de database (`app_logs`), bewaartermijn instelbaar

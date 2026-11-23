@@ -171,10 +171,47 @@ else
   RUN_STARTED="$(now)"
 fi
 
+# Controleert de handtekening (cosign, keyless) van het gepulde image tegen de identiteit van release.yml in deze repo.
+# Beleid in .env: IMAGE_SIGNATURE=auto (standaard: alleen controleren als cosign op de server staat), required (zonder
+# cosign of zonder geldige handtekening geen uitrol) of off. Een mislukte controle stopt vóór de onderhoudsmodus; de
+# versie wordt overgeslagen tot er een nieuwere is of iemand hem in de app opnieuw aanvraagt.
+SIGNER_IDENTITY_RE='^https://github\.com/danieldh00/[Aa]quatech/\.github/workflows/release\.yml@refs/heads/master$'
+SIGNER_ISSUER='https://token.actions.githubusercontent.com'
+verify_signature() {
+  local policy digest
+  policy="$(env_get IMAGE_SIGNATURE)"; policy="${policy:-auto}"
+  if [[ "$policy" == off ]]; then return 0; fi
+  if ! command -v cosign >/dev/null 2>&1; then
+    if [[ "$policy" == required ]]; then
+      echo "$NEW_VER" > .failed-version
+      log "Handtekening vereist (IMAGE_SIGNATURE=required) maar cosign ontbreekt; $NEW_VER niet uitgerold."
+      run_put mislukt klaar "Handtekeningcontrole vereist, maar cosign staat niet op de server (servertaak 011). Er is niets bijgewerkt."
+      exit 1
+    fi
+    log "Waarschuwing: cosign ontbreekt, de handtekening van $IMAGE:$NEW_VER is niet gecontroleerd (servertaak 011)."
+    return 0
+  fi
+  digest="$(docker image inspect -f '{{index .RepoDigests 0}}' "$IMAGE:$NEW_VER" 2>/dev/null || true)"
+  if [[ ! "$digest" =~ ^${IMAGE//./\\.}@sha256:[0-9a-f]{64}$ ]]; then
+    echo "$NEW_VER" > .failed-version
+    log "Geen digest van $IMAGE:$NEW_VER; niet uitgerold."
+    run_put mislukt klaar "De digest van het nieuwe image is niet vast te stellen. Er is niets bijgewerkt."
+    exit 1
+  fi
+  if ! cosign verify --certificate-identity-regexp "$SIGNER_IDENTITY_RE" --certificate-oidc-issuer "$SIGNER_ISSUER" "$digest" >/dev/null 2>&1; then
+    echo "$NEW_VER" > .failed-version
+    log "Handtekening van $digest ongeldig of ontbreekt; $NEW_VER niet uitgerold."
+    run_put mislukt klaar "De handtekening van versie $NEW_VER klopt niet of ontbreekt. Er is niets bijgewerkt."
+    exit 1
+  fi
+  log "Handtekening van $digest gecontroleerd."
+}
+
 # ---------- Uitrol ----------
 log "Update ${CUR_VER:-geen} -> $NEW_VER"
 run_put bezig ophalen "Nieuwe versie ophalen."
 docker pull -q "$IMAGE:$NEW_VER" >/dev/null
+verify_signature
 
 # Onderhoudsmodus aan; de app weigert vanaf nu schrijfverzoeken. Even wachten tot lopende verzoeken klaar zijn.
 run_put bezig onderhoud "Onderhoudsmodus aan."
