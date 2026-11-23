@@ -583,6 +583,19 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     if (orders) {
       // Pogingen per bezoeker ruim (een adres corrigeren telt mee, meerdere klanten achter één bedrijfsadres), geplaatste bestellingen per account krap (W-12).
       const attemptLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 40, keyFn: (req) => `bestelpoging:${clientKey(req)}` });
+      // Het totaal bijwerken tijdens het invullen (land, btw-nummer, verzendmethode): ruim genoeg voor gewoon gebruik, maar begrensd omdat elke aanroep de wagen doorrekent.
+      const totalsLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, keyFn: (req) => `afrekentotaal:${clientKey(req)}` });
+      /**
+       * Past de limiet op het bijwerken van het totaal toe zonder JSON-antwoord.
+       * @param {object} req Het verzoek.
+       * @param {object} res Het antwoord.
+       * @returns {boolean} true als het verzoek geweigerd moet worden.
+       */
+      const totalsLimited = (req, res) => {
+        let refused = false;
+        totalsLimiter(req, { setHeader: (name, value) => res.setHeader(name, value), status: () => ({ json: () => { refused = true; } }) }, () => {});
+        return refused;
+      };
       /** Hoogstens zoveel geplaatste bestellingen per account per uur. */
       const ORDERS_PER_HOUR = 10;
       /**
@@ -1004,12 +1017,22 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         const guestMode = !account && guestCheckoutOn() && body.guest === 'ja';
         if (!account && !guestMode) return res.redirect(303, './');
         const viewer = account || GUEST_VIEWER;
+        // Limieten vóór het rekenwerk (B-39): het bijwerken van het totaal (ook op de achtergrond bij elke wijziging) heeft een eigen ruime limiet, een bestelpoging de strengere.
+        if (body.action === 'update' ? totalsLimited(req, res) : attemptsLimited(req, res)) return res.status(429).type('text').send('Te veel bestelpogingen vanaf dit adres. Probeer het later opnieuw.');
         // Land wijzigen: alleen de pagina opnieuw tonen met de kosten voor dat land, zonder te bestellen.
         if (body.action === 'update') {
           res.setHeader('Cache-Control', 'no-store');
           const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
           if (!cart.lines.length || !cart.ok) return res.redirect(303, '../winkelwagen/');
           return sendWithGroups(req, res, 200, (groups) => checkoutPage({ cart, viewer, guest: guestMode, paymentOptions: paymentOptionsOf(viewer), values: body, ...checkoutChoice(cart, body, viewer) }, groups));
+        }
+        // Onzichtbare captcha (alleen als hij aan staat), vóór het doorrekenen van de bestelling (B-39): bij een weigering de afrekenpagina opnieuw met alles wat is ingevuld.
+        const human = await humanCheck(req, 'checkout');
+        if (!human.ok) {
+          const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
+          if (!cart.lines.length || !cart.ok) return res.redirect(303, '../winkelwagen/');
+          res.setHeader('Cache-Control', 'no-store');
+          return sendWithGroups(req, res, human.status, (groups) => checkoutPage({ cart, viewer, guest: guestMode, paymentOptions: paymentOptionsOf(viewer), error: human.message, values: body, ...checkoutChoice(cart, body, viewer) }, groups));
         }
         // Hoort het getoonde totaal niet bij de actuele invoer (btw-nummer, land, methode) of ontbreekt het? Dan eerst opnieuw tonen, zonder te bestellen.
         {
@@ -1024,17 +1047,8 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
             }
           }
         }
-        if (attemptsLimited(req, res)) return res.status(429).type('text').send('Te veel bestelpogingen vanaf dit adres. Probeer het later opnieuw.');
         if (guestMode ? guestOrdersLimited(req, res, body.email) : ordersLimited(viewer)) return res.status(429).type('text').send('Je hebt het afgelopen uur al veel bestellingen geplaatst. Probeer het later opnieuw of neem contact met ons op.');
         if (guestMode && guestOpenOrdersLimited(req, body.email)) return res.status(429).type('text').send('Je hebt nog bestellingen openstaan die niet betaald zijn. Reken die eerst af (via de bestelpagina of de link in je mail) of probeer het later opnieuw.');
-        // Onzichtbare captcha (alleen als hij aan staat): bij een weigering de afrekenpagina opnieuw met alles wat is ingevuld.
-        const human = await humanCheck(req, 'checkout');
-        if (!human.ok) {
-          const cart = orders.priceCart(tenantId, readCart(req), priceOptionsOf(req));
-          if (!cart.lines.length || !cart.ok) return res.redirect(303, '../winkelwagen/');
-          res.setHeader('Cache-Control', 'no-store');
-          return sendWithGroups(req, res, human.status, (groups) => checkoutPage({ cart, viewer, guest: guestMode, paymentOptions: paymentOptionsOf(viewer), error: human.message, values: body, ...checkoutChoice(cart, body, viewer) }, groups));
-        }
         try {
           // Een Nederlands adres komt uit postcode + huisnummer (PDOK): straat en woonplaats uit de browser worden niet vertrouwd,
           // behalve als de klant aangeeft dat zijn adres niet gevonden wordt (dan 'niet gecontroleerd'). Dat geldt voor het factuuradres
@@ -1272,10 +1286,12 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
             if (!orderingOn()) return orderingOff(req, res);
             const access = orderAccessOf(req, req.params.id);
             if (!access) return accounts.viewer(req) ? sendWithGroups(req, res, 404, (groups) => notFoundPage('../../../../', groups)) : res.redirect(303, '../../../../inloggen/');
-            // De retour moet bij deze bestelling horen (waar de bezoeker toegang toe heeft); bij een account ook van dat account zelf.
-            const found = access.guest ? returns.get(tenantId, req.params.returnId) : returns.getForUser(tenantId, access.viewer.id, req.params.returnId);
-            if (!found || found.orderId !== req.params.id) return sendWithGroups(req, res, 404, (groups) => notFoundPage('../../../../', groups));
-            const out = returns.withdraw(tenantId, returnActorOf(access), found.id);
+            // De retour moet bij deze bestelling horen (waar de bezoeker toegang toe heeft). Een retour die als gast is aangevraagd en nog geen
+            // eigenaar heeft (de bestelling is daarna aan een account gekoppeld, T-19) trekt de eigenaar van de bestelling in via de toegang tot die bestelling.
+            const found = returns.get(tenantId, req.params.returnId);
+            if (!found || found.orderId !== access.order.id || (!access.guest && found.userId && found.userId !== access.viewer.id)) return sendWithGroups(req, res, 404, (groups) => notFoundPage('../../../../', groups));
+            const actor = access.guest || found.userId ? returnActorOf(access) : { ...access.viewer, guestOrderId: access.order.id };
+            const out = returns.withdraw(tenantId, actor, found.id);
             if (out.error) return res.status(out.status || 400).type('text').send(out.error);
             res.redirect(303, '../../');
           } catch (error) { next(error); }
@@ -1292,6 +1308,19 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         const slipLimited = (req, res) => {
           let refused = false;
           slipLimiter(req, { setHeader: (name, value) => res.setHeader(name, value), status: () => ({ json: () => { refused = true; } }) }, () => {});
+          return refused;
+        };
+        // Per bestelling hoogstens een paar uploads per minuut (B-31): elke upload start een zware controle.
+        const slipOrderLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 10, keyFn: (req) => `pakbon-bestelling:${String(req.params.id).slice(0, 64)}` });
+        /**
+         * Past de uploadlimiet per bestelling toe zonder eigen antwoord.
+         * @param {object} req Het verzoek.
+         * @param {object} res Het antwoord.
+         * @returns {boolean} true als het verzoek geweigerd moet worden.
+         */
+        const slipOrderLimited = (req, res) => {
+          let refused = false;
+          slipOrderLimiter(req, { setHeader: (name, value) => res.setHeader(name, value), status: () => ({ json: () => { refused = true; } }) }, () => {});
           return refused;
         };
         /**
@@ -1319,6 +1348,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
           if (!orderingOn()) return res.status(404).json({ message: 'Bestellen is niet beschikbaar.' });
           if (!accounts.viewer(req)) return res.status(401).json({ message: 'Log opnieuw in om de pakbon te uploaden.' });
           if (slipLimited(req, res)) return res.status(429).json({ message: 'Te veel uploads vanaf dit adres. Probeer het later opnieuw.' });
+          if (slipOrderLimited(req, res)) return res.status(429).json({ message: 'Je hebt net al een pakbon voor deze bestelling geüpload. Wacht een minuut en probeer het opnieuw.' });
           next();
         };
         // De eigen pakbon van een dropshippingbestelling uploaden of vervangen (POST met de PDF als inhoud) (alleen de eigenaar, zolang de bestelling nieuw is).
@@ -1332,6 +1362,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
             if (order.status !== 'nieuw' || order.packingSlip) return res.status(409).json({ message: 'Deze bestelling is al in behandeling of de pakbon is al afgedrukt; de pakbon kan niet meer worden gewijzigd.' });
             if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(415).json({ message: 'Stuur een PDF-bestand (application/pdf).' });
             const checked = await inspectSlip(req.body);
+            if (checked.busy) { res.setHeader('Retry-After', '10'); return res.status(429).json({ message: checked.error }); }
             if (checked.error) return res.status(400).json({ message: checked.error });
             const saved = orderSlips.save(tenantId, order.id, { bytes: checked.bytes, pages: checked.pages, fileName: `Pakbon ${order.number}.pdf` });
             if (saved.error) return res.status(saved.status || 409).json({ message: saved.error });

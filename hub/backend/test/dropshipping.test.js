@@ -265,3 +265,26 @@ test('een dropshippingbestelling zonder pakbon blijft geblokkeerd voor het afdru
   assert.strictEqual(out.status, 409);
   assert.match(out.body.message, /nog geen pakbon geüpload/);
 });
+
+test('inspectSlip: hoogstens twee controles tegelijk, de derde krijgt meteen "te druk" (B-31)', async () => {
+  const pdf = await makePdf(1);
+  const results = await Promise.all([inspectSlip(pdf), inspectSlip(pdf), inspectSlip(pdf)]);
+  assert.strictEqual(results.filter((result) => result.busy).length, 1, 'één van de drie wacht niet maar wordt geweigerd');
+  assert.strictEqual(results.filter((result) => result.bytes).length, 2);
+  assert.match(results.find((result) => result.busy).error, /opnieuw/);
+  // Daarna is er weer plek, ook na een afgekeurd bestand.
+  assert.ok((await inspectSlip(Buffer.from(`%PDF-1.4 ${'x'.repeat(100)}`))).error);
+  assert.ok((await inspectSlip(pdf)).bytes);
+  assert.ok((await inspectSlip(pdf)).bytes);
+});
+
+test('dropshipping: hoogstens tien uploads per bestelling per minuut (B-31)', async () => {
+  const world = await setup();
+  const [owner] = world.shoppers;
+  const dropId = await order(world, owner, DROP);
+  const pdf = await makePdf(1);
+  for (let attempt = 0; attempt < 10; attempt++) assert.strictEqual((await putSlip(world, owner, dropId, pdf)).status, 200, `upload ${attempt + 1}`);
+  const refused = await putSlip(world, owner, dropId, pdf);
+  assert.strictEqual(refused.status, 429);
+  assert.match(refused.body.message, /Wacht een minuut/);
+});

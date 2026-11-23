@@ -441,3 +441,56 @@ test('audit: gastbestelling en koppeling aan een account staan in het logboek zo
   const token = guest.client.jar.get('aquatech_gastbestelling').split('.')[1];
   assert.ok(!JSON.stringify(rows).includes(token));
 });
+
+test('een retour die als gast is aangevraagd gaat mee naar het nieuwe account en is daar in te trekken (T-19)', async () => {
+  const world = await setup({ mollie: true });
+  const { id, guest } = await placeGuest(world);
+  await payAsGuest(world, id, guest);
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-orders/${id}/status`, { status: 'verzonden' })).status, 200);
+  assert.strictEqual((await postForm(world.base, guest.client, `/bestelling/${id}/retour`, { 'qty:BUS': '1', reason: 'defect' })).status, 303);
+  const record = world.db.prepare('SELECT id, user_id FROM web_returns').get();
+  assert.strictEqual(record.user_id, null);
+  const created = await postForm(world.base, guest.client, `/bestelling/${id}/account/`, { password: PW, password2: PW, website: '' });
+  assert.strictEqual(created.location, './?account=1', created.text);
+  const userId = (await adminOrder(world, id)).userId;
+  assert.strictEqual(world.db.prepare('SELECT user_id FROM web_returns WHERE id = ?').get(record.id).user_id, userId, 'de retour hangt nu ook aan het account');
+  // Een retour die vóór deze wijziging zonder eigenaar is blijven staan: de eigenaar van de bestelling kan hem toch intrekken.
+  world.db.prepare('UPDATE web_returns SET user_id = NULL WHERE id = ?').run(record.id);
+  const [other] = world.shoppers;
+  const stranger = await postForm(world.base, other.client, `/bestelling/${id}/retour/${record.id}/intrekken`, {});
+  assert.strictEqual(stranger.status, 404, 'een ander account heeft geen toegang tot de bestelling');
+  const withdrawn = await postForm(world.base, guest.client, `/bestelling/${id}/retour/${record.id}/intrekken`, {});
+  assert.strictEqual(withdrawn.status, 303, withdrawn.text);
+  assert.strictEqual(world.db.prepare('SELECT status FROM web_returns WHERE id = ?').get(record.id).status, 'ingetrokken');
+});
+
+test('het plafond per e-mailadres telt alleen bestellingen die nog voorraad vasthouden', async () => {
+  const world = await setup({ mollie: true });
+  const first = await placeGuest(world, { email: 'open@voorbeeld.nl' });
+  await placeGuest(world, { email: 'open@voorbeeld.nl' });
+  // Na de vasthoudtijd is de voorraad van de eerste vrij: het adres is niet langer geblokkeerd (de bezoeker hieronder is een andere).
+  world.db.prepare("UPDATE web_orders SET data = jsonb_set(data::jsonb, '{stockHoldUntil}', to_jsonb(?::text)) WHERE id = ?").run(new Date(Date.now() - 60000).toISOString(), first.id);
+  await world.app.locals.webPaymentsExpire();
+  assert.ok((await adminOrder(world, first.id)).reservationReleasedAt);
+  const third = await postCheckout(world.base, (await visitor(world)).client, { ...PERSON, email: 'open@voorbeeld.nl', guest: 'ja', paymentMethod: 'online' });
+  assert.strictEqual(third.status, 303, third.text);
+});
+
+test('de limiet op bestelpogingen geldt vóór het rekenwerk; het totaal bijwerken telt daar niet in mee (B-39)', async () => {
+  const world = await setup({ mollie: true });
+  const guest = await visitor(world);
+  // Bijwerken van het totaal (zoals de pagina op de achtergrond doet) valt niet onder de limiet op bestelpogingen.
+  for (let attempt = 0; attempt < 45; attempt++) {
+    const updated = await postForm(world.base, guest.client, '/afrekenen/', { ...PERSON, guest: 'ja', action: 'update' });
+    assert.strictEqual(updated.status, 200, `bijwerken ${attempt + 1}`);
+  }
+  // Veertig pogingen met een totaal dat niet klopt: de pagina komt terug zonder bestelling, maar elke poging telt.
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const shown = await postForm(world.base, guest.client, '/afrekenen/', { ...PERSON, guest: 'ja', paymentMethod: 'online', shippingMethod: 'dpd', expectedTotal: '0.01' });
+    assert.strictEqual(shown.status, 200, `poging ${attempt + 1}`);
+  }
+  const refused = await postForm(world.base, guest.client, '/afrekenen/', { ...PERSON, guest: 'ja', paymentMethod: 'online', shippingMethod: 'dpd', expectedTotal: '0.01' });
+  assert.strictEqual(refused.status, 429);
+  assert.match(refused.text, /Te veel bestelpogingen/);
+  assert.strictEqual(Number(world.db.prepare('SELECT COUNT(*) AS n FROM web_orders').get().n), 0);
+});

@@ -15,22 +15,48 @@ const MAX_SLIP_PAGES = 10;
 /** De controle van een upload mag hoogstens zo lang duren (milliseconden). */
 const WORKER_TIMEOUT_MS = 8000;
 
+/** Hoogstens zoveel controles tegelijk (B-31): elke controle is een werkthread met tot 192 MB geheugen en een eigen kern. */
+const MAX_PARALLEL_INSPECTIONS = 2;
+/** Het aantal controles dat nu loopt. */
+let runningInspections = 0;
+
 /**
  * Controleert een geüploade pakbon in een aparte werkthread met begrensd geheugen en een tijdslimiet (een PDF met gecomprimeerde
  * objectstromen kan veel groter uitpakken dan hij is, en pdf-lib leest synchroon: zo blijft de server er niet door hangen).
  * @param {Buffer} buffer De ontvangen bytes.
- * @returns {Promise<{ bytes?: Buffer, pages?: number, error?: string }>} De schone PDF en het aantal pagina's, of een melding in gewone taal.
+ * Er lopen hoogstens MAX_PARALLEL_INSPECTIONS controles tegelijk; is het vol, dan komt er meteen een melding terug (busy) in plaats van nog een werkthread.
+ * @returns {Promise<{ bytes?: Buffer, pages?: number, error?: string, busy?: boolean }>} De schone PDF en het aantal pagina's, of een melding in gewone taal (busy: het is nu te druk, later opnieuw).
  */
 function inspectSlip(buffer) {
   if (!Buffer.isBuffer(buffer) || buffer.length < 64) return Promise.resolve({ error: 'Het bestand is leeg.' });
   if (buffer.length > MAX_SLIP_BYTES) return Promise.resolve({ error: `De pakbon is te groot (hoogstens ${MAX_SLIP_BYTES / 1024 / 1024} MB).` });
   if (buffer.subarray(0, 5).toString('latin1') !== '%PDF-') return Promise.resolve({ error: 'Dit is geen PDF-bestand.' });
+  if (runningInspections >= MAX_PARALLEL_INSPECTIONS) return Promise.resolve({ busy: true, error: 'Er worden op dit moment al pakbonnen gecontroleerd. Probeer het over een paar tellen opnieuw.' });
+  runningInspections += 1;
   return new Promise((resolve) => {
     const unusable = { error: 'Deze PDF kan niet worden verwerkt.' };
-    const worker = new Worker(path.join(__dirname, 'order-slips-worker.js'), { workerData: buffer, resourceLimits: { maxOldGenerationSizeMb: 192 } });
-    const timer = setTimeout(() => { worker.terminate(); resolve(unusable); }, WORKER_TIMEOUT_MS);
-    worker.once('message', (result) => { clearTimeout(timer); resolve(result && result.bytes ? { bytes: Buffer.from(result.bytes), pages: result.pages } : { error: String((result && result.error) || unusable.error) }); });
-    worker.once('error', () => { clearTimeout(timer); resolve(unusable); });
+    let settled = false;
+    /**
+     * Rondt de controle één keer af en geeft de plek vrij.
+     * @param {object} outcome De uitkomst.
+     * @returns {void}
+     */
+    const finish = (outcome) => {
+      if (settled) return;
+      settled = true;
+      runningInspections -= 1;
+      clearTimeout(timer);
+      resolve(outcome);
+    };
+    let worker;
+    const timer = setTimeout(() => { if (worker) worker.terminate(); finish(unusable); }, WORKER_TIMEOUT_MS);
+    try {
+      worker = new Worker(path.join(__dirname, 'order-slips-worker.js'), { workerData: buffer, resourceLimits: { maxOldGenerationSizeMb: 192 } });
+    } catch { return finish(unusable); }
+    worker.once('message', (result) => finish(result && result.bytes ? { bytes: Buffer.from(result.bytes), pages: result.pages } : { error: String((result && result.error) || unusable.error) }));
+    worker.once('error', () => finish(unusable));
+    // Een werkthread die stopt zonder bericht (geheugenlimiet) geeft de plek ook vrij.
+    worker.once('exit', () => finish(unusable));
   });
 }
 
