@@ -85,3 +85,25 @@ test('pve/db-local.sh weigert een onbekende opdracht (exitcode 2) en ondersteunt
   assert.match(script, /APPS01_CTID/);
   assert.match(script, /systemd-run/);
 });
+
+test('restore-app (noodherstel): vraagt de hoofdsleutel, start de app pas na een geslaagd terugzetten en kent alleen app-back-ups', () => {
+  const script = read('localdb/local-db.sh');
+  const body = script.slice(script.indexOf('cmd_restore_app() {'), script.indexOf('cmd_status() {'));
+  assert.match(body, /secrets\/master-key ontbreekt/);
+  assert.match(body, /aquatech-\[0-9\]\{8\}-\[0-9\]\{6\}/);
+  assert.match(body, /AQUATECH_EMERGENCY_RESTORE=1/);
+  assert.match(body, /node src\/backup\.js noodherstel/);
+  assert.ok(body.indexOf('noodherstel /in/backup.db.enc') < body.indexOf('dc_now up -d aquatech'), 'de app start pas na het terugzetten');
+  assert.match(body, /de app is NIET gestart/);
+  assert.ok(body.indexOf('noodherstel is alleen voor een lege database') < body.indexOf('provision_local_db'), 'eerst de lege-database-controle, dan pas wachtwoorden en de app');
+  assert.match(script, /restore-app\) cmd_restore_app/);
+  const wrapper = read('pve/db-local.sh');
+  assert.match(wrapper, /migrate \| rollback \| status \| backup \| restore \| restore-app\)/);
+  assert.match(wrapper, /backups\/noodherstel/);
+});
+
+test('migrate en restore-app delen dezelfde inrichting van de eigen database', () => {
+  const script = read('localdb/local-db.sh');
+  assert.strictEqual(script.split('provision_local_db\n').length - 1, 2, 'aanroepen in migrate en restore-app');
+  assert.match(script, /provision_local_db\(\) \{[\s\S]*postgres-password[\s\S]*CREATE ROLE aquatech_app[\s\S]*unset app_password\n\}/);
+});

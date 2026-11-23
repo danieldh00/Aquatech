@@ -7,6 +7,8 @@
 #   bash db-local.sh status             waar draait de database, back-ups
 #   bash db-local.sh backup             nu een versleutelde back-up maken
 #   bash db-local.sh restore <bestand>  een back-up terugzetten (naam uit `status`)
+#   bash db-local.sh restore-app <bestand>  NOODHERSTEL op een nieuwe server: een app-back-up (aquatech-*.db.enc uit Google
+#                                       Drive, een bestand op deze host) in een lege database zetten; zie README > Noodherstel
 #
 # Zonder download, rechtstreeks van GitHub:
 #   curl -fsSL https://raw.githubusercontent.com/danieldh00/Aquatech/master/deploy/apps01/pve/db-local.sh -o /tmp/db-local.sh
@@ -42,9 +44,9 @@ log() { echo "[$(date '+%F %T')] $*"; }
 die() { echo "FOUT: $*" >&2; exit 1; }
 [[ $(id -u) -eq 0 ]] || die "Draai dit als root op de Proxmox-host."
 
-usage() { sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 ACTION="${1:-}"; shift || true
-case "$ACTION" in migrate | rollback | status | backup | restore) ;; *) usage ;; esac
+case "$ACTION" in migrate | rollback | status | backup | restore | restore-app) ;; *) usage ;; esac
 
 # ---------- Gast-systeem zoeken: LXC (pct exec) of VM (ssh) ----------
 MODE=""; GUEST_ID=""; SSH_TARGET="${APPS01_SSH:-}"
@@ -147,14 +149,25 @@ case "$ACTION" in
   restore)
     [[ -n "${1:-}" ]] || die "Gebruik: db-local.sh restore <bestand>  (namen: db-local.sh status)"
     confirm "Back-up '$1' wordt teruggezet: de huidige gegevens worden vervangen (er wordt eerst een back-up van de huidige stand gemaakt).\n  De app is ca. 2-10 minuten niet beschikbaar." ;;
+  restore-app)
+    APP_BACKUP="${1:-}"
+    [[ -n "$APP_BACKUP" && -f "$APP_BACKUP" && ! -L "$APP_BACKUP" ]] || die "Gebruik: db-local.sh restore-app <bestand op deze host>  (de aquatech-JJJJMMDD-UUMMSS.db.enc uit Google Drive)"
+    [[ "$(basename "$APP_BACKUP")" =~ ^aquatech-[0-9]{8}-[0-9]{6}\.db\.enc$ ]] || die "Geen app-back-up: verwacht een bestand als aquatech-20261120-023000.db.enc"
+    confirm "NOODHERSTEL: '$(basename "$APP_BACKUP")' wordt in een nieuwe, LEGE database op de server gezet.\n  - Het weigert als er al accounts of andere gegevens in de database staan (nooit over echte gegevens heen).\n  - secrets/master-key moet de hoofdsleutel uit de wachtwoordkluis zijn; zonder die sleutel is de back-up onleesbaar.\n  - De app start pas als het terugzetten slaagde." ;;
 esac
 
 # ---------- Uitvoeren (los van deze ssh-verbinding, zodat een verbroken verbinding de migratie niet midden in afbreekt) ----------
+if [[ "$ACTION" == "restore-app" ]]; then
+  # Het bestand van de host naar de server brengen (alleen voor root leesbaar); de server kent het daarna onder backups/noodherstel/.
+  log "Back-up naar de server kopiëren"
+  guest bash -c "umask 077 && mkdir -p '$APP_DIR/backups/noodherstel' && cat > '$APP_DIR/backups/noodherstel/$(basename "$APP_BACKUP")'" < "$APP_BACKUP"
+  set -- "$(basename "$APP_BACKUP")"
+fi
 RUN=(bash "$REMOTE_DIR/local-db.sh" "$ACTION" "$@" --yes)
 ENVIRONMENT=(APP_DIR="$APP_DIR" POSTGRES_TAG="${POSTGRES_TAG:-17}" SKIP_HASH="${SKIP_HASH:-0}" SUPABASE_SSLMODE="${SUPABASE_SSLMODE:-verify-full}")
 log "Uitvoeren: local-db.sh $ACTION"
 set +e
-if guest bash -c 'command -v systemd-run' >/dev/null 2>&1 && [[ "$ACTION" =~ ^(migrate|rollback|restore)$ ]]; then
+if guest bash -c 'command -v systemd-run' >/dev/null 2>&1 && [[ "$ACTION" =~ ^(migrate|rollback|restore|restore-app)$ ]]; then
   guest systemd-run --quiet --wait --pipe --collect --unit "aquatech-localdb-$ACTION-$$" "${ENVIRONMENT[@]/#/--setenv=}" "${RUN[@]}"
 else
   guest env "${ENVIRONMENT[@]}" "${RUN[@]}"
