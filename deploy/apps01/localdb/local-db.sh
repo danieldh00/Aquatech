@@ -459,10 +459,10 @@ cmd_restore_app() {
     install_files "$(date +%Y%m%d%H%M%S)"
     export POSTGRES_TAG
     dc_local up -d postgres >/dev/null
-    wait_health pg_health 180 || die "De bestaande eigen PostgreSQL werd niet healthy; niets veranderd."
+    wait_health pg_health 180 || die "De bestaande eigen PostgreSQL werd niet healthy; de gegevens en wachtwoorden zijn niet gewijzigd."
     local filled
-    filled="$(local_psql postgres -c "SELECT coalesce(sum(c), 0) FROM (SELECT (xpath('/row/c/text()', query_to_xml(format('SELECT count(*) AS c FROM %I.%I', schemaname, tablename), false, true, '')))[1]::text::bigint AS c FROM pg_tables WHERE schemaname = 'aquatech' AND tablename NOT IN ('tenants', 'schema_version')) counts" 2>/dev/null)" || die "De eigen database kon niet worden gecontroleerd op bestaande gegevens; niets veranderd."
-    [[ "$filled" == "0" ]] || die "De eigen database bevat al gegevens ($filled rijen); noodherstel is alleen voor een lege database. Niets veranderd."
+    filled="$(local_psql postgres -c "SELECT coalesce(sum(CASE WHEN tablename = 'tenants' THEN greatest(c - 1, 0) ELSE c END), 0) FROM (SELECT tablename, (xpath('/row/c/text()', query_to_xml(format('SELECT count(*) AS c FROM %I.%I', schemaname, tablename), false, true, '')))[1]::text::bigint AS c FROM pg_tables WHERE schemaname = 'aquatech' AND tablename <> 'schema_version') counts" 2>/dev/null)" || die "De eigen database kon niet worden gecontroleerd op bestaande gegevens; de gegevens en wachtwoorden zijn niet gewijzigd."
+    [[ "$filled" == "0" ]] || die "De eigen database bevat al gegevens ($filled rijen); noodherstel is alleen voor een lege database. De gegevens en wachtwoorden zijn niet gewijzigd."
   fi
 
   log "Eigen PostgreSQL inrichten (een bestaande database blijft ongemoeid)"
