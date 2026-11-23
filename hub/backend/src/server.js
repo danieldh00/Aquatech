@@ -843,7 +843,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // Webshop uit: de hoofdpagina is dan de app (voorbeeld voor beheerders blijft kunnen).
     if (req.path === '/' && !settingsFor(tenant.id).get('storefront') && !Object.prototype.hasOwnProperty.call(req.query, 'voorbeeld')) return res.redirect(302, 'app/');
     // De webshop hoort bij de hoofdtenant: ook zonder inlog ziet de database alleen die organisatie (B-12 uit de audit van 1.33.0).
-    limitTo(store.familyIds(tenant.id));
+    limitTo(shopFamilyIds());
     return storefrontRouter(req, res, next);
   });
 
@@ -2145,6 +2145,15 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const tenantRow = store.getTenant(id);
     const live = tenantRow && tenantRow.parent_id ? store.getTenant(tenantRow.parent_id) : tenantRow;
     return Boolean(tenantRow && !tenantRow.disabled && live && !live.disabled && inScope(tenantRow));
+  };
+  let shopFamily = { ids: [], until: 0 };
+  /**
+   * De omgevingen van de hoofdtenant voor de webshop, 30 s onthouden: een warme shop-pagina kost geen enkele query.
+   * @returns {string[]} Id's van de hoofdtenant en zijn testomgevingen.
+   */
+  const shopFamilyIds = () => {
+    if (shopFamily.until <= Date.now()) shopFamily = { ids: store.familyIds(tenant.id), until: Date.now() + 30000 };
+    return shopFamily.ids;
   };
   /**
    * Beperkt de rest van een openbaar verzoek (zonder inlog) tot de organisatie van de gevonden offerte, afspraak of
