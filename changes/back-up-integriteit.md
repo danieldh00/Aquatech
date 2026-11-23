@@ -3,7 +3,7 @@ titel: Back-ups met integriteitscontrole
 ---
 
 ## Nieuws
-- [beheer] De dagelijkse database-back-up krijgt een controlebestand (HMAC) ernaast. Terugzetten en de hersteltest weigeren een back-up die gewijzigd of beschadigd is.
+- [beheer] De dagelijkse database-back-up krijgt een controlebestand (HMAC) ernaast. Terugzetten en de hersteltest weigeren een back-up waarvan de controle niet klopt; een back-up zonder controlebestand (van vóór deze maatregel) krijgt alleen een waarschuwing.
 
 ## Changelog
 Audit B-33 (deel 1), geen migratie, servertaak `010-back-up-integriteitscontrole`:
