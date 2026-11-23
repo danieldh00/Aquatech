@@ -745,10 +745,17 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (match && isModule(match[1])) req.url = match[2];
     next();
   });
+  /**
+   * Is dit een API-pad? Express routeert hoofdletterongevoelig (`/API/plans` komt bij dezelfde route uit),
+   * dus alle controles die op het API-voorvoegsel leunen moeten dat ook zijn.
+   * @param {string} url Pad of URL van het verzoek.
+   * @returns {boolean} true als het pad met /api/ begint, in elke schrijfwijze.
+   */
+  const isApiPath = (url) => /^\/api\//i.test(url);
   // De sessie van een API-verzoek alvast ophalen via db.async (met PostgreSQL de pool): die query zet de hoofdthread
   // dan niet stil, zodat andere verzoeken intussen doorlopen. Statische bestanden niet (die hebben een eigen cache).
   app.use((req, res, next) => {
-    if (!req.url.startsWith('/api/')) return next();
+    if (!isApiPath(req.url)) return next();
     auth.prefetch(req).then(() => next(), () => next());
     return undefined;
   });
@@ -819,11 +826,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
     res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
-    res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=(), usb=()');
+    res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=(self), payment=(), usb=()');
     // Via https (de tunnel zet X-Forwarded-Proto): de browser onthoudt dat.
     if (req.headers['x-forwarded-proto'] === 'https') res.setHeader('Strict-Transport-Security', 'max-age=31536000');
     // API-antwoorden bevatten persoonsgegevens: nooit in een (proxy)cache.
-    if (req.url.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
+    if (isApiPath(req.url)) res.setHeader('Cache-Control', 'no-store');
     next();
   });
   // Onderhoudsmodus tijdens een systeemupdate (zie platform/system-update.js): schrijfverzoeken wachten even.
@@ -836,7 +843,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // Uit de oude webshop-URL gebleven webhooks van Mollie: nog een tijdje intern doorgeven.
     if (/^\/winkel\/mollie\/webhook\//.test(req.path)) req.url = req.url.slice('/winkel'.length);
     if (legacyAppRedirect(req, res)) return undefined;
-    if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'not_found', message: 'Deze API-route bestaat niet.' });
+    if (isApiPath(req.path)) return res.status(404).json({ error: 'not_found', message: 'Deze API-route bestaat niet.' });
     if (req.path === '/sw.js') return sendCleanupWorker(res);
     // Webshop uit: er is niets om te vinden (robots.txt van de shop zelf staat in webshop/storefront.js).
     if (req.path === '/robots.txt' && !settingsFor(tenant.id).get('storefront')) return res.type('text').send('User-agent: *\nDisallow: /\n');
@@ -893,11 +900,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Moet de gebruiker eerst zelf een nieuw wachtwoord kiezen (nieuw account of
   // reset door een beheerder), dan is alleen de wachtwoordpagina bereikbaar:
   // elke pagina toont die, de API weigert alles behalve wat die pagina nodig heeft.
-  const PASSWORD_OPEN = /^\/api\/(me|health|auth\/[a-z]+|account\/password)$/;
+  const PASSWORD_OPEN = /^\/api\/(me|health|auth\/[a-z]+|account\/password)$/i;
   app.use((req, res, next) => {
     // Scripts, stylesheets en afbeeldingen blijven bereikbaar (de
     // wachtwoordpagina gebruikt ze); daarvoor hoeft de sessie hier niet uit de database.
-    const api = req.path.startsWith('/api/');
+    const api = isApiPath(req.path);
     const page = !/\.[a-z0-9]+$/i.test(req.path) || req.path.endsWith('.html');
     if (!api && (!page || (req.method !== 'GET' && req.method !== 'HEAD'))) return next();
     const session = auth.session(req);
@@ -1761,11 +1768,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Alleen versleutelde bestanden; downloaden is dus veilig voor een kopie
   // elders (zonder de hoofdsleutel onleesbaar). Een back-up bevat de hele
   // database (alle tenants), dus alleen voor hoofdbeheerders.
-  // (Ook met de toegangscode van de hoofdtenant, zoals op een installatie
-  // met één organisatie.)
   app.use('/api/admin/backups', (req, res, next) => {
     const user = req.user;
-    if (user.platform_admin || (user.kind === 'systeem' && req.tenantId === tenant.id)) return next();
+    if (user.platform_admin) return next();
     res.status(403).json({ error: 'forbidden', message: 'Alleen voor hoofdbeheerders.' });
   });
   // Kopie van de back-ups naar Google Drive (platform/drive-backup.js): instelbaar en met overzicht in Beheer > Back-ups.
@@ -2923,7 +2928,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Scripts, stylesheets, lettertypen en afbeeldingen (geen HTML, geen API).
   const STATIC_ASSET = /\.(js|css|png|jpe?g|svg|webp|gif|ico|woff2?|map|json|traineddata(\.gz)?|wasm)$/i;
   app.use((req, res, next) => {
-    const asset = (req.method === 'GET' || req.method === 'HEAD') && !req.path.startsWith('/api/') && STATIC_ASSET.test(req.path);
+    const asset = (req.method === 'GET' || req.method === 'HEAD') && !isApiPath(req.path) && STATIC_ASSET.test(req.path);
     const authenticated = asset ? auth.isAuthenticatedForAsset(req) : auth.isAuthenticated(req);
     if (authenticated || (guestsAllowed() && !needsSetup()) || isPublicAsset(req) || isPublicPlanner(req)) return next();
     if (req.method !== 'GET' && req.method !== 'HEAD') return res.status(401).end();
