@@ -165,6 +165,23 @@ noemt de regel waarmee je bewust opnieuw begint.
 **Nieuwe hoofdversie van PostgreSQL**: niet automatisch (de image staat op `postgres:17`). Dump met `backup`, zet
 `POSTGRES_TAG` in `.env`, verplaats `pgdata/`, start een lege container en `restore` de back-up.
 
+**Noodherstel na verlies van apps01** (de enige kopie buiten de server is de app-back-up op Google Drive; de `pg_dump`-bestanden
+staan op dezelfde VM). Draaiboek, op de PVE-host als root:
+1. Nieuwe VM met Docker zoals bij *Verhuizen naar een VPS* (map `/opt/apps/aquatech` met `compose.yml`, `.env` met `AQUATECH_TAG`;
+   zie `setup-app-update.sh`). Zet **`secrets/master-key` uit de wachtwoordkluis** terug (root, mode 400): zonder die sleutel is
+   elke back-up onleesbaar. De Drive-koppeling zelf staat in de verloren database, dus de back-up haal je met de hand op.
+2. Download in Google Drive (map van de app-back-ups, bestanden `aquatech-JJJJMMDD-UUMMSS.db.enc`) de **nieuwste** back-up en zet
+   hem op de PVE-host. Draai daar: `bash db-local.sh restore-app /pad/naar/aquatech-JJJJMMDD-UUMMSS.db.enc` (de gewone aanroep
+   van dit script, zie boven; `APPS01_SSH=daniel@apps01` + sudo).
+3. Het script richt een lege eigen PostgreSQL in, zet de hele back-up terug (`node src/backup.js noodherstel`, alles of niets in
+   één transactie) en start pas daarna de app. Het weigert in een database waar al accounts of andere gegevens in staan, en bij
+   een mislukking blijft de app uit (een app op een lege database toont het scherm voor de eerste beheerder).
+4. Controleer: inloggen, Beheer > Systeem > *Back-ups naar Google Drive* (de koppeling komt met de gegevens mee), maak een verse
+   back-up (`db-local.sh backup`) en zet het Cloudflare-tunneltoken terug in `.env`. Gegevens van na de laatste Drive-back-up
+   zijn verloren (hoogstens de leeftijd van die kopie; de hersteltest van de Drive-back-up waarschuwt na 36 uur).
+Het terugzetten zelf wordt wekelijks getest door *Hersteltest Google Drive* (zelfde `restoreAll`, zelfde back-up, in een
+wegwerpdatabase met een wegwerp-app).
+
 **Verhuizen naar een VPS**: het afvinkbare draaiboek staat in de app (Beheer > Systeem > *Draaiboek VPS-verhuizing*).
 
 **Op de nieuwe webserver**: kopieer `/opt/apps/aquatech` (of zet een back-up terug met `restore`) en draai `db-local.sh status`

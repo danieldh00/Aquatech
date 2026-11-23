@@ -37,6 +37,12 @@ function registerSettingsRoutes(app, { tenant, auth, audit, requireJson, setting
     const lockedKeys = ModuleTools.lockedSettings({ ...moduleFlagsOf(req.tenantId), ...patchedFlags });
     const lockedField = [...Object.keys(patch), ...resets].find((key) => lockedKeys.has(key));
     if (lockedField) return res.status(409).json({ error: 'module_off', field: lockedField, message: 'Deze instelling hoort bij een module die uit staat. Zet de module eerst aan in Beheer > Modules aan/uit.' });
+    // De toegangscode en de gastentoegang geven een ingang zonder account (en zonder 2FA): alleen een hoofdbeheerder
+    // of wie al met de toegangscode is ingelogd mag ze wijzigen, een gewone beheerder niet.
+    const entryField = [...Object.keys(patch), ...resets].find((key) => key === 'accessCode' || key === 'guestAccess');
+    if (entryField && !req.user?.platform_admin && auth.session(req)?.via !== 'code') {
+      return res.status(403).json({ error: 'forbidden', field: entryField, message: 'De toegangscode en de gastentoegang wijzigt alleen een hoofdbeheerder.' });
+    }
     const platformField = [...Object.keys(patch), ...resets].find((key) => FIELDS[key]?.platform || FIELDS[key]?.internal);
     if (platformField) {
       return res.status(400).json({ error: 'invalid_setting', field: platformField,

@@ -238,12 +238,11 @@ test('wie met de toegangscode beheert, kan die niet leegmaken', async () => {
     const reset = await adminClient.put('/app/api/admin/settings', { reset: ['accessCode'] });
     // Startwaarde is 'Geheim-Code-2026' (uit de opstartparameters), dus terugzetten mag.
     assert.strictEqual(reset.status, 200);
-    // Met een beheerdersaccount mag het wel.
+    // Een gewone beheerder mag de toegangscode niet wijzigen (alleen een hoofdbeheerder, zie entry-hardening.test.js).
     await adminClient.post('/app/api/admin/users', { username: 'baas', displayName: 'Baas', role: 'beheerder', password: 'Tuin-Plan-2026!', mustChangePassword: false });
     const baas = createClient(base);
     await baas.post('/app/api/auth/login', { username: 'baas', password: 'Tuin-Plan-2026!' });
-    assert.strictEqual((await baas.put('/app/api/admin/settings', { accessCode: '' })).status, 200);
-    assert.strictEqual((await createClient(base).get('/app/api/auth/status')).body.configured, false);
+    assert.strictEqual((await baas.put('/app/api/admin/settings', { accessCode: '' })).status, 403);
   } finally {
     server.close();
   }

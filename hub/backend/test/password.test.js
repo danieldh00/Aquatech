@@ -65,6 +65,25 @@ test('gebruiker wijzigt zelf het wachtwoord; andere sessies vervallen', async ()
   }
 });
 
+test('verplicht wachtwoord wijzigen is niet te omzeilen met hoofdletters in het API-pad', async () => {
+  const { server, base } = await start();
+  try {
+    const baas = await login(base, 'baas', PW);
+    await baas.post('/app/api/admin/users', { username: 'lies', displayName: 'Lies', role: 'installateur', password: 'Gras-Pomp-2027!' });
+    const lies = await login(base, 'lies', 'Gras-Pomp-2027!');
+    for (const url of ['/app/API/plans', '/app/Api/plans', '/app/API/quotes']) {
+      const blocked = await lies.get(url);
+      assert.strictEqual(blocked.status, 403, url);
+      assert.strictEqual(blocked.body.error, 'password_change_required', url);
+    }
+    const created = await lies.post('/app/API/plans', { name: 'Tuin' });
+    assert.strictEqual(created.status, 403);
+    assert.strictEqual((await lies.get('/app/API/plans')).headers.get('cache-control'), 'no-store');
+  } finally {
+    server.close();
+  }
+});
+
 test('nieuw account en reset door beheerder: eerst zelf een wachtwoord kiezen', async () => {
   const { server, base } = await start();
   try {

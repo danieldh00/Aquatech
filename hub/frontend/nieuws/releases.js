@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.33.1',
+      date: '2026-11-23',
+      title: 'Noodherstel uit de Google Drive-back-up',
+      items: [
+        { text: 'Gaat de server verloren, dan is de hele database terug te zetten uit de back-up op Google Drive. Het draaiboek staat in de serverdocumentatie en het terugzetten wordt elke week al getest.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.33.0',
       date: '2026-11-22',
       title: 'Voorraad tellen werkt ook zonder verbinding',

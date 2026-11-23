@@ -7,7 +7,8 @@
 // bewaren. (Versie 1 was een SQLite-bestand; dat formaat wordt niet meer gelezen.)
 //
 // Terugzetten van losse records gaat in de app (Beheer > Systeem > Terugzetten uit back-up, platform/backup-restore.js);
-// de hele database terugzetten gaat met de PostgreSQL-dump (deploy/apps01/pve/db-local.sh restore).
+// de hele database terugzetten gaat met de PostgreSQL-dump (deploy/apps01/pve/db-local.sh restore), of na verlies van de server
+// uit de Drive-kopie van deze app-back-up (`noodherstel`, deploy/apps01/pve/db-local.sh restore-app).
 //
 // Maken (ook terwijl de app draait; volgens DATABASE_URL):
 //   node src/backup.js create [map]        (standaard BACKUP_DIR of DATA_DIR/backups)
@@ -246,8 +247,8 @@ module.exports = { createBackup, createBackupInChild, listBackups, pruneBackups,
 
 if (require.main === module) {
   const [command, source, target] = process.argv.slice(2);
-  if (!(command === 'decrypt' && source && target) && !(command === 'restore-into' && source) && command !== 'create') {
-    console.error('Gebruik: node src/backup.js create [map]\n       node src/backup.js decrypt <back-up.db.enc> <doel.ndjson.gz>\n       node src/backup.js restore-into <back-up.db.enc>   (alleen hersteltest, met AQUATECH_RESTORE_TEST=1: leegt de database)');
+  if (!(command === 'decrypt' && source && target) && !(command === 'restore-into' && source) && !(command === 'noodherstel' && source) && command !== 'create') {
+    console.error('Gebruik: node src/backup.js create [map]\n       node src/backup.js decrypt <back-up.db.enc> <doel.ndjson.gz>\n       node src/backup.js restore-into <back-up.db.enc>   (alleen hersteltest, met AQUATECH_RESTORE_TEST=1: leegt de database)\n       node src/backup.js noodherstel <back-up.db.enc>   (noodherstel in een lege database, met AQUATECH_EMERGENCY_RESTORE=1)');
     process.exit(2);
   }
   const { createVault, loadOrCreateMasterKey } = require('./beveiliging/vault');
@@ -270,6 +271,12 @@ if (require.main === module) {
     require('./platform/backup-restore-all').restoreAll({ db: openDatabase(), file: source, vault })
       .then((result) => { console.log(`Teruggezet: ${Object.keys(result.tables).length} tabellen, ${Object.values(result.tables).reduce((sum, rows) => sum + rows, 0)} rijen.`); process.exit(0); })
       .catch((err) => { console.error(`Terugzetten mislukt: ${err.message}`); process.exit(1); });
+  } else if (command === 'noodherstel') {
+    // Noodherstel na verlies van de server: de hele back-up (uit Google Drive) in de nieuwe, lege database van DATABASE_URL(_FILE).
+    const { openDatabase } = require('./database/db');
+    require('./platform/backup-restore-all').restoreAll({ db: openDatabase(), file: source, vault, emergency: true })
+      .then((result) => { console.log(`Noodherstel klaar: ${Object.keys(result.tables).length} tabellen, ${Object.values(result.tables).reduce((sum, rows) => sum + rows, 0)} rijen teruggezet.`); process.exit(0); })
+      .catch((err) => { console.error(`Noodherstel mislukt: ${err.message}`); process.exit(1); });
   } else if (fs.existsSync(target)) {
     console.error(`${target} bestaat al; kies een ander doel of verplaats het eerst.`);
     process.exit(1);
