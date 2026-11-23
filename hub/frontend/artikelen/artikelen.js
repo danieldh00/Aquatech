@@ -1081,7 +1081,7 @@
     window.ArtikelenExports.setup({ state, api, toast, visible, valuesText, loadMoves, movesShown, KINDS });
     window.ArtikelenNew.setup({ state, api, toast, num, parseTiers, load, loadUnits, fillUnits });
     window.ArtikelenNew.setupAll();
-    window.ArtikelenMedia.setup({ state, toast, load, openItem });
+    window.ArtikelenMedia.setup({ state, api, toast, load, openItem });
     window.ArtikelenMedia.setupAll();
     window.ArtikelenMerge.setup({
       api, toast, esc, eur, nl, getItems: () => state.items,

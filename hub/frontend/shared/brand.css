@@ -90,3 +90,6 @@
   .tablewrap > table :is(td.wrap, td.c-desc) { --stick-min: 120px; }
   .tablewrap > table tr[data-id]:hover > :is(td):is(:first-child, :nth-child(2)) { background-color: var(--at-green-soft); }
 }
+
+/* Knoppen erven het lettertype van de pagina (anders valt de browser terug op Arial). */
+button { font-family: inherit; }
