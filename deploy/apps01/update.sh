@@ -162,7 +162,8 @@ else
   # Na een mislukte back-up niet elke 15 minuten opnieuw in onderhoudsmodus gaan: minstens een uur wachten
   # (Nu updaten vanuit de app negeert dit).
   BACKUP_FAILED_AT="$(cat .backup-failed-at 2>/dev/null || true)"
-  if [[ "$BACKUP_FAILED_AT" =~ ^[0-9]+$ ]] && (( $(date +%s) - BACKUP_FAILED_AT < 3600 )); then
+  # Alleen een leeftijd tussen 0 en een uur telt (een klok die terugspringt mag het niet urenlang blokkeren).
+  if [[ "$BACKUP_FAILED_AT" =~ ^[0-9]+$ ]] && (( $(date +%s) - BACKUP_FAILED_AT >= 0 && $(date +%s) - BACKUP_FAILED_AT < 3600 )); then
     log "Back-up vóór de update mislukte kort geleden; update naar $NEW_VER wacht."
     exit 0
   fi
