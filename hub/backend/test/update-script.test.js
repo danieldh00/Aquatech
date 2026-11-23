@@ -61,6 +61,7 @@ function install({ current = '1.14.1', failed = '' } = {}) {
   /**
    * Zet een nep-cosign klaar die zijn aanroep logt en met de gegeven exitcode stopt.
    * @param {number} exitCode Exitcode van `cosign verify`.
+   * @param {string} [message] Melding die cosign op stderr schrijft.
    * @returns {void}
    */
   const installCosign = (exitCode, message = '') => fs.writeFileSync(path.join(bin, 'cosign'), `#!/usr/bin/env bash\necho "$*" >> "${state}/cosign.log"\n${message ? `echo '${message}' >&2\n` : ''}exit ${exitCode}\n`, { mode: 0o755 });
