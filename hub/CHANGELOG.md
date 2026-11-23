@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.34.2
+
+Audit B-33 (vervolg): `vault.fingerprint()` geeft een SHA-256 over een apart met HKDF afgeleide sleutel, ingekort tot 96 bit (zes groepen van vier tekens); niet terug te rekenen naar de hoofdsleutel. `GET /api/admin/backups` (alleen hoofdbeheerders) geeft `keyFingerprint` mee; Beheer toont hem in het blok Back-ups. Tests in `backup-restore-routes.test.js`.
+
 ## 1.34.1
 
 - Artikelen: `ArtikelenMedia.setup` krijgt `api` mee (L-01, "api is not defined"); test `artikelen-media-setup.test.js`.

@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.34.2',
+      date: '2026-11-23',
+      title: 'Vingerafdruk van de hoofdsleutel in Beheer',
+      items: [
+        { text: 'Bij Beheer > Back-ups staat nu een vingerafdruk van de hoofdsleutel. Noteer die bij de kopie van de sleutel in je wachtwoordkluis: zo controleer je altijd dat die kopie bij deze server hoort.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.34.1',
       date: '2026-11-23',
       title: 'Mediabibliotheek en knoppen netter',
