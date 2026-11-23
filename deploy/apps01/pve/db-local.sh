@@ -27,7 +27,7 @@
 #                 bij een andere gebruiker dan root (bijv. daniel@apps01) draaien alle opdrachten met `sudo -n`
 #                 (sudo zonder wachtwoord nodig; root-ssh staat op apps01 uit)
 #   APP_DIR       map op de server (standaard /opt/apps/aquatech)
-#   REF           branch of tag op GitHub (standaard master)
+#   REF           branch, tag of commit op GitHub (standaard master; wordt naar een vaste commit omgezet en getoond)
 #   SRC_DIR       map deploy/apps01 van een lokale checkout (in plaats van GitHub)
 #   POSTGRES_TAG  hoofdversie van PostgreSQL (standaard 17)
 #   SKIP_HASH=1   alleen aantallen controleren, niet de inhoud (bij een zeer grote database)
@@ -37,6 +37,14 @@ set -euo pipefail
 NAME="${APPS01_NAME:-apps01}"
 APP_DIR="${APP_DIR:-/opt/apps/aquatech}"
 REF="${REF:-master}"
+# Een branch of tag wordt eenmalig naar de commit omgezet en daarop vastgezet: alle bestanden van deze run komen van
+# dezelfde commit en de commit staat in het log (een script dat als root draait loopt nooit mee met een branch).
+if [[ -z "${SRC_DIR:-}" && ! "$REF" =~ ^[0-9a-f]{40}$ ]]; then
+  PINNED="$(curl -fsSL -m 30 --retry 2 -H 'Accept: application/vnd.github.sha' "https://api.github.com/repos/danieldh00/Aquatech/commits/$REF" 2>/dev/null || true)"
+  [[ "$PINNED" =~ ^[0-9a-f]{40}$ ]] || { echo "FOUT: kan $REF niet naar een commit omzetten (staat hij op GitHub?)." >&2; exit 1; }
+  echo "[$(date '+%F %T')] $REF = commit $PINNED"
+  REF="$PINNED"
+fi
 RAW="https://raw.githubusercontent.com/danieldh00/Aquatech/$REF"
 REMOTE_DIR="$APP_DIR/.localdb"
 
