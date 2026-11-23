@@ -66,6 +66,12 @@ const HOST_TASKS = [
     description: 'Installeert restore-test-drive.sh, restore-app-check.sh en een path-unit op apps01 (en vernieuwt de lokale hersteltest). De hersteltest van de Google Drive-back-up zet de gedownloade back-up daarna ook terug in een wegwerpdatabase en start er een wegwerp-app op (hoogstens 512 MB, intern netwerk zonder uitgang, geen mail of koppelingen) die inlogt en gegevens ophaalt.',
     addedAt: '2026-11-20',
   },
+  {
+    id: '009-update-script-stopt-bij-mislukte-back-up',
+    title: 'Updatescript bijwerken: stoppen als de back-up mislukt',
+    description: 'Installeert de nieuwste update.sh op apps01 (zelfde stappen als taak 001, ca. 1 minuut niet beschikbaar). Daarna gaat een update niet meer door en migreert niet meer als de back-up vooraf mislukt (schijf vol, sleutel, time-out); de huidige versie blijft dan draaien.',
+    addedAt: '2026-11-23',
+  },
 ];
 
 const MAX_FILE_BYTES = 64 * 1024;

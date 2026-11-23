@@ -174,10 +174,22 @@ status_put maintenance.json "{\"since\":\"$(now)\",\"version\":\"$NEW_VER\"}"
 sleep "$DRAIN_SECONDS"
 
 run_put bezig back-up "Back-up maken."
-# Terwijl de app nog draait (consistente momentopname); oudere versies
-# kennen 'create' nog niet, dan alleen een waarschuwing.
-docker compose exec -T -u 1000 aquatech node src/backup.js create \
-  || log "Waarschuwing: geen back-up vóór de update (versie ${CUR_VER:-?} kent 'backup.js create' nog niet?)"
+# Terwijl de app nog draait (consistente momentopname). Zonder verse back-up gaat er nooit een migratie van start:
+# elke fout stopt de update vóór het vervangen van de container. Alleen een oude versie die 'create' nog niet kent
+# (gebruiksmelding, exitcode 2) of een eerste installatie zonder draaiende versie mag door met een waarschuwing.
+BACKUP_CODE=0
+docker compose exec -T -u 1000 aquatech node src/backup.js create || BACKUP_CODE=$?
+if [[ "$BACKUP_CODE" != 0 ]]; then
+  if [[ -z "$CUR_VER" ]]; then
+    log "Waarschuwing: geen back-up vóór de eerste installatie (geen draaiende versie bekend)."
+  elif [[ "$BACKUP_CODE" == 2 ]]; then
+    log "Waarschuwing: geen back-up vóór de update (versie $CUR_VER kent 'backup.js create' nog niet)."
+  else
+    log "Back-up vóór de update mislukt (exitcode $BACKUP_CODE); update naar $NEW_VER gestopt, de huidige versie blijft draaien."
+    run_put mislukt klaar "De back-up vóór de update mislukte; er is niets bijgewerkt. Controleer schijfruimte en sleutel."
+    exit 1
+  fi
+fi
 
 run_put bezig herstarten "Nieuwe versie starten."
 docker compose stop aquatech
