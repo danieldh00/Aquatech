@@ -454,6 +454,12 @@ cmd_restore_app() {
   local free_kb; free_kb="$(df -Pk "$APP_DIR" | awk 'NR==2{print $4}')"
   (( free_kb >= MIN_FREE_KB )) || die "Minder dan 2 GB vrij op de schijf van $APP_DIR."
 
+  # Een draaiende eigen database met gegevens blijft volledig ongemoeid: eerst kijken, vóór wachtwoorden of de app worden aangeraakt.
+  if [[ "$(pg_health)" == "healthy" ]]; then
+    local filled
+    filled="$(local_psql postgres -c "SELECT coalesce(sum(c), 0) FROM (SELECT (xpath('/row/c/text()', query_to_xml(format('SELECT count(*) AS c FROM %I.%I', schemaname, tablename), false, true, '')))[1]::text::bigint AS c FROM pg_tables WHERE schemaname = 'aquatech' AND tablename <> 'tenants') counts" 2>/dev/null || echo 0)"
+    [[ "$filled" == "0" ]] || die "De eigen database bevat al gegevens ($filled rijen); noodherstel is alleen voor een lege database. Niets veranderd."
+  fi
   log "Eigen PostgreSQL inrichten (een bestaande database blijft ongemoeid)"
   install_files "$(date +%Y%m%d%H%M%S)"
   provision_local_db

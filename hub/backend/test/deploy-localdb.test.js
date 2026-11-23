@@ -95,6 +95,7 @@ test('restore-app (noodherstel): vraagt de hoofdsleutel, start de app pas na een
   assert.match(body, /node src\/backup\.js noodherstel/);
   assert.ok(body.indexOf('noodherstel /in/backup.db.enc') < body.indexOf('dc_now up -d aquatech'), 'de app start pas na het terugzetten');
   assert.match(body, /de app is NIET gestart/);
+  assert.ok(body.indexOf('noodherstel is alleen voor een lege database') < body.indexOf('provision_local_db'), 'eerst de lege-database-controle, dan pas wachtwoorden en de app');
   assert.match(script, /restore-app\) cmd_restore_app/);
   const wrapper = read('pve/db-local.sh');
   assert.match(wrapper, /migrate \| rollback \| status \| backup \| restore \| restore-app\)/);
