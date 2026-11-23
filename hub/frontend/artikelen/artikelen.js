@@ -196,13 +196,13 @@
   /**
    * Roept de API aan en geeft de JSON terug.
    * @param {string} url pad na '../api/'
-   * @param {{method: string, body: object}} request methode en inhoud (standaard GET zonder inhoud)
+   * @param {{method: string, body: object, headers: object}} request methode, inhoud (standaard GET zonder inhoud) en extra koppen
    * @returns {Promise<object>} het antwoord; gooit een fout met code, field en status bij een foutstatus
    */
-  async function api(url, { method = 'GET', body } = {}) {
+  async function api(url, { method = 'GET', body, headers = {} } = {}) {
     const res = await fetch(`../api/${url}`, {
       method, cache: 'no-store',
-      headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+      headers: body === undefined ? { ...headers } : { 'Content-Type': 'application/json', ...headers },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const result = await res.json().catch(() => ({}));

@@ -382,7 +382,7 @@ test('wijzigingen via de API vanaf een andere (sub)site worden geweigerd', async
 
 test('mailserver en webshop alleen op een openbaar adres (geen toegang tot het eigen netwerk)', async () => {
   const { publicAddress, isPublicAddress } = require('../src/beveiliging/netguard');
-  for (const ip of ['10.1.2.3', '192.168.2.251', '172.18.0.2', '127.0.0.1', '169.254.169.254', '100.100.1.1', '::1', 'fd00::1', '::ffff:192.168.1.1']) {
+  for (const ip of ['10.1.2.3', '192.168.2.251', '172.18.0.2', '127.0.0.1', '169.254.169.254', '100.100.1.1', '::1', 'fd00::1', '::ffff:192.168.1.1', '2002:c0a8:0101::1', '2001:0:4136:e378:8000:63bf:3fff:fdd2', '::192.168.1.1', 'fec0::1', '192.88.99.1']) {
     assert.strictEqual(isPublicAddress(ip), false, ip);
   }
   assert.ok(isPublicAddress('8.8.8.8') && isPublicAddress('2606:4700::1111'));

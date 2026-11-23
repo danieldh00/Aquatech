@@ -258,7 +258,7 @@ test('prijsfactor: een inkooporder met een nieuwe inkoopprijs zet de verkoopprij
   assert.strictEqual(item.salePrice, 10);
   const order = (await admin.post('/app/api/purchase-orders', { supplierId: supplier.id, lines: [{ itemId: item.id, qty: 4, unitCost: 8 }] })).body;
   const placed = (await admin.post(`/app/api/purchase-orders/${order.id}/place`)).body;
-  const received = await admin.post(`/app/api/purchase-orders/${order.id}/receive`, { lines: [{ lineId: placed.lines[0].id, qty: 4 }] });
+  const received = await admin.post(`/app/api/purchase-orders/${order.id}/receive`, { lines: [{ lineId: placed.lines[0].id, qty: 4, seen: 0 }] });
   assert.strictEqual(received.status, 200, JSON.stringify(received.body));
   const after = (await admin.get(`/app/api/stock/items/${item.id}`)).body;
   assert.deepStrictEqual([after.costPrice, after.salePrice], [8, 16]);
