@@ -386,7 +386,9 @@ HOST_TASK_IDS=(
   005-hersteltest-app-controle
   006-database-grootte-en-indexgebruik
   007-hersteltest-drive-app-controle
+  008-vertrouwde-proxy-instellen
   009-update-script-stopt-bij-mislukte-back-up
+  010-back-up-integriteitscontrole
 )
 HOST_TASKS_LEDGER="host-tasks.json"
 # Functienaam van een taak (streepjes worden underscores).
@@ -449,6 +451,11 @@ hosttask_009_update_script_stopt_bij_mislukte_back_up() {
   hosttask_001_app_update_opnieuw_inrichten
 }
 
+# Taak 010: pg-backup.sh en restore-test.sh vernieuwen en een back-up maken, nu met een HMAC-bestand ernaast (zelfde handeling als taak 004).
+hosttask_010_back_up_integriteitscontrole() {
+  hosttask_004_pg_back_up_script_herstellen
+}
+
 # Taak 002: de wekelijkse hersteltest van de back-up inrichten (restore-test.sh + timer + path-unit). Veilig herhaalbaar.
 hosttask_002_hersteltest_back_up_inrichten() {
   local dir file
@@ -501,6 +508,25 @@ hosttask_007_hersteltest_drive_app_controle() {
   hosttask_002_hersteltest_back_up_inrichten
 }
 
+# Taak 008: TRUSTED_PROXIES in .env zetten (het IPv4-subnet(ten) van de netwerken van de app, waar cloudflared in zit) en
+# compose.yml vernieuwen (taak 001), zodat de app proxykoppen alleen van dat netwerk gelooft. Veilig herhaalbaar.
+hosttask_008_vertrouwde_proxy_instellen() {
+  local networks subnets env_file="$APP_DIR/.env" tmp
+  # Alle netwerken van de app (cloudflared zit in hetzelfde compose-project, dus in een van deze subnetten).
+  networks="$(docker inspect aquatech --format '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}} {{end}}' 2>/dev/null)"
+  [[ -n "${networks// /}" ]] || { echo "FOUT: de container aquatech draait niet; geen netwerk gevonden." >&2; return 1; }
+  # shellcheck disable=SC2086
+  subnets="$(docker network inspect $networks --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}' | tr ' ' '\n' | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}/[0-9]{1,2}$' | paste -sd, -)"
+  [[ -n "$subnets" ]] || { echo "FOUT: geen IPv4-subnet van de netwerken $networks gevonden." >&2; return 1; }
+  touch "$env_file"
+  tmp="$(mktemp "$APP_DIR/.env.XXXXXX")"
+  { grep -v '^TRUSTED_PROXIES=' "$env_file" || true; echo "TRUSTED_PROXIES=$subnets"; } > "$tmp"
+  chmod --reference="$env_file" "$tmp" 2>/dev/null || chmod 600 "$tmp"
+  mv -f "$tmp" "$env_file"
+  echo "TRUSTED_PROXIES=$subnets gezet in $env_file."
+  hosttask_001_app_update_opnieuw_inrichten
+}
+
 # Taak 006: alleen lezen. Toont de grootste tabellen en het gebruik van de indexen van de productiedatabase (voor de beslissing over
 # zware kolomomzettingen) en bewaart dezelfde uitvoer in update/status/db-stats.txt. Geen gegevens, alleen namen, aantallen en groottes.
 hosttask_006_database_grootte_en_indexgebruik() {
@@ -525,6 +551,20 @@ hosttask_006_database_grootte_en_indexgebruik() {
   echo "Bewaard in $out."
 }
 
+# Toont wie de commit maakte, wanneer, de titel en of GitHub de handtekening verifieert, zodat de bevestiging
+# erna een bewuste keuze is (alles op master draait hier als root). Best effort: zonder antwoord van GitHub alleen een melding.
+show_ref_commit() {
+  local json author date title verified
+  json="$(curl -fsSL -m 20 "https://api.github.com/repos/danieldh00/Aquatech/commits/$TASKS_REF" 2>/dev/null || true)"
+  if [[ -z "$json" ]]; then echo "  (commitgegevens niet op te halen van GitHub; controleer de commit zelf: https://github.com/danieldh00/Aquatech/commit/$TASKS_REF)"; return 0; fi
+  author="$(grep -m1 -oE '"name": *"[^"]*"' <<<"$json" | cut -d'"' -f4)"
+  date="$(grep -m1 -oE '"date": *"[^"]*"' <<<"$json" | cut -d'"' -f4)"
+  title="$(grep -m1 -oE '"message": *"[^"\\]*' <<<"$json" | cut -d'"' -f4)"
+  verified="nee"; grep -qE '"verified": *true' <<<"$json" && verified="ja"
+  echo "  commit: $title"
+  echo "  door $author op $date; handtekening geverifieerd door GitHub: $verified"
+  echo "  https://github.com/danieldh00/Aquatech/commit/$TASKS_REF"
+}
 # Toont wat er openstaat. Uitgangscode 10 = er is iets te doen (two_step vraagt dan om bevestiging).
 remote_openstaand_check() {
   local pending
@@ -536,6 +576,7 @@ remote_openstaand_check() {
     return 0
   fi
   echo "Openstaande servertaken (uit commit ${TASKS_REF:0:10}):"
+  show_ref_commit
   for id in $pending; do echo "  - $id"; done
   return 10
 }

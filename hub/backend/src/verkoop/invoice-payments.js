@@ -44,11 +44,12 @@ function createInvoicePayments({ db, invoices, mollie, settingsFor, linkKey = nu
   const enabled = (tenantId) => configOf(settingsFor(tenantId)).online;
 
   /**
-   * Of deze factuur nog betaald kan worden: een definitieve, openstaande factuur (geen credit, geen bedrag van nul of lager).
+   * Of deze factuur nog betaald kan worden: een definitieve, openstaande factuur (geen credit, geen bedrag van nul of lager,
+   * niet gecrediteerd: dan hoeft de klant niets meer te betalen).
    * @param {object} invoice De factuur (toInvoice).
    * @returns {boolean} true als hij betaald mag worden.
    */
-  const payable = (invoice) => invoice.kind === 'factuur' && invoice.status === 'definitief' && invoice.total > 0;
+  const payable = (invoice) => invoice.kind === 'factuur' && invoice.status === 'definitief' && invoice.total > 0 && !invoice.creditedAt;
 
   /**
    * De betaalstand voor het portaal: of de klant nu kan betalen.
@@ -68,7 +69,7 @@ function createInvoicePayments({ db, invoices, mollie, settingsFor, linkKey = nu
     const online = enabled(tenantId);
     return invoices.list(tenantId, { customerId: String(customerId), kinds: ['factuur'], statuses: ['definitief', 'betaald'] }).map((invoice) => ({
       id: invoice.id, number: invoice.number, date: invoice.date, dueDate: invoice.dueDate, total: invoice.total, status: invoice.status,
-      overdue: invoice.overdue, paidAt: invoice.paidAt, payable: online && payable(invoice),
+      overdue: invoice.overdue, paidAt: invoice.paidAt, credited: Boolean(invoice.creditedAt), payable: online && payable(invoice),
     }));
   }
 
@@ -115,6 +116,11 @@ function createInvoicePayments({ db, invoices, mollie, settingsFor, linkKey = nu
       // De controle op de status en setPaid draaien synchroon achter elkaar (geen await ertussen), dus gelijktijdige aanroepen maken de factuur maar één keer betaald.
       let becamePaid = false;
       const current = invoices.get(tenantId, invoice.id);
+      // Een betaling die vóór de creditering is gestart: de rij blijft betaald (het geld is zichtbaar in invoice_payments), maar de gecrediteerde factuur wordt niet op betaald gezet; terugbetalen gaat met de hand.
+      if (current && current.creditedAt && current.status === 'definitief') {
+        log.warn(`Betaling ${payment.id} (${payment.amount}) is binnengekomen op gecrediteerde factuur ${current.number}; handmatig terugbetalen.`);
+        return { becamePaid: false, status: 'betaald', afterCredit: true };
+      }
       if (current && current.status === 'definitief') {
         const out = invoices.setPaid(tenantId, invoice.id, true, paidAt.slice(0, 10));
         becamePaid = Boolean(out && out.invoice);
@@ -173,6 +179,7 @@ function createInvoicePayments({ db, invoices, mollie, settingsFor, linkKey = nu
     const config = configOf(settingsFor(tenantId));
     if (!config.online) return { error: 'Online betalen staat niet aan.', status: 409 };
     if (invoice.status === 'betaald') return { paid: true };
+    if (invoice.creditedAt) return { error: 'Deze factuur is gecrediteerd en hoeft niet meer betaald te worden.', status: 409 };
     if (!payable(invoice)) return { error: 'Deze factuur kan niet online betaald worden.', status: 409 };
     try {
       const attempts = paymentsOf(tenantId, invoice.id);

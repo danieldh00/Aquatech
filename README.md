@@ -178,7 +178,7 @@ server geladen (dezelfde berekening aan beide kanten).
 ```sh
 cd hub/backend && npm install
 # PostgreSQL is verplicht (docker compose up -d postgres in de root start er een; zie docker-compose.yml)
-DATABASE_URL=postgres://aquatech:aquatech-lokaal@127.0.0.1:5432/aquatech DATA_DIR=/tmp/bp PORT=3300 node src/server.js   # http://localhost:3300/app/ -> eerste beheerder aanmaken
+DATABASE_URL=postgres://aquatech:<wachtwoord>@127.0.0.1:5432/aquatech DATA_DIR=/tmp/bp PORT=3300 node src/server.js   # http://localhost:3300/app/ -> eerste beheerder aanmaken
 TEST_DATABASE_URL=postgres://… npm test         # node --test tegen PostgreSQL (zonder TEST_DATABASE_URL falen de tests met een duidelijke melding)
 ```
 

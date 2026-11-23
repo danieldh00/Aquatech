@@ -48,7 +48,8 @@ function install(setupBody) {
   fs.mkdirSync(path.join(appDir, 'update', 'status'), { recursive: true });
   fs.mkdirSync(bin);
   fs.mkdirSync(repo, { recursive: true });
-  fs.writeFileSync(path.join(bin, 'docker'), '#!/usr/bin/env bash\nexit 0\n', { mode: 0o755 });
+  // De nepdocker kent het netwerk van de app (taak 008 leest daar het subnet uit).
+  fs.writeFileSync(path.join(bin, 'docker'), '#!/usr/bin/env bash\ncase "$1 $2" in\n  "inspect aquatech") echo "aquatech_default ";;\n  "network inspect") echo "172.18.0.0/16 ";;\nesac\nexit 0\n', { mode: 0o755 });
   fs.writeFileSync(path.join(bin, 'systemctl'), '#!/usr/bin/env bash\necho "$*" >> "$FAKE_SYSTEMCTL_LOG"\n[[ "$1" == "is-active" ]] && echo active\nexit 0\n', { mode: 0o755 });
   const systemdDir = path.join(root, 'systemd');
   fs.mkdirSync(systemdDir);
@@ -108,6 +109,7 @@ test('hostscript: openstaand voert de taak uit, legt hem vast en doet daarna nie
   for (const task of HOST_TASKS) assert.ok(Date.parse(ledger.done[task.id]) > 0, `${task.id} is vastgelegd`);
   assert.ok(fs.existsSync(path.join(appDir, 'restore-test.sh')), 'taak 002 installeert restore-test.sh');
   assert.ok(fs.existsSync(path.join(appDir, 'restore-test-drive.sh')) && fs.existsSync(path.join(appDir, 'restore-app-check.sh')), 'taak 007 installeert de Drive-app-controle');
+  assert.ok(fs.readFileSync(path.join(appDir, '.env'), 'utf8').split('\n').includes('TRUSTED_PROXIES=172.18.0.0/16'), 'taak 008 zet het subnet van het compose-netwerk in .env');
   assert.ok(fs.existsSync(path.join(appDir, 'pg-backup.sh')), 'taak 004 installeert pg-backup.sh');
   assert.ok(fs.existsSync(path.join(appDir, 'backup-gedraaid')), 'taak 004 maakt direct een back-up');
   assert.deepStrictEqual(fs.readdirSync(systemdDir).sort(), ['aquatech-restore-test-drive.path', 'aquatech-restore-test-drive.service', 'aquatech-restore-test.path', 'aquatech-restore-test.service', 'aquatech-restore-test.timer']);

@@ -11,10 +11,13 @@ services:
     container_name: aquatech
     restart: unless-stopped
     # Alleen voor beheer via Tailscale; LAN-inbound blokkeert de Proxmox-firewall.
+    # Proxykoppen (CF-Connecting-IP, X-Forwarded-For) worden alleen geloofd van TRUSTED_PROXIES (het subnet van dit
+    # compose-netwerk, door servertaak 008 in .env gezet), dus niet van een adres buiten dat netwerk. Let op: met de userland-proxy van Docker komt een verbinding naar poort 3300 aan met het gateway-adres van dit netwerk en telt dus als vertrouwd; wie poort 3300 bereikt (Tailscale) kan dus nog steeds een eigen CF-Connecting-IP meegeven.
     ports:
       - "3300:3300"
     environment:
       - PORT=3300
+      - TRUSTED_PROXIES=${TRUSTED_PROXIES:-}
       - DATA_DIR=/data
       - TZ=${TZ:-Europe/Amsterdam}
       - AQUATECH_MASTER_KEY_FILE=/run/secrets/master-key

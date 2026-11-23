@@ -43,7 +43,7 @@
    * @returns {string} Bijv. "22 okt 2026 10:15" (leeg zonder tijdstip).
    */
   const when = (iso) => (iso ? new Date(iso).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' }) : '');
-  const STATUS = { aangeboden: 'Aangeboden', geaccepteerd: 'Aangenomen', afgewezen: 'Afgewezen', ingetrokken: 'Ingetrokken' };
+  const STATUS = { aangeboden: 'Aangeboden', aangevraagd: 'Wacht op bevestiging', geaccepteerd: 'Aangenomen', afgewezen: 'Afgewezen', ingetrokken: 'Ingetrokken' };
 
   const state = { data: null, workOrder: null, tab: 'incoming' };
 
@@ -116,7 +116,7 @@
   /** Tekent de opdrachten die aan ons zijn aangeboden. */
   function renderIncoming() {
     const showAll = $('#i-all').checked;
-    const items = (state.data.incoming || []).filter((offer) => showAll || offer.myStatus === 'aangeboden');
+    const items = (state.data.incoming || []).filter((offer) => showAll || offer.myStatus === 'aangeboden' || offer.myStatus === 'aangevraagd');
     const openCount = (state.data.incoming || []).filter((offer) => offer.myStatus === 'aangeboden').length;
     $('#t-incoming').textContent = openCount ? String(openCount) : '';
     const list = $('#i-list');
@@ -131,7 +131,8 @@
     list.innerHTML = items.map((offer) => {
       const preview = offer.preview || {};
       const actions = offer.myStatus === 'aangeboden'
-        ? `<button class="btn primary" data-accept="${esc(offer.id)}">Aannemen</button><button class="btn" data-decline="${esc(offer.id)}">Afwijzen</button>`
+        ? `<button class="btn primary" data-accept="${esc(offer.id)}">${offer.direct ? 'Aannemen' : 'Aanvragen'}</button><button class="btn" data-decline="${esc(offer.id)}">Afwijzen</button>`
+        : offer.myStatus === 'aangevraagd' ? `<span class="muted small">${esc(offer.fromName)} moet je aanvraag nog bevestigen; daarna krijg je de klantgegevens.</span><button class="btn" data-decline="${esc(offer.id)}">Aanvraag intrekken</button>`
         : offer.receivedWorkOrderId ? `<a class="btn" href="../werkorders/?id=${encodeURIComponent(offer.receivedWorkOrderId)}">Naar onze werkorder</a>` : '';
       return `<article class="card-form offer st-${esc(offer.myStatus)}">
         <div class="offer-head">
@@ -175,9 +176,17 @@
    */
   async function accept(id) {
     const offer = state.data.incoming.find((candidate) => candidate.id === id);
-    if (!confirm(`Opdracht "${offer.preview.title}" van ${offer.fromName} aannemen?\n\nJullie krijgen een eigen werkorder met de klantgegevens; ${offer.fromName} ziet daarna de voortgang (status, planning en afgevinkte stappen).`)) return;
+    const question = offer.direct
+      ? `Opdracht "${offer.preview.title}" van ${offer.fromName} aannemen?\n\nJullie krijgen een eigen werkorder met de klantgegevens; ${offer.fromName} ziet daarna de voortgang (status, planning en afgevinkte stappen).`
+      : `Opdracht "${offer.preview.title}" van ${offer.fromName} aanvragen?\n\nDit aanbod staat open voor meerdere organisaties. ${offer.fromName} moet je aanvraag eerst bevestigen; pas daarna krijg je een eigen werkorder met de klantgegevens.`;
+    if (!confirm(question)) return;
     try {
       const out = await api(`outsourcing/offers/${encodeURIComponent(id)}/accept`, { method: 'POST', body: {} });
+      if (out.requested) {
+        toast('Aangevraagd: wacht op bevestiging van de aanbieder');
+        load();
+        return;
+      }
       toast(`Aangenomen: werkorder ${out.workOrder.number}`);
       location.href = `../werkorders/?id=${encodeURIComponent(out.workOrder.id)}`;
     } catch (error) {
@@ -229,11 +238,35 @@
     table.innerHTML = `<thead><tr><th>Werkorder</th><th>Aan</th><th>Status</th><th>Uitvoering</th><th>Aangeboden</th><th></th></tr></thead><tbody>${items.map((offer) => `<tr>
       <td class="wrap"><a href="../werkorders/?id=${encodeURIComponent(offer.workOrderId)}"><b>${esc(offer.preview.title || 'Werkorder')}</b></a><span class="sub">${esc(offer.preview.place || '')}${offer.fee != null ? ` · ${esc(eur(offer.fee))}` : ''}</span></td>
       <td>${offer.receiverName ? esc(offer.receiverName) : '<span class="muted">Alle organisaties</span>'}${!offer.direct && offer.status === 'aangeboden' && offer.declinedCount ? `<span class="sub">${offer.declinedCount}× afgewezen</span>` : ''}</td>
-      <td>${pill(offer.status)}${offer.respondedAt ? `<span class="sub">${esc(when(offer.respondedAt))}${offer.respondedBy ? ` · ${esc(offer.respondedBy)}` : ''}</span>` : ''}${offer.reason ? `<span class="sub">“${esc(offer.reason)}”</span>` : ''}</td>
+      <td>${offer.pending ? pill('aangevraagd') : pill(offer.status)}${offer.pending ? `<span class="sub">Aangevraagd door ${esc(offer.receiverName)}${offer.requestedBy ? ` · ${esc(offer.requestedBy)}` : ''}</span>` : ''}${offer.respondedAt && !offer.pending ? `<span class="sub">${esc(when(offer.respondedAt))}${offer.respondedBy ? ` · ${esc(offer.respondedBy)}` : ''}</span>` : ''}${offer.reason ? `<span class="sub">“${esc(offer.reason)}”</span>` : ''}</td>
       <td>${execution(offer)}</td>
       <td>${esc(when(offer.createdAt))}<span class="sub">${esc(offer.createdBy)}</span></td>
-      <td>${offer.status === 'aangeboden' ? `<button class="btn small danger" data-withdraw="${esc(offer.id)}">Intrekken</button>` : ''}</td>
+      <td>${offer.pending ? `<button class="btn small primary" data-approve="${esc(offer.id)}">Bevestigen</button><button class="btn small" data-reject="${esc(offer.id)}">Afwijzen</button>` : ''}${offer.status === 'aangeboden' ? `<button class="btn small danger" data-withdraw="${esc(offer.id)}">Intrekken</button>` : ''}</td>
     </tr>`).join('')}</tbody>`;
+    table.querySelectorAll('[data-approve]').forEach((button) => {
+      /**
+       * Bevestigt de aanvraag na controle: de ontvanger krijgt dan de klantgegevens.
+       * @returns {Promise<void>}
+       */
+      button.onclick = async () => {
+        const offer = items.find((candidate) => candidate.id === button.dataset.approve);
+        if (!confirm(`${offer.receiverName} de opdracht laten uitvoeren?\n\nZij krijgen dan de naam, het adres en de contactgegevens van de klant en je instructies.`)) return;
+        try { await api(`outsourcing/offers/${encodeURIComponent(offer.id)}/approve`, { method: 'POST', body: {} }); toast('Bevestigd'); } catch (error) { toast(error.message, true); }
+        load();
+      };
+    });
+    table.querySelectorAll('[data-reject]').forEach((button) => {
+      /**
+       * Wijst de aanvraag af, met een optionele toelichting; het aanbod staat dan weer open voor anderen.
+       * @returns {Promise<void>}
+       */
+      button.onclick = async () => {
+        const reason = prompt('Aanvraag afwijzen. Toelichting voor de aanvrager (optioneel):', '');
+        if (reason === null) return;
+        try { await api(`outsourcing/offers/${encodeURIComponent(button.dataset.reject)}/reject`, { method: 'POST', body: { reason } }); toast('Afgewezen'); } catch (error) { toast(error.message, true); }
+        load();
+      };
+    });
     table.querySelectorAll('[data-withdraw]').forEach((button) => {
       /**
        * Trekt het aanbod na bevestiging in.

@@ -744,6 +744,7 @@ function registerQuoteRoutes(app, ctx) {
   // Kleurthema van de tenant voor de openbare pagina (CSS-variabelen).
   const themeOf = ctx.themeOf || (() => null);
   const tenantActive = ctx.tenantActive || (() => true);
+  const scopeToTenant = ctx.scopeToTenant || (() => {});
   const mailerFor = ctx.mailerFor || ((settings) => createMailer(settings));
   const remoteIp = ctx.remoteIp || ((req) => req.socket?.remoteAddress || '');
   const publicLimiter = ctx.publicLimiter || ((req, res, next) => next());
@@ -1248,6 +1249,7 @@ function registerQuoteRoutes(app, ctx) {
       res.status(404).json({ error: 'not_found', message: 'Deze offerte is niet (meer) beschikbaar. Neem contact op met de afzender.' });
       return null;
     }
+    scopeToTenant(quoteRow.tenant_id);
     return quoteRow;
   }
 
