@@ -1807,7 +1807,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   }
 
   app.get('/api/admin/backups', (req, res) => {
-    res.json({ enabled: Boolean(backupDir), keepDays: settings.get('backupKeepDays'), items: backupDir ? backups.listBackups(backupDir) : [] });
+    res.json({ enabled: Boolean(backupDir), keepDays: settings.get('backupKeepDays'), keyFingerprint: vault.fingerprint(), items: backupDir ? backups.listBackups(backupDir) : [] });
   });
 
   app.post('/api/admin/backups', wrap(async (req, res) => {

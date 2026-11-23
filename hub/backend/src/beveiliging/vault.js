@@ -59,7 +59,7 @@ function loadOrCreateMasterKey(dataDir, env = process.env) {
 /**
  * Maakt de kluis voor versleutelen en ontsleutelen met sleutels die van de hoofdsleutel zijn afgeleid.
  * @param {Buffer} [masterKey] Hoofdsleutel van 32 bytes; zonder sleutel een willekeurige (alleen voor tests).
- * @returns {{ seal: Function, open: Function, isSealed: Function, derive: Function, sealBytes: Function, openBytes: Function }} De kluisfuncties.
+ * @returns {{ seal: Function, open: Function, isSealed: Function, derive: Function, fingerprint: Function, sealBytes: Function, openBytes: Function }} De kluisfuncties.
  */
 function createVault(masterKey) {
   const master = masterKey || crypto.randomBytes(32);
@@ -144,7 +144,15 @@ function createVault(masterKey) {
    */
   const isSealed = (value) => typeof value === 'string' && /^v1:[\w-]+:[\w-]+:[\w-]*$/.test(value);
 
-  return { seal, open, isSealed, derive, sealBytes, openBytes };
+  /**
+   * Vingerafdruk van de hoofdsleutel om een kopie in de wachtwoordkluis mee te vergelijken. Het is een SHA-256 over een
+   * apart afgeleide sleutel (dus niet de hoofdsleutel zelf, niet terug te rekenen en onbruikbaar om iets te ontsleutelen),
+   * ingekort tot 96 bit en in groepen van vier tekens.
+   * @returns {string} Bijv. A1B2-C3D4-E5F6-0718-293A-4B5C.
+   */
+  const fingerprint = () => crypto.createHash('sha256').update(derive('vingerafdruk')).digest('hex').slice(0, 24).toUpperCase().match(/.{4}/g).join('-');
+
+  return { seal, open, isSealed, derive, fingerprint, sealBytes, openBytes };
 }
 
 module.exports = { createVault, loadOrCreateMasterKey, parseKey, KEY_FILE };

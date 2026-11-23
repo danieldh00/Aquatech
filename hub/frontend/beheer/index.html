@@ -298,6 +298,7 @@
         <form id="s-backup" class="card-form settings">
           <h3>Back-ups</h3>
           <p class="muted small">Elke dag een versleutelde kopie van de database (plannen, historie, gebruikers, instellingen). Alleen terug te zetten met de hoofdsleutel van deze server; een gedownloade back-up is daarom veilig elders te bewaren. Bewaar wel een kopie buiten de server.</p>
+          <p class="muted small">Vingerafdruk van de hoofdsleutel: <code id="b-fingerprint">…</code><br>Vergelijk die met de vingerafdruk die je bij de kopie van de sleutel in je wachtwoordkluis hebt genoteerd: zo weet je zeker dat die kopie bij deze server hoort. De vingerafdruk zegt niets over de sleutel zelf.</p>
           <div class="row">
             <label>Back-ups bewaren (dagen, 0 = uit) <span class="src" data-origin="backupKeepDays"></span><input name="backupKeepDays" type="number" min="0" max="365" step="1" required></label>
           </div>

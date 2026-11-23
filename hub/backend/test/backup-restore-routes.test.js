@@ -138,3 +138,25 @@ test('een geweigerde terugzetting maakt geen veiligheidsback-up', async () => {
     assert.strictEqual(fs.readdirSync(world.dir).length, before);
   } finally { world.cleanup(); }
 });
+
+test('vingerafdruk van de hoofdsleutel: vast per sleutel, anders per sleutel en zonder iets van de sleutel zelf', () => {
+  const { createVault } = require('../src/beveiliging/vault');
+  const key = Buffer.alloc(32, 7);
+  const fingerprint = createVault(key).fingerprint();
+  assert.match(fingerprint, /^([0-9A-F]{4}-){5}[0-9A-F]{4}$/);
+  assert.strictEqual(createVault(Buffer.from(key)).fingerprint(), fingerprint);
+  assert.notStrictEqual(createVault(Buffer.alloc(32, 8)).fingerprint(), fingerprint);
+  assert.ok(!key.toString('hex').toUpperCase().includes(fingerprint.replace(/-/g, '')), 'geen stuk van de sleutel');
+});
+
+test('het back-upoverzicht toont de vingerafdruk alleen aan hoofdbeheerders', async () => {
+  const world = await start();
+  try {
+    const own = await world.baas.get(BASE);
+    assert.strictEqual(own.status, 200);
+    assert.match(own.body.keyFingerprint, /^([0-9A-F]{4}-){5}[0-9A-F]{4}$/);
+    const other = await world.jan.get(BASE);
+    assert.strictEqual(other.status, 403);
+    assert.ok(!JSON.stringify(other.body).includes(own.body.keyFingerprint));
+  } finally { world.cleanup(); }
+});
