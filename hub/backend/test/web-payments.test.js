@@ -260,7 +260,16 @@ test('betaald na annuleren: de betaling wordt vastgelegd met een waarschuwing om
   const detail = (await world.admin.get(`/app/api/admin/web-orders/${id}`)).body.order;
   assert.strictEqual(detail.status, 'geannuleerd');
   assert.strictEqual(detail.pay.status, 'betaald');
-  assert.strictEqual(detail.pay.refundNeeded, true);
+  // T-08: het bedrag gaat meteen terug via Mollie en er komt geen bevestiging of factuur.
+  assert.strictEqual(detail.pay.paidAfterCancel, true);
+  assert.strictEqual(detail.pay.refundNeeded, false);
+  assert.strictEqual(detail.pay.refunds.length, 1);
+  assert.strictEqual(detail.pay.refunds[0].key, 'annulering');
+  assert.strictEqual(detail.pay.refunds[0].amount, detail.totals.total);
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.strictEqual(mailsWith(world.sent, /Bevestiging van je bestelling|Nieuwe webshopbestelling/).length, 0, 'geen bevestiging voor een geannuleerde bestelling');
+  assert.strictEqual((await world.admin.get(`/app/api/admin/web-orders/${id}`)).body.invoice, null, 'geen factuur');
+  assert.strictEqual((await world.admin.post(`/app/api/admin/web-orders/${id}/refund`, {})).status, 409, 'niet nog een keer terugbetalen');
 });
 
 test('annuleren van een online betaalde bestelling met factuur maakt een creditnota', async () => {

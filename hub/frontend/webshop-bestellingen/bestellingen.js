@@ -62,6 +62,9 @@
    */
   const reservationText = (order) => {
     if (order.status !== 'nieuw') return '';
+    const unpaidOnline = order.payment === 'online' && !(order.pay && order.pay.status === 'betaald');
+    if (order.reservationReleasedAt && unpaidOnline) return `<br><strong>Voorraad vrijgegeven</strong> op ${when(order.reservationReleasedAt)}: nog niet betaald. Bij het betalen wordt opnieuw gereserveerd${order.reservedUntil ? `; de bestelling vervalt op ${when(order.reservedUntil)}` : ''}.`;
+    if (unpaidOnline && order.stockHoldUntil) return `<br>Voorraad gereserveerd tot ${when(order.stockHoldUntil)} (nog niet betaald)${order.reservedUntil ? `; de bestelling vervalt op ${when(order.reservedUntil)}` : ''}.`;
     if (order.reservationReleasedAt) return `<br><strong>Reservering vervallen</strong> op ${when(order.reservationReleasedAt)}: de voorraad is weer vrij. Verzenden kan nog, mits er voorraad is.`;
     // Een betaalde online bestelling houdt haar voorraad tot verzenden of annuleren; de betaaltermijn speelt dan niet meer.
     if (order.payment === 'online' && order.pay && order.pay.status === 'betaald') return '<br>Voorraad gereserveerd tot verzenden of annuleren.';
@@ -77,11 +80,12 @@
     if (order.payment !== 'online' || !order.pay) return 'op rekening';
     const pay = order.pay;
     const method = PAY_METHODS[pay.method] || pay.method;
-    const refund = pay.refundNeeded ? ' · <b>betaald en geannuleerd: nog terugbetalen</b>' : '';
-    const refunds = (pay.refunds || []).map((entry) => ` · terugbetaald ${euro(entry.amount)} (${when(entry.at)})`).join('');
+    const duplicates = (pay.duplicates || []).map((entry) => ` · <b>dubbele betaling ${euro(entry.amount)}</b>: ${entry.refund && entry.refund.id ? 'terugbetaald' : entry.refund ? 'terugbetaling aangevraagd' : 'nog terugbetalen via Mollie'}`).join('');
+    const refund = pay.refundNeeded && !(pay.duplicates || []).length ? ' · <b>betaald en geannuleerd: nog terugbetalen</b>' : pay.refundNeeded ? ' · <b>nog terugbetalen</b>' : '';
+    const refunds = (pay.refunds || []).map((entry) => ` · ${entry.status === 'aangevraagd' ? 'terugbetaling aangevraagd' : 'terugbetaald'} ${euro(entry.amount)} (${when(entry.at)})`).join('');
     const outsideRefund = Number(pay.refundedTotal) > (pay.refunds || []).reduce((sum, entry) => sum + Number(entry.amount || 0), 0) + 0.005 ? ` · volgens Mollie in totaal ${euro(pay.refundedTotal)} terugbetaald` : '';
     const chargeback = Number(pay.chargedBack) > 0 ? ` · <b>teruggeboekt door de bank (chargeback): ${euro(pay.chargedBack)}</b>` : '';
-    return `online via Mollie, ${esc(PAY_LABELS[pay.status] || pay.status)}${pay.status === 'betaald' ? ` op ${when(pay.paidAt)}${method ? ` (${esc(method)})` : ''}` : ''}${pay.mode === 'test' ? ' · testbetaling' : ''}${refund}${refunds}${outsideRefund}${chargeback}`;
+    return `online via Mollie, ${esc(PAY_LABELS[pay.status] || pay.status)}${pay.status === 'betaald' ? ` op ${when(pay.paidAt)}${method ? ` (${esc(method)})` : ''}` : ''}${pay.mode === 'test' ? ' · testbetaling' : ''}${refund}${refunds}${duplicates}${outsideRefund}${chargeback}`;
   }
 
   /**

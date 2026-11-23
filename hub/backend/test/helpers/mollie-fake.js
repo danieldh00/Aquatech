@@ -4,7 +4,7 @@
 
 /**
  * Maakt de nagebootste Mollie.
- * @returns {{ fetchImpl: Function, payments: Map<string, object>, calls: object[], set: Function, down: { on: boolean } }} fetchImpl voor createApp({ env: { MULTITENANCY: '1' }, mollieFetch }), de betalingen, alle aanroepen, set(id, status, extra) en down.on om Mollie onbereikbaar te maken.
+ * @returns {{ fetchImpl: Function, payments: Map<string, object>, calls: object[], set: Function, down: { on: boolean }, lost: { refunds: boolean } }} fetchImpl voor createApp({ env: { MULTITENANCY: '1' }, mollieFetch }), de betalingen, alle aanroepen, set(id, status, extra), down.on om Mollie onbereikbaar te maken en lost.refunds om het antwoord op een terugbetaling te laten wegvallen (Mollie voert hem wel uit).
  */
 function createMollieFake() {
   const payments = new Map();
@@ -12,6 +12,7 @@ function createMollieFake() {
   const refundsByKey = new Map();
   const calls = [];
   const down = { on: false };
+  const lost = { refunds: false };
   let counter = 0;
 
   /**
@@ -57,10 +58,26 @@ function createMollieFake() {
       const refunded = payment.amountRefunded ? Number(payment.amountRefunded.value) : 0;
       if (payment.status !== 'paid' || refunded + Number(body.amount.value) > Number(payment.amount.value) + 0.001) return respond(422, { title: 'Unprocessable Entity', detail: 'The amount is higher than the remaining amount' });
       counter += 1;
-      const refund = { id: `re_test${String(counter).padStart(4, '0')}`, status: 'pending', amount: body.amount, description: body.description };
+      const refund = { id: `re_test${String(counter).padStart(4, '0')}`, status: 'pending', amount: body.amount, description: body.description, metadata: body.metadata || null };
+      payment.refunds = [...(payment.refunds || []), refund];
+      // refundLost: Mollie voert de terugbetaling uit, maar het antwoord komt niet aan (verbinding verbroken).
+      if (lost.refunds) { payment.amountRefunded = { currency: 'EUR', value: (refunded + Number(body.amount.value)).toFixed(2) }; throw new Error('verbinding verbroken'); }
       payment.amountRefunded = { currency: 'EUR', value: (refunded + Number(body.amount.value)).toFixed(2) };
       if (key) refundsByKey.set(key, refund);
       return respond(201, refund);
+    }
+    const listMatch = apiPath.match(/^\/payments\/(tr_[A-Za-z0-9]+)\/refunds\?limit=\d+$/);
+    if (init.method === 'GET' && listMatch) {
+      const payment = payments.get(listMatch[1]);
+      return payment ? respond(200, { count: (payment.refunds || []).length, _embedded: { refunds: payment.refunds || [] } }) : respond(404, { title: 'Not Found', detail: 'No payment exists with token' });
+    }
+    const cancelMatch = apiPath.match(/^\/payments\/(tr_[A-Za-z0-9]+)$/);
+    if (init.method === 'DELETE' && cancelMatch) {
+      const payment = payments.get(cancelMatch[1]);
+      if (!payment) return respond(404, { title: 'Not Found', detail: 'No payment exists with token' });
+      if (payment.status !== 'open' || payment.isCancelable === false) return respond(422, { title: 'Unprocessable Entity', detail: 'The payment cannot be canceled' });
+      payment.status = 'canceled';
+      return respond(200, payment);
     }
     const match = apiPath.match(/^\/payments\/(tr_[A-Za-z0-9]+)$/);
     if (init.method === 'GET' && match) return payments.has(match[1]) ? respond(200, payments.get(match[1])) : respond(404, { title: 'Not Found', detail: 'No payment exists with token' });
@@ -81,7 +98,7 @@ function createMollieFake() {
     Object.assign(payment, extra);
   }
 
-  return { fetchImpl, payments, calls, set, down };
+  return { fetchImpl, payments, calls, set, down, lost };
 }
 
 module.exports = { createMollieFake };

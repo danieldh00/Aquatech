@@ -392,13 +392,34 @@ test('een ingelogd account kan geen account maken op een gastbestelling', async 
 
 test('limieten: hoogstens drie gastbestellingen per e-mailadres per uur', async () => {
   const world = await setup({ mollie: true });
-  for (let count = 0; count < 3; count += 1) await placeGuest(world, { email: 'veel@voorbeeld.nl' });
+  // Elke bestelling wordt betaald: onbetaald mogen er maar twee tegelijk openstaan (zie de test hieronder).
+  for (let count = 0; count < 3; count += 1) {
+    const placed = await placeGuest(world, { email: 'veel@voorbeeld.nl' });
+    await payAsGuest(world, placed.id, placed.guest);
+  }
   const fourth = await postCheckout(world.base, (await visitor(world)).client, { ...PERSON, email: 'veel@voorbeeld.nl', guest: 'ja', paymentMethod: 'online' });
   assert.strictEqual(fourth.status, 429);
   assert.match(fourth.text, /veel bestellingen/);
   const other = await postCheckout(world.base, (await visitor(world)).client, { ...PERSON, email: 'ander@voorbeeld.nl', guest: 'ja', paymentMethod: 'online' });
   assert.strictEqual(other.status, 303, 'een ander adres is niet geblokkeerd');
   assert.strictEqual(world.db.prepare("SELECT COUNT(*) AS n FROM web_orders WHERE email = 'veel@voorbeeld.nl'").get().n, 3);
+});
+
+test('plafond: hoogstens twee onbetaalde gastbestellingen tegelijk per e-mailadres en drie per bezoeker (B-13)', async () => {
+  const world = await setup({ mollie: true });
+  const first = await placeGuest(world, { email: 'open@voorbeeld.nl' });
+  await placeGuest(world, { email: 'open@voorbeeld.nl' });
+  const third = await postCheckout(world.base, (await visitor(world)).client, { ...PERSON, email: 'open@voorbeeld.nl', guest: 'ja', paymentMethod: 'online' });
+  assert.strictEqual(third.status, 429);
+  assert.match(third.text, /openstaan die niet betaald zijn/);
+  // Een ander adres vanaf dezelfde bezoeker mag nog één keer (drie open per bezoeker), daarna niet meer.
+  await placeGuest(world, { email: 'tweede@voorbeeld.nl' });
+  const fourth = await postCheckout(world.base, (await visitor(world)).client, { ...PERSON, email: 'derde@voorbeeld.nl', guest: 'ja', paymentMethod: 'online' });
+  assert.strictEqual(fourth.status, 429, 'drie onbetaalde bestellingen vanaf dezelfde bezoeker');
+  // Na het betalen van één bestelling is er weer ruimte, voor het adres en voor de bezoeker.
+  await payAsGuest(world, first.id, first.guest);
+  const after = await postCheckout(world.base, (await visitor(world)).client, { ...PERSON, email: 'open@voorbeeld.nl', guest: 'ja', paymentMethod: 'online' });
+  assert.strictEqual(after.status, 303, after.text);
 });
 
 test('een gast die bestaande bestellingen heeft houdt toegang als bestellen als gast wordt uitgezet', async () => {

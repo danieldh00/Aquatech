@@ -35,6 +35,13 @@ const PAGE_LIMIT = 200;
 const EXPORT_LIMIT = 500;
 
 /**
+ * Zoveel minuten houdt een online bestelling de voorraad vast zolang hij niet betaald is (audit 1.33.0 B-13). Elke keer dat de
+ * klant naar de betaalpagina gaat begint die tijd opnieuw; daarna komt de voorraad vrij, de bestelling zelf blijft tot de
+ * bewaartijd (`reservedUntil`) betaalbaar zolang de voorraad strekt.
+ */
+const PAY_HOLD_MINUTES = 30;
+
+/**
  * Tot wanneer een nieuwe bestelling de voorraad vasthoudt (8): online kort (de bewaartijd van een onbetaalde
  * bestelling), op rekening lang (dagen), of zonder einde.
  * @param {string} placedAt Moment van bestellen (ISO).
@@ -385,7 +392,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
    */
   const shapeFull = (row) => {
     const data = JSON.parse(row.data);
-    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, billingAddress: data.billingAddress || null, deliverySame: data.deliverySame !== false, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null, consent: data.consent || null, invoiceError: data.invoiceError || '', shipMail: data.shipMail || null, payment: data.payment || 'op rekening', pay: data.pay || null, creditNote: data.creditNote || null, reservedUntil: data.reservedUntil || null, reservationReleasedAt: data.reservationReleasedAt || null, quote: data.quote || null, paymentDays: data.paymentDays === undefined ? null : data.paymentDays, language: data.language === 'en' ? 'en' : 'nl', packingSlip: data.packingSlip || null, dropshipping: data.dropshipping || null, allowPartial: data.allowPartial !== false, shipments: data.shipments || [], backorderSince: data.backorderSince || null, backorderReadyAt: data.backorderReadyAt || null, guest: Boolean(data.guest) };
+    return { ...shape(row), lines: data.lines, customer: data.customer, address: data.address, billingAddress: data.billingAddress || null, deliverySame: data.deliverySame !== false, note: data.note, totals: data.totals, history: data.history, mail: data.mail || null, shipping: data.shipping || null, customerGroup: data.customerGroup || '', vat: data.vat || null, consent: data.consent || null, invoiceError: data.invoiceError || '', shipMail: data.shipMail || null, payment: data.payment || 'op rekening', pay: data.pay || null, creditNote: data.creditNote || null, reservedUntil: data.reservedUntil || null, stockHoldUntil: data.stockHoldUntil || null, reservationReleasedAt: data.reservationReleasedAt || null, quote: data.quote || null, paymentDays: data.paymentDays === undefined ? null : data.paymentDays, language: data.language === 'en' ? 'en' : 'nl', packingSlip: data.packingSlip || null, dropshipping: data.dropshipping || null, allowPartial: data.allowPartial !== false, shipments: data.shipments || [], backorderSince: data.backorderSince || null, backorderReadyAt: data.backorderReadyAt || null, guest: Boolean(data.guest) };
   };
   const COLUMNS = 'id, number, user_id, status, customer_name, email, total, created_at, updated_at';
 
@@ -544,6 +551,8 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
         ...(guest ? { guest: { hash: guest.hash, sealed: guest.sealFor(id) } } : {}),
         ...(online ? { pay: { provider: 'mollie', status: 'open', id: null, ids: [], checkoutUrl: '', createdAt: timestamp, paidAt: null } } : {}),
         ...(reservedUntil ? { reservedUntil } : {}),
+        // Onbetaald houdt een online bestelling de voorraad maar kort vast (B-13); de bestelling zelf blijft langer betaalbaar.
+        ...(online ? { stockHoldUntil: new Date(Date.parse(timestamp) + PAY_HOLD_MINUTES * 60 * 1000).toISOString() } : {}),
         history: [{ at: timestamp, status: 'nieuw', by: fields.name }],
       };
       prepare(`INSERT INTO web_orders (id, tenant_id, number, user_id, status, customer_name, email, total, data, created_at, updated_at)
@@ -659,6 +668,30 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
    */
   function countGuestSince(tenantId, email, since) {
     return Number(prepare('SELECT COUNT(*) AS n FROM web_orders WHERE tenant_id = ? AND user_id IS NULL AND email = ? AND created_at > ?').get(tenantId, String(email || '').trim().toLowerCase(), since).n) || 0;
+  }
+
+  /**
+   * Telt de nieuwe, nog niet betaalde online bestellingen als gast met dit e-mailadres (plafond op wat tegelijk openstaat, B-13).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} email Het e-mailadres.
+   * @returns {number} Het aantal openstaande onbetaalde gastbestellingen.
+   */
+  function countOpenUnpaidGuest(tenantId, email) {
+    return Number(prepare("SELECT COUNT(*) AS n FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND user_id IS NULL AND lower(email) = ? AND data->>'payment' = 'online' AND COALESCE(data->'pay'->>'status', '') <> 'betaald'")
+      .get(tenantId, String(email || '').trim().toLowerCase()).n) || 0;
+  }
+
+  /**
+   * Welke van deze bestellingen nog nieuw en onbetaald zijn (online). Eén query.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string[]} ids Id's van bestellingen.
+   * @returns {string[]} De id's die nog openstaan.
+   */
+  function unpaidAmong(tenantId, ids) {
+    const wanted = [...new Set((ids || []).map(String))].slice(0, 50);
+    if (!wanted.length) return [];
+    return prepare("SELECT id FROM web_orders WHERE tenant_id = ? AND id = ANY(?::uuid[]) AND status = 'nieuw' AND data->>'payment' = 'online' AND COALESCE(data->'pay'->>'status', '') <> 'betaald'")
+      .all(tenantId, wanted).map((row) => row.id);
   }
 
   /**
@@ -1221,10 +1254,104 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
       if (data.payment !== 'online' || !data.pay) return { error: 'Dit is geen online bestelling.', status: 409 };
       const next = mutate(data.pay, shapeFull(row));
       if (!next) return { order: shapeFull(row), changed: false };
+      // Betaald nadat de voorraad was vrijgegeven (B-13): de bestelling reserveert opnieuw. Is er intussen te weinig, dan wacht hij
+      // als backorder op voorraad (eerst-besteld-eerst-geleverd, zie fulfilment.js).
+      if (next.status === 'betaald' && data.pay.status !== 'betaald' && row.status === 'nieuw' && data.reservationReleasedAt) {
+        const lines = stockLinesOf(data.lines.map((line) => ({ ...line, qty: remainingOf(line) })).filter((line) => line.qty > 0));
+        if (lines.length) stock.reserveOrder(tenantId, row.id, lines);
+        delete data.reservationReleasedAt;
+        delete data.stockHoldUntil;
+        data.history = [...(Array.isArray(data.history) ? data.history : []), { at: currentTimestamp(), status: 'nieuw', by: 'Systeem', note: 'Betaald na het vrijgeven van de voorraad: opnieuw gereserveerd' }];
+      }
       data.pay = next;
       prepare('UPDATE web_orders SET data = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(JSON.stringify(data), currentTimestamp(), tenantId, row.id);
       return { order: get(tenantId, row.id), changed: true };
     });
+  }
+
+  /**
+   * Houdt de voorraad van een onbetaalde online bestelling (opnieuw) vast omdat de klant naar de betaalpagina gaat (B-13): de
+   * tijd begint opnieuw, en was de voorraad al vrijgegeven, dan wordt hij opnieuw gereserveerd als er nog genoeg vrij is. Onder
+   * het rijslot van de bestelling, dus een bestelling die intussen is geannuleerd of betaald wordt hier geweigerd.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} id Id van de bestelling.
+   * @param {string} [now] Het huidige moment (ISO); standaard nu.
+   * @returns {{ ok?: boolean, paid?: boolean, error?: string, status?: number, short?: string[] }} ok als de voorraad vastligt; paid als hij al betaald is; anders de fout, met bij te weinig voorraad de namen van de artikelen in `short`.
+   */
+  function holdForPayment(tenantId, id, now = currentTimestamp()) {
+    return transaction(db, () => {
+      const row = readForUpdate(tenantId, id, `${COLUMNS}, data`);
+      if (!row) return { error: 'Bestelling niet gevonden.', status: 404 };
+      const data = JSON.parse(row.data);
+      if (data.payment !== 'online' || !data.pay) return { error: 'Deze bestelling gaat op rekening.', status: 409 };
+      if (data.pay.status === 'betaald') return { paid: true };
+      if (row.status !== 'nieuw') return { error: 'Deze bestelling kan niet meer betaald worden.', status: 409 };
+      if (data.reservationReleasedAt) {
+        const lines = stockLinesOf(data.lines.map((line) => ({ ...line, qty: remainingOf(line) })).filter((line) => line.qty > 0));
+        lockItemIds(tenantId, data.lines);
+        const short = stock.shortageFor(tenantId, lines, `order:${row.id}`);
+        if (short.length) return { error: `Niet meer genoeg op voorraad: ${short.map((item) => item.name).join(', ')}.`, status: 409, short: short.map((item) => item.name) };
+        if (lines.length) stock.reserveOrder(tenantId, row.id, lines);
+        delete data.reservationReleasedAt;
+      }
+      data.stockHoldUntil = new Date(Date.parse(now) + PAY_HOLD_MINUTES * 60 * 1000).toISOString();
+      prepare('UPDATE web_orders SET data = ? WHERE tenant_id = ? AND id = ?').run(JSON.stringify(data), tenantId, row.id);
+      return { ok: true };
+    });
+  }
+
+  /**
+   * Geeft de voorraad vrij van online bestellingen die na de korte betaaltijd (`data.stockHoldUntil`) nog niet betaald zijn
+   * (B-13). De bestelling blijft staan en kan tot de bewaartijd nog betaald worden; bij het betalen wordt opnieuw gereserveerd.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} [now] Het huidige moment (ISO); standaard nu.
+   * @returns {{ released: number }} Het aantal bestellingen waarvan de voorraad is vrijgegeven.
+   */
+  function releaseUnpaidHolds(tenantId, now = currentTimestamp()) {
+    const ids = prepare("SELECT id FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND data->>'payment' = 'online' AND COALESCE(data->'pay'->>'status', '') <> 'betaald' AND jsonb_exists(data, 'stockHoldUntil') AND NOT jsonb_exists(data, 'reservationReleasedAt') AND data->>'stockHoldUntil' <= ? ORDER BY created_at, id LIMIT 500")
+      .all(tenantId, String(now)).map((row) => row.id);
+    let released = 0;
+    for (const id of ids) {
+      const done = transaction(db, () => {
+        const row = readForUpdate(tenantId, id, 'status, data');
+        if (!row || row.status !== 'nieuw') return false;
+        const data = JSON.parse(row.data);
+        if (data.reservationReleasedAt || !data.stockHoldUntil || data.stockHoldUntil > now || (data.pay && data.pay.status === 'betaald')) return false;
+        stock.releaseOrder(tenantId, id);
+        data.reservationReleasedAt = now;
+        data.history = [...(Array.isArray(data.history) ? data.history : []), { at: now, status: 'nieuw', by: 'Systeem', note: 'Nog niet betaald: voorraad vrijgegeven' }];
+        prepare('UPDATE web_orders SET data = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(JSON.stringify(data), now, tenantId, id);
+        return true;
+      });
+      if (done) released += 1;
+    }
+    return { released };
+  }
+
+  /**
+   * De betaalde online bestellingen waarvan nog een stap na de betaling openstaat (bevestigingsmail, factuur; T-16): betaald
+   * vóór `before` en na `since`, niet geannuleerd, en met nog niet afgeronde stappen in `pay.hooks.pending`.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} before Tijdstip (ISO): alleen bestellingen die daarvoor zijn betaald (de eerste poging krijgt eerst de tijd).
+   * @param {string} since Tijdstip (ISO): alleen bestellingen die daarna zijn betaald.
+   * @param {number} [limit] Hoogstens zoveel bestellingen.
+   * @returns {string[]} De id's van de bestellingen.
+   */
+  function paidWithOpenHooks(tenantId, before, since, limit = 50) {
+    return prepare("SELECT id FROM web_orders WHERE tenant_id = ? AND status <> 'geannuleerd' AND updated_at > ? AND data->'pay'->>'status' = 'betaald' AND data->'pay'->>'paidAt' < ? AND jsonb_array_length(COALESCE(data->'pay'->'hooks'->'pending', '[]'::jsonb)) > 0 ORDER BY created_at, id LIMIT ?")
+      .all(tenantId, String(since), String(before), Math.max(1, Math.floor(limit))).map((row) => row.id);
+  }
+
+  /**
+   * De online bestellingen met een terugbetaling die bij Mollie is aangevraagd maar nog niet is afgerond (T-18).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} since Tijdstip (ISO): alleen bestellingen die daarna nog zijn gewijzigd.
+   * @param {number} [limit] Hoogstens zoveel bestellingen.
+   * @returns {string[]} De id's van de bestellingen.
+   */
+  function withPendingRefunds(tenantId, since, limit = 50) {
+    return prepare(`SELECT id FROM web_orders WHERE tenant_id = ? AND updated_at > ? AND (data->'pay'->'refunds' @> '[{"status":"aangevraagd"}]'::jsonb OR data->'pay'->'duplicates' @> '[{"refund":{"status":"aangevraagd"}}]'::jsonb) ORDER BY created_at, id LIMIT ?`)
+      .all(tenantId, String(since), Math.max(1, Math.floor(limit))).map((row) => row.id);
   }
 
   /**
@@ -1308,7 +1435,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
     return { released };
   }
 
-  return { deliveryRulesOf, priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, countGuestSince, guestAccessOf, attachToUser, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, unpaidOnline, reminderAllowed, releaseExpired, listToPick, listUnprocessed, getMany, pickable, markPackingSlipsPrinted, setDropshippingSlip, onShipped, onCancelled, onTracking, withFulfilment, getDetailed, ship, recordShipmentLabel, setAllowPartial, listBackorders, markBackorderReady, onPartialShipped };
+  return { deliveryRulesOf, priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, countGuestSince, countOpenUnpaidGuest, unpaidAmong, guestAccessOf, attachToUser, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, holdForPayment, releaseUnpaidHolds, paidWithOpenHooks, withPendingRefunds, unpaidOnline, reminderAllowed, releaseExpired, listToPick, listUnprocessed, getMany, pickable, markPackingSlipsPrinted, setDropshippingSlip, onShipped, onCancelled, onTracking, withFulfilment, getDetailed, ship, recordShipmentLabel, setAllowPartial, listBackorders, markBackorderReady, onPartialShipped };
 }
 
 /**
@@ -1407,4 +1534,4 @@ function registerWebOrderRoutes(app, { orders, requireJson, audit, invoices = nu
   });
 }
 
-module.exports = { createWebOrderStore, registerWebOrderRoutes, sanitizeCheckout, deliverySameOf, totalsOf, STATUSES, TRANSITIONS, MAX_QTY, MAX_LINES, stockQtyOf, stockLinesOf, splitCartCode };
+module.exports = { createWebOrderStore, registerWebOrderRoutes, sanitizeCheckout, deliverySameOf, totalsOf, STATUSES, TRANSITIONS, MAX_QTY, MAX_LINES, PAY_HOLD_MINUTES, stockQtyOf, stockLinesOf, splitCartCode };
