@@ -159,6 +159,13 @@ else
     log "GHCR-versie $NEW_VER is ouder dan $CUR_VER; overslaan."
     exit 0
   fi
+  # Na een mislukte back-up niet elke 15 minuten opnieuw in onderhoudsmodus gaan: minstens een uur wachten
+  # (Nu updaten vanuit de app negeert dit).
+  BACKUP_FAILED_AT="$(cat .backup-failed-at 2>/dev/null || true)"
+  if [[ "$BACKUP_FAILED_AT" =~ ^[0-9]+$ ]] && (( $(date +%s) - BACKUP_FAILED_AT < 3600 )); then
+    log "Back-up vóór de update mislukte kort geleden; update naar $NEW_VER wacht."
+    exit 0
+  fi
   AUTOMATIC=true
   RUN_STARTED="$(now)"
 fi
@@ -185,12 +192,14 @@ if [[ "$BACKUP_CODE" != 0 ]]; then
   elif [[ "$BACKUP_CODE" == 2 ]]; then
     log "Waarschuwing: geen back-up vóór de update (versie $CUR_VER kent 'backup.js create' nog niet)."
   else
+    date +%s > .backup-failed-at
     log "Back-up vóór de update mislukt (exitcode $BACKUP_CODE); update naar $NEW_VER gestopt, de huidige versie blijft draaien."
     run_put mislukt klaar "De back-up vóór de update mislukte; er is niets bijgewerkt. Controleer schijfruimte en sleutel."
     exit 1
   fi
 fi
 
+rm -f .backup-failed-at
 run_put bezig herstarten "Nieuwe versie starten."
 docker compose stop aquatech
 

@@ -276,6 +276,13 @@ test('update.sh: een mislukte back-up vooraf stopt de update vóór het vervange
   assert.ok(!/compose stop/.test(calls), 'container niet gestopt');
   assert.strictEqual(readStatus(setup.statusDir, 'run.json').state, 'mislukt');
   assert.ok(!fs.existsSync(path.join(setup.statusDir, 'maintenance.json')), 'onderhoudsmodus weer uit');
+  // Automatisch: het volgende uur niet opnieuw proberen (geen onderhoudsmodus om de 15 minuten); de aanvraag uit de app wel.
+  const again = setup.run({ FAKE_LATEST: '1.14.2', FAKE_BACKUP_EXIT: '1' });
+  assert.strictEqual(again.status, 0, again.output);
+  assert.match(again.output, /wacht/);
+  putRequest(setup.requestDir, '1.14.2');
+  const manual = setup.run({ FAKE_LATEST: '1.14.2' });
+  assert.strictEqual(manual.tag, '1.14.2', manual.output);
 });
 
 test('update.sh: een oude versie die backup.js create niet kent (exitcode 2) mag door met een waarschuwing', { skip: !bashAvailable }, () => {
