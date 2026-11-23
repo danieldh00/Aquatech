@@ -410,6 +410,15 @@ cmd_restore() {
   [[ -f "$file" && ! -L "$file" ]] || die "Back-upbestand niet gevonden: $file"
   [[ "$(pg_health)" == "healthy" ]] || die "De eigen PostgreSQL draait niet (healthy)."
   local decrypt="openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass file:secrets/master-key"
+  # Integriteit (HMAC naast de dump, zie pg-backup.sh): klopt hij niet, dan wordt er niets teruggezet.
+  if [[ -f "$file.hmac" && ! -L "$file.hmac" ]]; then
+    local mac_key mac_now
+    mac_key="$( { printf 'aquatech-dump-hmac\n'; cat secrets/master-key; } | sha256sum | cut -d' ' -f1)"
+    mac_now="$(openssl dgst -sha256 -mac HMAC -macopt "hexkey:$mac_key" -r "$file" | cut -d' ' -f1)"
+    [[ "$mac_now" == "$(tr -d '[:space:]' < "$file.hmac")" ]] || die "Integriteitscontrole (HMAC) van de back-up klopt niet: bestand gewijzigd of beschadigd; niets teruggezet."
+  else
+    log "Waarschuwing: deze back-up heeft geen .hmac (van vóór de integriteitscontrole); alleen ontsleutelen is gecontroleerd."
+  fi
   # pg_restore -l stopt na de inhoudsopgave (openssl krijgt dan een gesloten pijp), dus de uitvoer eerst opvangen.
   $decrypt < "$file" >/dev/null 2>&1 || die "Back-up niet te ontsleutelen (andere hoofdsleutel?)."
   local contents

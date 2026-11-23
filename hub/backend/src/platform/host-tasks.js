@@ -72,6 +72,12 @@ const HOST_TASKS = [
     description: 'Installeert de nieuwste update.sh op apps01 (zelfde stappen als taak 001, ca. 1 minuut niet beschikbaar). Daarna gaat een update niet meer door en migreert niet meer als de back-up vooraf mislukt (schijf vol, sleutel, time-out); de huidige versie blijft dan draaien.',
     addedAt: '2026-11-23',
   },
+  {
+    id: '010-back-up-integriteitscontrole',
+    title: 'Back-ups met integriteitscontrole (HMAC)',
+    description: 'Vernieuwt pg-backup.sh en restore-test.sh op apps01 en maakt direct een back-up. Elke dump krijgt daarna een .hmac-bestand ernaast; terugzetten en de hersteltest weigeren een dump waarvan de controle niet klopt. Oude back-ups zonder .hmac blijven werken (met een opmerking).',
+    addedAt: '2026-11-23',
+  },
 ];
 
 const MAX_FILE_BYTES = 64 * 1024;

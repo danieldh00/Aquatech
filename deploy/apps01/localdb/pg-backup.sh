@@ -4,7 +4,7 @@
 #   sudo systemctl start aquatech-pg-backup.service     (of: bash /opt/apps/aquatech/pg-backup.sh)
 #
 # - pg_dump (custom-formaat, gecomprimeerd) -> openssl AES-256-CBC (PBKDF2) met de hoofdsleutel van de app als
-#   wachtwoord, naar backups/postgres/aquatech-<datum>-<tijd>.dump.enc (map en bestanden alleen voor root).
+#   wachtwoord (met een HMAC-SHA256-bestand .hmac ernaast), naar backups/postgres/aquatech-<datum>-<tijd>.dump.enc (map en bestanden alleen voor root).
 # - Elke back-up wordt direct gecontroleerd (ontsleutelen + inhoudsopgave lezen) voordat hij blijft staan.
 # - Bewaartermijn: dagelijkse back-ups KEEP_DAILY_DAYS (14) dagen, die van zondag KEEP_WEEKLY_DAYS (56) dagen,
 #   de nieuwste 3 altijd.
@@ -38,10 +38,18 @@ flock -n 8 || { log "Er loopt al een back-up; overslaan."; exit 0; }
 STAMP="$(date +%Y%m%d-%H%M%S)"
 FINAL="$BACKUP_DIR/aquatech-$STAMP.dump.enc"
 TMP="$BACKUP_DIR/.bezig-$STAMP"
-trap 'rm -f "$TMP"' EXIT
+trap 'rm -f "$TMP" "$BACKUP_DIR/.bezig-$STAMP" "$FINAL.hmac.bezig"' EXIT
 
 encrypt() { openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass "file:$KEY_FILE"; }
 decrypt() { openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass "file:$KEY_FILE"; }
+
+# Integriteit: AES-CBC authenticeert niet, dus naast elk bestand staat een HMAC-SHA256 (.hmac) met een sleutel die
+# uit de hoofdsleutel is afgeleid. Terugzetten en de hersteltest controleren hem vóór het ontsleutelen.
+mac_of() {
+  local mac_key
+  mac_key="$( { printf 'aquatech-dump-hmac\n'; cat "$KEY_FILE"; } | sha256sum | cut -d' ' -f1)"
+  openssl dgst -sha256 -mac HMAC -macopt "hexkey:$mac_key" -r "$1" | cut -d' ' -f1
+}
 
 log "Back-up maken: $FINAL"
 docker exec "$CONTAINER" pg_dump -U postgres -d aquatech -n aquatech -Fc --no-owner --no-acl | encrypt > "$TMP"
@@ -56,6 +64,8 @@ contents="$( { decrypt < "$TMP" 2>/dev/null || true; } | docker exec -i "$CONTAI
 if ! grep -q ' TABLE ' <<<"$contents"; then
   die "Back-up gecontroleerd en afgekeurd (geen tabellen in de dump); niet bewaard."
 fi
+mac_of "$TMP" > "$FINAL.hmac.bezig" || die "HMAC maken mislukt; niet bewaard."
+mv -f "$FINAL.hmac.bezig" "$FINAL.hmac"
 mv -f "$TMP" "$FINAL"
 log "Back-up klaar ($(stat -c %s "$FINAL") bytes)"
 date -u '+%Y-%m-%dT%H:%M:%SZ' > "$BACKUP_DIR/laatste-geslaagd"
@@ -75,7 +85,7 @@ while IFS= read -r file; do
   limit="$KEEP_DAILY_DAYS"
   [[ "$(date -d "$day" +%u)" == "7" ]] && limit="$KEEP_WEEKLY_DAYS"
   if (( age_days > limit )); then
-    rm -f -- "$file"
+    rm -f -- "$file" "$file.hmac"
     log "Oude back-up verwijderd: $name"
   fi
 done < <(ls -1t "$BACKUP_DIR"/aquatech-*.dump.enc 2>/dev/null)

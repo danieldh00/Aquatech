@@ -387,6 +387,7 @@ HOST_TASK_IDS=(
   006-database-grootte-en-indexgebruik
   007-hersteltest-drive-app-controle
   009-update-script-stopt-bij-mislukte-back-up
+  010-back-up-integriteitscontrole
 )
 HOST_TASKS_LEDGER="host-tasks.json"
 # Functienaam van een taak (streepjes worden underscores).
@@ -447,6 +448,11 @@ hosttask_001_app_update_opnieuw_inrichten() {
 # Taak 009: update.sh vernieuwen (stopt bij een mislukte back-up vooraf); zelfde handeling als taak 001. Veilig herhaalbaar.
 hosttask_009_update_script_stopt_bij_mislukte_back_up() {
   hosttask_001_app_update_opnieuw_inrichten
+}
+
+# Taak 010: pg-backup.sh en restore-test.sh vernieuwen en een back-up maken, nu met een HMAC-bestand ernaast (zelfde handeling als taak 004).
+hosttask_010_back_up_integriteitscontrole() {
+  hosttask_004_pg_back_up_script_herstellen
 }
 
 # Taak 002: de wekelijkse hersteltest van de back-up inrichten (restore-test.sh + timer + path-unit). Veilig herhaalbaar.

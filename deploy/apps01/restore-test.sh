@@ -196,6 +196,17 @@ BACKUP_BYTES="$(stat -c %s "$BACKUP_FILE")"
 BACKUP_AT="$(date -u -d "@$(stat -c %Y "$BACKUP_FILE")" +%Y-%m-%dT%H:%M:%SZ)"
 decrypt() { openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass "file:$KEY_FILE" < "$BACKUP_FILE"; }
 
+# Integriteit (zie pg-backup.sh): een bestaande .hmac moet kloppen, anders is de dump gemanipuleerd of beschadigd.
+INTEGRITY_NOTE=""
+if [[ -f "$BACKUP_FILE.hmac" && ! -L "$BACKUP_FILE.hmac" ]]; then
+  mac_key="$( { printf 'aquatech-dump-hmac\n'; cat "$KEY_FILE"; } | sha256sum | cut -d' ' -f1)"
+  mac_now="$(openssl dgst -sha256 -mac HMAC -macopt "hexkey:$mac_key" -r "$BACKUP_FILE" | cut -d' ' -f1)"
+  [[ "$mac_now" == "$(tr -d '[:space:]' < "$BACKUP_FILE.hmac")" ]] \
+    || finish mislukt "De integriteitscontrole (HMAC) van de back-up klopt niet: het bestand is gewijzigd of beschadigd, of de hoofdsleutel is anders."
+else
+  INTEGRITY_NOTE="Deze back-up heeft nog geen integriteitscontrole (.hmac; van vóór die maatregel). "
+fi
+
 WORK_DIR="$(mktemp -d)"
 IMAGE="$(docker inspect -f '{{.Config.Image}}' "$PG_CONTAINER" 2>/dev/null || echo postgres:17)"
 
@@ -288,7 +299,7 @@ run_app_check
 if (( SANITY_FAILED > 0 )); then
   finish mislukt "$SANITY_FAILED sanity-controle(s) gaven geen goed resultaat."
 fi
-notes="$APP_NOTE"
+notes="$APP_NOTE$INTEGRITY_NOTE"
 (( VERSION_BACKUP < VERSION_PROD )) && notes+="De back-up is van een oudere schemaversie ($VERSION_BACKUP, productie $VERSION_PROD). "
 [[ -n "$MISSING" ]] && notes+="Tabellen die in productie wel bestaan en in de back-up niet. "
 (( deviating_count > 0 )) && notes+="$deviating_count tabel(len) met een afwijkend aantal rijen. "
