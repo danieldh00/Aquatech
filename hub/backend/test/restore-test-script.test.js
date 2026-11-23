@@ -74,11 +74,23 @@ exit 0
 `;
 
 /**
+ * Schrijft het HMAC-bestand naast een dump, zoals pg-backup.sh (sleutel afgeleid uit de hoofdsleutel).
+ * @param {string} dump Pad van de dump.
+ * @param {string} keyFile Pad van de hoofdsleutel.
+ */
+function writeMac(dump, keyFile) {
+  const derived = spawnSync('bash', ['-c', `{ printf 'aquatech-dump-hmac\\n'; cat "${keyFile}"; } | sha256sum | cut -d' ' -f1`], { encoding: 'utf8' }).stdout.trim();
+  const mac = spawnSync('openssl', ['dgst', '-sha256', '-mac', 'HMAC', '-macopt', `hexkey:${derived}`, '-r', dump], { encoding: 'utf8' });
+  assert.strictEqual(mac.status, 0, String(mac.stderr));
+  fs.writeFileSync(`${dump}.hmac`, `${mac.stdout.split(' ')[0]}\n`);
+}
+
+/**
  * Maakt een nep-installatie met een echt versleutelde dump, de nep-docker en de updatemappen.
- * @param {object} [options] policy (inhoud restore-test.json), prodCounts en testCounts (tekst "tabel|aantal" per regel), lastRun (epoch voor .restore-test-last), plainBytes (grootte van de nep-dump).
+ * @param {object} [options] policy (inhoud restore-test.json), prodCounts en testCounts (tekst "tabel|aantal" per regel), lastRun (epoch voor .restore-test-last), plainBytes (grootte van de nep-dump), withMac (HMAC-bestand naast de dump, standaard aan).
  * @returns {object} appDir, statusDir, requestDir, state en run (script draaien).
  */
-function install({ policy = null, prodCounts = 'users|50\nquotes|200\nwork_orders|100', testCounts = 'users|50\nquotes|190\nwork_orders|100', lastRun = null, plainBytes = 11 } = {}) {
+function install({ policy = null, prodCounts = 'users|50\nquotes|200\nwork_orders|100', testCounts = 'users|50\nquotes|190\nwork_orders|100', lastRun = null, plainBytes = 11, withMac = true } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'aqt-rtest-'));
   const appDir = path.join(root, 'app');
   const bin = path.join(root, 'bin');
@@ -93,6 +105,7 @@ function install({ policy = null, prodCounts = 'users|50\nquotes|200\nwork_order
   fs.writeFileSync(plain, plainBytes === 11 ? 'dump-inhoud' : 'x'.repeat(plainBytes));
   const encrypted = spawnSync('openssl', ['enc', '-aes-256-cbc', '-pbkdf2', '-iter', '200000', '-salt', '-pass', `file:${keyFile}`, '-in', plain, '-out', path.join(backupDir, 'aquatech-20261120-023000.dump.enc')]);
   assert.strictEqual(encrypted.status, 0, String(encrypted.stderr));
+  if (withMac) writeMac(path.join(backupDir, 'aquatech-20261120-023000.dump.enc'), keyFile);
   fs.writeFileSync(path.join(bin, 'docker'), FAKE_DOCKER, { mode: 0o755 });
   fs.writeFileSync(path.join(state, 'counts.prod'), `${prodCounts}\n`);
   fs.writeFileSync(path.join(state, 'counts.test'), `${testCounts}\n`);
@@ -309,4 +322,29 @@ test('restore-test.js: saneert de uitkomst van de host en bewaart de planning', 
   assert.strictEqual(restoreTest.requestRun({ userId: 'u1', byName: 'Bert' }).requested, true);
   assert.strictEqual(restoreTest.requestRun({ userId: 'u1' }).status, 409);
   assert.strictEqual(restoreTest.view().requested, true);
+});
+
+test('een dump waarvan de HMAC niet klopt wordt geweigerd', () => {
+  const env = install({ policy: dueNow() });
+  const dump = path.join(env.appDir, 'backups', 'postgres', 'aquatech-20261120-023000.dump.enc');
+  fs.appendFileSync(dump, 'x');
+  assert.strictEqual(env.run().status, 1);
+  const [latest] = readStatus(env.statusDir).runs;
+  assert.strictEqual(latest.state, 'mislukt');
+  assert.match(latest.message, /integriteitscontrole \(HMAC\)/);
+});
+
+test('een oude dump zonder HMAC geeft een opmerking, geen fout', () => {
+  const env = install({ policy: dueNow(), withMac: false });
+  assert.strictEqual(env.run().status, 0);
+  const [latest] = readStatus(env.statusDir).runs;
+  assert.strictEqual(latest.state, 'waarschuwing');
+  assert.match(latest.message, /nog geen integriteitscontrole/);
+});
+
+test('een lege HMAC-bestand telt niet als geldig', () => {
+  const env = install({ policy: dueNow() });
+  fs.writeFileSync(path.join(env.appDir, 'backups', 'postgres', 'aquatech-20261120-023000.dump.enc.hmac'), '\n');
+  assert.strictEqual(env.run().status, 1);
+  assert.strictEqual(readStatus(env.statusDir).runs[0].state, 'mislukt');
 });
