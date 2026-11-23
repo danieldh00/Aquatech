@@ -39,8 +39,8 @@ APP_DIR="${APP_DIR:-/opt/apps/aquatech}"
 REF="${REF:-master}"
 # Een branch of tag wordt eenmalig naar de commit omgezet en daarop vastgezet: alle bestanden van deze run komen van
 # dezelfde commit en de commit staat in het log (een script dat als root draait loopt nooit mee met een branch).
-if [[ ! "$REF" =~ ^[0-9a-f]{40}$ ]]; then
-  PINNED="$(curl -fsSL -m 30 -H 'Accept: application/vnd.github.sha' "https://api.github.com/repos/danieldh00/Aquatech/commits/$REF" 2>/dev/null || true)"
+if [[ -z "${SRC_DIR:-}" && ! "$REF" =~ ^[0-9a-f]{40}$ ]]; then
+  PINNED="$(curl -fsSL -m 30 --retry 2 -H 'Accept: application/vnd.github.sha' "https://api.github.com/repos/danieldh00/Aquatech/commits/$REF" 2>/dev/null || true)"
   [[ "$PINNED" =~ ^[0-9a-f]{40}$ ]] || { echo "FOUT: kan $REF niet naar een commit omzetten (staat hij op GitHub?)." >&2; exit 1; }
   echo "[$(date '+%F %T')] $REF = commit $PINNED"
   REF="$PINNED"

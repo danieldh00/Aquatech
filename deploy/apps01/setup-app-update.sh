@@ -20,7 +20,7 @@ SETUP_REF="${SETUP_REF:-master}"
 [[ "$SETUP_REF" == "master" || "$SETUP_REF" =~ ^[0-9a-f]{40}$ ]] || { echo "FOUT: SETUP_REF moet master of een volledige commit zijn." >&2; exit 1; }
 # master wordt eenmalig naar een commit omgezet en getoond: alle bestanden van deze run komen van dezelfde commit.
 if [[ "$SETUP_REF" == "master" ]]; then
-  PINNED="$(curl -fsSL -m 30 -H 'Accept: application/vnd.github.sha' https://api.github.com/repos/danieldh00/Aquatech/commits/master 2>/dev/null || true)"
+  PINNED="$(curl -fsSL -m 30 --retry 2 -H 'Accept: application/vnd.github.sha' https://api.github.com/repos/danieldh00/Aquatech/commits/master 2>/dev/null || true)"
   [[ "$PINNED" =~ ^[0-9a-f]{40}$ ]] || { echo "FOUT: kan master niet naar een commit omzetten." >&2; exit 1; }
   echo "SETUP_REF master = commit $PINNED"
   SETUP_REF="$PINNED"
