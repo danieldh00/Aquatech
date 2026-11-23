@@ -652,7 +652,8 @@
   async function loadBackups() {
     const list = $('#b-list');
     try {
-      const { enabled, items } = await api('backups');
+      const { enabled, items, keyFingerprint } = await api('backups');
+      $('#b-fingerprint').textContent = keyFingerprint || 'onbekend';
       const driveNames = await api('backups/drive').then((drive) => new Set(drive.items.filter((item) => item.onDrive).map((item) => item.name))).catch(() => new Set());
       $('#b-now').disabled = !enabled;
       list.innerHTML = !enabled ? 'Back-ups zijn op deze server niet beschikbaar.'

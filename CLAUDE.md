@@ -115,7 +115,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   Back-ups (`backup.js`, 0.19.0; sinds SQLite weg is formaatversie 2): alle rijen uit één leestransactie als gzip-regels JSON (`database/table-rows.js` `exportLines`) + AES-GCM (`vault.derive('back-ups')`; bestandsnaam blijft `.db.enc`; versie 1 = SQLite wordt geweigerd),
   ook via `node src/backup.js create` (update.sh doet dat vóór elke update),
   `/data/backups` of `BACKUP_DIR`, dagelijks via `app.locals.backupIfDue`,
-  `backupKeepDays`; `store.purgePlan` wist plan + historie-inhoud (AVG).
+  `backupKeepDays`; `store.purgePlan` wist plan + historie-inhoud (AVG). **Vingerafdruk hoofdsleutel** (geen migratie): `vault.fingerprint()` (SHA-256 over een eigen HKDF-sleutel, 96 bit) staat als `keyFingerprint` in `GET /api/admin/backups` en in Beheer > Back-ups, om een kopie in de wachtwoordkluis mee te vergelijken; de sleutel zelf gaat nooit naar de frontend.
   **Back-ups naar Google Drive** (1.14.8, geen migratie, `platform/drive-backup.js`, Beheer > Systeem > *Back-ups naar Google Drive* in
   `beheer/drive-backup.js`; wens Daniël 2026-11-13: instelbaar en inzichtelijk in de app, geen hostscripts): OAuth2 (`drive.file`,
   offline, `prompt=consent`) met een eigen Google-app per installatie (`backupDrive` + geheimen `backupDriveClientSecret`/
