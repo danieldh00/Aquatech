@@ -260,6 +260,14 @@ test('uitbesteden: aanbiedingen per uur begrensd en per ontvanger één mail per
     assert.strictEqual(blocked.status, 429);
     assert.strictEqual(blocked.body.error, 'rate_limited');
     assert.strictEqual(sent.filter((message) => message.to === 'groen@voorbeeld.nl').length, 1, 'één mail per ontvanger per werkorder, ook na intrekken en opnieuw aanbieden');
+    // Eerst gericht aan Groen (al gemaild), daarna open aanbod voor een andere werkorder-aanbieding: Groen krijgt geen tweede mail.
+    await db.prepare("UPDATE work_order_offers SET created_at = created_at - interval '2 hours'").run();
+    sent.length = 0;
+    const woOther = await acceptedWorkOrder(baas);
+    const first = await baas.post('/app/api/outsourcing/offers', { workOrderId: woOther.id, toTenantId: orgs.groen.id });
+    assert.strictEqual((await baas.del(`/app/api/outsourcing/offers/${first.body.id}`)).status, 200);
+    assert.strictEqual((await baas.post('/app/api/outsourcing/offers', { workOrderId: woOther.id })).status, 201);
+    assert.strictEqual(sent.filter((message) => message.to === 'groen@voorbeeld.nl').length, 1, 'gericht en daarna open aanbod: één mail');
     // Een ander uur: oude aanbiedingen tellen niet meer mee.
     await db.prepare("UPDATE work_order_offers SET created_at = created_at - interval '2 hours'").run();
     assert.strictEqual((await baas.post('/app/api/outsourcing/offers', { workOrderId: wo.id, toTenantId: orgs.groen.id })).status, 201);

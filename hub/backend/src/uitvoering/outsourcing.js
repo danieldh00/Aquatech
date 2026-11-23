@@ -134,7 +134,7 @@ const F_COLS = COLS.split(', ').map((column) => `f.${column}`).join(', ');
  * Maakt de opslag voor uitbestede opdrachten.
  * @param {object} db De database.
  * @param {{ workorders: object }} stores De werkorderopslag (createReceived).
- * @returns {object} offer, outgoing, incoming, marks, withdraw, decline, accept, request, approve, reject, offeredBefore, find, outgoingView en incomingView.
+ * @returns {object} offer, outgoing, incoming, marks, withdraw, decline, accept, request, approve, reject, mailedBefore, find, outgoingView en incomingView.
  */
 function createOutsourcingStore(db, { workorders }) {
   /**
@@ -235,7 +235,7 @@ function createOutsourcingStore(db, { workorders }) {
    * @param {string} tenantId Id van de uitbesteder.
    * @param {string} workOrderId Id van de werkorder.
    * @param {object} input toTenantId (null = iedereen), toName, message, fee en fromName.
-   * @returns {{ offer: object, alreadyMailed: boolean }|{ error: string, status?: string }} Het aanbod (alreadyMailed: deze ontvanger kreeg al eerder een mail over deze werkorder), of de fout not_found, status, active of rate_limited.
+   * @returns {{ offer: object, mailed: { everyone: boolean, tenantIds: string[] } }|{ error: string, status?: string }} Het aanbod (mailed: wie al eerder een mail over deze werkorder kreeg, zie mailedBefore), of de fout not_found, status, active of rate_limited.
    */
   function offer(user, tenantId, workOrderId, input) {
     return transaction(db, () => {
@@ -247,14 +247,14 @@ function createOutsourcingStore(db, { workorders }) {
       const recent = prepare('SELECT COUNT(*) AS total FROM work_order_offers WHERE tenant_id = ? AND created_at > ?').get(tenantId, sinceHour);
       if (Number(recent?.total) >= OFFERS_PER_HOUR) return { error: 'rate_limited' };
       // In dezelfde transactie als het aanmaken, zodat gelijktijdige aanbiedingen niet dubbel mailen.
-      const alreadyMailed = offeredBefore(tenantId, workOrder.id, input.toTenantId || null);
+      const mailed = mailedBefore(tenantId, workOrder.id);
       const id = crypto.randomUUID();
       const timestamp = currentTimestamp();
       prepare(`INSERT INTO work_order_offers (id, tenant_id, work_order_id, to_tenant_id, status, message, fee, preview, from_name, created_by, created_by_name,
           receiver_name, created_at, updated_at) VALUES (?, ?, ?, ?, 'aangeboden', ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(id, tenantId, workOrder.id, input.toTenantId || null, cleanText(input.message, 2000), input.fee ?? null, JSON.stringify(previewOf(parseJson(workOrder.data, {}), { neutralTitle: !input.toTenantId })),
           cleanText(input.fromName, 200), user.id, cleanText(user.display_name, 120), input.toTenantId ? cleanText(input.toName, 200) : '', timestamp, timestamp);
-      return { offer: outgoingView(find(id)), alreadyMailed };
+      return { offer: outgoingView(find(id)), mailed };
     });
   }
 
@@ -473,21 +473,17 @@ function createOutsourcingStore(db, { workorders }) {
   }
 
   /**
-   * Is dit werkorder-aanbod al eerder aangeboden aan (of via een open aanbod ook aan) deze ontvanger?
-   * Voor het mailen: een ontvanger krijgt per werkorder hoogstens één aanbiedingsmail.
+   * Wie kreeg al eerder een aanbiedingsmail voor deze werkorder? Een ontvanger krijgt per werkorder hoogstens één mail.
    * @param {string} tenantId Id van de uitbesteder.
    * @param {string} workOrderId Id van de werkorder.
-   * @param {string|null} toTenantId De ontvanger van het nieuwe aanbod, null = iedereen.
-   * @returns {boolean} true als eerder al gemaild is.
+   * @returns {{ everyone: boolean, tenantIds: string[] }} everyone: er was al een open aanbod (alle ontvangers gemaild); tenantIds: eerder gericht aangeboden aan.
    */
-  function offeredBefore(tenantId, workOrderId, toTenantId) {
-    const row = toTenantId
-      ? prepare('SELECT 1 AS found FROM work_order_offers WHERE tenant_id = ? AND work_order_id = ? AND (to_tenant_id IS NULL OR to_tenant_id = ?) LIMIT 1').get(tenantId, String(workOrderId), toTenantId)
-      : prepare('SELECT 1 AS found FROM work_order_offers WHERE tenant_id = ? AND work_order_id = ? AND to_tenant_id IS NULL LIMIT 1').get(tenantId, String(workOrderId));
-    return Boolean(row);
+  function mailedBefore(tenantId, workOrderId) {
+    const rows = prepare('SELECT to_tenant_id FROM work_order_offers WHERE tenant_id = ? AND work_order_id = ?').all(tenantId, String(workOrderId));
+    return { everyone: rows.some((row) => !row.to_tenant_id), tenantIds: rows.map((row) => row.to_tenant_id).filter(Boolean) };
   }
 
-  return { offer, outgoing, incoming, marks, withdraw, decline, accept, request, approve, reject, offeredBefore, find, outgoingView, incomingView };
+  return { offer, outgoing, incoming, marks, withdraw, decline, accept, request, approve, reject, mailedBefore, find, outgoingView, incomingView };
 }
 
 /**
@@ -616,7 +612,8 @@ function registerOutsourcingRoutes(app, ctx) {
     audit(req, 'opdracht_aangeboden', { offerId: out.offer.id, workOrderId: out.offer.workOrderId, aan: target ? target.name : 'iedereen' });
     const preview = out.offer.preview;
     // Wie al eens een aanbod voor deze werkorder kreeg, krijgt geen tweede mail (intrekken en opnieuw aanbieden herhaalt de mailronde niet).
-    if (!out.alreadyMailed) mail(tenantId, target ? [target.id] : list.map((partner) => partner.id), `Opdracht aangeboden door ${nameOf(tenantId)}`, [
+    const recipients = (target ? [target.id] : list.map((partner) => partner.id)).filter((id) => !out.mailed.everyone && !out.mailed.tenantIds.includes(id));
+    if (recipients.length) mail(tenantId, recipients, `Opdracht aangeboden door ${nameOf(tenantId)}`, [
       `${nameOf(tenantId)} biedt een opdracht aan${target ? ' aan uw organisatie' : ' aan organisaties die opdrachten ontvangen'}: ${preview.title}${preview.place ? ` in ${preview.place}` : ''}.`,
       out.offer.message,
       'Bekijk het aanbod en neem het aan in de module Uitbesteden.',
