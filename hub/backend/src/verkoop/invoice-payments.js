@@ -116,6 +116,11 @@ function createInvoicePayments({ db, invoices, mollie, settingsFor, linkKey = nu
       // De controle op de status en setPaid draaien synchroon achter elkaar (geen await ertussen), dus gelijktijdige aanroepen maken de factuur maar één keer betaald.
       let becamePaid = false;
       const current = invoices.get(tenantId, invoice.id);
+      // Een betaling die vóór de creditering is gestart: de rij blijft betaald (het geld is zichtbaar in invoice_payments), maar de gecrediteerde factuur wordt niet op betaald gezet; terugbetalen gaat met de hand.
+      if (current && current.creditedAt && current.status === 'definitief') {
+        log.warn(`Betaling ${payment.id} (${payment.amount}) is binnengekomen op gecrediteerde factuur ${current.number}; handmatig terugbetalen.`);
+        return { becamePaid: false, status: 'betaald', afterCredit: true };
+      }
       if (current && current.status === 'definitief') {
         const out = invoices.setPaid(tenantId, invoice.id, true, paidAt.slice(0, 10));
         becamePaid = Boolean(out && out.invoice);
