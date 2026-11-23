@@ -67,6 +67,12 @@ const HOST_TASKS = [
     addedAt: '2026-11-20',
   },
   {
+    id: '008-vertrouwde-proxy-instellen',
+    title: 'Vertrouwde proxy van de app instellen',
+    description: 'Zet in .env het subnet van het compose-netwerk als TRUSTED_PROXIES en vernieuwt compose.yml (ca. 1 minuut niet beschikbaar). Daarna gelooft de app het bezoeker-IP uit CF-Connecting-IP alleen van het compose-netwerk en niet meer van elk ander privé-adres. Beperking: een verbinding via de gepubliceerde poort 3300 (Tailscale) komt via de Docker-gateway binnen en blijft dus vertrouwd.',
+    addedAt: '2026-11-23',
+  },
+  {
     id: '009-update-script-stopt-bij-mislukte-back-up',
     title: 'Updatescript bijwerken: stoppen als de back-up mislukt',
     description: 'Installeert de nieuwste update.sh op apps01 (zelfde stappen als taak 001, ca. 1 minuut niet beschikbaar). Daarna gaat een update niet meer door en migreert niet meer als de back-up vooraf mislukt (schijf vol, sleutel, time-out); de huidige versie blijft dan draaien.',

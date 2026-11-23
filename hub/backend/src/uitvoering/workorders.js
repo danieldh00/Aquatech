@@ -707,6 +707,7 @@ function registerWorkOrderRoutes(app, ctx) {
   const settingsOf = ctx.settingsOf;
   const settingsForTenant = ctx.settingsForTenant;
   const tenantActive = ctx.tenantActive || (() => true);
+  const scopeToTenant = ctx.scopeToTenant || (() => {});
   const mailerFor = ctx.mailerFor || ((settings) => createMailer(settings));
   const remoteIp = ctx.remoteIp || ((req) => req.socket?.remoteAddress || '');
   const publicLimiter = ctx.publicLimiter || ((req, res, next) => next());
@@ -967,6 +968,7 @@ function registerWorkOrderRoutes(app, ctx) {
       res.status(404).json({ error: 'not_found', message: 'Deze afspraak is niet (meer) beschikbaar. Neem contact op met de afzender.' });
       return null;
     }
+    scopeToTenant(workOrderRow.tenant_id);
     return workOrderRow;
   }
   /**

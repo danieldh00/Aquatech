@@ -528,7 +528,7 @@
     $('#invoices').innerHTML = `<thead><tr><th>Nummer</th><th>Datum</th><th>Vervaldatum</th><th>Status</th><th class="num">Totaal incl. btw</th><th></th></tr></thead>
       <tbody>${invoices.map((invoice) => `
         <tr><td><b>${esc(invoice.number)}</b></td><td>${esc(invoice.date)}</td><td>${esc(invoice.dueDate)}</td>
-          <td><span class="pill ${invoice.overdue ? 'afgewezen' : invoice.status === 'betaald' ? 'gereed' : 'open'}">${invoice.overdue ? 'Verlopen' : esc(INVOICE_STATUS[invoice.status] || invoice.status)}</span>${invoice.paidAt ? ` <span class="muted">${esc(when(invoice.paidAt))}</span>` : ''}</td>
+          <td><span class="pill ${invoice.credited ? 'gereed' : invoice.overdue ? 'afgewezen' : invoice.status === 'betaald' ? 'gereed' : 'open'}">${invoice.credited && invoice.status !== 'betaald' ? 'Gecrediteerd' : invoice.overdue ? 'Verlopen' : esc(INVOICE_STATUS[invoice.status] || invoice.status)}</span>${invoice.paidAt ? ` <span class="muted">${esc(when(invoice.paidAt))}</span>` : ''}</td>
           <td class="num">${money(invoice.total)}</td>
           <td class="actions"><a class="btn small" href="../api/portal/invoices/${encodeURIComponent(invoice.id)}/pdf" target="_blank" rel="noopener">PDF</a>
             ${invoice.payable ? `<button class="btn small primary" type="button" data-pay="${esc(invoice.id)}">Nu betalen</button>` : ''}</td></tr>`).join('')}</tbody>`;

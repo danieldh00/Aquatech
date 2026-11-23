@@ -76,6 +76,20 @@ test('een concept of een creditfactuur staat niet in het portaal', async () => {
   assert.strictEqual((await world.shoppers[0].client.get(`/app/api/portal/invoices/${draft.id}/pdf`)).status, 404);
 });
 
+test('een gecrediteerde factuur is niet meer te betalen en staat als gecrediteerd in het portaal', async () => {
+  const world = await setup({ mollie: true });
+  const { invoiceId } = await finalInvoiceFor(world, 0);
+  const credit = await world.admin.post(`/app/api/invoices/${invoiceId}/credit`, {});
+  assert.strictEqual(credit.status, 201, JSON.stringify(credit.body));
+  const finalized = await world.admin.post(`/app/api/invoices/${credit.body.id}/finalize`, {});
+  assert.strictEqual(finalized.status, 200, JSON.stringify(finalized.body));
+  const listed = (await world.shoppers[0].client.get('/app/api/portal')).body.invoices.find((invoice) => invoice.id === invoiceId);
+  assert.deepStrictEqual([listed.credited, listed.payable, listed.overdue], [true, false, false]);
+  const started = await world.shoppers[0].client.post(`/app/api/portal/invoices/${invoiceId}/pay`, {});
+  assert.strictEqual(started.status, 409);
+  assert.strictEqual(world.mollie.payments.size, 0, 'er is bij Mollie niets aangemaakt');
+});
+
 test('betalen: betaalpagina, webhook zet de factuur op betaald, een tweede melding doet niets', async () => {
   const world = await setup({ mollie: true });
   const { invoiceId } = await finalInvoiceFor(world, 0);

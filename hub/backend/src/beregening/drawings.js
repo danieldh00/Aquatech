@@ -71,6 +71,7 @@ function registerDrawingRoutes(app, ctx) {
   const { store, identify, requirePlans, requireRight, requireJson, audit, settingsFor, remoteIp, publicLimiter } = ctx;
   const { captcha, captchaGate } = ctx;
   const tenantActive = ctx.tenantActive || (() => true);
+  const scopeToTenant = ctx.scopeToTenant || (() => {});
   const mailerFor = ctx.mailerFor || ((settings) => createMailer(settings));
   const planLimiter = ctx.planLimiter || ((req, res, next) => next());
   const ipLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: PER_IP_HOUR, keyFn: clientKey });
@@ -93,6 +94,7 @@ function registerDrawingRoutes(app, ctx) {
     const slug = String(code ?? '').trim().toLowerCase().slice(0, 64);
     const tenant = store.getTenantBySlug(slug || 'default');
     if (!tenant || !tenantActive(tenant.id)) return null;
+    scopeToTenant(tenant.id);
     const settings = settingsFor(tenant.id);
     if (!settings.get('drawingRequests')) return null;
     return { tenant: tenant, settings };

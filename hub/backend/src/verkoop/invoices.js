@@ -90,7 +90,7 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
     sentAt: row.sent_at || null, sentTo: row.sent_to || null, sendError: row.send_error || '',
     vismaInvoiceId: row.visma_invoice_id || null, vismaNumber: row.visma_number || null, vismaSyncedAt: row.visma_synced_at || null, vismaError: row.visma_error || '',
     ...(row.debtor_number !== undefined ? { debtorNumber: row.debtor_number == null ? null : Number(row.debtor_number) } : {}),
-    overdue: row.status === 'definitief' && row.kind === 'factuur' && row.due_date < Core.today(),
+    overdue: row.status === 'definitief' && row.kind === 'factuur' && !row.credited_at && row.due_date < Core.today(),
   });
 
   /**
