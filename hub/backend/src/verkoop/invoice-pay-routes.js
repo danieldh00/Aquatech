@@ -27,8 +27,9 @@ const messagePage = (rawTitle, rawText) => {
  * @param {{ invoicePayments: object, tenantId: string, limiter: Function }} ctx De betaalfuncties, de omgeving van de webshop/facturen en de limiet per bezoeker.
  * @returns {void}
  */
-function registerInvoicePayLinkRoutes(app, { invoicePayments, tenantId, limiter }) {
+function registerInvoicePayLinkRoutes(app, { invoicePayments, tenantId, limiter, scopeToTenant = () => {} }) {
   app.get('/api/public/invoice-pay/:invoiceId/:signature', limiter, async (req, res) => {
+    scopeToTenant(tenantId);
     res.set({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Robots-Tag': 'noindex' });
     /**
      * Stuurt een korte meldingspagina terug.
@@ -51,6 +52,7 @@ function registerInvoicePayLinkRoutes(app, { invoicePayments, tenantId, limiter 
       return show(200, 'Uw betaling is nog niet bevestigd', 'Is de betaling gelukt, dan ziet u de factuur zo als betaald. Anders kunt u de link uit de e-mail opnieuw gebruiken.');
     }
     if (invoice.status === 'betaald') return show(200, 'Deze factuur is al betaald', `Factuur ${invoice.number} is betaald, dank u wel.`);
+    if (invoice.creditedAt) return show(409, 'Deze factuur is gecrediteerd', 'U hoeft niets meer te betalen. Heeft u vragen, neem dan contact met ons op.');
     if (!invoicePayments.payableState(tenantId, invoice)) return show(409, 'Online betalen is niet mogelijk', 'Betaal deze factuur op de manier die in de e-mail of op de factuur staat.');
     // Terug na het betalen: een adres uit het webadres van Beheer, nooit uit de Host-kop.
     const returnUrl = invoicePayments.appUrl(tenantId, `api/public/invoice-pay/${encodeURIComponent(invoice.id)}/${req.params.signature}?teruggekeerd=1`);

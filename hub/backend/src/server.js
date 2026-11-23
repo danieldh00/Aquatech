@@ -842,6 +842,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (req.path === '/robots.txt' && !settingsFor(tenant.id).get('storefront')) return res.type('text').send('User-agent: *\nDisallow: /\n');
     // Webshop uit: de hoofdpagina is dan de app (voorbeeld voor beheerders blijft kunnen).
     if (req.path === '/' && !settingsFor(tenant.id).get('storefront') && !Object.prototype.hasOwnProperty.call(req.query, 'voorbeeld')) return res.redirect(302, 'app/');
+    // De webshop hoort bij de hoofdtenant: ook zonder inlog ziet de database alleen die organisatie (B-12 uit de audit van 1.33.0).
+    limitTo(store.familyIds(tenant.id));
     return storefrontRouter(req, res, next);
   });
 
@@ -2144,11 +2146,18 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const live = tenantRow && tenantRow.parent_id ? store.getTenant(tenantRow.parent_id) : tenantRow;
     return Boolean(tenantRow && !tenantRow.disabled && live && !live.disabled && inScope(tenantRow));
   };
+  /**
+   * Beperkt de rest van een openbaar verzoek (zonder inlog) tot de organisatie van de gevonden offerte, afspraak of
+   * tekening, zodat de database-afscherming (RLS) ook daar geldt (B-12 uit de audit van 1.33.0).
+   * @param {string} tenantId Id van de omgeving van de gevonden rij.
+   * @returns {void}
+   */
+  const scopeToTenant = (tenantId) => limitTo(store.familyIds(tenantId));
   const publicLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, keyFn: clientKey });
 
   // ---------- Tekening indienen zonder inloggen, plan ter controle, goedkeuren.
   registerDrawingRoutes(app, {
-    store, identify, requireUser, requirePlans, requireRight, requireJson, audit, remoteIp, tenantActive, publicLimiter, planLimiter, mailerFor,
+    store, identify, requireUser, requirePlans, requireRight, requireJson, audit, remoteIp, tenantActive, scopeToTenant, publicLimiter, planLimiter, mailerFor,
     settingsFor: (id) => settingsFor(id), canApprove: (user) => Roles.can(user, 'plannen.goedkeuren'), captcha, captchaGate,
   });
 
@@ -2207,7 +2216,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // Een offerte uit een plan alleen als dat plan is goedgekeurd.
     planReviewOf: (tenantId, planId) => store.planReviewStatus(tenantId, planId),
     tenantOf: (req) => req.tenantId || tenant.id, settingsOf: (req) => settingsFor(req.tenantId || tenant.id),
-    settingsForTenant: (id) => settingsFor(id), remoteIp, mailerFor, tenantActive, publicLimiter, addressGuard,
+    settingsForTenant: (id) => settingsFor(id), remoteIp, mailerFor, tenantActive, scopeToTenant, publicLimiter, addressGuard,
     themeOf: (id) => Theme.vars(themeFor(id)),
     // Klantaccounts horen bij de live-tenant (ook als er in test gewerkt
     // wordt); in een testomgeving komen de testklanten daarvan erbij.
@@ -2236,7 +2245,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   registerWorkOrderRoutes(app, {
     workorders: workOrderStore, requireRight, requireAdmin, requireJson, audit, addressGuard,
     settingsOf: (req) => settingsFor(req.tenantId || tenant.id), settingsForTenant: (id) => settingsFor(id),
-    remoteIp, mailerFor, tenantActive, publicLimiter,
+    remoteIp, mailerFor, tenantActive, scopeToTenant, publicLimiter,
     themeOf: (id) => Theme.vars(themeFor(id)),
     photoCounts: (tid, ids) => photoStore.counts(tid, ids),
     loggedOf: (tid, ids) => workLogStore.counts(tid, ids),
@@ -2582,12 +2591,13 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const seasonReminderStore = createSeasonReminderStore(database, { roles: store.roles });
   // Facturen online betalen door de klant (Mollie, zie invoice-payments.js); de webhook is openbaar en vraagt de uitkomst zelf bij Mollie op.
   const invoicePayments = createInvoicePayments({ db: database, invoices: invoiceStore, mollie: createMollie(mollieFetch ? { fetchImpl: mollieFetch } : {}), settingsFor: (id) => settingsFor(id), linkKey: vault.derive('factuur-betaallink') });
-  registerInvoicePayLinkRoutes(app, { invoicePayments, tenantId: tenant.id, limiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: (req) => `factuur-betaallink:${clientKey(req)}` }) });
+  registerInvoicePayLinkRoutes(app, { invoicePayments, tenantId: tenant.id, scopeToTenant, limiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: (req) => `factuur-betaallink:${clientKey(req)}` }) });
   invoicePayments.onPaid((tenantId, invoice) => store.audit({ tenantId, userId: null, action: 'factuur_betaald_online', detail: { number: invoice.number, total: invoice.total } }));
   const invoiceWebhookLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 120, keyFn: (req) => `mollie-factuur:${clientKey(req)}` });
   app.post('/api/public/invoice-payment/:invoiceId/webhook', invoiceWebhookLimiter, express.urlencoded({ extended: false, limit: '2kb' }), async (req, res) => {
     const paymentId = String(req.body && req.body.id || '');
     if (!validPaymentId(paymentId)) return res.status(200).end();
+    scopeToTenant(tenant.id);
     try {
       await invoicePayments.sync(tenant.id, String(req.params.invoiceId), { paymentId });
     } catch (failure) {

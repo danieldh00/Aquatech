@@ -44,11 +44,12 @@ function createInvoicePayments({ db, invoices, mollie, settingsFor, linkKey = nu
   const enabled = (tenantId) => configOf(settingsFor(tenantId)).online;
 
   /**
-   * Of deze factuur nog betaald kan worden: een definitieve, openstaande factuur (geen credit, geen bedrag van nul of lager).
+   * Of deze factuur nog betaald kan worden: een definitieve, openstaande factuur (geen credit, geen bedrag van nul of lager,
+   * niet gecrediteerd: dan hoeft de klant niets meer te betalen).
    * @param {object} invoice De factuur (toInvoice).
    * @returns {boolean} true als hij betaald mag worden.
    */
-  const payable = (invoice) => invoice.kind === 'factuur' && invoice.status === 'definitief' && invoice.total > 0;
+  const payable = (invoice) => invoice.kind === 'factuur' && invoice.status === 'definitief' && invoice.total > 0 && !invoice.creditedAt;
 
   /**
    * De betaalstand voor het portaal: of de klant nu kan betalen.
@@ -68,7 +69,7 @@ function createInvoicePayments({ db, invoices, mollie, settingsFor, linkKey = nu
     const online = enabled(tenantId);
     return invoices.list(tenantId, { customerId: String(customerId), kinds: ['factuur'], statuses: ['definitief', 'betaald'] }).map((invoice) => ({
       id: invoice.id, number: invoice.number, date: invoice.date, dueDate: invoice.dueDate, total: invoice.total, status: invoice.status,
-      overdue: invoice.overdue, paidAt: invoice.paidAt, payable: online && payable(invoice),
+      overdue: invoice.overdue, paidAt: invoice.paidAt, credited: Boolean(invoice.creditedAt), payable: online && payable(invoice),
     }));
   }
 
@@ -173,6 +174,7 @@ function createInvoicePayments({ db, invoices, mollie, settingsFor, linkKey = nu
     const config = configOf(settingsFor(tenantId));
     if (!config.online) return { error: 'Online betalen staat niet aan.', status: 409 };
     if (invoice.status === 'betaald') return { paid: true };
+    if (invoice.creditedAt) return { error: 'Deze factuur is gecrediteerd en hoeft niet meer betaald te worden.', status: 409 };
     if (!payable(invoice)) return { error: 'Deze factuur kan niet online betaald worden.', status: 409 };
     try {
       const attempts = paymentsOf(tenantId, invoice.id);

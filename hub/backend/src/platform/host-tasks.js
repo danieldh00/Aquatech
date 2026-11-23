@@ -66,6 +66,12 @@ const HOST_TASKS = [
     description: 'Installeert restore-test-drive.sh, restore-app-check.sh en een path-unit op apps01 (en vernieuwt de lokale hersteltest). De hersteltest van de Google Drive-back-up zet de gedownloade back-up daarna ook terug in een wegwerpdatabase en start er een wegwerp-app op (hoogstens 512 MB, intern netwerk zonder uitgang, geen mail of koppelingen) die inlogt en gegevens ophaalt.',
     addedAt: '2026-11-20',
   },
+  {
+    id: '008-vertrouwde-proxy-instellen',
+    title: 'Vertrouwde proxy van de app instellen',
+    description: 'Zet in .env het subnet van het compose-netwerk als TRUSTED_PROXIES en vernieuwt compose.yml (ca. 1 minuut niet beschikbaar). Daarna gelooft de app het bezoeker-IP uit CF-Connecting-IP alleen van de tunnel en niet meer van elk privé-adres dat poort 3300 bereikt (limieten en auditlog zijn dan niet meer te omzeilen).',
+    addedAt: '2026-11-23',
+  },
 ];
 
 const MAX_FILE_BYTES = 64 * 1024;

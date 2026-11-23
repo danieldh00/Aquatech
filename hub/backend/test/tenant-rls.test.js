@@ -9,7 +9,7 @@ const { createApp } = require('../src/server');
 const { openDb, listTables, tableColumns } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { withScope, limitTo, asSystem, scopeKey } = require('../src/database/tenant-scope');
-const { createLogin, listen } = require('./helpers/http-client');
+const { createLogin, createClient, listen } = require('./helpers/http-client');
 
 const needPg = { skip: !process.env.TEST_DATABASE_URL && 'zet TEST_DATABASE_URL voor tests tegen PostgreSQL' };
 const SECRET = 'r'.repeat(64);
@@ -84,4 +84,35 @@ test('via de app: een beheerder van een andere organisatie ziet geen plannen van
   const vreemd = await login('vreemd', 'ander');
   assert.deepStrictEqual((await vreemd.get('/app/api/admin/plans')).body.items, []);
   assert.strictEqual((await baas.get('/app/api/admin/plans')).body.items.length, 1);
+});
+
+test('zonder inlog: de webshop en een openbare tekening-link draaien binnen de eigen organisatie (B-12)', needPg, async () => {
+  const db = openDb();
+  const store = createStore(db);
+  const main = store.ensureTenant().id;
+  await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW, mustChangePassword: false }, { platformAdmin: true });
+  const other = store.createTenant({ slug: 'ander', name: 'Ander BV' }).tenant;
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db, loginDelayMs: 0 }));
+  servers.push(server);
+  const baas = await createLogin(base, { password: PW })('baas');
+  assert.strictEqual((await baas.put('/app/api/admin/settings', { storefront: true })).status, 200);
+  const keys = [];
+  const originalPrepare = db.prepare.bind(db);
+  /**
+   * Onthoudt de scope waarmee elke query wordt voorbereid, en geeft de query door.
+   * @param {string} sql De query.
+   * @returns {object} Het voorbereide statement.
+   */
+  db.prepare = (sql) => { keys.push(scopeKey()); return originalPrepare(sql); };
+  try {
+    const anonymous = createClient(base);
+    keys.length = 0;
+    assert.strictEqual((await anonymous.get('/')).status, 200);
+    assert.strictEqual(keys[keys.length - 1], store.familyIds(main).join(','), 'de shop-aanvraag eindigt binnen de hoofdtenant');
+    keys.length = 0;
+    await anonymous.get('/app/api/public/drawing?org=ander');
+    assert.strictEqual(keys[keys.length - 1], store.familyIds(other.id).join(','), 'een openbare link werkt binnen de gevonden organisatie');
+  } finally {
+    db.prepare = originalPrepare;
+  }
 });
