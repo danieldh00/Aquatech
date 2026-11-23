@@ -108,3 +108,16 @@ test('migratie weigert een schema met vreemde tabellen', needPg, () => {
   pg.exec('DROP TABLE schema_version');
   assert.throws(() => openPg(URL_, { schema }), /bevat al tabellen/);
 });
+
+test('een database die nieuwer is dan de code start niet (tenzij bewust toegestaan)', needPg, () => {
+  const schema = freshSchema();
+  const pg = openPg(URL_, { schema });
+  pg.prepare('UPDATE schema_version SET version = ?').run(PG_BASE_VERSION + PG_MIGRATIONS.length + 1);
+  assert.throws(() => openPg(URL_, { schema }), /database nieuwer dan de code/);
+  process.env.AQUATECH_ALLOW_NEWER_SCHEMA = '1';
+  try {
+    assert.doesNotThrow(() => openPg(URL_, { schema }));
+  } finally {
+    delete process.env.AQUATECH_ALLOW_NEWER_SCHEMA;
+  }
+});

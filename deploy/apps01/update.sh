@@ -218,6 +218,9 @@ if ! wait_healthy || ! health_version_is "$NEW_VER"; then
   echo "$NEW_VER" > .failed-version
   if wait_healthy; then
     run_put mislukt klaar "Versie $NEW_VER startte niet goed; $CUR_VER draait weer."
+  elif docker compose logs --tail 80 aquatech 2>/dev/null | grep -q 'database nieuwer dan de code'; then
+    # De vorige versie weigert te starten op een database die de nieuwe versie al heeft gemigreerd (migraties zijn niet altijd terugwaarts compatibel).
+    run_put mislukt klaar "Database nieuwer dan versie $CUR_VER: herstel uit back-up nodig (Beheer > Systeem of db-local.sh restore). Niets is stil beschadigd; de app staat uit."
   else
     run_put mislukt klaar "Versie $NEW_VER startte niet goed en de vorige versie start ook niet. Controleer de server."
   fi
