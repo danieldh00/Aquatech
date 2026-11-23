@@ -198,7 +198,19 @@ verify_signature() {
     run_put mislukt klaar "De digest van het nieuwe image is niet vast te stellen. Er is niets bijgewerkt."
     exit 1
   fi
-  if ! cosign verify --certificate-identity-regexp "$SIGNER_IDENTITY_RE" --certificate-oidc-issuer "$SIGNER_ISSUER" "$digest" >/dev/null 2>&1; then
+  local output attempt ok=0
+  for attempt in 1 2; do
+    if output="$(cosign verify --certificate-identity-regexp "$SIGNER_IDENTITY_RE" --certificate-oidc-issuer "$SIGNER_ISSUER" "$digest" 2>&1 >/dev/null)"; then ok=1; break; fi
+    [[ "$attempt" == 1 ]] && sleep "${VERIFY_RETRY_SECONDS:-10}"
+  done
+  if [[ "$ok" != 1 ]]; then
+    log "cosign verify mislukte: $(tail -n 3 <<<"$output" | tr '\n' ' ')"
+    # Een storing bij Sigstore of het netwerk is geen afwijzing: de versie niet overslaan, de volgende ronde probeert opnieuw.
+    if grep -qiE 'no such host|timeout|timed out|connection (refused|reset)|temporary failure|TLS handshake|EOF|50[0-9]|unavailable' <<<"$output"; then
+      log "Handtekeningcontrole van $NEW_VER kon niet worden uitgevoerd (netwerk of Sigstore); niet uitgerold, volgende ronde probeert opnieuw."
+      run_put mislukt klaar "De handtekening van versie $NEW_VER kon niet worden gecontroleerd (netwerk of Sigstore). Er is niets bijgewerkt; later opnieuw proberen."
+      exit 1
+    fi
     echo "$NEW_VER" > .failed-version
     log "Handtekening van $digest ongeldig of ontbreekt; $NEW_VER niet uitgerold."
     run_put mislukt klaar "De handtekening van versie $NEW_VER klopt niet of ontbreekt. Er is niets bijgewerkt."
