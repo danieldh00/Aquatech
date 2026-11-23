@@ -80,6 +80,8 @@ const ORDER_POSTS = /^\/(winkelwagen(?:\/(?:planner|offerte))?|afrekenen|grootha
 /** Hoeveel producten de suggesties onder het zoekveld tonen. */
 const SUGGESTION_COUNT = 6;
 /** Pad van het aanvraagformulier voor een zakelijk account op de startpagina. */
+/** Het adres waarop Mollie een wijziging van een betaling meldt. */
+const MOLLIE_WEBHOOK = /^\/mollie\/webhook\/[^/]+\/?$/;
 const REQUEST_POST = /^\/zakelijk-aanvraag\/?$/;
 /** Het formulier "Mail mij als hij weer binnen is" (voorraadmelding). */
 const ALERT_POST = /^\/voorraadmelding\/?$/;
@@ -270,7 +272,9 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     const accountPost = req.method === 'POST' && ((accounts && (ACCOUNT_POSTS.test(req.path) || (orders && ORDER_POSTS.test(req.path)))) || (orderMail && orderMail.sendBusinessRequest && REQUEST_POST.test(req.path)) || (stockAlerts && ALERT_POST.test(req.path)));
     if (req.method !== 'GET' && req.method !== 'HEAD' && !accountPost) return res.status(405).set('Allow', 'GET, HEAD').end();
     const previewFile = Boolean(content) && /^\/(assets|media)\//.test(req.path) && previewAllowed(req);
-    if (!settingsFor(tenantId).get('storefront') && !isPreview(req) && !previewFile) return res.status(404).type('text').send('Niet gevonden.');
+    // De melding van Mollie over een betaling moet ook aankomen als de webshop (tijdelijk) uit staat (audit 1.33.0 T-20).
+    const paymentWebhook = req.method === 'POST' && MOLLIE_WEBHOOK.test(req.path);
+    if (!settingsFor(tenantId).get('storefront') && !isPreview(req) && !previewFile && !paymentWebhook) return res.status(404).type('text').send('Niet gevonden.');
     next();
   });
   // Een categorie toont alle producten met hun foto: de afbeeldingen krijgen een ruimere eigen limiet.
@@ -615,6 +619,39 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         let refused = false;
         guestOrderLimiter(req, { setHeader: (name, value) => res.setHeader(name, value), status: () => ({ json: () => { refused = true; } }) }, () => {});
         return refused;
+      };
+      /** Hoogstens zoveel onbetaalde bestellingen als gast tegelijk open per e-mailadres en per bezoeker (audit 1.33.0 B-13: voorraad vasthouden zonder te betalen). */
+      const OPEN_GUEST_ORDERS_PER_EMAIL = 2;
+      const OPEN_GUEST_ORDERS_PER_VISITOR = 3;
+      /** Per bezoeker de gastbestellingen die hij plaatste (in het geheugen, zoals de andere limieten; of ze nog openstaan zegt de database). */
+      const guestOrdersByVisitor = new Map();
+      /**
+       * Of een gast eerst zijn openstaande onbetaalde bestellingen moet afrekenen (of laten vervallen) voor hij een nieuwe plaatst.
+       * @param {object} req Het verzoek.
+       * @param {string} email Het ingevulde e-mailadres.
+       * @returns {boolean} true als er te veel onbetaalde gastbestellingen openstaan.
+       */
+      const guestOpenOrdersLimited = (req, email) => {
+        const address = String(email || '').trim().toLowerCase().slice(0, 200);
+        if (address && orders.countOpenUnpaidGuest(tenantId, address) >= OPEN_GUEST_ORDERS_PER_EMAIL) return true;
+        const visitor = clientKey(req);
+        const known = guestOrdersByVisitor.get(visitor);
+        if (!known || !known.length) return false;
+        const open = orders.unpaidAmong(tenantId, known);
+        if (open.length) guestOrdersByVisitor.set(visitor, open); else guestOrdersByVisitor.delete(visitor);
+        return open.length >= OPEN_GUEST_ORDERS_PER_VISITOR;
+      };
+      /**
+       * Onthoudt dat deze bezoeker een bestelling als gast plaatste (voor het plafond op openstaande onbetaalde bestellingen).
+       * @param {object} req Het verzoek.
+       * @param {string} orderId Id van de bestelling.
+       * @returns {void}
+       */
+      const rememberGuestOrder = (req, orderId) => {
+        // Begrensd geheugen: loopt de lijst vol, dan begint hij opnieuw (de limiet per e-mailadres en per uur blijven gelden).
+        if (guestOrdersByVisitor.size > 20000) guestOrdersByVisitor.clear();
+        const visitor = clientKey(req);
+        guestOrdersByVisitor.set(visitor, [...(guestOrdersByVisitor.get(visitor) || []), orderId].slice(-20));
       };
       /**
        * Of een bezoeker zonder account mag afrekenen (online betalen werkt en de beheerder heeft bestellen als gast niet uitgezet).
@@ -989,6 +1026,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         }
         if (attemptsLimited(req, res)) return res.status(429).type('text').send('Te veel bestelpogingen vanaf dit adres. Probeer het later opnieuw.');
         if (guestMode ? guestOrdersLimited(req, res, body.email) : ordersLimited(viewer)) return res.status(429).type('text').send('Je hebt het afgelopen uur al veel bestellingen geplaatst. Probeer het later opnieuw of neem contact met ons op.');
+        if (guestMode && guestOpenOrdersLimited(req, body.email)) return res.status(429).type('text').send('Je hebt nog bestellingen openstaan die niet betaald zijn. Reken die eerst af (via de bestelpagina of de link in je mail) of probeer het later opnieuw.');
         // Onzichtbare captcha (alleen als hij aan staat): bij een weigering de afrekenpagina opnieuw met alles wat is ingevuld.
         const human = await humanCheck(req, 'checkout');
         if (!human.ok) {
@@ -1057,7 +1095,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
             return sendWithGroups(req, res, out.status, (groups) => checkoutPage({ cart, viewer, guest: guestMode, paymentOptions: paymentOptionsOf(viewer), error: out.error, values: body, ...checkoutChoice(cart, body, viewer) }, groups));
           }
           writeCart(req, res, []);
-          if (access) rememberGrant(req, res, out.order.id, access.token);
+          if (access) { rememberGrant(req, res, out.order.id, access.token); rememberGuestOrder(req, out.order.id); }
           // De bestelling staat al vast: een fout in audit of mail mag de klant niet naar een foutpagina sturen, en de ene stap niet de andere overslaan.
           track(req, 'order');
           try { onOrder(req, out.order); } catch (failure) { console.error(`Audit van bestelling ${out.order.number} mislukt: ${failure.message}`); }
@@ -1092,7 +1130,8 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
             } catch (failure) { console.error(`Betaling van bestelling ${order.number} opvragen mislukt: ${failure.message}`); }
           }
           const invoice = orderInvoices ? orderInvoices.invoiceFor(tenantId, order.id) : null;
-          const payError = req.query.betaalfout === '1' ? 'De betaalpagina is nu niet bereikbaar. Probeer het zo opnieuw met de knop hieronder.' : '';
+          const payError = req.query.betaalfout === '1' ? 'De betaalpagina is nu niet bereikbaar. Probeer het zo opnieuw met de knop hieronder.'
+            : req.query.betaalfout === '2' ? 'Je bestelling stond te lang open en een of meer artikelen zijn intussen niet meer op voorraad. Betalen kan daarom nu niet. Plaats een nieuwe bestelling of neem contact met ons op.' : '';
           // Een gast zonder ingelogd account krijgt het aanbod om een account te maken, zolang de bestelling nog van niemand is.
           const accountOffer = guest && !viewer && !order.userId && order.status !== 'geannuleerd' && isPaid(order) ? {} : null;
           sendWithGroups(req, res, 200, (groups) => orderPage(order, groups, { thanks: req.query.bedankt === '1' || (req.query.betaald === '1' && order.pay && order.pay.status === 'betaald'), invoice: invoice && invoice.status !== 'concept' ? invoice : null, returnsHtml: returnsHtmlOf(order), payError, autoPay: req.query.betalen === '1', guest: guest && !order.userId, accountOffer, accountCreated: req.query.account === '1' }));
@@ -1127,6 +1166,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
             if (out.paid) return res.redirect(303, '../?betaald=1');
             if (out.checkoutUrl && /^https:\/\//.test(out.checkoutUrl)) return res.redirect(302, out.checkoutUrl);
             if (out.status === 502) return res.redirect(303, '../?betaalfout=1');
+            if (out.soldOut) return res.redirect(303, '../?betaalfout=2');
             res.redirect(303, '../');
           } catch (error) { next(error); }
         });

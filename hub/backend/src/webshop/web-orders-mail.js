@@ -298,7 +298,7 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody, guestLink
    * artikelen gereserveerd blijven en een link om af te rekenen (de persoonlijke link bij een gastbestelling, anders de
    * bestelpagina met Nu betalen). Zonder webadres uit Beheer wordt er niets gestuurd: een herinnering zonder link helpt niemand.
    * @param {string} tenantId Id van de omgeving.
-   * @param {object} order De bestelling (met pay, email, customer, number, reservedUntil).
+   * @param {object} order De bestelling (met pay, email, customer, number, reservedUntil, reservationReleasedAt).
    * @returns {Promise<boolean>} true als de mail is verstuurd; false bij een ongeldig adres, geen mailserver of geen webadres.
    */
   async function sendPaymentReminder(tenantId, order) {
@@ -315,7 +315,8 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody, guestLink
     const until = order.reservedUntil ? new Date(order.reservedUntil).toLocaleString('nl-NL', { dateStyle: 'long', timeStyle: 'short', timeZone: 'Europe/Amsterdam' }) : '';
     const composed = composeFor(settings, failed ? 'betalingsherinnering_mislukt' : 'betalingsherinnering', {
       klant: safeName(order.customer.name), nummer: order.number, bedrag: EUR.format(order.totals.total), link,
-      reservering: until ? `We houden de artikelen voor je gereserveerd tot ${until}. ` : '',
+      // Onbetaald ligt de voorraad maar kort vast (audit 1.33.0 B-13): na het vrijgeven beloven we geen reservering meer.
+      reservering: !until ? '' : order.reservationReleasedAt ? `Je kunt je bestelling nog afrekenen tot ${until}, zolang de voorraad strekt. ` : `We houden de artikelen voor je gereserveerd tot ${until}. `,
     });
     const mail = mailBody(profile, composed.paragraphs, undefined, mailStyleOf(settings));
     await mailer.send({ to: order.email, subject: composed.subject, text: mail.text, html: mail.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
