@@ -69,7 +69,7 @@ const HOST_TASKS = [
   {
     id: '008-vertrouwde-proxy-instellen',
     title: 'Vertrouwde proxy van de app instellen',
-    description: 'Zet in .env het subnet van het compose-netwerk als TRUSTED_PROXIES en vernieuwt compose.yml (ca. 1 minuut niet beschikbaar). Daarna gelooft de app het bezoeker-IP uit CF-Connecting-IP alleen van de tunnel en niet meer van elk privé-adres dat poort 3300 bereikt (limieten en auditlog zijn dan niet meer te omzeilen).',
+    description: 'Zet in .env het subnet van het compose-netwerk als TRUSTED_PROXIES en vernieuwt compose.yml (ca. 1 minuut niet beschikbaar). Daarna gelooft de app het bezoeker-IP uit CF-Connecting-IP alleen van het compose-netwerk en niet meer van elk ander privé-adres. Beperking: een verbinding via de gepubliceerde poort 3300 (Tailscale) komt via de Docker-gateway binnen en blijft dus vertrouwd.',
     addedAt: '2026-11-23',
   },
   {
