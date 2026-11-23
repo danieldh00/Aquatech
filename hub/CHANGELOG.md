@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.33.8
+
+Audit 1.33.0, punten B-05, B-10 en B-12.
+- B-05: `payable()` weigert een gecrediteerde factuur (`creditedAt`); het portaal toont `credited`, `start()` en de betaallink geven een nette melding, en een gecrediteerde factuur telt niet meer als te laat.
+- B-12: verzoeken zonder inlog draaien nu binnen de RLS-afscherming: de webshop (hoofdmap) in de hoofdtenant, openbare offerte-, afspraak-, tekening- en betaallinks en de Mollie-factuurwebhook in de organisatie van de gevonden rij (`scopeToTenant`). Zoeken op token-hash en inloggen blijven bewust over organisaties heen. Niet gedaan: de scope van een ingelogd verzoek beperken tot de actieve omgeving (gebruikers, rollen en instellingen van de live-tenant worden ook vanuit een testomgeving gelezen).
+- B-10: compose.yml geeft `TRUSTED_PROXIES` door; servertaak 008 zet het subnet van het compose-netwerk in `.env` en vernieuwt compose.yml, zodat proxykoppen alleen van de tunnel geloofd worden en niet van elk ander privé-adres (verbindingen via de gepubliceerde poort 3300 komen via de Docker-gateway en blijven vertrouwd).
+
+## 1.33.7
+
+Audit B-11 (scripts), geen migratie, geen servertaak nodig (het vaste commando haalt servertaken.sh altijd vers op):
+- `servertaken.sh openstaand` toont vóór de bevestiging wie de commit maakte, wanneer, de titel en of GitHub de handtekening verifieert.
+- `db-local.sh` en `setup-app-update.sh` zetten een branchnaam (standaard `master`) eenmalig om naar een commit en tonen die; alle bestanden van de run komen van die ene commit.
+- Het releasetoken zit niet meer in de git-config (workflowwijziging, aparte PR).
+
+## 1.33.6
+
+Audit B-33 (deel 1), geen migratie, servertaak `010-back-up-integriteitscontrole`:
+- `pg-backup.sh` schrijft naast elke `aquatech-*.dump.enc` een `.hmac` (HMAC-SHA256, sleutel afgeleid uit de hoofdsleutel); opruimen verwijdert hem mee.
+- `restore-test.sh` en `db-local.sh restore` controleren hem vóór het ontsleutelen: een afwijking is `mislukt`/stopt het terugzetten; een oude dump zonder `.hmac` geeft een opmerking.
+- Nog open uit B-33: een vingerafdruk van de hoofdsleutel in Beheer (raakt vault/server.js; apart).
+
 ## 1.33.5
 
 Audit B-37, geen migratie:

@@ -13,6 +13,28 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.33.8',
+      date: '2026-11-23',
+      title: 'Veiliger zonder inlog en gecrediteerde facturen niet meer betaalbaar',
+      items: [
+        { text: 'Een gecrediteerde factuur staat in het portaal als Gecrediteerd en kan niet meer online betaald worden.', for: ['portaal'] },
+      ],
+    },
+    {
+      version: '1.33.7',
+      date: '2026-11-23',
+      title: 'Hostscripts draaien op een zichtbare, vaste commit',
+      items: [],
+    },
+    {
+      version: '1.33.6',
+      date: '2026-11-23',
+      title: 'Back-ups met integriteitscontrole',
+      items: [
+        { text: 'De dagelijkse database-back-up krijgt een controlebestand (HMAC) ernaast. Terugzetten en de hersteltest weigeren een back-up waarvan de controle niet klopt; een back-up zonder controlebestand (van vóór deze maatregel) krijgt alleen een waarschuwing.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.33.5',
       date: '2026-11-23',
       title: 'Veiligere standaarden in de voorbeeld-installatie',
