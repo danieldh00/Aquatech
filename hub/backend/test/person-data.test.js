@@ -7,6 +7,7 @@ const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { createLogin, listen } = require('./helpers/http-client');
+const Totp = require('../src/beveiliging/totp');
 
 const SECRET = 'd'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
@@ -171,4 +172,19 @@ test('wissen wordt geweigerd zolang er een onafgehandelde bestelling of werkorde
   assert.strictEqual(refused.status, 409);
   assert.strictEqual(refused.body.error, 'open_items');
   assert.strictEqual(db.prepare('SELECT display_name FROM users WHERE id = ?').get(customer.id).display_name, 'Piet Jansen');
+});
+
+test('wissen vraagt bij tweestapsverificatie ook de code', async () => {
+  const { admin, db, customer } = await setup();
+  const started = await admin.post('/app/api/account/totp/setup', {});
+  assert.strictEqual((await admin.post('/app/api/account/totp/confirm', { code: Totp.codeAt(started.body.secret, Totp.stepOf()) })).status, 200);
+  const body = { confirm: 'Piet Jansen', password: PW };
+  const missing = await admin.post(`/app/api/customers/${customer.id}/anonymize`, body);
+  assert.deepStrictEqual([missing.status, missing.body.error], [401, 'totp_required']);
+  const wrong = await admin.post(`/app/api/customers/${customer.id}/anonymize`, { ...body, totp: '000000' });
+  assert.deepStrictEqual([wrong.status, wrong.body.error], [401, 'totp_wrong']);
+  assert.strictEqual(db.prepare('SELECT display_name FROM users WHERE id = ?').get(customer.id).display_name, 'Piet Jansen');
+  const code = Totp.codeAt(started.body.secret, Totp.stepOf() + 1);
+  const done = await admin.post(`/app/api/customers/${customer.id}/anonymize`, { ...body, totp: code });
+  assert.strictEqual(done.status, 200, JSON.stringify(done.body));
 });

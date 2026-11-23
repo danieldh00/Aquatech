@@ -2198,7 +2198,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     invite: (customer) => shopAccounts.invite(customer),
   });
   registerPersonDataRoutes(app, {
-    store, personData: createPersonData(database, store), requireRight, requireJson, audit,
+    store, personData: createPersonData(database, store), requireRight, requireJson, audit, twoFactor,
     tenantsOf: (req) => {
       const tenantId = req.tenantId || tenant.id;
       const home = homeOf(tenantId);
