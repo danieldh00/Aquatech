@@ -55,7 +55,7 @@ test('Mollie: niet bereikbaar en een weigering zonder tekst geven een leesbare m
 });
 
 test('terugbetalen: een storing van Mollie staat in de melding, een fout in de app niet letterlijk', async () => {
-  const order = { id: 'o1', number: 'W-1', payment: 'online', pay: { status: 'betaald', paidId: 'tr_abcd1234', refunds: [] }, totals: { total: 20 } };
+  const WAITING = ' De aanvraag blijft staan en wordt automatisch bij Mollie nagekeken.';
   const settings = settingsWith({ shopPayment: { online: true, publicUrl: 'https://shop.test/' }, mollieApiKey: 'test_abcdefghijklmnopqrstuvwxyz0123' });
   /**
    * Terugbetalen met een Mollie-client die op de gegeven manier faalt.
@@ -64,18 +64,39 @@ test('terugbetalen: een storing van Mollie staat in de melding, een fout in de a
    */
   const refundWith = async (failure) => {
     const log = quietLog();
-    const payments = createWebPayments({ orders: { get: () => order }, mollie: { createRefund: async () => { throw failure; } }, settingsFor: () => settings, log });
+    const order = { id: 'o1', number: 'W-1', payment: 'online', pay: { status: 'betaald', paidId: 'tr_abcd1234', refunds: [] }, totals: { total: 20 } };
+    const orders = {
+      /**
+       * Geeft de bestelling uit het geheugen.
+       * @returns {object} De bestelling.
+       */
+      get: () => order,
+      /**
+       * Nagebootste changePay: past de wijziging toe op de bestelling in het geheugen.
+       * @param {string} _tenantId Id van de omgeving (ongebruikt).
+       * @param {string} _id Id van de bestelling (ongebruikt).
+       * @param {Function} mutate Maakt de nieuwe betaalstand, of null voor geen wijziging.
+       * @returns {{ order: object, changed: boolean }} De bestelling en of er iets veranderde.
+       */
+      changePay: (_tenantId, _id, mutate) => {
+        const next = mutate(order.pay, order);
+        if (!next) return { order, changed: false };
+        order.pay = next;
+        return { order, changed: true };
+      },
+    };
+    const payments = createWebPayments({ orders, mollie: { createRefund: async () => { throw failure; } }, settingsFor: () => settings, log });
     return { out: await payments.refund('t1', 'o1', { amount: 20, description: 'Terugbetaling', key: 'annulering' }), log };
   };
 
   const mollieDown = await refundWith(new MollieError('Mollie is niet bereikbaar. Probeer het later opnieuw.'));
   assert.strictEqual(mollieDown.out.status, 502);
-  assert.strictEqual(mollieDown.out.error, 'Terugbetalen via Mollie lukte niet: Mollie is niet bereikbaar. Probeer het later opnieuw.');
+  assert.strictEqual(mollieDown.out.error, `Terugbetalen via Mollie lukte niet: Mollie is niet bereikbaar. Probeer het later opnieuw.${WAITING}`);
   assert.strictEqual(mollieDown.log.lines.length, 0);
 
   const bug = new TypeError("Cannot read properties of undefined (reading 'value')");
   const internal = await refundWith(bug);
-  assert.strictEqual(internal.out.error, 'Terugbetalen via Mollie lukte niet: interne fout, de oorzaak staat in het serverlog');
+  assert.strictEqual(internal.out.error, `Terugbetalen via Mollie lukte niet: interne fout, de oorzaak staat in het serverlog${WAITING}`);
   assert.strictEqual(internal.out.cause, bug, 'de oorzaak is er voor withCause');
   assert.ok(!JSON.stringify(internal.out).includes('Cannot read'), 'maar gaat niet mee als JSON');
   assert.strictEqual(internal.log.lines[0][0], 'error');
