@@ -6,6 +6,7 @@ const { buildWorkbook } = require('../mcp/xlsx-writer');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
 const { clientKey } = require('../beveiliging/auth');
 const { transaction } = require('../database/db');
+const { verifyPassword } = require('../platform/store');
 
 /** Naam die in de plaats komt van een gewiste persoon. */
 const ANONYMOUS_NAME = 'Verwijderde persoon';
@@ -172,9 +173,23 @@ function createPersonData(db, store) {
       .map((row) => ({ number: Number(row.number), name: row.name, contact: row.contact, address: row.address, email: row.email, phone: row.phone, vatNumber: row.vat_number, createdAt: row.created_at }));
     const alerts = email ? prepare(`SELECT item_code, created_at FROM stock_alerts WHERE tenant_id = ? AND lower(email) = ? ORDER BY created_at DESC${limit}`).all(tenantId, email)
       .map((row) => ({ itemCode: row.item_code, createdAt: row.created_at })) : [];
+    const acceptances = prepare(`SELECT number, acceptance FROM quotes WHERE tenant_id = ? AND customer_id = ? AND acceptance IS NOT NULL ORDER BY created_at DESC${limit}`).all(tenantId, userId)
+      .map((row) => {
+        const proof = parseJson(row.acceptance);
+        return { number: row.number, answer: proof.answer || '', name: proof.name || '', at: proof.at || '', via: proof.via || '', reason: proof.reason || '', ip: proof.ip || '', forwardedFor: proof.forwardedFor || '', userAgent: proof.userAgent || '' };
+      });
+    const appointments = [];
+    for (const row of prepare(`SELECT w.id, w.number, w.appointment FROM work_orders w WHERE w.tenant_id = ? AND w.appointment IS NOT NULL AND (w.customer_id = ?
+        OR w.quote_id IN (SELECT q.id FROM quotes q WHERE q.tenant_id = w.tenant_id AND q.customer_id = ?)
+        OR EXISTS (SELECT 1 FROM service_requests sr WHERE sr.tenant_id = w.tenant_id AND sr.work_order_id = w.id AND sr.customer_id = ?)) ORDER BY w.created_at DESC${limit}`).all(tenantId, userId, userId, userId)) {
+      const entries = JSON.parse(row.appointment || '[]');
+      for (const entry of Array.isArray(entries) ? entries : []) {
+        appointments.push({ number: row.number, answer: entry.answer || '', name: entry.name || '', reason: entry.reason || '', at: entry.at || '', via: entry.via || '', ip: entry.ip || '', forwardedFor: entry.forwardedFor || '', userAgent: entry.userAgent || '' });
+      }
+    }
     const log = prepare(`SELECT action, ip, created_at FROM audit WHERE tenant_id = ? AND user_id = ? ORDER BY created_at DESC${limit}`).all(tenantId, userId)
       .map((row) => ({ action: row.action, ip: row.ip || '', createdAt: row.created_at }));
-    return { quotes, workOrders, invoices, orders, returns, requests, plans, debtors, alerts, log };
+    return { quotes, workOrders, invoices, orders, returns, requests, plans, debtors, alerts, acceptances, appointments, log };
   }
 
   /**
@@ -224,7 +239,7 @@ function createPersonData(db, store) {
       { name: 'Over deze inzage', columns: [text('Onderwerp', 'topic', 28), text('Toelichting', 'text', 110)], rows: [
         { topic: 'Organisatie', text: organization },
         { topic: 'Opgesteld op', text: new Date().toISOString().slice(0, 10) },
-        { topic: 'Inhoud', text: 'Alle persoonsgegevens die onze administratie van deze persoon bevat: account, offertes, werkorders, facturen, bestellingen, retouren, meldingen, plannen, debiteurgegevens, voorraadmeldingen en inlogactiviteit.' },
+        { topic: 'Inhoud', text: 'Alle persoonsgegevens die onze administratie van deze persoon bevat: account, offertes met het akkoordbewijs, werkorders met het afspraaklogboek, facturen, bestellingen, retouren, meldingen, plannen, debiteurgegevens, voorraadmeldingen en inlogactiviteit.' },
         { topic: 'Niet in dit bestand', text: 'Foto\'s bij werkorders en meldingen (die worden bij wissen verwijderd; uren en materiaal blijven, zonder vrije tekst), en wachtwoorden en beveiligingsgegevens (die staan versleuteld of als hash en zijn niet leesbaar). Vraag de beheerder om foto\'s apart aan te leveren.' },
         { topic: 'Bewaarplicht', text: 'Definitieve facturen en de stukken waarop ze rusten bewaren we zeven jaar (fiscale bewaarplicht); die kunnen niet gewist worden.' },
         { topic: 'Gastbestellingen', text: 'Bestellingen zonder account zijn alleen aan deze persoon gekoppeld als het e-mailadres van de klant bevestigd is.' },
@@ -245,6 +260,8 @@ function createPersonData(db, store) {
       { name: 'Plannen', columns: [text('Titel', 'title', 30), text('Klant', 'customer'), text('Adres', 'address', 40), text('Aangemaakt', 'createdAt'), text('Verwijderd op', 'deletedAt')], rows: data.plans },
       { name: 'Debiteur', columns: [text('Debiteurnummer', 'number'), text('Naam', 'name'), text('Contactpersoon', 'contact'), text('Adres', 'address', 40), text('E-mail', 'email', 28), text('Telefoon', 'phone'), text('Btw-nummer', 'vatNumber'), text('Aangemaakt', 'createdAt')], rows: data.debtors },
       { name: 'Voorraadmeldingen', columns: [text('Artikelcode', 'itemCode'), text('Aangemeld op', 'createdAt')], rows: data.alerts },
+      { name: 'Akkoorden offertes', columns: [text('Offerte', 'number'), text('Antwoord', 'answer'), text('Naam', 'name'), text('Tijdstip', 'at'), text('Via', 'via'), text('Toelichting', 'reason', 40), text('IP-adres', 'ip'), text('Doorgestuurd IP', 'forwardedFor'), text('Browser', 'userAgent', 50)], rows: data.acceptances },
+      { name: 'Afspraaklogboek', columns: [text('Werkorder', 'number'), text('Antwoord', 'answer'), text('Naam', 'name'), text('Toelichting', 'reason', 40), text('Tijdstip', 'at'), text('Via', 'via'), text('IP-adres', 'ip'), text('Doorgestuurd IP', 'forwardedFor'), text('Browser', 'userAgent', 50)], rows: data.appointments },
       { name: 'Inlogactiviteit', columns: [text('Actie', 'action', 30), text('IP-adres', 'ip'), text('Tijdstip', 'createdAt')], rows: data.log },
     ];
     return buildWorkbook(sheets);
@@ -272,6 +289,28 @@ function createPersonData(db, store) {
   }
 
   /**
+   * Werkorders die alleen via het klantrecord (`customer_id`) aan de persoon hangen, zonder offerte of melding van die persoon. Dat
+   * zijn onder meer werkorders die automatisch op gelijke naam zijn gekoppeld (`autoLink`): bij wissen gaan ze mee, dus de beheerder
+   * moet ze kunnen nakijken.
+   * @param {string[]} tenantIds De omgevingen.
+   * @param {object} customer De klant.
+   * @returns {{ count: number, numbers: string[] }} Aantal en (hoogstens 10) nummers van deze werkorders.
+   */
+  function weakLinksOf(tenantIds, customer) {
+    const numbers = [];
+    let count = 0;
+    for (const tenantId of tenantIds) {
+      const rows = prepare(`SELECT w.number FROM work_orders w WHERE w.tenant_id = ? AND w.customer_id = ? AND w.deleted_at IS NULL
+        AND NOT EXISTS (SELECT 1 FROM quotes q WHERE q.tenant_id = w.tenant_id AND q.id = w.quote_id AND q.customer_id = w.customer_id)
+        AND NOT EXISTS (SELECT 1 FROM service_requests sr WHERE sr.tenant_id = w.tenant_id AND sr.work_order_id = w.id AND sr.customer_id = w.customer_id)
+        ORDER BY w.number LIMIT 200`).all(tenantId, customer.id);
+      count += rows.length;
+      for (const row of rows) if (numbers.length < 10) numbers.push(row.number);
+    }
+    return { count, numbers };
+  }
+
+  /**
    * Past een JSON-veld van een rij aan met een schoonmaakfunctie.
    * @param {string} text Het huidige JSON-veld.
    * @param {Function} scrub De schoonmaakfunctie.
@@ -293,7 +332,7 @@ function createPersonData(db, store) {
 
     for (const row of prepare('SELECT id, data, acceptance FROM quotes WHERE tenant_id = ? AND customer_id = ?').all(tenantId, userId)) {
       if (keep.quoteIds.has(row.id)) { counts.kept.quotes += 1; continue; }
-      const acceptance = row.acceptance ? JSON.stringify({ ...parseJson(row.acceptance), name: '', signature: null, reason: '' }) : null;
+      const acceptance = row.acceptance ? JSON.stringify({ ...parseJson(row.acceptance), name: '', signature: null, reason: '', ip: '', forwardedFor: '', userAgent: '', userId: null }) : null;
       prepare(`UPDATE quotes SET customer = ?, customer_id = NULL, sent_to = NULL, share_hash = NULL, share_token = NULL, share_url = NULL, acceptance = ?, data = ?
         WHERE tenant_id = ? AND id = ?`).run(ANONYMOUS_NAME, acceptance, scrubbed(row.data, scrubDocumentData), tenantId, row.id);
       counts.quotes += 1;
@@ -376,7 +415,7 @@ function createPersonData(db, store) {
     });
   }
 
-  return { collect, workbookFor, blockersOf, anonymize };
+  return { collect, workbookFor, blockersOf, weakLinksOf, anonymize };
 }
 
 /**
@@ -386,10 +425,51 @@ function createPersonData(db, store) {
  * @returns {void}
  */
 function registerPersonDataRoutes(app, ctx) {
-  const { store, personData, requireRight, requireJson, audit, tenantsOf } = ctx;
+  const { store, personData, requireRight, requireJson, audit, tenantsOf, twoFactor } = ctx;
   const requireAdmin = requireRight('beheer');
   const exportLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, keyFn: (req) => `avg-inzage:${req.user?.id || clientKey(req)}` });
   const eraseLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10, keyFn: (req) => `avg-wissen:${req.user?.id || clientKey(req)}` });
+  /** Mislukte wachtwoordpogingen bij wissen per beheerder: na 5 in 15 minuten geblokkeerd. */
+  const failures = new Map();
+  const FAIL_LIMIT = 5;
+  const FAIL_WINDOW_MS = 15 * 60 * 1000;
+  /**
+   * Vraagt het wachtwoord (en bij tweestapsverificatie de code) van de beheerder opnieuw, met een grens op mislukte pogingen.
+   * Zet bij een fout het antwoord al klaar.
+   * @param {object} req Het verzoek (body.password, body.totp).
+   * @param {object} res Het antwoord.
+   * @returns {Promise<boolean>} true als de identiteit klopt.
+   */
+  async function confirmIdentity(req, res) {
+    const key = `${req.tenantId}:${req.user.id}`;
+    const entry = failures.get(key);
+    if (entry && entry.reset > Date.now() && entry.count >= FAIL_LIMIT) {
+      res.status(429).json({ error: 'locked', message: 'Te veel verkeerde pogingen. Probeer het over een kwartier opnieuw.' });
+      return false;
+    }
+    // De poging telt vóór de (trage) controle, zodat gelijktijdige verzoeken de grens niet allemaal passeren; bij succes gaat de teller terug.
+    const current = entry && entry.reset > Date.now() ? entry : { count: 0, reset: Date.now() + FAIL_WINDOW_MS };
+    current.count += 1;
+    failures.set(key, current);
+    const account = store.getUser(req.user.id);
+    const password = String(req.body?.password ?? '').slice(0, 200);
+    if (!account || !account.password_hash || !(await verifyPassword(password, account.password_hash))) {
+      audit(req, 'klant_wissen_wachtwoord_fout', {});
+      res.status(401).json({ error: 'wrong_password', message: 'Je wachtwoord klopt niet.' });
+      return false;
+    }
+    if (twoFactor) {
+      const second = twoFactor.check(account, String(req.body?.totp ?? '').slice(0, 40));
+      if (!second.ok) {
+        if (second.missing) { current.count -= 1; res.status(401).json({ error: 'totp_required', message: 'Vul de code uit je authenticator-app in.' }); return false; }
+        audit(req, 'klant_wissen_wachtwoord_fout', { via: 'tweestaps' });
+        res.status(401).json({ error: 'totp_wrong', message: 'De code klopt niet.' });
+        return false;
+      }
+    }
+    failures.delete(key);
+    return true;
+  }
   /**
    * Antwoordt 404 voor een onbekende klant.
    * @param {object} res Het antwoord.
@@ -414,7 +494,15 @@ function registerPersonDataRoutes(app, ctx) {
     return res.send(file);
   });
 
-  app.post('/api/customers/:id/anonymize', requireJson, requireAdmin, eraseLimiter, (req, res) => {
+  app.get('/api/customers/:id/anonymize-preview', requireAdmin, exportLimiter, (req, res) => {
+    const customer = store.getCustomer(tenantsOf(req), req.params.id);
+    if (!customer) return unknown(res);
+    res.set('Cache-Control', 'no-store');
+    return res.json({ weakLinks: personData.weakLinksOf(scopeOf(req, customer), customer), blockers: personData.blockersOf(scopeOf(req, customer), customer) });
+  });
+
+  app.post('/api/customers/:id/anonymize', requireJson, requireAdmin, eraseLimiter, async (req, res, next) => {
+   try {
     const customer = store.getCustomer(tenantsOf(req), req.params.id);
     if (!customer) return unknown(res);
     if (customer.username.startsWith(ANONYMOUS_PREFIX)) return res.status(409).json({ error: 'already_anonymized', message: 'Deze klant is al gewist.' });
@@ -426,9 +514,11 @@ function registerPersonDataRoutes(app, ctx) {
     if (blockers.orders || blockers.workOrders) {
       return res.status(409).json({ error: 'open_items', blockers, message: `Rond eerst af wat nog openstaat: ${blockers.orders} bestelling(en) en ${blockers.workOrders} werkorder(s) van deze klant.` });
     }
+    if (!(await confirmIdentity(req, res))) return undefined;
     const result = personData.anonymize(scope, customer);
     audit(req, 'klant_geanonimiseerd', { userId: customer.id, ...result, kept: result.kept }, undefined, customer.tenantId);
     return res.json({ ok: true, result });
+   } catch (error) { return next(error); }
   });
 }
 

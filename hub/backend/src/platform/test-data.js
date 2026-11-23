@@ -910,7 +910,7 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
         purchaseOrders.place(tenantId, placed.id);
         const partial = purchaseOrders.create(tenantId, admin, { supplierId: wholesaler.id, lines: orderLines(2) }).order;
         purchaseOrders.place(tenantId, partial.id);
-        purchaseOrders.receive(tenantId, partial.id, admin, [{ lineId: partial.lines[0].id, qty: 12 }]);
+        purchaseOrders.receive(tenantId, partial.id, admin, [{ lineId: partial.lines[0].id, qty: 12, seen: 0 }]);
         // Automatisch bestelvoorstel: siergrind zit onder het minimum en heeft een voorkeursleverancier (bestellen per 2 zakken),
         // dus de taak zet het in een voorstel-concept bij de groothandel (nog niet besteld: dat doet de beheerder).
         const gravel = stock.create(tenantId, admin, { code: 'EIGEN-GRIND', name: 'Siergrind (big bag)', unit: 'zak', location: 'Buitenterrein', minQty: 4, reorderQty: 9, costPrice: 55, onHand: 1 }, { resync: false });

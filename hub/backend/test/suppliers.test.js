@@ -236,21 +236,21 @@ test('leveranciers: prioriteit, voorraadstatus en een backup in het bestelvoorst
     const order = (await kees.post('/app/api/purchase-orders', { supplierId: backup.id, lines: [{ itemId: item.id, qty: 10 }] })).body;
     assert.deepStrictEqual([order.lines[0].unitCost, order.lines[0].backup.extraPerUnit, order.lines[0].backup.extraAmount], [2.5, 0.5, 5]);
     const placed = (await kees.post(`/app/api/purchase-orders/${order.id}/place`)).body;
-    const received = await kees.post(`/app/api/purchase-orders/${order.id}/receive`, { lines: [{ lineId: placed.lines[0].id, qty: 10 }] });
+    const received = await kees.post(`/app/api/purchase-orders/${order.id}/receive`, { lines: [{ lineId: placed.lines[0].id, qty: 10, seen: 0 }] });
     assert.strictEqual(received.status, 200, JSON.stringify(received.body));
     assert.strictEqual((await kees.get(`/app/api/stock/items/${item.id}`)).body.costPrice, 2);
     // Bij de voorkeur zelf verandert de inkoopprijs wel mee.
     const preferredOrder = (await kees.post('/app/api/purchase-orders', { supplierId: teruplast.id, lines: [{ itemId: item.id, qty: 5, unitCost: 2.2 }] })).body;
     assert.strictEqual(preferredOrder.lines[0].backup, undefined);
     const placed2 = (await kees.post(`/app/api/purchase-orders/${preferredOrder.id}/place`)).body;
-    await kees.post(`/app/api/purchase-orders/${preferredOrder.id}/receive`, { lines: [{ lineId: placed2.lines[0].id, qty: 5 }] });
+    await kees.post(`/app/api/purchase-orders/${preferredOrder.id}/receive`, { lines: [{ lineId: placed2.lines[0].id, qty: 5, seen: 0 }] });
     assert.strictEqual((await kees.get(`/app/api/stock/items/${item.id}`)).body.costPrice, 2.2);
     // Een handmatige order bij een leverancier die niet bij het artikel staat is geen backup: de prijs volgt zoals altijd.
     const stranger = (await kees.post('/app/api/suppliers', { name: 'Losse Handel' })).body;
     const manual = (await kees.post('/app/api/purchase-orders', { supplierId: stranger.id, lines: [{ itemId: item.id, qty: 1, unitCost: 3 }] })).body;
     assert.strictEqual(manual.lines[0].backup, undefined);
     const placed3 = (await kees.post(`/app/api/purchase-orders/${manual.id}/place`)).body;
-    await kees.post(`/app/api/purchase-orders/${manual.id}/receive`, { lines: [{ lineId: placed3.lines[0].id, qty: 1 }] });
+    await kees.post(`/app/api/purchase-orders/${manual.id}/receive`, { lines: [{ lineId: placed3.lines[0].id, qty: 1, seen: 0 }] });
     assert.strictEqual((await kees.get(`/app/api/stock/items/${item.id}`)).body.costPrice, 3);
     // Ook als de voorkeur wel leverbaar is blijft een bestelling bij Fitwerk een backup-bestelling: de verkoopprijs hoort bij de voorkeur, niet bij de voorraadstatus.
     await link(saved.body.items.map((row) => ({ ...row, stockStatus: 'in_stock' })));
@@ -262,7 +262,7 @@ test('leveranciers: prioriteit, voorraadstatus en een backup in het bestelvoorst
     assert.strictEqual(later.lines[0].backup, undefined);
     // Positieve controle: Fitwerk is nu de voorkeur, dus een ontvangst bij Fitwerk verandert wel de inkoopprijs van het artikel.
     const placed4 = (await kees.post(`/app/api/purchase-orders/${later.id}/place`)).body;
-    await kees.post(`/app/api/purchase-orders/${later.id}/receive`, { lines: [{ lineId: placed4.lines[0].id, qty: 1 }] });
+    await kees.post(`/app/api/purchase-orders/${later.id}/receive`, { lines: [{ lineId: placed4.lines[0].id, qty: 1, seen: 0 }] });
     assert.strictEqual((await kees.get(`/app/api/stock/items/${item.id}`)).body.costPrice, 2.5);
   } finally {
     server.close();

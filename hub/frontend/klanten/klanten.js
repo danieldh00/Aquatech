@@ -359,6 +359,9 @@
       <div class="form-actions"><a class="btn" href="../api/customers/${encodeURIComponent(customer.id)}/privacy-export" download>Inzage downloaden (Excel)</a></div>
       ${erased ? '<p class="muted small">Deze klant is gewist.</p>' : `<label class="field">Typ de naam van de klant om te wissen
         <input type="text" id="c-erase-confirm" autocomplete="off" placeholder="${esc(customer.displayName)}"></label>
+      <label class="field">Je wachtwoord (opnieuw)<input type="password" id="c-erase-password" autocomplete="current-password"></label>
+      <label class="field" id="c-erase-totp-row" hidden>Code uit je authenticator-app<input type="text" id="c-erase-totp" inputmode="numeric" autocomplete="one-time-code"></label>
+      <p class="muted small" id="c-erase-weak" role="status"></p>
       <div class="form-actions"><button type="button" class="btn danger" data-erase disabled>Persoonsgegevens wissen</button></div>`}
     </section>`;
   }
@@ -478,7 +481,15 @@
     if (erase) {
       const confirmField = $('#c-erase-confirm');
       /** Het wisknop werkt pas als de naam klopt. */
-      confirmField.oninput = () => { erase.disabled = confirmField.value.trim() !== state.detail.customer.displayName; };
+      const passwordField = $('#c-erase-password');
+      /** De wisknop werkt pas als de naam klopt en een wachtwoord is ingevuld. */
+      const refresh = () => { erase.disabled = confirmField.value.trim() !== state.detail.customer.displayName || !passwordField.value; };
+      confirmField.oninput = refresh;
+      passwordField.oninput = refresh;
+      api(`customers/${encodeURIComponent(state.detail.customer.id)}/anonymize-preview`).then((preview) => {
+        const weak = preview.weakLinks;
+        if (weak && weak.count) $('#c-erase-weak').textContent = `Let op: ${weak.count} werkorder(s) hangen alleen via het klantrecord aan deze klant (mogelijk automatisch op gelijke naam gekoppeld: ${weak.numbers.join(', ')}${weak.count > weak.numbers.length ? ', …' : ''}). Die worden ook gewist. Controleer ze eerst.`;
+      }).catch(() => {});
       /**
        * Wist de persoonsgegevens en tekent de kaart opnieuw.
        * @returns {Promise<void>}
@@ -487,11 +498,12 @@
         $('#c-privacy-err').textContent = '';
         erase.disabled = true;
         try {
-          await api(`customers/${encodeURIComponent(state.detail.customer.id)}/anonymize`, { method: 'POST', body: { confirm: confirmField.value.trim() } });
+          await api(`customers/${encodeURIComponent(state.detail.customer.id)}/anonymize`, { method: 'POST', body: { confirm: confirmField.value.trim(), password: passwordField.value, totp: $('#c-erase-totp').value.trim() } });
           toast('Persoonsgegevens gewist');
           await loadDetail(state.detail.customer.id);
         } catch (error) {
           $('#c-privacy-err').textContent = error.message;
+          if (error.code === 'totp_required') $('#c-erase-totp-row').hidden = false;
           erase.disabled = false;
         }
       };

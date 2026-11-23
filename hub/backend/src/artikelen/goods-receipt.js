@@ -174,17 +174,17 @@ function createGoodsReceipt(db, { purchaseOrders, release }) {
       if (round3(part.seen) !== line.receivedQty) return { error: 'De inkooporder is intussen gewijzigd of ontvangen. Open hem opnieuw.', code: 'changed', status: 409 };
       const qty = round3(part.qty);
       if (qty > line.openQty && body.allowOver !== true) return { error: `Van ${line.name} staat nog ${line.openQty} open; meer ontvangen vraagt om een bevestiging.`, code: 'over_received', status: 409 };
-      entries.push({ lineId, qty });
+      entries.push({ lineId, qty, seen: round3(part.seen) });
     }
-    const out = purchaseOrders.receive(tenantId, id, user, entries);
-    if (out.error) return { error: out.error === 'not_found' ? 'Inkooporder niet gevonden.' : out.error, code: out.status === 404 ? 'not_found' : out.status === 409 ? 'not_receivable' : 'invalid', status: out.status || 400 };
+    const out = purchaseOrders.receive(tenantId, id, user, entries, { allowOver: body.allowOver === true });
+    if (out.error) return { error: out.error === 'not_found' ? 'Inkooporder niet gevonden.' : out.error, code: out.code || (out.status === 404 ? 'not_found' : out.status === 409 ? 'not_receivable' : 'invalid'), status: out.status || 400 };
     const itemIds = entries.map((entry) => lineById.get(entry.lineId).itemId);
     let released = [];
     try { released = release(tenantId, itemIds) || []; } catch (error) { console.warn(`Backorders na ontvangst: ${error.message}`); }
     return {
       result: {
         number: out.order.number, status: out.order.status, complete: out.order.status === 'ontvangen',
-        lines: entries, pieces: round3(entries.reduce((sum, entry) => sum + entry.qty, 0)), releasedOrders: released.length,
+        lines: entries.map(({ lineId, qty }) => ({ lineId, qty })), pieces: round3(entries.reduce((sum, entry) => sum + entry.qty, 0)), releasedOrders: released.length,
       },
     };
   }

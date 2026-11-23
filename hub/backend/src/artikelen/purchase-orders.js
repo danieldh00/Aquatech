@@ -535,18 +535,33 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
   }
 
   /**
-   * Boekt een ontvangst op een bestelde order (alles of niets).
+   * Boekt een ontvangst op een bestelde order (alles of niets). Elke regel meldt `seen`: het eerder ontvangen aantal dat de
+   * aanroeper kende. Wijkt dat af (iemand ontving intussen, een herhaling of een tweede tabblad) dan gebeurt er niets (409
+   * `changed`), zodat nooit dubbel wordt geboekt. Meer dan nog openstaat vraagt `options.allowOver` (409 `over_received`).
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van de order.
    * @param {object} user Wie ontvangt.
-   * @param {Array<{ lineId: string, qty: number }>} entries De ontvangen aantallen per regel.
-   * @returns {{ order?: object, error?: string, field?: string, status?: number }} De order, of een fout.
+   * @param {Array<{ lineId: string, qty: number, seen: number }>} entries De ontvangen aantallen per regel.
+   * @param {{ allowOver?: boolean }} [options] allowOver: meer ontvangen dan openstaat is bevestigd.
+   * @returns {{ order?: object, error?: string, code?: string, field?: string, status?: number }} De order, of een fout.
    */
-  function receive(tenantId, id, user, entries) {
+  function receive(tenantId, id, user, entries, options = {}) {
     return transaction(db, () => {
       const row = findRow(tenantId, id);
       if (!row) return { error: 'not_found', status: 404 };
       if (row.status !== 'besteld' && row.status !== 'deels_ontvangen') return { error: 'Alleen een bestelde order is te ontvangen.', status: 409 };
+      if (Array.isArray(entries)) {
+        const lineById = new Map(linesOf(tenantId, row.id).map((line) => [line.id, line]));
+        for (const entry of entries) {
+          const line = lineById.get(cleanText(entry && entry.lineId, 60));
+          if (!line) continue; // receiveRows meldt de onbekende regel
+          if (typeof entry.seen !== 'number' || !Number.isFinite(entry.seen) || entry.seen < 0) return { error: 'Geef op hoeveel er eerder was ontvangen.', field: 'seen' };
+          if (round3(entry.seen) !== line.receivedQty) return { error: 'De inkooporder is intussen gewijzigd of ontvangen. Open hem opnieuw.', code: 'changed', status: 409 };
+          const qty = Number(entry.qty);
+          const open = round3(line.qty - line.receivedQty);
+          if (Number.isFinite(qty) && qty > open && options.allowOver !== true) return { error: `Van ${line.name} staat nog ${open} open; meer ontvangen vraagt om een bevestiging.`, code: 'over_received', status: 409 };
+        }
+      }
       return receiveRows(tenantId, row, user, entries);
     });
   }
@@ -972,7 +987,7 @@ function registerPurchaseOrderRoutes(app, ctx) {
   const respond = (res, out, onSuccess) => {
     if (!out.error) return onSuccess(out);
     if (out.status === 404) return res.status(404).json({ error: 'not_found', message: out.error === 'not_found' ? 'Inkooporder niet gevonden.' : out.error, field: out.field });
-    return res.status(out.status || 400).json({ error: out.status === 409 ? 'conflict' : 'invalid', message: out.error, field: out.field });
+    return res.status(out.status || 400).json({ error: out.code || (out.status === 409 ? 'conflict' : 'invalid'), message: out.error, field: out.field });
   };
 
   app.get('/api/purchase-orders', requireStock, (req, res) => {
@@ -1116,7 +1131,7 @@ function registerPurchaseOrderRoutes(app, ctx) {
   });
 
   app.post('/api/purchase-orders/:id/receive', requireJson, requireStock, (req, res) => {
-    const out = purchaseOrders.receive(tenantOf(req), req.params.id, req.user, req.body && req.body.lines);
+    const out = purchaseOrders.receive(tenantOf(req), req.params.id, req.user, req.body && req.body.lines, { allowOver: req.body && req.body.allowOver === true });
     respond(res, out, () => {
       audit(req, 'inkooporder_ontvangen', { number: out.order.number, status: out.order.status });
       afterReceive(tenantOf(req), out.order.lines.map((line) => line.itemId));

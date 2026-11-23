@@ -7,6 +7,7 @@ const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const { createLogin, listen } = require('./helpers/http-client');
+const Totp = require('../src/beveiliging/totp');
 
 const SECRET = 'd'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
@@ -37,8 +38,11 @@ async function setup() {
   const quote = (id, number, status) => db.prepare(`INSERT INTO quotes (id, tenant_id, owner_id, number, status, title, customer, data, created_at, updated_at, customer_id, sent_to)
     VALUES (?, ?, ?, ?, ?, 'Tuin', 'Piet Jansen', ?, ?, ?, ?, 'piet@example.nl')`).run(id, main, owner.id, number, status, JSON.stringify({ customer: { name: 'Piet Jansen', address: 'Dorpsstraat 1', email: 'piet@example.nl', phone: '0612345678' }, internalNote: 'lastig' }), now, now, customer.id);
   quote('00000000-0000-4000-8000-0000000000a0', 'O-1', 'akkoord');
+  db.prepare(`INSERT INTO work_orders (id, tenant_id, owner_id, number, status, title, customer, customer_id, data, appointment, created_at, updated_at)
+    VALUES ('00000000-0000-4000-8000-0000000000b1', ?, ?, 'WO-1', 'gereed', 'Aanleg', 'Piet Jansen', ?, '{}', ?, ?, ?)`).run(main, owner.id, customer.id, JSON.stringify([{ answer: 'bevestigd', name: 'Piet', at: now, via: 'link', ip: '203.0.113.88', userAgent: 'AfspraakBrowser/1' }]), now, now);
   quote('00000000-0000-4000-8000-0000000000a1', 'O-2', 'concept');
   quote('00000000-0000-4000-8000-0000000000a2', 'O-3', 'concept');
+  db.prepare("UPDATE quotes SET acceptance = ? WHERE id = '00000000-0000-4000-8000-0000000000a1'").run(JSON.stringify({ answer: 'akkoord', name: 'Piet Jansen', at: now, via: 'link', userId: null, ip: '203.0.113.77', forwardedFor: '198.51.100.9', userAgent: 'TestBrowser/9' }));
   db.prepare("INSERT INTO plans (id, tenant_id, owner_id, title, customer, address, data, created_at, updated_at) VALUES ('00000000-0000-4000-8000-0000000000a3', ?, ?, 'Tuinplan', 'Piet Jansen', 'Dorpsstraat 1', '{}', ?, ?)").run(main, customer.id, now, now);
   db.prepare("UPDATE quotes SET deleted_at = ? WHERE id = '00000000-0000-4000-8000-0000000000a2'").run(now);
   /**
@@ -95,7 +99,7 @@ test('inzage geeft een Excel met de gegevens van de klant, alleen voor beheerder
   assert.strictEqual(out.status, 200);
   assert.match(out.type, /spreadsheetml/);
   const text = xlsxText(out.raw);
-  for (const expected of ['Piet Jansen', 'piet@example.nl', 'O-1', 'F-1', 'B-1', 'X1', 'O-3']) assert.ok(text.includes(expected), expected);
+  for (const expected of ['Piet Jansen', 'piet@example.nl', 'O-1', 'F-1', 'B-1', 'X1', 'O-3', '203.0.113.77', 'TestBrowser/9', '203.0.113.88', 'AfspraakBrowser/1', 'WO-1']) assert.ok(text.includes(expected), expected);
   assert.strictEqual((await installer.get(`/app/api/customers/${customer.id}/privacy-export`)).status, 403);
   assert.strictEqual((await admin.get('/app/api/customers/onbekend/privacy-export')).status, 404);
 });
@@ -103,14 +107,14 @@ test('inzage geeft een Excel met de gegevens van de klant, alleen voor beheerder
 test('een beheerder van een andere organisatie ziet de klant niet', async () => {
   const { other, customer } = await setup();
   assert.strictEqual((await other.get(`/app/api/customers/${customer.id}/privacy-export`)).status, 404);
-  assert.strictEqual((await other.post(`/app/api/customers/${customer.id}/anonymize`, { confirm: 'Piet Jansen' })).status, 404);
+  assert.strictEqual((await other.post(`/app/api/customers/${customer.id}/anonymize`, { confirm: 'Piet Jansen', password: PW })).status, 404);
 });
 
 test('wissen vraagt de naam, anonimiseert en bewaart wat de bewaarplicht beschermt', async () => {
   const { admin, installer, db, customer } = await setup();
-  assert.strictEqual((await installer.post(`/app/api/customers/${customer.id}/anonymize`, { confirm: 'Piet Jansen' })).status, 403);
+  assert.strictEqual((await installer.post(`/app/api/customers/${customer.id}/anonymize`, { confirm: 'Piet Jansen', password: PW })).status, 403);
   assert.strictEqual((await admin.post(`/app/api/customers/${customer.id}/anonymize`, { confirm: 'fout' })).status, 409);
-  const done = await admin.post(`/app/api/customers/${customer.id}/anonymize`, { confirm: 'Piet Jansen' });
+  const done = await admin.post(`/app/api/customers/${customer.id}/anonymize`, { confirm: 'Piet Jansen', password: PW });
   assert.strictEqual(done.status, 200, JSON.stringify(done.body));
   assert.strictEqual(done.body.result.kept.invoices, 2);
   assert.strictEqual(done.body.result.kept.quotes, 1);
@@ -119,6 +123,8 @@ test('wissen vraagt de naam, anonimiseert en bewaart wat de bewaarplicht bescher
   assert.strictEqual(user.email, '');
   assert.strictEqual(user.password_hash, null);
   assert.strictEqual(Number(user.disabled), 1);
+  const proof = db.prepare("SELECT acceptance FROM quotes WHERE id = '00000000-0000-4000-8000-0000000000a1'").get().acceptance;
+  assert.ok(!/203\.0\.113|198\.51\.100|TestBrowser|Piet/.test(proof), proof);
   const wiped = db.prepare("SELECT customer, customer_id, sent_to, data FROM quotes WHERE id = '00000000-0000-4000-8000-0000000000a1'").get();
   assert.strictEqual(wiped.customer, 'Verwijderde persoon');
   assert.strictEqual(wiped.customer_id, null);
@@ -144,7 +150,7 @@ test('een gastbestelling op een onbevestigd e-mailadres wordt niet gekoppeld of 
   db.prepare(`INSERT INTO web_orders (id, tenant_id, number, user_id, status, customer_name, email, total, data, created_at, updated_at)
     VALUES ('00000000-0000-4000-8000-0000000000a7', (SELECT tenant_id FROM users WHERE id = ?), 'B-2', NULL, 'afgerond', 'Andere Gast', 'piet@example.nl', 5, '{}', ?, ?)`).run(customer.id, now, now);
   assert.ok(!xlsxText((await admin.get(`/app/api/customers/${customer.id}/privacy-export`)).raw).includes('B-2'));
-  assert.strictEqual((await admin.post(`/app/api/customers/${customer.id}/anonymize`, { confirm: 'Piet Jansen' })).status, 200);
+  assert.strictEqual((await admin.post(`/app/api/customers/${customer.id}/anonymize`, { confirm: 'Piet Jansen', password: PW })).status, 200);
   assert.strictEqual(db.prepare("SELECT customer_name FROM web_orders WHERE id = '00000000-0000-4000-8000-0000000000a7'").get().customer_name, 'Andere Gast');
 });
 
@@ -154,7 +160,7 @@ test('een open werkorder uit een melding van de klant houdt het wissen tegen', a
   const owner = db.prepare("SELECT id, tenant_id FROM users WHERE username = 'baas'").get();
   db.prepare(`INSERT INTO work_orders (id, tenant_id, owner_id, number, status, data, created_at, updated_at) VALUES ('00000000-0000-4000-8000-0000000000ab', ?, ?, 'W-1', 'open', '{}', ?, ?)`).run(owner.tenant_id, owner.id, now, now);
   db.prepare(`INSERT INTO service_requests (id, tenant_id, number, customer_id, subject, work_order_id, created_at, updated_at) VALUES ('00000000-0000-4000-8000-0000000000ac', ?, 'M-1', ?, 'Storing', '00000000-0000-4000-8000-0000000000ab', ?, ?)`).run(owner.tenant_id, customer.id, now, now);
-  const refused = await admin.post(`/app/api/customers/${customer.id}/anonymize`, { confirm: 'Piet Jansen' });
+  const refused = await admin.post(`/app/api/customers/${customer.id}/anonymize`, { confirm: 'Piet Jansen', password: PW });
   assert.strictEqual(refused.status, 409);
   assert.strictEqual(refused.body.blockers.workOrders, 1);
 });
@@ -162,8 +168,23 @@ test('een open werkorder uit een melding van de klant houdt het wissen tegen', a
 test('wissen wordt geweigerd zolang er een onafgehandelde bestelling of werkorder is', async () => {
   const { admin, db, customer } = await setup();
   db.prepare("UPDATE web_orders SET status = 'nieuw' WHERE id = '00000000-0000-4000-8000-0000000000a8'").run();
-  const refused = await admin.post(`/app/api/customers/${customer.id}/anonymize`, { confirm: 'Piet Jansen' });
+  const refused = await admin.post(`/app/api/customers/${customer.id}/anonymize`, { confirm: 'Piet Jansen', password: PW });
   assert.strictEqual(refused.status, 409);
   assert.strictEqual(refused.body.error, 'open_items');
   assert.strictEqual(db.prepare('SELECT display_name FROM users WHERE id = ?').get(customer.id).display_name, 'Piet Jansen');
+});
+
+test('wissen vraagt bij tweestapsverificatie ook de code', async () => {
+  const { admin, db, customer } = await setup();
+  const started = await admin.post('/app/api/account/totp/setup', {});
+  assert.strictEqual((await admin.post('/app/api/account/totp/confirm', { code: Totp.codeAt(started.body.secret, Totp.stepOf()) })).status, 200);
+  const body = { confirm: 'Piet Jansen', password: PW };
+  const missing = await admin.post(`/app/api/customers/${customer.id}/anonymize`, body);
+  assert.deepStrictEqual([missing.status, missing.body.error], [401, 'totp_required']);
+  const wrong = await admin.post(`/app/api/customers/${customer.id}/anonymize`, { ...body, totp: '000000' });
+  assert.deepStrictEqual([wrong.status, wrong.body.error], [401, 'totp_wrong']);
+  assert.strictEqual(db.prepare('SELECT display_name FROM users WHERE id = ?').get(customer.id).display_name, 'Piet Jansen');
+  const code = Totp.codeAt(started.body.secret, Totp.stepOf() + 1);
+  const done = await admin.post(`/app/api/customers/${customer.id}/anonymize`, { ...body, totp: code });
+  assert.strictEqual(done.status, 200, JSON.stringify(done.body));
 });

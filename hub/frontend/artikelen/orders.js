@@ -212,10 +212,25 @@
     document.querySelectorAll('#po-lines tr[data-line]').forEach((row) => {
       const input = row.querySelector('[data-field=receive]');
       const qty = input ? Number(input.value) : 0;
-      if (qty > 0) entries.push({ lineId: state.lines[Number(row.dataset.line)].id, qty });
+      if (qty > 0) { const line = state.lines[Number(row.dataset.line)]; entries.push({ lineId: line.id, qty, seen: Number(line.receivedQty) || 0 }); }
     });
     if (!entries.length) { $('#order-form .err').textContent = 'Vul bij minstens één regel in wat er is ontvangen.'; return; }
-    await run('Ontvangst geboekt, de voorraad is bijgewerkt', () => context.api(`purchase-orders/${encodeURIComponent(state.order.id)}/receive`, { method: 'POST', body: { lines: entries } }));
+    // Eén sleutel per ontvangstpoging: een herhaling na een time-out boekt nooit dubbel (de server onthoudt het antwoord).
+    const key = crypto.randomUUID();
+    /**
+     * Verstuurt de ontvangst met de sleutel van deze poging.
+     * @param {boolean} allowOver true als meer ontvangen dan openstaat is bevestigd.
+     * @returns {Promise<object>} De bijgewerkte order.
+     */
+    const send = (allowOver) => context.api(`purchase-orders/${encodeURIComponent(state.order.id)}/receive`, { method: 'POST', headers: { 'Idempotency-Key': key }, body: { lines: entries, allowOver } });
+    await run('Ontvangst geboekt, de voorraad is bijgewerkt', async () => {
+      try {
+        return await send(false);
+      } catch (error) {
+        if (error.code !== 'over_received' || !window.confirm(`${error.message}\n\nToch boeken?`)) throw error;
+        return send(true);
+      }
+    });
   }
 
   /**

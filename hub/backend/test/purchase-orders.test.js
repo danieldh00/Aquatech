@@ -75,7 +75,7 @@ test('inkooporders: maken, wijzigen, bestellen, ontvangen en afsluiten', async (
     // Zonder regels is er niets te bestellen.
     const empty = (await kees.post('/app/api/purchase-orders', { supplierId: supplier.id, lines: [] })).body;
     assert.strictEqual((await kees.post(`/app/api/purchase-orders/${empty.id}/place`)).status, 409);
-    assert.strictEqual((await kees.post(`/app/api/purchase-orders/${order.id}/receive`, { lines: [{ lineId: order.lines[0].id, qty: 1 }] })).status, 409);
+    assert.strictEqual((await kees.post(`/app/api/purchase-orders/${order.id}/receive`, { lines: [{ lineId: order.lines[0].id, qty: 1, seen: 0 }] })).status, 409);
     const placed = await kees.post(`/app/api/purchase-orders/${order.id}/place`);
     assert.strictEqual(placed.body.status, 'besteld');
     assert.ok(placed.body.orderedAt);
@@ -84,7 +84,7 @@ test('inkooporders: maken, wijzigen, bestellen, ontvangen en afsluiten', async (
 
     // Deels ontvangen: de voorraad gaat omhoog en het logboek noemt de order.
     const [pipeLine, valveLine] = placed.body.lines;
-    const partial = await kees.post(`/app/api/purchase-orders/${order.id}/receive`, { lines: [{ lineId: pipeLine.id, qty: 30 }] });
+    const partial = await kees.post(`/app/api/purchase-orders/${order.id}/receive`, { lines: [{ lineId: pipeLine.id, qty: 30, seen: 0 }] });
     assert.strictEqual(partial.status, 200, JSON.stringify(partial.body));
     assert.strictEqual(partial.body.status, 'deels_ontvangen');
     assert.deepStrictEqual(partial.body.lines.map((line) => [line.receivedQty, line.openQty]), [[30, 20], [0, 4]]);
@@ -97,16 +97,24 @@ test('inkooporders: maken, wijzigen, bestellen, ontvangen en afsluiten', async (
     assert.deepStrictEqual([movement.kind, movement.source, movement.qty], ['ontvangst', `inkoop:${order.number}`, 30]);
 
     // Alles of niets: een foute regel in dezelfde ontvangst boekt niets.
-    const bad = await kees.post(`/app/api/purchase-orders/${order.id}/receive`, { lines: [{ lineId: pipeLine.id, qty: 5 }, { lineId: 'bestaat-niet', qty: 1 }] });
+    const bad = await kees.post(`/app/api/purchase-orders/${order.id}/receive`, { lines: [{ lineId: pipeLine.id, qty: 5, seen: 30 }, { lineId: 'bestaat-niet', qty: 1, seen: 0 }] });
     assert.strictEqual(bad.status, 404);
     assert.strictEqual((await kees.get(`/app/api/stock/items/${pipe.id}`)).body.onHand, 30);
-    assert.strictEqual((await kees.post(`/app/api/purchase-orders/${order.id}/receive`, { lines: [{ lineId: pipeLine.id, qty: 0 }] })).status, 400);
+    assert.strictEqual((await kees.post(`/app/api/purchase-orders/${order.id}/receive`, { lines: [{ lineId: pipeLine.id, qty: 0, seen: 30 }] })).status, 400);
     assert.strictEqual((await kees.post(`/app/api/purchase-orders/${order.id}/receive`, { lines: [] })).status, 400);
     // Annuleren kan niet meer, afsluiten wel: wat nog niet geleverd is vervalt.
     assert.strictEqual((await kees.post(`/app/api/purchase-orders/${order.id}/cancel`)).status, 409);
 
+    // Dezelfde ontvangst nog eens (twee tabbladen) of meer dan open zonder bevestiging: geweigerd, niets geboekt.
+    const stale = await kees.post(`/app/api/purchase-orders/${order.id}/receive`, { lines: [{ lineId: pipeLine.id, qty: 10, seen: 0 }] });
+    assert.deepStrictEqual([stale.status, stale.body.error], [409, 'changed']);
+    const over = await kees.post(`/app/api/purchase-orders/${order.id}/receive`, { lines: [{ lineId: pipeLine.id, qty: 25, seen: 30 }] });
+    assert.deepStrictEqual([over.status, over.body.error], [409, 'over_received']);
+    assert.strictEqual((await kees.post(`/app/api/purchase-orders/${order.id}/receive`, { lines: [{ lineId: pipeLine.id, qty: 1 }] })).status, 400);
+    assert.strictEqual((await kees.get(`/app/api/stock/items/${pipe.id}`)).body.onHand, 30);
+
     // Meer ontvangen dan besteld mag; de order is ontvangen zodra elke regel is gehaald.
-    const done = await kees.post(`/app/api/purchase-orders/${order.id}/receive`, { lines: [{ lineId: pipeLine.id, qty: 25 }, { lineId: valveLine.id, qty: 4 }] });
+    const done = await kees.post(`/app/api/purchase-orders/${order.id}/receive`, { lines: [{ lineId: pipeLine.id, qty: 25, seen: 30 }, { lineId: valveLine.id, qty: 4, seen: 0 }], allowOver: true });
     assert.strictEqual(done.body.status, 'ontvangen');
     assert.ok(done.body.closedAt);
     assert.strictEqual((await kees.get(`/app/api/stock/items/${pipe.id}`)).body.onHand, 55);
@@ -115,7 +123,7 @@ test('inkooporders: maken, wijzigen, bestellen, ontvangen en afsluiten', async (
     // Afsluiten van een deels ontvangen order.
     const second = (await kees.post('/app/api/purchase-orders', { supplierId: supplier.id, lines: [{ itemId: valve.id, qty: 10 }] })).body;
     await kees.post(`/app/api/purchase-orders/${second.id}/place`);
-    await kees.post(`/app/api/purchase-orders/${second.id}/receive`, { lines: [{ lineId: second.lines[0].id, qty: 6 }] });
+    await kees.post(`/app/api/purchase-orders/${second.id}/receive`, { lines: [{ lineId: second.lines[0].id, qty: 6, seen: 0 }] });
     const closed = await kees.post(`/app/api/purchase-orders/${second.id}/close`);
     assert.strictEqual(closed.body.status, 'ontvangen');
     assert.strictEqual(closed.body.openQty, 4);
@@ -195,7 +203,7 @@ test('inkooporders: onderweg telt mee in het bestelvoorstel en een order uit het
     const again = (await kees.post('/app/api/purchase-orders/from-proposal')).body.orders[0];
     await kees.post(`/app/api/purchase-orders/${again.id}/place`);
     const lineId = (await kees.get(`/app/api/purchase-orders/${again.id}`)).body.lines[0].id;
-    await kees.post(`/app/api/purchase-orders/${again.id}/receive`, { lines: [{ lineId, qty: 25 }] });
+    await kees.post(`/app/api/purchase-orders/${again.id}/receive`, { lines: [{ lineId, qty: 25, seen: 0 }] });
     assert.deepStrictEqual((await kees.get('/app/api/stock/reorder')).body.items.map((item) => item.code), ['KLEP', 'LOS']);
   } finally {
     server.close();
@@ -221,7 +229,7 @@ test('inkooporders: rechten en andere organisatie', async () => {
     assert.deepStrictEqual((await piet.get('/app/api/purchase-orders')).body.items, []);
     assert.strictEqual((await piet.get(`/app/api/purchase-orders/${order.id}`)).status, 404);
     for (const path of ['place', 'cancel', 'close']) assert.strictEqual((await piet.post(`/app/api/purchase-orders/${order.id}/${path}`)).status, 404, path);
-    assert.strictEqual((await piet.post(`/app/api/purchase-orders/${order.id}/receive`, { lines: [{ lineId: 'x', qty: 1 }] })).status, 404);
+    assert.strictEqual((await piet.post(`/app/api/purchase-orders/${order.id}/receive`, { lines: [{ lineId: 'x', qty: 1, seen: 0 }] })).status, 404);
     assert.strictEqual((await piet.put(`/app/api/purchase-orders/${order.id}`, { supplierId: supplier.id, lines: [] })).status, 404);
     assert.strictEqual((await piet.del(`/app/api/purchase-orders/${order.id}`)).status, 404);
     // Leverancier en artikel van de andere organisatie zijn onbereikbaar.
