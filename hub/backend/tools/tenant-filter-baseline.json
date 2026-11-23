@@ -339,7 +339,7 @@
     },
     {
       "file": "uitvoering/outsourcing.js",
-      "sql": "SELECT ${} FROM work_order_offers f JOIN tenants s ON s.id = f.tenant_id WHERE f.tenant_id <> ? AND s.environment = ? AND ((f.status = 'aangeboden' AND (f.to_tenant_id = ? OR f.to_tenant_id IS NULL)) OR f.receiver_tenant_id = ? OR (f.status = 'afgewezen' AND f.to_tenant_id = ?)) ORDER BY f.created_at DESC LIMIT 200"
+      "sql": "SELECT ${} FROM work_order_offers f JOIN tenants s ON s.id = f.tenant_id WHERE f.tenant_id <> ? AND s.environment = ? AND ((f.status = 'aangeboden' AND (f.to_tenant_id = ? OR f.to_tenant_id IS NULL) AND (f.receiver_tenant_id IS NULL OR f.receiver_tenant_id = ?)) OR f.receiver_tenant_id = ? OR (f.status = 'afgewezen' AND f.to_tenant_id = ?)) ORDER BY f.created_at DESC LIMIT 200"
     },
     {
       "file": "uitvoering/outsourcing.js",
