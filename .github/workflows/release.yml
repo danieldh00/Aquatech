@@ -46,17 +46,21 @@ jobs:
         with:
           ref: master
           fetch-depth: 0
-          token: ${{ secrets.RELEASE_PUSH_TOKEN || github.token }}
+          # Het push-token staat niet in de git-config: alleen de push-stap gebruikt het (via PUSH_TOKEN).
+          persist-credentials: false
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: "22"
       - name: Versie en releasenotes bijwerken
         id: bump
+        env:
+          PUSH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN || github.token }}
         run: |
+          auth_header="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$PUSH_TOKEN" | base64 -w0)"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           for attempt in 1 2 3 4 5; do
-            git fetch origin master
+            git -c "http.https://github.com/.extraheader=$auth_header" fetch origin master
             git reset --hard origin/master
             node hub/backend/tools/release-notes.js
             if git diff --quiet HEAD; then
@@ -66,7 +70,7 @@ jobs:
             version=$(jq -r .version hub/backend/package.json)
             git add -A changes hub/backend/package.json hub/CHANGELOG.md hub/frontend/nieuws/releases.js
             git commit -m "Release $version [skip ci]"
-            if git push origin HEAD:master; then
+            if git -c "http.https://github.com/.extraheader=$auth_header" push origin HEAD:master; then
               break
             fi
             echo "Push mislukt (poging $attempt); opnieuw op de nieuwste master."
