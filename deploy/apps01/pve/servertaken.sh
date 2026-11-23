@@ -386,6 +386,7 @@ HOST_TASK_IDS=(
   005-hersteltest-app-controle
   006-database-grootte-en-indexgebruik
   007-hersteltest-drive-app-controle
+  009-update-script-stopt-bij-mislukte-back-up
 )
 HOST_TASKS_LEDGER="host-tasks.json"
 # Functienaam van een taak (streepjes worden underscores).
@@ -441,6 +442,11 @@ hosttask_001_app_update_opnieuw_inrichten() {
   SETUP_REF="$TASKS_REF" APP_DIR="$APP_DIR" bash "$dir/setup-app-update.sh" || rc=$?
   rm -rf "$dir"
   return "$rc"
+}
+
+# Taak 009: update.sh vernieuwen (stopt bij een mislukte back-up vooraf); zelfde handeling als taak 001. Veilig herhaalbaar.
+hosttask_009_update_script_stopt_bij_mislukte_back_up() {
+  hosttask_001_app_update_opnieuw_inrichten
 }
 
 # Taak 002: de wekelijkse hersteltest van de back-up inrichten (restore-test.sh + timer + path-unit). Veilig herhaalbaar.
