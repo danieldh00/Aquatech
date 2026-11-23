@@ -119,6 +119,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write # keyless ondertekenen met cosign (OIDC-identiteit van deze workflow)
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -174,6 +175,7 @@ jobs:
 
       # Pas na een geslaagde smoketest naar GHCR: :latest wijst nooit naar een kapot image.
       - name: Pushen naar GHCR
+        id: push
         if: steps.exists.outputs.skip == 'false'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
@@ -188,3 +190,17 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
           cache-from: type=gha
+
+      # Ondertekenen op digest (niet op tag): de server controleert dezelfde digest vóór een uitrol.
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        if: steps.exists.outputs.skip == 'false'
+        with:
+          cosign-release: v3.1.4
+
+      - name: Image ondertekenen
+        if: steps.exists.outputs.skip == 'false'
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          test -n "$DIGEST"
+          cosign sign --yes "$IMAGE@$DIGEST"
