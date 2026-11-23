@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.33.4',
+      date: '2026-11-23',
+      title: 'Uitbesteden veiliger',
+      items: [
+        { text: 'Een opdracht die je aan alle organisaties aanbiedt, gaat pas naar de aanvrager nadat jij die hebt bevestigd. Tot die tijd krijgt niemand de klantgegevens.', for: ['uitbesteden'] },
+        { text: 'Je kunt maximaal 20 opdrachten per uur aanbieden, en een organisatie krijgt per werkorder hoogstens één mail.', for: ['uitbesteden'] },
+      ],
+    },
+    {
       version: '1.33.3',
       date: '2026-11-23',
       title: 'Updates stoppen als de back-up mislukt',
