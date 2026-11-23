@@ -13,6 +13,32 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.34.1',
+      date: '2026-11-23',
+      title: 'Mediabibliotheek en knoppen netter',
+      items: [
+        { text: 'Het tabblad Afbeeldingen bij Artikelen laadt weer.', for: ['voorraad'] },
+        { text: 'Kleine knoppen zijn op de telefoon makkelijker aan te tikken en gebruiken overal het huislettertype.' },
+      ],
+    },
+    {
+      version: '1.34.0',
+      date: '2026-11-23',
+      title: 'Veiliger terugvallen na een mislukte update',
+      items: [
+        { text: 'Mislukt een update en moet de vorige versie terug, dan start die niet meer stilletjes op een nieuwere database. Je krijgt de melding dat een back-up hersteld moet worden.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.33.9',
+      date: '2026-11-23',
+      title: 'AVG-wissen, inkoopontvangst en netwerkfilter aangescherpt',
+      items: [
+        { text: 'Een klant wissen (AVG) vraagt nu je wachtwoord opnieuw en waarschuwt voor werkorders die alleen op naam aan de klant gekoppeld zijn. De inzage-Excel bevat ook het akkoordbewijs van offertes en het afspraaklogboek.', for: ['beheer'] },
+        { text: 'Een inkooporder ontvangen via Artikelen boekt nooit meer dubbel: een herhaling of tweede tabblad wordt geweigerd, en meer ontvangen dan besteld vraagt om een bevestiging.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.33.8',
       date: '2026-11-23',
       title: 'Veiliger zonder inlog en gecrediteerde facturen niet meer betaalbaar',

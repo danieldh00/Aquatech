@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.34.1
+
+- Artikelen: `ArtikelenMedia.setup` krijgt `api` mee (L-01, "api is not defined"); test `artikelen-media-setup.test.js`.
+- `shared/brand.css`: `button { font-family: inherit }` (L-11); `beheer/beheer.css` en `artikelen/artikelen.css`: op smal scherm een hoger tikdoel voor `.btn.small` en `.linkbtn` (L-08).
+
+## 1.34.0
+
+Audit T-07, geen migratie:
+- `migratePg` weigert een schemaversie die hoger is dan de code kent (`database nieuwer dan de code`); `AQUATECH_ALLOW_NEWER_SCHEMA=1` slaat dat bewust over.
+- `update.sh` herkent die melding na een mislukte terugval en meldt "Database nieuwer dan versie X: herstel uit back-up nodig" in plaats van een algemene fout. Geldt vanaf de eerste versie die deze controle bevat (een oudere vorige versie kent hem nog niet).
+
+## 1.33.9
+
+- Audit B-16: bij wissen gaan ook IP-adres, doorgestuurd IP, browser en gebruikers-id uit het offerte-akkoordbewijs; de inzage heeft de tabbladen *Akkoorden offertes* en *Afspraaklogboek*; `POST /api/customers/:id/anonymize` vraagt `password` (en `totp` bij tweestapsverificatie, met een grens van 5 mislukte pogingen per 15 minuten per beheerder, audit `klant_wissen_wachtwoord_fout`); `GET /api/customers/:id/anonymize-preview` telt werkorders die alleen via `customer_id` gekoppeld zijn (`weakLinksOf`) en de klantkaart toont die waarschuwing.
+- Audit T-10: `purchaseOrders.receive` dwingt zelf `seen` (409 `changed`) en `allowOver` (409 `over_received`) af, zodat de Artikelen-route en de orderpick-app dezelfde regel delen; de frontend stuurt per poging een `Idempotency-Key` en vraagt bevestiging bij een overschot.
+- Audit B-38: netguard blokkeert ook 6to4 (2002::/16), Teredo (2001::/32), IPv4-compatibel (::/96), site-local (fec0::/10) en 192.88.99.0/24.
+
 ## 1.33.8
 
 Audit 1.33.0, punten B-05, B-10 en B-12.
