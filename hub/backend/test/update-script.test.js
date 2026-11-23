@@ -21,7 +21,8 @@ running() { sed -n 's/^AQUATECH_TAG=//p' "$APP_DIR/.env" | tail -n1; }
 case "$1" in
   pull) exit 0 ;;
   image)
-    if [[ "$2" == "inspect" ]]; then echo "$FAKE_LATEST"; fi
+    if [[ "$2" == "inspect" && "$*" == *RepoDigests* ]]; then echo "ghcr.io/danieldh00/aquatech@sha256:$(printf 'a%.0s' $(seq 64))";
+    elif [[ "$2" == "inspect" ]]; then echo "$FAKE_LATEST"; fi
     if [[ "$2" == "ls" ]]; then for tag in $FAKE_TAGS; do echo "$tag"; done; fi
     exit 0 ;;
   run) echo '{"version":"'"$FAKE_LATEST"'","releases":[{"version":"'"$FAKE_LATEST"'","date":"2026-11-13","title":"Nieuw","items":[{"text":"Punt"}]}]}'; exit 0 ;;
@@ -57,6 +58,13 @@ function install({ current = '1.14.1', failed = '' } = {}) {
   fs.writeFileSync(path.join(appDir, 'compose.yml'), 'services:\n  aquatech:\n    environment:\n      - DATABASE_URL_FILE=/run/secrets/database-url\n');
   if (failed) fs.writeFileSync(path.join(appDir, '.failed-version'), `${failed}\n`);
   fs.writeFileSync(path.join(bin, 'docker'), FAKE_DOCKER, { mode: 0o755 });
+  /**
+   * Zet een nep-cosign klaar die zijn aanroep logt en met de gegeven exitcode stopt.
+   * @param {number} exitCode Exitcode van `cosign verify`.
+   * @param {string} [message] Melding die cosign op stderr schrijft.
+   * @returns {void}
+   */
+  const installCosign = (exitCode, message = '') => fs.writeFileSync(path.join(bin, 'cosign'), `#!/usr/bin/env bash\necho "$*" >> "${state}/cosign.log"\n${message ? `echo '${message}' >&2\n` : ''}exit ${exitCode}\n`, { mode: 0o755 });
   const statusDir = path.join(appDir, 'update', 'status');
   const requestDir = path.join(appDir, 'update', 'request');
   /**
@@ -66,13 +74,13 @@ function install({ current = '1.14.1', failed = '' } = {}) {
    */
   const run = (env) => {
     const result = spawnSync('bash', [SCRIPT], {
-      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, APP_DIR: appDir, FAKE_STATE: state, DRAIN_SECONDS: '0', HEALTH_TRIES: '1', FAKE_BAD: '', ...env },
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, APP_DIR: appDir, FAKE_STATE: state, DRAIN_SECONDS: '0', HEALTH_TRIES: '1', VERIFY_RETRY_SECONDS: '0', FAKE_BAD: '', ...env },
       encoding: 'utf8', timeout: 60000,
     });
     const tag = /AQUATECH_TAG=(.*)/.exec(fs.readFileSync(path.join(appDir, '.env'), 'utf8'))[1];
     return { status: result.status, output: `${result.stdout}${result.stderr}`, tag };
   };
-  return { root, appDir, statusDir, requestDir, state, run };
+  return { root, appDir, statusDir, requestDir, state, run, installCosign };
 }
 
 /**
@@ -291,4 +299,73 @@ test('update.sh: een oude versie die backup.js create niet kent (exitcode 2) mag
   assert.strictEqual(out.status, 0, out.output);
   assert.strictEqual(out.tag, '1.14.2');
   assert.match(out.output, /kent 'backup\.js create' nog niet/);
+});
+
+// Hostgereedschap kan op de testmachine staan; de nep-PATH zet alleen een eigen cosign vooraan.
+const hostHasCosign = spawnSync('bash', ['-c', 'command -v cosign']).status === 0;
+
+test('update.sh: met cosign wordt de handtekening op digest gecontroleerd tegen de identiteit van release.yml', { skip: !bashAvailable }, () => {
+  const setup = install();
+  setup.installCosign(0);
+  const out = setup.run({ FAKE_LATEST: '1.14.2' });
+  assert.strictEqual(out.status, 0, out.output);
+  assert.strictEqual(out.tag, '1.14.2');
+  assert.match(out.output, /Handtekening van ghcr\.io\/danieldh00\/aquatech@sha256:a{64} gecontroleerd/);
+  const call = fs.readFileSync(path.join(setup.state, 'cosign.log'), 'utf8');
+  assert.match(call, /verify --certificate-identity-regexp \^https:\/\/github\\\.com\/danieldh00\/\[Aa\]quatech\/\\\.github\/workflows\/release\\\.yml@refs\/heads\/master\$ --certificate-oidc-issuer https:\/\/token\.actions\.githubusercontent\.com ghcr\.io\/danieldh00\/aquatech@sha256:a{64}/);
+});
+
+test('update.sh: een ontbrekende of ongeldige handtekening stopt de update vóór de onderhoudsmodus', { skip: !bashAvailable }, () => {
+  const setup = install();
+  setup.installCosign(1);
+  const out = setup.run({ FAKE_LATEST: '1.14.2' });
+  assert.strictEqual(out.status, 1, out.output);
+  assert.strictEqual(out.tag, '1.14.1', 'versie blijft ongewijzigd');
+  const calls = fs.readFileSync(path.join(setup.state, 'calls.log'), 'utf8');
+  assert.ok(!/compose stop/.test(calls), 'container niet gestopt');
+  assert.strictEqual(readStatus(setup.statusDir, 'run.json').state, 'mislukt');
+  assert.match(readStatus(setup.statusDir, 'run.json').message, /handtekening/);
+  assert.strictEqual(fs.readFileSync(path.join(setup.appDir, '.failed-version'), 'utf8').trim(), '1.14.2', 'versie wordt overgeslagen');
+  assert.ok(!fs.existsSync(path.join(setup.statusDir, 'maintenance.json')));
+});
+
+test('update.sh: IMAGE_SIGNATURE=off slaat de controle over en =required eist cosign', { skip: !bashAvailable || hostHasCosign }, () => {
+  const off = install();
+  off.installCosign(1);
+  fs.appendFileSync(path.join(off.appDir, '.env'), 'IMAGE_SIGNATURE=off\n');
+  assert.strictEqual(off.run({ FAKE_LATEST: '1.14.2' }).tag, '1.14.2');
+  assert.ok(!fs.existsSync(path.join(off.state, 'cosign.log')), 'cosign niet aangeroepen');
+
+  const warn = install();
+  const auto = warn.run({ FAKE_LATEST: '1.14.2' });
+  assert.strictEqual(auto.tag, '1.14.2', auto.output);
+  assert.match(auto.output, /cosign ontbreekt/);
+
+  const required = install();
+  fs.appendFileSync(path.join(required.appDir, '.env'), 'IMAGE_SIGNATURE=required\n');
+  const blocked = required.run({ FAKE_LATEST: '1.14.2' });
+  assert.strictEqual(blocked.status, 1, blocked.output);
+  assert.strictEqual(blocked.tag, '1.14.1');
+  assert.match(readStatus(required.statusDir, 'run.json').message, /servertaak 011/);
+});
+
+test('update.sh: een netwerkstoring bij de handtekeningcontrole slaat de versie niet over en wordt opnieuw geprobeerd', { skip: !bashAvailable }, () => {
+  const setup = install();
+  setup.installCosign(1, 'Error: dial tcp: lookup tuf-repo-cdn.sigstore.dev: no such host');
+  const out = setup.run({ FAKE_LATEST: '1.14.2' });
+  assert.strictEqual(out.status, 1, out.output);
+  assert.strictEqual(out.tag, '1.14.1');
+  assert.ok(!fs.existsSync(path.join(setup.appDir, '.failed-version')), 'versie niet overgeslagen');
+  assert.match(out.output, /no such host/, 'de cosign-melding staat in het log');
+  assert.strictEqual(fs.readFileSync(path.join(setup.state, 'cosign.log'), 'utf8').trim().split('\n').length, 2, 'één keer opnieuw geprobeerd');
+  setup.installCosign(0);
+  assert.strictEqual(setup.run({ FAKE_LATEST: '1.14.2' }).tag, '1.14.2', 'de volgende ronde slaagt');
+});
+
+test('update.sh: een ongeldige handtekening waarvan de melding een digest bevat telt niet als netwerkstoring', { skip: !bashAvailable }, () => {
+  const setup = install();
+  setup.installCosign(1, 'Error: no matching signatures for sha256:5e50c0eeffb0504aa5e50f0eef5009e50e50e50e50e50e50e50e50e50e50e50');
+  const out = setup.run({ FAKE_LATEST: '1.14.2' });
+  assert.strictEqual(out.status, 1, out.output);
+  assert.strictEqual(fs.readFileSync(path.join(setup.appDir, '.failed-version'), 'utf8').trim(), '1.14.2', 'versie wordt overgeslagen');
 });

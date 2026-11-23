@@ -64,7 +64,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   met `[skip ci]`. De PR-check `version-must-increase` (`version.yml`) faalt bij een eigen versie-/releases.js-/CHANGELOG-wijziging
   of een ontbrekend fragment; alleen docs/CI zonder effect: label `geen-releasenotes`. Enige uitzondering: een vergeten doelgroep (`for: [...]`) toevoegen aan een bestaand punt in `releases.js` mag in een PR (`audienceOnlyChange`); bestaande doelgroepen, tekst, versies en nieuwe punten blijven geweigerd. Het versienummer in een PR staat dus
   altijd op het oude; tests die de versie nodig hebben lezen `package.json`. Voor de push naar de beschermde master is
-  het secret `RELEASE_PUSH_TOKEN` nodig (beheerder-PAT) met Repository admin als bypass in de ruleset.
+  het secret `RELEASE_PUSH_TOKEN` nodig (fijnmazige token met Contents: lezen en schrijven op deze repo; de eigenaar staat als bypass in de ruleset).
   Wijzigingen buiten `hub/` (zoals deze `CLAUDE.md`) hebben
   geen bump nodig.
 
@@ -86,7 +86,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   `audited.json`). `aquatech-update.path` start het script meteen. Het script vertrouwt de aanvraag niet (geen symlinks,
   versie moet gelijk zijn aan `:latest`), de app saneert de statusbestanden. Wie: `canUpdate` in server.js (eigen
   account in de live hoofdtenant met `beheer`, bij multitenancy alleen `platform_admin`), wachtwoord opnieuw, 5 per
-  kwartier, audit `update_*`. **Onderhoudsmodus**: zolang `maintenance.json` bestaat (max. 30 min) geeft
+  kwartier, audit `update_*`. **Handtekening** (audit B-03, geen migratie): `release.yml` tekent het gepushte image met cosign (keyless, op digest, `id-token: write` alleen in de job `publish`); `update.sh` (`verify_signature`) controleert na het ophalen de digest tegen de identiteit van `release.yml@refs/heads/master` (alleen als cosign op de server staat, servertaak 011; `.env` `IMAGE_SIGNATURE=auto|required|off`); een mislukte controle stopt vóór de onderhoudsmodus en slaat die versie over. Basisimage en cloudflared staan op digest vast (Renovate werkt die bij). **Onderhoudsmodus**: zolang `maintenance.json` bestaat (max. 30 min) geeft
   `maintenanceGuard` 503 `maintenance` op schrijfverzoeken (behalve in- en uitloggen en de Mollie-webhook), kop
   `X-Aquatech-Maintenance` (balk via `shared/common.js`), achtergrondtaken in `main` slaan over, `/api/health` meldt
   `maintenance`. Tests: `system-update.test.js`, `update-script.test.js` (nep-docker). Inrichten op de server:

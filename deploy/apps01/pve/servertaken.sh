@@ -389,6 +389,7 @@ HOST_TASK_IDS=(
   008-vertrouwde-proxy-instellen
   009-update-script-stopt-bij-mislukte-back-up
   010-back-up-integriteitscontrole
+  011-image-handtekening-controleren
 )
 HOST_TASKS_LEDGER="host-tasks.json"
 # Functienaam van een taak (streepjes worden underscores).
@@ -454,6 +455,31 @@ hosttask_009_update_script_stopt_bij_mislukte_back_up() {
 # Taak 010: pg-backup.sh en restore-test.sh vernieuwen en een back-up maken, nu met een HMAC-bestand ernaast (zelfde handeling als taak 004).
 hosttask_010_back_up_integriteitscontrole() {
   hosttask_004_pg_back_up_script_herstellen
+}
+
+# Taak 011: update.sh vernieuwen (controleert de handtekening van het image) en cosign installeren: vaste versie, SHA-256 vooraf bekend.
+# COSIGN_URL, COSIGN_SHA256 en COSIGN_BIN zijn alleen voor de test te wijzigen.
+COSIGN_VERSION="v3.1.4"
+hosttask_011_image_handtekening_controleren() {
+  local arch url sha dir bin
+  case "$(uname -m)" in
+    x86_64|amd64) arch=amd64; sha=424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa ;;
+    aarch64|arm64) arch=arm64; sha=ade83b7aac62e131cacfe96d958948b2150cc9efec46a570a2649b8e27dedad2 ;;
+    *) echo "FOUT: onbekende processorarchitectuur $(uname -m)." >&2; return 1 ;;
+  esac
+  url="${COSIGN_URL:-https://github.com/sigstore/cosign/releases/download/$COSIGN_VERSION/cosign-linux-$arch}"
+  sha="${COSIGN_SHA256:-$sha}"
+  bin="${COSIGN_BIN:-/usr/local/bin/cosign}"
+  hosttask_001_app_update_opnieuw_inrichten || return 1
+  dir="$(mktemp -d)"
+  curl -fsSL -m 300 "$url" -o "$dir/cosign" || { echo "FOUT: ophalen van cosign mislukt." >&2; rm -rf "$dir"; return 1; }
+  if [[ "$(sha256sum "$dir/cosign" | cut -d' ' -f1)" != "$sha" ]]; then
+    echo "FOUT: de SHA-256 van cosign klopt niet; niet geïnstalleerd." >&2; rm -rf "$dir"; return 1
+  fi
+  install -m 755 "$dir/cosign" "$bin"
+  rm -rf "$dir"
+  "$bin" version >/dev/null 2>&1 || { echo "FOUT: cosign start niet na de installatie." >&2; return 1; }
+  echo "cosign $COSIGN_VERSION geïnstalleerd; update.sh controleert voortaan de handtekening van een nieuw image (IMAGE_SIGNATURE in .env: auto, required of off)."
 }
 
 # Taak 002: de wekelijkse hersteltest van de back-up inrichten (restore-test.sh + timer + path-unit). Veilig herhaalbaar.

@@ -84,6 +84,12 @@ const HOST_TASKS = [
     description: 'Vernieuwt pg-backup.sh en restore-test.sh op apps01 en maakt direct een back-up. Elke dump krijgt daarna een .hmac-bestand ernaast; terugzetten en de hersteltest weigeren een dump waarvan de controle niet klopt. Oude back-ups zonder .hmac blijven werken (met een opmerking).',
     addedAt: '2026-11-23',
   },
+  {
+    id: '011-image-handtekening-controleren',
+    title: 'Handtekening van het image controleren (cosign)',
+    description: 'Vernieuwt update.sh (zelfde stappen als taak 001, ca. 1 minuut niet beschikbaar) en installeert cosign op apps01 (vaste versie, SHA-256 gecontroleerd). Daarna rolt update.sh alleen een image uit waarvan de handtekening van release.yml klopt. Pas uitvoeren nadat de PR met het ondertekenen is samengevoegd en een nieuwe versie is gebouwd: een eerdere, niet-ondertekende versie wordt dan geweigerd. Zet IMAGE_SIGNATURE=required in .env om cosign verplicht te stellen, of off om de controle uit te zetten.',
+    addedAt: '2026-11-23',
+  },
 ];
 
 const MAX_FILE_BYTES = 64 * 1024;
