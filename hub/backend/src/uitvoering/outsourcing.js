@@ -235,7 +235,7 @@ function createOutsourcingStore(db, { workorders }) {
    * @param {string} tenantId Id van de uitbesteder.
    * @param {string} workOrderId Id van de werkorder.
    * @param {object} input toTenantId (null = iedereen), toName, message, fee en fromName.
-   * @returns {{ offer: object }|{ error: string, status?: string }} Het aanbod, of de fout not_found, status, active of rate_limited.
+   * @returns {{ offer: object, alreadyMailed: boolean }|{ error: string, status?: string }} Het aanbod (alreadyMailed: deze ontvanger kreeg al eerder een mail over deze werkorder), of de fout not_found, status, active of rate_limited.
    */
   function offer(user, tenantId, workOrderId, input) {
     return transaction(db, () => {
@@ -246,13 +246,15 @@ function createOutsourcingStore(db, { workorders }) {
       const sinceHour = new Date(Date.now() - 3600 * 1000).toISOString();
       const recent = prepare('SELECT COUNT(*) AS total FROM work_order_offers WHERE tenant_id = ? AND created_at > ?').get(tenantId, sinceHour);
       if (Number(recent?.total) >= OFFERS_PER_HOUR) return { error: 'rate_limited' };
+      // In dezelfde transactie als het aanmaken, zodat gelijktijdige aanbiedingen niet dubbel mailen.
+      const alreadyMailed = offeredBefore(tenantId, workOrder.id, input.toTenantId || null);
       const id = crypto.randomUUID();
       const timestamp = currentTimestamp();
       prepare(`INSERT INTO work_order_offers (id, tenant_id, work_order_id, to_tenant_id, status, message, fee, preview, from_name, created_by, created_by_name,
           receiver_name, created_at, updated_at) VALUES (?, ?, ?, ?, 'aangeboden', ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(id, tenantId, workOrder.id, input.toTenantId || null, cleanText(input.message, 2000), input.fee ?? null, JSON.stringify(previewOf(parseJson(workOrder.data, {}), { neutralTitle: !input.toTenantId })),
           cleanText(input.fromName, 200), user.id, cleanText(user.display_name, 120), input.toTenantId ? cleanText(input.toName, 200) : '', timestamp, timestamp);
-      return { offer: outgoingView(find(id)) };
+      return { offer: outgoingView(find(id)), alreadyMailed };
     });
   }
 
@@ -604,8 +606,6 @@ function registerOutsourcingRoutes(app, ctx) {
     if (!list.length) return res.status(409).json({ error: 'no_partners', message: 'Er zijn nog geen organisaties die opdrachten ontvangen.' });
     const target = toTenantId ? list.find((partner) => partner.id === toTenantId) : null;
     if (toTenantId && !target) return res.status(400).json({ error: 'invalid_partner', message: 'Deze organisatie ontvangt geen opdrachten.' });
-    // Wie al eens een aanbod voor deze werkorder kreeg, krijgt geen tweede mail (intrekken en opnieuw aanbieden herhaalt de mailronde niet).
-    const alreadyMailed = outsourcing.offeredBefore(tenantId, body.workOrderId, target ? target.id : null);
     const out = outsourcing.offer(req.user, tenantId, body.workOrderId, {
       toTenantId, toName: target?.name, message: body.message, fee: fee === null ? null : Math.round(fee * 100) / 100, fromName: nameOf(tenantId),
     });
@@ -615,7 +615,8 @@ function registerOutsourcingRoutes(app, ctx) {
     if (out.error === 'rate_limited') return res.status(429).json({ error: 'rate_limited', message: 'Je hebt het maximum aantal aanbiedingen per uur bereikt. Probeer het later opnieuw.' });
     audit(req, 'opdracht_aangeboden', { offerId: out.offer.id, workOrderId: out.offer.workOrderId, aan: target ? target.name : 'iedereen' });
     const preview = out.offer.preview;
-    if (!alreadyMailed) mail(tenantId, target ? [target.id] : list.map((partner) => partner.id), `Opdracht aangeboden door ${nameOf(tenantId)}`, [
+    // Wie al eens een aanbod voor deze werkorder kreeg, krijgt geen tweede mail (intrekken en opnieuw aanbieden herhaalt de mailronde niet).
+    if (!out.alreadyMailed) mail(tenantId, target ? [target.id] : list.map((partner) => partner.id), `Opdracht aangeboden door ${nameOf(tenantId)}`, [
       `${nameOf(tenantId)} biedt een opdracht aan${target ? ' aan uw organisatie' : ' aan organisaties die opdrachten ontvangen'}: ${preview.title}${preview.place ? ` in ${preview.place}` : ''}.`,
       out.offer.message,
       'Bekijk het aanbod en neem het aan in de module Uitbesteden.',
