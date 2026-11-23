@@ -29,6 +29,7 @@ const messagePage = (rawTitle, rawText) => {
  */
 function registerInvoicePayLinkRoutes(app, { invoicePayments, tenantId, limiter, scopeToTenant = () => {} }) {
   app.get('/api/public/invoice-pay/:invoiceId/:signature', limiter, async (req, res) => {
+    // Alleen de hoofdtenant kan online factuurbetalen (configOf), dus de scope is die van de webshop/facturen.
     scopeToTenant(tenantId);
     res.set({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Robots-Tag': 'noindex' });
     /**

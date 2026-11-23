@@ -496,14 +496,16 @@ hosttask_007_hersteltest_drive_app_controle() {
   hosttask_002_hersteltest_back_up_inrichten
 }
 
-# Taak 008: TRUSTED_PROXIES in .env zetten (het IPv4-subnet van het compose-netwerk van de app, waar cloudflared in zit) en
+# Taak 008: TRUSTED_PROXIES in .env zetten (het IPv4-subnet(ten) van de netwerken van de app, waar cloudflared in zit) en
 # compose.yml vernieuwen (taak 001), zodat de app proxykoppen alleen van dat netwerk gelooft. Veilig herhaalbaar.
 hosttask_008_vertrouwde_proxy_instellen() {
-  local network subnets env_file="$APP_DIR/.env" tmp
-  network="$(docker inspect aquatech --format '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}} {{end}}' 2>/dev/null | awk '{print $1}')"
-  [[ -n "$network" ]] || { echo "FOUT: de container aquatech draait niet; geen netwerk gevonden." >&2; return 1; }
-  subnets="$(docker network inspect "$network" --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}' | tr ' ' '\n' | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}/[0-9]{1,2}$' | paste -sd, -)"
-  [[ -n "$subnets" ]] || { echo "FOUT: geen IPv4-subnet van netwerk $network gevonden." >&2; return 1; }
+  local networks subnets env_file="$APP_DIR/.env" tmp
+  # Alle netwerken van de app (cloudflared zit in hetzelfde compose-project, dus in een van deze subnetten).
+  networks="$(docker inspect aquatech --format '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}} {{end}}' 2>/dev/null)"
+  [[ -n "${networks// /}" ]] || { echo "FOUT: de container aquatech draait niet; geen netwerk gevonden." >&2; return 1; }
+  # shellcheck disable=SC2086
+  subnets="$(docker network inspect $networks --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}' | tr ' ' '\n' | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}/[0-9]{1,2}$' | paste -sd, -)"
+  [[ -n "$subnets" ]] || { echo "FOUT: geen IPv4-subnet van de netwerken $networks gevonden." >&2; return 1; }
   touch "$env_file"
   tmp="$(mktemp "$APP_DIR/.env.XXXXXX")"
   { grep -v '^TRUSTED_PROXIES=' "$env_file" || true; echo "TRUSTED_PROXIES=$subnets"; } > "$tmp"

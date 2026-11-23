@@ -2597,6 +2597,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.post('/api/public/invoice-payment/:invoiceId/webhook', invoiceWebhookLimiter, express.urlencoded({ extended: false, limit: '2kb' }), async (req, res) => {
     const paymentId = String(req.body && req.body.id || '');
     if (!validPaymentId(paymentId)) return res.status(200).end();
+    // Online factuurbetalen werkt alleen in de hoofdtenant (configOf in invoice-payments.js); wordt dat anders, dan hier de tenant van de factuur nemen.
     scopeToTenant(tenant.id);
     try {
       await invoicePayments.sync(tenant.id, String(req.params.invoiceId), { paymentId });
