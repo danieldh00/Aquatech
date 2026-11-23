@@ -13,6 +13,17 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.34.3',
+      date: '2026-11-24',
+      title: 'Online betalen in de webshop steviger',
+      items: [
+        { text: 'Een online bestelling die nog niet betaald is houdt de voorraad nog maar een half uur vast. Daarna komt de voorraad vrij; de klant kan tot de bewaartijd nog afrekenen zolang de voorraad strekt, en bij het betalen wordt opnieuw gereserveerd.', for: ['beheer'] },
+        { text: 'Een gast kan hoogstens twee onbetaalde bestellingen tegelijk open hebben staan per e-mailadres (drie per bezoeker).', for: ['beheer'] },
+        { text: 'Wordt een bestelling betaald nadat hij is vervallen of geannuleerd, of komt er een tweede betaling binnen op dezelfde bestelling, dan gaat het bedrag automatisch terug via Mollie. De klant krijgt dan geen bevestiging en er komt geen factuur. Lukt terugbetalen niet, dan staat bij de bestelling dat het nog moet.', for: ['beheer'] },
+        { text: 'Een terugbetaling staat direct bij de bestelling, ook als het antwoord van Mollie uitblijft. De app kijkt dan zelf bij Mollie na of hij is uitgevoerd.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.34.2',
       date: '2026-11-23',
       title: 'Vingerafdruk van de hoofdsleutel in Beheer',

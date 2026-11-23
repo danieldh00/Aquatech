@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.34.3
+
+Audit 1.33.0, thema webshopbetalingen (deel 1).
+- **B-13** Online bestellingen krijgen `data.stockHoldUntil` (30 minuten, `PAY_HOLD_MINUTES`). `releaseUnpaidHolds` geeft daarna de voorraad vrij (`reservationReleasedAt`); `holdForPayment` reserveert opnieuw bij het starten van een betaling (onder het rijslot, geweigerd bij te weinig voorraad: `?betaalfout=2`) en `changePay` reserveert opnieuw bij betaald na vrijgave. Plafond op openstaande onbetaalde gastbestellingen: 2 per e-mailadres (`countOpenUnpaidGuest`), 3 per bezoeker (in het geheugen, `unpaidAmong`). De herinneringsmail belooft na het vrijgeven geen reservering meer.
+- **T-08** Betaald op een geannuleerde bestelling: geen betaalhaken (bevestiging, factuur), `pay.paidAfterCancel`, automatisch terugbetalen (sleutel `annulering`) en de nieuwe haak `onLatePayment`. Vervallen annuleert de openstaande betaling bij Mollie waar dat kan (`mollie.cancelPayment`); een nieuwe betaling wordt alleen vastgelegd als de bestelling onder het rijslot nog nieuw is.
+- **T-16** `onPaid(hook, { key })`: stappen met een sleutel worden bijgehouden in `pay.hooks` en door `catchUpPaid` opnieuw geprobeerd (na 10 minuten, hoogstens 5 keer, daarna `onHookFailed`). De sleutels worden in een volgende wijziging aan de factuur en de bevestigingsmail gehangen.
+- **T-17** Een tweede geslaagde betaling komt in `pay.duplicates` en wordt op die betaling zelf terugbetaald.
+- **T-18** Terugbetalen in drie stappen: aanvraag vastleggen (`status: 'aangevraagd'`, onder het rijslot), Mollie, afronden. Een weigering haalt de aanvraag weg; bij een onbekende uitkomst stemt `reconcileRefunds` af met `mollie.listRefunds` (onze sleutel gaat als metadata mee) en vervalt de aanvraag na 15 minuten zonder spoor.
+- **T-20** De Mollie-webhook werkt ook als de webshop uit staat.
+- De uurlijkse vervalronde (`expireUnpaid`) doet ook het vrijgeven, het afstemmen en het inhalen.
+
 ## 1.34.2
 
 Audit B-33 (vervolg): `vault.fingerprint()` geeft een SHA-256 over een apart met HKDF afgeleide sleutel, ingekort tot 96 bit (zes groepen van vier tekens); niet terug te rekenen naar de hoofdsleutel. `GET /api/admin/backups` (alleen hoofdbeheerders) geeft `keyFingerprint` mee; Beheer toont hem in het blok Back-ups. Tests in `backup-restore-routes.test.js`.
