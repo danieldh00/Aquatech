@@ -206,7 +206,7 @@ verify_signature() {
   if [[ "$ok" != 1 ]]; then
     log "cosign verify mislukte: $(tail -n 3 <<<"$output" | tr '\n' ' ')"
     # Een storing bij Sigstore of het netwerk is geen afwijzing: de versie niet overslaan, de volgende ronde probeert opnieuw.
-    if grep -qiE 'no such host|timeout|timed out|connection (refused|reset)|temporary failure|TLS handshake|EOF|50[0-9]|unavailable' <<<"$output"; then
+    if grep -qiE 'dial tcp|no such host|i/o timeout|context deadline exceeded|connection (refused|reset)|TLS handshake timeout|unexpected EOF|temporary failure|status (502|503|504)|service unavailable' <<<"$output"; then
       log "Handtekeningcontrole van $NEW_VER kon niet worden uitgevoerd (netwerk of Sigstore); niet uitgerold, volgende ronde probeert opnieuw."
       run_put mislukt klaar "De handtekening van versie $NEW_VER kon niet worden gecontroleerd (netwerk of Sigstore). Er is niets bijgewerkt; later opnieuw proberen."
       exit 1

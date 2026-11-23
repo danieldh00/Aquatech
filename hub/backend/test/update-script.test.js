@@ -360,3 +360,11 @@ test('update.sh: een netwerkstoring bij de handtekeningcontrole slaat de versie 
   setup.installCosign(0);
   assert.strictEqual(setup.run({ FAKE_LATEST: '1.14.2' }).tag, '1.14.2', 'de volgende ronde slaagt');
 });
+
+test('update.sh: een ongeldige handtekening waarvan de melding een digest bevat telt niet als netwerkstoring', { skip: !bashAvailable }, () => {
+  const setup = install();
+  setup.installCosign(1, 'Error: no matching signatures for sha256:5e50c0eeffb0504aa5e50f0eef5009e50e50e50e50e50e50e50e50e50e50e50');
+  const out = setup.run({ FAKE_LATEST: '1.14.2' });
+  assert.strictEqual(out.status, 1, out.output);
+  assert.strictEqual(fs.readFileSync(path.join(setup.appDir, '.failed-version'), 'utf8').trim(), '1.14.2', 'versie wordt overgeslagen');
+});
