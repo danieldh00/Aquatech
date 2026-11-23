@@ -11,7 +11,7 @@ const { createStore } = require('../src/platform/store');
 const { createVault } = require('../src/beveiliging/vault');
 const { createBackup } = require('../src/backup');
 const { fingerprint } = require('../src/database/table-rows');
-const { restoreAll } = require('../src/platform/backup-restore-all');
+const { restoreAll, realDataOf } = require('../src/platform/backup-restore-all');
 
 test('restoreAll zet een hele back-up identiek terug in een gemigreerde database', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aquatech-restore-all-'));
@@ -116,6 +116,22 @@ test('noodherstel weigert ook een database met alleen instellingen of voorraad (
     const before = fingerprint(target);
     await assert.rejects(restoreAll({ db: target, file: path.join(dir, backup.name), vault, env: { AQUATECH_EMERGENCY_RESTORE: '1' }, tempDir: dir, emergency: true }), /alleen in een lege database.*stock_items: 1/);
     assert.deepStrictEqual(fingerprint(target), before, 'niets gewist');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('noodherstel: alleen de hoofdtenant mag er al staan, een tweede tenant is al een gevulde database', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aquatech-emergency-'));
+  try {
+    const vault = createVault(Buffer.alloc(32, 7));
+    const backup = await createBackup({ db: openDb(), dir, vault });
+    const target = openDb();
+    createStore(target).ensureTenant();
+    assert.deepStrictEqual(realDataOf(target), {}, 'alleen de hoofdtenant telt niet mee');
+    target.prepare('INSERT INTO tenants (id, name, slug, created_at) VALUES (?, ?, ?, ?)').run(crypto.randomUUID(), 'Tweede', 'tweede', '2026-11-23T00:00:00Z');
+    assert.deepStrictEqual(realDataOf(target), { tenants: 2 });
+    await assert.rejects(restoreAll({ db: target, file: path.join(dir, backup.name), vault, env: { AQUATECH_EMERGENCY_RESTORE: '1' }, tempDir: dir, emergency: true }), /tenants: 2/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
