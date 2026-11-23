@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.33.5',
+      date: '2026-11-23',
+      title: 'Veiligere standaarden in de voorbeeld-installatie',
+      items: [],
+    },
+    {
       version: '1.33.4',
       date: '2026-11-23',
       title: 'Uitbesteden veiliger',
