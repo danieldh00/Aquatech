@@ -72,6 +72,12 @@ const HOST_TASKS = [
     description: 'Zet in .env het subnet van het compose-netwerk als TRUSTED_PROXIES en vernieuwt compose.yml (ca. 1 minuut niet beschikbaar). Daarna gelooft de app het bezoeker-IP uit CF-Connecting-IP alleen van de tunnel en niet meer van elk privé-adres dat poort 3300 bereikt (limieten en auditlog zijn dan niet meer te omzeilen).',
     addedAt: '2026-11-23',
   },
+  {
+    id: '009-update-script-stopt-bij-mislukte-back-up',
+    title: 'Updatescript bijwerken: stoppen als de back-up mislukt',
+    description: 'Installeert de nieuwste update.sh op apps01 (zelfde stappen als taak 001, ca. 1 minuut niet beschikbaar). Daarna gaat een update niet meer door en migreert niet meer als de back-up vooraf mislukt (schijf vol, sleutel, time-out); de huidige versie blijft dan draaien.',
+    addedAt: '2026-11-23',
+  },
 ];
 
 const MAX_FILE_BYTES = 64 * 1024;

@@ -159,6 +159,14 @@ else
     log "GHCR-versie $NEW_VER is ouder dan $CUR_VER; overslaan."
     exit 0
   fi
+  # Na een mislukte back-up niet elke 15 minuten opnieuw in onderhoudsmodus gaan: minstens een uur wachten
+  # (Nu updaten vanuit de app negeert dit).
+  BACKUP_FAILED_AT="$(cat .backup-failed-at 2>/dev/null || true)"
+  # Alleen een leeftijd tussen 0 en een uur telt (een klok die terugspringt mag het niet urenlang blokkeren).
+  if [[ "$BACKUP_FAILED_AT" =~ ^[0-9]+$ ]] && (( $(date +%s) - BACKUP_FAILED_AT >= 0 && $(date +%s) - BACKUP_FAILED_AT < 3600 )); then
+    log "Back-up vóór de update mislukte kort geleden; update naar $NEW_VER wacht."
+    exit 0
+  fi
   AUTOMATIC=true
   RUN_STARTED="$(now)"
 fi
@@ -174,11 +182,25 @@ status_put maintenance.json "{\"since\":\"$(now)\",\"version\":\"$NEW_VER\"}"
 sleep "$DRAIN_SECONDS"
 
 run_put bezig back-up "Back-up maken."
-# Terwijl de app nog draait (consistente momentopname); oudere versies
-# kennen 'create' nog niet, dan alleen een waarschuwing.
-docker compose exec -T -u 1000 aquatech node src/backup.js create \
-  || log "Waarschuwing: geen back-up vóór de update (versie ${CUR_VER:-?} kent 'backup.js create' nog niet?)"
+# Terwijl de app nog draait (consistente momentopname). Zonder verse back-up gaat er nooit een migratie van start:
+# elke fout stopt de update vóór het vervangen van de container. Alleen een oude versie die 'create' nog niet kent
+# (gebruiksmelding, exitcode 2) of een eerste installatie zonder draaiende versie mag door met een waarschuwing.
+BACKUP_CODE=0
+docker compose exec -T -u 1000 aquatech node src/backup.js create || BACKUP_CODE=$?
+if [[ "$BACKUP_CODE" != 0 ]]; then
+  if [[ -z "$CUR_VER" ]]; then
+    log "Waarschuwing: geen back-up vóór de eerste installatie (geen draaiende versie bekend)."
+  elif [[ "$BACKUP_CODE" == 2 ]]; then
+    log "Waarschuwing: geen back-up vóór de update (versie $CUR_VER kent 'backup.js create' nog niet)."
+  else
+    date +%s > .backup-failed-at
+    log "Back-up vóór de update mislukt (exitcode $BACKUP_CODE); update naar $NEW_VER gestopt, de huidige versie blijft draaien."
+    run_put mislukt klaar "De back-up vóór de update mislukte; er is niets bijgewerkt. Controleer schijfruimte en sleutel."
+    exit 1
+  fi
+fi
 
+rm -f .backup-failed-at
 run_put bezig herstarten "Nieuwe versie starten."
 docker compose stop aquatech
 

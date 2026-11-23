@@ -33,6 +33,7 @@ case "$1" in
   compose)
     case "$2" in
       stop) [[ -f "$APP_DIR/update/status/maintenance.json" ]] && echo yes > "$state/maintenance-at-stop" || echo no > "$state/maintenance-at-stop"; exit 0 ;;
+      exec) if [[ "$*" == *"backup.js create"* ]]; then exit "\${FAKE_BACKUP_EXIT:-0}"; fi; exit 0 ;;
       up) running >> "$state/started.log"; exit 0 ;;
       *) exit 0 ;;
     esac ;;
@@ -264,4 +265,30 @@ test('update.sh: een check-aanvraag werkt alleen de status bij en installeert ni
   assert.ok(!fs.existsSync(path.join(setup.requestDir, 'request.json')), 'aanvraag is weggehaald');
   assert.strictEqual(readStatus(setup.statusDir, 'status.json').available, '1.14.2');
   assert.strictEqual(readStatus(setup.statusDir, 'run.json'), null, 'de stand van de laatste uitrol blijft ongemoeid');
+});
+
+test('update.sh: een mislukte back-up vooraf stopt de update vóór het vervangen van de container', { skip: !bashAvailable }, () => {
+  const setup = install();
+  const out = setup.run({ FAKE_LATEST: '1.14.2', FAKE_BACKUP_EXIT: '1' });
+  assert.strictEqual(out.status, 1, out.output);
+  assert.strictEqual(out.tag, '1.14.1', 'versie blijft ongewijzigd');
+  const calls = fs.readFileSync(path.join(setup.state, 'calls.log'), 'utf8');
+  assert.ok(!/compose stop/.test(calls), 'container niet gestopt');
+  assert.strictEqual(readStatus(setup.statusDir, 'run.json').state, 'mislukt');
+  assert.ok(!fs.existsSync(path.join(setup.statusDir, 'maintenance.json')), 'onderhoudsmodus weer uit');
+  // Automatisch: het volgende uur niet opnieuw proberen (geen onderhoudsmodus om de 15 minuten); de aanvraag uit de app wel.
+  const again = setup.run({ FAKE_LATEST: '1.14.2', FAKE_BACKUP_EXIT: '1' });
+  assert.strictEqual(again.status, 0, again.output);
+  assert.match(again.output, /wacht/);
+  putRequest(setup.requestDir, '1.14.2');
+  const manual = setup.run({ FAKE_LATEST: '1.14.2' });
+  assert.strictEqual(manual.tag, '1.14.2', manual.output);
+});
+
+test('update.sh: een oude versie die backup.js create niet kent (exitcode 2) mag door met een waarschuwing', { skip: !bashAvailable }, () => {
+  const setup = install();
+  const out = setup.run({ FAKE_LATEST: '1.14.2', FAKE_BACKUP_EXIT: '2' });
+  assert.strictEqual(out.status, 0, out.output);
+  assert.strictEqual(out.tag, '1.14.2');
+  assert.match(out.output, /kent 'backup\.js create' nog niet/);
 });

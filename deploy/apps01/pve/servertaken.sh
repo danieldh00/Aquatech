@@ -46,10 +46,8 @@ set -euo pipefail
 
 APP_DIR="${APP_DIR:-/opt/apps/aquatech}"
 
-# =====================================================================================================================
-# Deel 1: draait OP DE SERVER (apps01). Het host-deel hieronder stuurt dit bestand met SERVERTAKEN_REMOTE=1 erheen.
-# =====================================================================================================================
-IMAGE="ghcr.io/danieldh00/aquatech"
+# ==============================================================================================================# Deel 1: draait OP DE SERVER (apps01). Het host-deel hieronder stuurt dit bestand met SERVERTAKEN_REMOTE=1 erheen.
+# ==============================================================================================================IMAGE="ghcr.io/danieldh00/aquatech"
 VERSION_RE='^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}$'
 OK_COUNT=0; WARN_COUNT=0; FAIL_COUNT=0
 
@@ -387,6 +385,7 @@ HOST_TASK_IDS=(
   006-database-grootte-en-indexgebruik
   007-hersteltest-drive-app-controle
   008-vertrouwde-proxy-instellen
+  009-update-script-stopt-bij-mislukte-back-up
 )
 HOST_TASKS_LEDGER="host-tasks.json"
 # Functienaam van een taak (streepjes worden underscores).
@@ -442,6 +441,11 @@ hosttask_001_app_update_opnieuw_inrichten() {
   SETUP_REF="$TASKS_REF" APP_DIR="$APP_DIR" bash "$dir/setup-app-update.sh" || rc=$?
   rm -rf "$dir"
   return "$rc"
+}
+
+# Taak 009: update.sh vernieuwen (stopt bij een mislukte back-up vooraf); zelfde handeling als taak 001. Veilig herhaalbaar.
+hosttask_009_update_script_stopt_bij_mislukte_back_up() {
+  hosttask_001_app_update_opnieuw_inrichten
 }
 
 # Taak 002: de wekelijkse hersteltest van de back-up inrichten (restore-test.sh + timer + path-unit). Veilig herhaalbaar.
@@ -595,10 +599,8 @@ if [[ "${SERVERTAKEN_REMOTE:-}" == "1" ]]; then
   exit $?
 fi
 
-# =====================================================================================================================
-# Deel 2: draait OP DE PROXMOX-HOST. Zoekt apps01 en voert dit bestand daar uit.
-# =====================================================================================================================
-NAME="${APPS01_NAME:-apps01}"
+# ==============================================================================================================# Deel 2: draait OP DE PROXMOX-HOST. Zoekt apps01 en voert dit bestand daar uit.
+# ==============================================================================================================NAME="${APPS01_NAME:-apps01}"
 die() { echo "FOUT: $*" >&2; exit 1; }
 usage() { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 

@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.33.4
+
+Audit B-28 en B-29 (Uitbesteden), geen migratie:
+- Een open aanbod (aan iedereen) wordt bij "Aannemen" een aanvraag: `request` houdt het aanbod vast voor de aanvragende organisatie (`receiver_tenant_id` gevuld, `received_work_order_id` leeg = `pending`), de uitbesteder bevestigt (`POST /api/outsourcing/offers/:id/approve`, maakt dan pas de werkorder met klantgegevens) of wijst af (`…/reject`, het aanbod staat weer open voor anderen, de afgewezene komt in `declined`). De aanvrager kan zijn aanvraag zelf intrekken (`decline`). Een gericht aanbod blijft direct aan te nemen. Audit `opdracht_aangevraagd|bevestigd|aanvraag_afgewezen`.
+- Het voorbeeld van een open aanbod toont de neutrale titel "Werkorder" (de titel kan klantgegevens bevatten).
+- Aanbieden is begrensd op 20 per organisatie per uur (429 `rate_limited`, geteld uit `work_order_offers`) en een ontvanger krijgt per werkorder één aanbiedingsmail (`offeredBefore`), ook na intrekken en opnieuw aanbieden.
+
+## 1.33.3
+
+- Audit T-06: `update.sh` stopt de update vóór het vervangen van de container als `backup.js create` faalt (alleen exitcode 2 = oude versie kent `create` niet, of een eerste installatie zonder draaiende versie, gaat door met een waarschuwing); de huidige versie blijft draaien en run.json meldt `mislukt`. Servertaak `009-update-script-stopt-bij-mislukte-back-up` (zelfde handeling als 001) installeert het nieuwe script.
+
+## 1.33.2
+
+- Audit B-06: de controle op verplicht wachtwoord wijzigen, de no-store-kop en het 404-antwoord voor onbekende API-routes herkennen het API-pad nu hoofdletterongevoelig (`isApiPath`), dus `/API/…` omzeilt ze niet meer.
+- Audit T-04: Permissions-Policy `camera=(self)` (eigen site) in plaats van `camera=()`; de rest blijft uit.
+- Audit B-07: `accessCode` en `guestAccess` wijzigen (en resetten) mag alleen een hoofdbeheerder of wie al met de toegangscode is ingelogd; de back-uppoort laat de systeemgebruiker (toegangscode) niet meer toe. Test: `entry-hardening.test.js`.
+
 ## 1.33.1
 
 Auditpunt T-01 (1.33.0): ondersteund, getest volledig herstel vanaf de Drive-kopie.
