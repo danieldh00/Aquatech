@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.36.7',
+      date: '2026-11-24',
+      title: 'Offertes en werkorders: veiliger akkoord en minder zichtbare gegevens',
+      items: [
+        { text: 'Een klant tekent nooit meer voor een offerte die ondertussen is aangepast: de pagina vraagt dan eerst om opnieuw te laden.', for: ['offertes'] },
+        { text: 'Als het mailen van een offerte of afspraak mislukt, blijft de offerte een concept en is er geen losse link in omloop.', for: ['offertes'] },
+        { text: 'Het gewone opslaan van een werkorder verplaatst geen afspraken meer zonder het recht Planning.', for: ['werkorders'] },
+      ],
+    },
+    {
       version: '1.36.6',
       date: '2026-11-24',
       title: 'Veiliger mail, klantlinks en AI-koppeling',
