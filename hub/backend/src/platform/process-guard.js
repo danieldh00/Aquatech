@@ -1,5 +1,7 @@
 // Vangnet voor fouten buiten een verzoek (timers, achtergrondtaken): een niet-afgevangen belofte of uitzondering komt
 // in het centrale logboek en de foutteller van Bewaking, in plaats van stil het proces te stoppen (audit T-14).
+// Alles wat naar de console of het logboek gaat, loopt eerst door `redact` (geen geheimen in logs).
+const { redact } = require('./error-report');
 
 /**
  * Installeert de vangnetten op het proces. Een niet-afgevangen belofte wordt gelogd en geteld; het proces blijft draaien
@@ -16,10 +18,11 @@ function installProcessGuard({ appLog, errorCounter, server = null, onExit = (co
    * @returns {void}
    */
   function record(message, reason) {
-    const text = String((reason && reason.message) || reason).slice(0, 300);
-    log(`[proces] ${message}:`, reason);
+    const text = redact((reason && reason.message) || reason, 300);
+    const stack = redact((reason && reason.stack) || '', 2000);
+    log(`[proces] ${message}:`, stack || text);
     try { errorCounter.add(); } catch { /* de teller mag het vangnet niet breken */ }
-    try { appLog.error('proces', `${message}: ${text}`, { data: { stack: String((reason && reason.stack) || '').split('\n').slice(0, 6).join('\n') } }); } catch { /* idem */ }
+    try { appLog.error('proces', `${message}: ${text}`, { data: { stack: stack.split('\n').slice(0, 6).join('\n') } }); } catch { /* idem */ }
   }
 
   /**
