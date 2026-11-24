@@ -182,6 +182,14 @@
           if (['bom', 'sprinklers'].includes(STEPS[this.step].id)) this.renderStepPanel();
         });
       }
+      // Zonder account: assortiment en prijzen voor de prijsindicatie en het bestellen (api/public/planner-catalog).
+      if (window.ShopCatalog && ANON) {
+        window.ShopCatalog.loadPublic(PARAMS.get('org') || '').then((info) => {
+          if (!info) return;
+          this.recalc();
+          if (['bom', 'sprinklers'].includes(STEPS[this.step].id)) this.renderStepPanel();
+        });
+      }
       this._loadRights().then(() => { this._restoreOwnedDraft(); this._initReview(); });
       this._loadShop();
       this._openFromUrl();
@@ -1819,6 +1827,7 @@
       const levels = Object.entries(Catalog.levels).map(([levelKey, level]) => `
         <label class="radio"><input type="radio" name="level" value="${escapeHtml(levelKey)}" ${settings.level === levelKey ? 'checked' : ''}><span><b>${level.label}</b> – <span class="small">${escapeHtml(level.desc)}</span></span></label>`).join('');
       return `
+        ${this._publicPriceCard(rows)}
         <h3>Uitvoeringsniveau</h3>
         ${levels}
         <button id="btn-export-xlsx" class="btn primary">Exporteer naar Excel</button>
@@ -1853,15 +1862,37 @@
      * Knop onder de stuklijst die al het materiaal in één keer in de winkelwagen van de webshop zet
      * (een gewoon formulier naar de winkel: prijzen, btw, varianten en voorraad bepaalt de winkel zelf).
      * @param {object[]} rows de regels van de stuklijst (code, qty, unit: de winkel rekent om of laat een artikel in een andere eenheid weg)
+     * @param {{ anonymous?: boolean }} [options] anonymous: voor een bezoeker zonder account (de aanroeper weet dat er besteld kan worden)
      * @returns {string} HTML, leeg als de webshop niet bestelbaar is of er geen regels zijn
      */
-    _cartForm(rows) {
-      if (!this.shop || !this.shop.ordering || !rows.length) return '';
+    _cartForm(rows, { anonymous = false } = {}) {
+      if (!anonymous && (!this.shop || !this.shop.ordering)) return '';
+      if (!rows.length) return '';
       const fields = rows.map((row) => `<input type="hidden" name="q:${escapeHtml(row.code)}" value="${escapeHtml(String(row.qty))}"><input type="hidden" name="u:${escapeHtml(row.code)}" value="${escapeHtml(row.unit || '')}">`).join('');
       return `<form class="to-cart" method="post" action="../../winkelwagen/planner/">${fields}
-        <button type="submit" class="btn primary">Alles in winkelwagen</button>
-        <p class="hint small">Zet het materiaal uit deze stuklijst in je winkelwagen in de webshop. Prijzen en voorraad zie je daar.</p>
+        <button type="submit" class="btn primary">${anonymous ? 'Materiaal bestellen' : 'Alles in winkelwagen'}</button>
+        <p class="hint small">${anonymous ? 'Het materiaal gaat in je winkelwagen. Je bestelt als gast of met een account en laat het bezorgen.' : 'Zet het materiaal uit deze stuklijst in je winkelwagen in de webshop. Prijzen en voorraad zie je daar.'}</p>
       </form>`;
+    },
+    /**
+     * Prijsindicatie voor een bezoeker zonder account: totaal incl. btw van de stuklijst met twee knoppen,
+     * materiaal bestellen (winkelwagen, bezorgen) en een offerte voor de aanleg (het indienformulier).
+     * @param {object[]} rows de regels van de stuklijst
+     * @returns {string} HTML, leeg als er geen openbare prijzen zijn of geen regels
+     */
+    _publicPriceCard(rows) {
+      const info = ANON && window.ShopCatalog && window.ShopCatalog.publicInfo;
+      if (!info || !rows.length) return '';
+      const priced = rows.filter((row) => row.shop);
+      if (!priced.length) return '';
+      const total = priced.reduce((sum, row) => sum + row.total * (1 + ((Catalog.articles[row.code] || {}).vatRate ?? 21) / 100), 0);
+      const partial = priced.length < rows.length ? ' Niet alle onderdelen hebben een prijs: het totaal is dan lager dan het materiaal dat je nodig hebt.' : '';
+      const order = info.ordering ? this._cartForm(rows, { anonymous: true }) : '';
+      const quote = this.drawing && this.drawing.enabled ? '<button type="button" id="btn-public-quote" class="btn">Offerte voor aanleg aanvragen</button><p class="hint small">Een installateur controleert je tekening en stuurt een offerte. Geen verplichtingen.</p>' : '';
+      return `<div class="public-price"><h3>Prijsindicatie voor jouw tuin</h3>
+        <div class="public-price-total">${formatEuro(total)}<small>incl. btw, materiaal voor je tekening · exclusief bezorgkosten</small></div>
+        ${order}${quote}
+        <p class="hint small">Indicatie op basis van de webshopprijzen.${partial} Voorraad en bezorgkosten zie je in de winkelwagen.</p></div>`;
     },
     /**
      * Regel onder de stuklijst over het eigen assortiment en de webshopprijzen.
@@ -1893,6 +1924,11 @@
       $('#btn-export-png', panel).onclick = () => { this.exportPlanPng(); };
       /** Drukt de pagina af. */
       $('#btn-print', panel).onclick = () => { window.print(); };
+      const publicQuote = $('#btn-public-quote', panel);
+      if (publicQuote) {
+        /** Opent het indienformulier voor een offerte (planner zonder account). */
+        publicQuote.onclick = () => { this.openSubmit(); };
+      }
       const quote = $('#btn-quote', panel);
       if (quote) {
         /** Gaat naar Offertes met dit plan. */

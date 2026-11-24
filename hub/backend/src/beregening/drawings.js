@@ -65,7 +65,7 @@ function sanitizeSubmission(body) {
 /**
  * Registreert de routes voor tekeningen indienen en plannen controleren.
  * @param {object} app De Express-app.
- * @param {object} ctx store, identify, requirePlans (gebruiker met het recht plannen), requireRight, requireJson, audit, settingsFor(tenantId), tenantActive(id), mailerFor(settings), remoteIp, publicLimiter en planLimiter.
+ * @param {object} ctx store, identify, requirePlans (gebruiker met het recht plannen), requireRight, requireJson, audit, settingsFor(tenantId), tenantActive(id), mailerFor(settings), remoteIp, publicLimiter, planLimiter en plannerCatalogOf(tenantId) (catalogus voor de openbare planner, met `ordering`).
  */
 function registerDrawingRoutes(app, ctx) {
   const { store, identify, requirePlans, requireRight, requireJson, audit, settingsFor, remoteIp, publicLimiter } = ctx;
@@ -104,6 +104,14 @@ function registerDrawingRoutes(app, ctx) {
     const found = drawingTenant(req.query.org);
     if (!found) return res.json({ enabled: false });
     res.json({ enabled: true, company: found.settings.get('quoteProfile').companyName || found.tenant.name, limits: LIMITS, captcha: captcha ? captcha.publicOf(found.tenant.id) : null });
+  });
+
+  // Assortiment en prijzen voor de planner zonder account (prijsindicatie en bestellen); zelfde organisatie en limiet als indienen.
+  app.get('/api/public/planner-catalog', publicLimiter, (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const found = drawingTenant(req.query.org);
+    if (!found || !ctx.plannerCatalogOf) return res.json({ enabled: false });
+    res.json({ enabled: true, ...ctx.plannerCatalogOf(found.tenant.id) });
   });
 
   app.post('/api/public/drawing', requireJson, ipLimiter, async (req, res) => {

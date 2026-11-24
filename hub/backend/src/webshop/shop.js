@@ -204,7 +204,7 @@ function createShopStore(db) {
  * (koppeling, status en nu ophalen; in server.js al achter requireAdmin).
  * @param {object} app De Express-app.
  * @param {object} ctx shop, requireUser, requireJson, settingsOf, tenantOf, audit, syncLimiter, fetchImpl, sync, salePrices en libraryCodes.
- * @returns {{ catalogOf: Function }} De catalogusfunctie, voor wie de catalogus buiten de routes nodig heeft (AI-koppeling).
+ * @returns {{ catalogOf: Function, publicCatalogOf: Function }} De catalogusfuncties, voor wie de catalogus buiten de routes nodig heeft (AI-koppeling, openbare planner).
  */
 function registerShopRoutes(app, { shop, requireUser, requireJson, settingsOf, tenantOf, audit, syncLimiter, fetchImpl, sync = null, salePrices = () => ({}), libraryCodes = () => [] }) {
   /**
@@ -372,7 +372,26 @@ function registerShopRoutes(app, { shop, requireUser, requireJson, settingsOf, t
       respondShopError(res, error, next);
     }
   });
-  return { catalogOf };
+  /**
+   * De catalogus voor de planner zonder inloggen: alleen wat een bezoeker mag zien om een prijsindicatie te tonen
+   * (naam, prijs excl. btw, btw-tarief, voorraad) plus het eigen assortiment. Geen koppeling, sku's of adressen.
+   * @param {string} tenantId Id van de tenant.
+   * @param {object} settings De instellingen van de tenant.
+   * @returns {{ assortment: string[]|null, articles: Object<string, { name: string, price: number, vatRate: number, inStock: boolean }> }} Assortiment (null = standaardcatalogus) en artikelen met prijs per code.
+   */
+  function publicCatalogOf(tenantId, settings) {
+    const catalog = catalogOf(tenantId, settings);
+    const sale = salePrices(tenantId);
+    const articles = {};
+    for (const [code, article] of Object.entries(catalog.articles || {})) {
+      if (!(Number(article.price) > 0)) continue;
+      const vatRate = sale[code] && Number.isFinite(sale[code].vatRate) ? sale[code].vatRate : 21;
+      articles[code] = { name: String(article.name || code), price: Number(article.price), vatRate, inStock: article.inStock !== false };
+    }
+    return { assortment: catalog.assortment && catalog.assortment.length ? catalog.assortment : null, articles };
+  }
+
+  return { catalogOf, publicCatalogOf };
 }
 
 module.exports = { createShopStore, registerShopRoutes, matchProducts, loadArticles };
