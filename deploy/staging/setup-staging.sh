@@ -32,11 +32,12 @@ if ! docker compose version >/dev/null 2>&1; then
   apt-get update -qq
   apt-get install -y -qq ca-certificates curl gnupg openssl >/dev/null
   install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL "https://download.docker.com/linux/$ID/gpg" -o /tmp/docker.gpg
-  actual="$(gpg --show-keys --with-colons /tmp/docker.gpg | awk -F: '/^fpr:/ {print $10; exit}')"
-  [[ "$actual" == "$DOCKER_KEY_FINGERPRINT" ]] || { rm -f /tmp/docker.gpg; die "Vingerafdruk van de Docker-sleutel klopt niet ($actual)."; }
-  gpg --dearmor --yes -o /etc/apt/keyrings/docker.gpg /tmp/docker.gpg
-  rm -f /tmp/docker.gpg
+  gpg_tmp="$(mktemp -d)"
+  curl -fsSL "https://download.docker.com/linux/$ID/gpg" -o "$gpg_tmp/docker.gpg"
+  actual="$(gpg --show-keys --with-colons "$gpg_tmp/docker.gpg" | awk -F: '/^fpr:/ {print $10; exit}')"
+  [[ "$actual" == "$DOCKER_KEY_FINGERPRINT" ]] || { rm -rf "$gpg_tmp"; die "Vingerafdruk van de Docker-sleutel klopt niet ($actual)."; }
+  gpg --dearmor --yes -o /etc/apt/keyrings/docker.gpg "$gpg_tmp/docker.gpg"
+  rm -rf "$gpg_tmp"
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$ID ${VERSION_CODENAME} stable" > /etc/apt/sources.list.d/docker.list
   apt-get update -qq
   apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-compose-plugin >/dev/null
@@ -71,8 +72,12 @@ if [[ ! -s secrets/database-url ]]; then
 fi
 # De compose-bestanden verwijzen naar elk geheim; zonder tunnel-token staat er een leeg bestand (de tunnel start dan niet).
 [[ -e secrets/tunnel-token ]] || { : > secrets/tunnel-token; chmod 600 secrets/tunnel-token; }
-chown 1000:1000 secrets/master-key secrets/database-url secrets/postgres-password 2>/dev/null || true
-chmod 644 secrets/master-key secrets/database-url secrets/postgres-password
+# Docker mount geheimen met eigenaar en modus van het bestand: elk geheim hoort bij de gebruiker in de container die het leest
+# (app 1000, postgres 999, cloudflared 65532) en is voor anderen onleesbaar.
+chown 1000:1000 secrets/master-key secrets/database-url
+chown 999:999 secrets/postgres-password
+chown 65532:65532 secrets/tunnel-token
+chmod 600 secrets/master-key secrets/database-url secrets/postgres-password secrets/tunnel-token
 chmod 711 secrets
 
 # ---------- 4. Eerste image en starten ----------

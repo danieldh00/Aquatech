@@ -20,6 +20,8 @@ services:
       - TZ=${TZ:-Europe/Amsterdam}
       - AQUATECH_MASTER_KEY_FILE=/run/secrets/master-key
       - DATABASE_URL_FILE=/run/secrets/database-url
+      # Terugzetten naar het vorige image na een gemigreerde database (migraties zijn alleen toevoegingen); zie update-staging.sh.
+      - AQUATECH_ALLOW_NEWER_SCHEMA=1
     volumes:
       - ./data:/data
     secrets:
@@ -49,6 +51,7 @@ services:
       retries: 3
 
   postgres:
+    # Images op tag; Renovate pint ze op digest (zoals cloudflared). Staging bevat alleen testdata.
     image: postgres:17
     container_name: aquatech-stg-postgres
     restart: unless-stopped
