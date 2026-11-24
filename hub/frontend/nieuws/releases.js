@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.36.4',
+      date: '2026-11-24',
+      title: 'Beheer-menu: één groep tegelijk open',
+      items: [
+        { text: 'In het Beheer-menu staat nog maar één groep tegelijk open, net als in de zijbalk.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.36.3',
       date: '2026-11-24',
       title: 'Visma, KPI\'s, openstaande taken en voorraadmelding apart aan of uit',

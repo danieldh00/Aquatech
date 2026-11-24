@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.36.4
+
+`beheer/indeling.js`: openklappen van een groep sluit de andere; alleen de laatst geopende groep wordt onthouden (oudere bewaarde keuzes met meerdere groepen tonen alleen de eerste).
+
 ## 1.36.3
 
 - Schakelaars `visma` (heeft Facturen nodig; adressen `/api/visma/**` dicht, niet meer automatisch doorsturen), `dashboard-cijfers` (`/api/kpis`, instelling `dashboardKpis`), `dashboard-taken` (`/api/tasks`, blok en bel) en `webshop-voorraadmelding` (formulier op de productpagina en de mails).
