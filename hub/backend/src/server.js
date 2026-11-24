@@ -813,8 +813,12 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use('/api/sprinkler-library', gatedJson('2mb'));
   // Afbeelding bij een artikel (base64, verkleind in de browser): vóór de 256 kB hieronder.
   app.use(/^\/api\/stock\/items\/[^/]+\/image$/, gatedJson('8mb'));
+  // Artikelen importeren uit Excel (artikelen/item-import.js): hoogstens 1000 regels; vóór de 256 kB van /api/stock.
+  app.use('/api/stock/import-excel', gatedJson('1mb'));
   app.use('/api/stock', express.json({ limit: '256kb' }));
   app.use('/api/suppliers', express.json({ limit: '32kb' }));
+  // Klanten importeren uit Excel (verkoop/customer-import.js): hoogstens 500 regels.
+  app.use('/api/customers/import', express.json({ limit: '256kb' }));
   // Leveranciersdocument inlezen (order-read-route.js): PDF of foto als base64, vóór de 256 kB hieronder.
   app.use('/api/purchase-orders/read', gatedJson('12mb'));
   app.use('/api/purchase-orders', express.json({ limit: '256kb' }));

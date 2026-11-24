@@ -556,6 +556,15 @@
     /** Opent het formulier voor een nieuwe klant. */
     $('#k-new').onclick = () => { navigate('nieuw'); };
     $('#k-export').onclick = exportExcel;
+    /**
+     * Opent het importvenster: Excel kiezen, controleren en verwerken.
+     * @returns {void}
+     */
+    $('#k-import').onclick = () => window.AquatechExcelImport.open({
+      title: 'Klanten importeren uit Excel', subject: 'De klanten', keyLabel: 'Naam', templateName: 'klanten-importeren-voorbeeld.xlsx', api,
+      intro: 'Een klant wordt herkend op e-mailadres, anders op naam. Lege cellen laten een bestaande klant ongemoeid. Eerst volgt een controle; er wordt pas iets opgeslagen als je op Verwerken drukt.',
+      fieldsPath: 'customers/import/fields', importPath: 'customers/import', onDone: () => { state.offset = 0; loadList(); },
+    });
     /** Vorige pagina. */
     $('#k-prev').onclick = () => { state.offset = Math.max(0, state.offset - PAGE_SIZE); loadList(); };
     /** Volgende pagina. */

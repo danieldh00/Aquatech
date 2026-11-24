@@ -1,0 +1,34 @@
+/* Importvenster voor Excel-bestanden (klanten, artikelen, prijslijst): een paneel over de pagina met de stappen bestand kiezen,
+   controle en verwerken. Kleuren via de --at-*-variabelen, indeling in één kolom zodat het ook op 375 px past. */
+.xi-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); z-index: 40; display: flex; align-items: flex-start; justify-content: center; padding: 24px 12px; overflow-y: auto; }
+.xi-panel { background: var(--at-surface); border-radius: 10px; width: 100%; max-width: 960px; box-sizing: border-box; padding: 18px 20px; box-shadow: var(--at-shadow); }
+.xi-panel h2 { margin: 0 0 6px; font-size: 18px; }
+.xi-panel .xi-intro { margin: 0 0 14px; color: var(--at-muted); font-size: 14px; }
+.xi-step { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+.xi-step input[type="file"] { max-width: 100%; }
+.xi-counts { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.xi-count { border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; font-size: 13px; background: var(--at-surface); }
+.xi-count b { display: block; font-size: 18px; line-height: 1.2; }
+.xi-count.nieuw b { color: var(--at-ok); }
+.xi-count.wijzigt b { color: var(--at-teal); }
+.xi-count.fout b { color: var(--at-danger); }
+.xi-note { font-size: 13px; color: var(--at-muted); margin: 6px 0; }
+.xi-note.warn { color: var(--at-warn); }
+.xi-table-wrap { overflow-x: auto; max-width: 100%; border: 1px solid var(--line); border-radius: 8px; max-height: 50vh; overflow-y: auto; }
+.xi-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.xi-table th, .xi-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.xi-table th { position: sticky; top: 0; background: var(--at-surface); color: var(--at-muted); font-weight: 600; font-size: 12px; }
+.xi-badge { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 12px; border: 1px solid currentColor; white-space: nowrap; }
+.xi-badge.nieuw { color: var(--at-ok); }
+.xi-badge.wijzigt { color: var(--at-teal); }
+.xi-badge.ongewijzigd { color: var(--at-muted); }
+.xi-badge.fout { color: var(--at-danger); }
+.xi-problem { color: var(--at-danger); }
+.xi-warning { color: var(--at-warn); }
+.xi-change { white-space: nowrap; }
+.xi-change s { color: var(--at-muted); }
+.xi-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; }
+.xi-actions .spacer { flex: 1; }
+.xi-result { font-size: 14px; margin: 10px 0 0; }
+.xi-result.err { color: var(--at-danger); }
+@media (max-width: 560px) { .xi-overlay { padding: 8px; } .xi-panel { padding: 14px 12px; } .xi-change { white-space: normal; } }
