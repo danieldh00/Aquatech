@@ -282,7 +282,7 @@ function createPlanStore(db, { insertUser }) {
    * een gast met de contactgegevens wordt eigenaar, het plan staat meteen ter controle.
    * @param {string} tenantId Id van de tenant.
    * @param {object} drawing name, email, phone, address, question, data (het plan) en ip.
-   * @returns {{ id: string, title: string, reference: string }} Het plan en het kenmerk voor de indiener.
+   * @returns {{ id: string, title: string, reference: string, ownerId: string }} Het plan, het kenmerk voor de indiener en het gastaccount dat eigenaar is.
    */
   function submitDrawing(tenantId, { name, email, phone, address, question, data, ip }) {
     return transaction(db, () => {
@@ -302,7 +302,7 @@ function createPlanStore(db, { insertUser }) {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ter_controle', ?, ?, 'openbaar')`)
         .run(planId, tenantId, guest.id, planMeta.title, planMeta.customer, planMeta.address, JSON.stringify(plan), timestamp, timestamp, question, timestamp);
       record({ tenantId, userId: guest.id, planId: planId, action: 'aangemaakt', data: plan, ip });
-      return { id: planId, title: planMeta.title, reference: planId.slice(0, 8).toUpperCase() };
+      return { id: planId, title: planMeta.title, reference: planId.slice(0, 8).toUpperCase(), ownerId: guest.id };
     });
   }
 
