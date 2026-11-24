@@ -293,3 +293,45 @@ test('server: zonder multitenancy staat uitbesteden op slot in Beheer > Modules'
   assert.ok(view.locked.uitbesteden);
   assert.strictEqual((await admin.put('/app/api/admin/modules', { flags: { uitbesteden: true } })).status, 409);
 });
+
+test('hulpfuncties: adressen van een uitgezet onderdeel zijn helemaal dicht (patronen met een sterretje)', () => {
+  assert.deepStrictEqual(Tools.blockedRoutes({}), []);
+  assert.deepStrictEqual(Tools.blockedRoutes({ nacalculatie: false }), ['/api/workorders/*/costing']);
+  assert.deepStrictEqual(Tools.blockedRoutes({ werkorders: false, offertes: false }), [], 'alleen de module uit: de regel van de module geldt (lezen blijft)');
+  assert.strictEqual(Tools.matchesRoute('/api/workorders/*/costing', '/api/workorders/abc/costing'), true);
+  assert.strictEqual(Tools.matchesRoute('/api/workorders/*/costing', '/api/workorders/abc/costing/extra'), false);
+  assert.strictEqual(Tools.matchesRoute('/api/workorders/*/costing', '/api/workorders/costing'), false);
+  assert.strictEqual(Tools.matchesRoute('/api/quote-templates/**', '/api/quote-templates'), true);
+  assert.strictEqual(Tools.matchesRoute('/api/quote-templates/**', '/api/quote-templates/abc/nog-iets'), true);
+  assert.strictEqual(Tools.matchesRoute('/api/quote-templates/**', '/api/quote-templatesx'), false);
+  assert.strictEqual(Tools.matchesRoute('/api/quote-templates/**', '/api'), false);
+  for (const entry of [...MODULES, ...Tools.FEATURES]) {
+    for (const pattern of (entry.configuration && entry.configuration.blocked) || []) assert.match(pattern, /^\/api\/[a-z-]+(\/([a-z-]+|\*))*(\/\*\*)?$/, `${entry.id}: ${pattern}`);
+  }
+});
+
+test('server: een uitgezet onderdeel weigert ook lezen op zijn adressen, aan werkt het weer', async () => {
+  const { adminA, adminB } = await setup();
+  const id = '3f0e6f5c-0d5e-4d0b-9a57-0c1f1b9d2a11';
+  const routes = [
+    ['get', `/app/api/workorders/${id}/costing`], ['get', '/app/api/quote-templates'], ['put', '/app/api/quote-templates', { template: { name: 'Gazon' } }],
+    ['post', `/app/api/workorders/${id}/share`, { url: 'https://voorbeeld.nl/' }], ['post', `/app/api/workorders/${id}/send`, {}], ['get', `/app/api/portal/locations/l-${'a'.repeat(64)}`],
+    ['post', '/app/api/plan/analyze', {}],
+  ];
+  for (const [method, url, body] of routes) assert.notStrictEqual((await adminA[method](url, body)).status, 409, `aan: ${method} ${url}`);
+  const off = { nacalculatie: false, offertesjablonen: false, afspraaklink: false, installatiedossier: false, 'plan-herkennen-ai': false };
+  assert.strictEqual((await adminA.put('/app/api/admin/modules', { flags: off })).status, 200);
+  for (const [method, url, body] of routes) {
+    const response = await adminA[method](url, body);
+    assert.strictEqual(response.status, 409, `uit: ${method} ${url}`);
+    assert.strictEqual(response.body.error, 'module_off');
+  }
+  // Hoofdletters en een slash aan het eind omzeilen de blokkade niet; een andere organisatie merkt er niets van.
+  assert.strictEqual((await adminA.get(`/app/api/Workorders/${id}/Costing/`)).status, 409);
+  assert.strictEqual((await adminA.get('/app/api/QUOTE-TEMPLATES/')).status, 409);
+  assert.notStrictEqual((await adminB.get('/app/api/quote-templates')).status, 409);
+  // De werkorders zelf blijven gewoon werken.
+  assert.strictEqual((await adminA.get('/app/api/workorders')).status, 200);
+  assert.strictEqual((await adminA.put('/app/api/admin/modules', { flags: Object.fromEntries(Object.keys(off).map((key) => [key, true])) })).status, 200);
+  for (const [method, url, body] of routes) assert.notStrictEqual((await adminA[method](url, body)).status, 409, `weer aan: ${method} ${url}`);
+});

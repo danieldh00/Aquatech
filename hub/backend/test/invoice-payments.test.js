@@ -496,3 +496,15 @@ test('online factuurbetalen werkt alleen in de hoofdtenant (T-03)', async () => 
   assert.deepStrictEqual(await payments.sync(otherTenantId, INVOICE_ONE, { paymentId: 'tr_test0001' }), { becamePaid: false, ignored: true });
   assert.ok((await payments.start(mainTenantId, invoice)).checkoutUrl);
 });
+
+test('onderdeel Online betalen uit in Beheer > Modules: geen knop, de server weigert en de mail heeft geen betaallink', async () => {
+  const world = await setup({ mollie: true });
+  const { invoiceId } = await finalInvoiceFor(world, 0);
+  assert.strictEqual((await world.admin.put('/app/api/admin/modules', { flags: { 'factuur-online-betalen': false } })).status, 200);
+  const listed = (await world.shoppers[0].client.get('/app/api/portal')).body.invoices[0];
+  assert.strictEqual(listed.payable, false);
+  assert.strictEqual((await world.shoppers[0].client.post(`/app/api/portal/invoices/${invoiceId}/pay`, {})).status, 409);
+  // Weer aan: de knop is terug.
+  await world.admin.put('/app/api/admin/modules', { flags: { 'factuur-online-betalen': true } });
+  assert.strictEqual((await world.shoppers[0].client.get('/app/api/portal')).body.invoices[0].payable, true);
+});

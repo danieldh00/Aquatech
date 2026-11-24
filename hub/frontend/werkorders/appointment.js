@@ -34,6 +34,9 @@
     function renderAppt() {
       const workOrder = state.workOrder;
       const box = $('#e-appt');
+      // Afspraaklink uit (Beheer > Modules): het blok verdwijnt.
+      box.hidden = !window.AquatechModuleTools.isOn(state.moduleFlags, 'afspraaklink');
+      if (box.hidden) { box.innerHTML = ''; return; }
       const appointment = workOrder.appointment || { state: 'geen', response: null };
       const share = workOrder.share || { active: false };
       const response = appointment.response;

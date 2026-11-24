@@ -11,10 +11,10 @@ const MOLLIE_STATES = { paid: 'betaald', open: 'open', pending: 'open', authoriz
 
 /**
  * Maakt de betaalfuncties voor facturen.
- * @param {{ db: object, invoices: object, mollie: object, settingsFor: Function, linkKey?: Buffer, mainTenantId?: string, log?: object }} deps De database, de factuuropslag, de Mollie-client, de instellingen per omgeving, de sleutel voor de betaallinks (zonder sleutel geen links) en de hoofdtenant: met mainTenantId werkt online betalen alleen daar (T-03: de webhook en de betaallink zonder inlog kennen alleen die omgeving).
+ * @param {{ db: object, invoices: object, mollie: object, settingsFor: Function, linkKey?: Buffer, mainTenantId?: string, switchedOn?: Function, log?: object }} deps De database, de factuuropslag, de Mollie-client, de instellingen per omgeving, de sleutel voor de betaallinks (zonder sleutel geen links) en de hoofdtenant: met mainTenantId werkt online betalen alleen daar (T-03: de webhook en de betaallink zonder inlog kennen alleen die omgeving); switchedOn(tenantId) = of het onderdeel in Beheer > Modules aan staat (zonder = altijd).
  * @returns {{ enabled: Function, payableState: Function, start: Function, sync: Function, onPaid: Function, onPaidAfterCredit: Function, listOwn: Function, own: Function, paymentsOf: Function, linkFor: Function, publicLinkCheck: Function, appUrl: Function }} De functies.
  */
-function createInvoicePayments({ db, invoices, mollie, settingsFor, linkKey = null, mainTenantId = null, log = console }) {
+function createInvoicePayments({ db, invoices, mollie, settingsFor, linkKey = null, mainTenantId = null, switchedOn = null, log = console }) {
   const paidHooks = [];
   /**
    * Bereidt een SQL-opdracht voor.
@@ -45,11 +45,11 @@ function createInvoicePayments({ db, invoices, mollie, settingsFor, linkKey = nu
   const onPaidAfterCredit = (hook) => { afterCreditHooks.push(hook); };
 
   /**
-   * Of online betalen van facturen kan in deze omgeving (aan, sleutel en webadres kloppen; met mainTenantId alleen in de hoofdtenant).
+   * Of online betalen van facturen kan in deze omgeving (het onderdeel staat aan in Beheer > Modules, online betalen aan, sleutel en webadres kloppen; met mainTenantId alleen in de hoofdtenant).
    * @param {string} tenantId Id van de omgeving.
    * @returns {boolean} true als klanten kunnen betalen.
    */
-  const enabled = (tenantId) => (!mainTenantId || tenantId === mainTenantId) && configOf(settingsFor(tenantId)).online;
+  const enabled = (tenantId) => (!mainTenantId || tenantId === mainTenantId) && (!switchedOn || switchedOn(tenantId)) && configOf(settingsFor(tenantId)).online;
 
   /**
    * Of deze factuur nog betaald kan worden: een definitieve, openstaande factuur (geen credit, geen bedrag van nul of lager,

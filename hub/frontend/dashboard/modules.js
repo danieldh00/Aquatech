@@ -25,7 +25,7 @@
 // beheer/indeling.js, verborgen in Beheer als de module uit staat), `settings`
 // (sleutels uit settings.js die de server dan niet meer wijzigt) en `routes` (API-adressen
 // waarvan de server dan alle schrijfacties weigert met 409 `module_off`; lezen blijft
-// werken). Een nieuwe module met eigen instellingen vult alleen dit veld; Beheer en de
+// werken) en `blocked` (patronen met `*` voor één deel van het pad, `/**` aan het eind = alles eronder: daar weigert de server dan ook het lezen). Een nieuwe module met eigen instellingen vult alleen dit veld; Beheer en de
 // server volgen vanzelf (zie `isOn`, `hiddenSections`, `lockedSettings`, `lockedRoutes`).
 // **Modules aan/uit (Beheer > Modules)**: een module met `category` (sleutel uit CATEGORIES) krijgt daar een kaart met
 // een schakelaar en de korte tekst `summary` (`switchTitle` = een andere naam op die kaart). Een onderdeel met een eigen schakelaar is een module met `partOf` en
@@ -77,9 +77,14 @@
    * Met `setting` is de schakelaar de bestaande instelling zelf; zonder `setting` staat hij in de vlaggen van `modules`.
    */
   const FEATURES = [
+    { id: 'offertesjablonen', partOf: 'offertes', title: 'Offertesjablonen', configuration: { blocked: ['/api/quote-templates/**'] } },
     { id: 'offerte-opvolging', partOf: 'offertes', title: 'Automatische opvolging', section: 'offerteopvolging', setting: { key: 'quoteFollowUp', field: 'enabled' } },
     { id: 'betalingsherinneringen', partOf: 'facturen', title: 'Betalingsherinneringen en aanmaningen', section: 'paymentreminders', setting: { key: 'paymentReminders', field: 'enabled' } },
+    { id: 'factuur-online-betalen', partOf: 'facturen', title: 'Online betalen (klantportaal en betaallink)' },
+    { id: 'nacalculatie', category: 'verkoop', needs: 'werkorders', title: 'Nacalculatie', summary: 'Opbrengst, kosten en marge per werkorder.', configuration: { blocked: ['/api/workorders/*/costing'] } },
+    { id: 'plan-herkennen-ai', partOf: 'beregening', title: 'Plan herkennen met AI', section: 'ai', configuration: { blocked: ['/api/plan/analyze'] } },
     { id: 'tekening-indienen', partOf: 'beregening', title: 'Tekening indienen zonder account', section: 'access', setting: { key: 'drawingRequests' } },
+    { id: 'afspraaklink', partOf: 'planning', title: 'Afspraaklink voor de klant', configuration: { blocked: ['/api/workorders/*/share', '/api/workorders/*/send'] } },
     { id: 'bestelvoorstellen-automatisch', partOf: 'voorraad', title: 'Automatische bestelvoorstellen', setting: { key: 'purchaseProposals', field: 'enabled' } },
     { id: 'webshop', category: 'webshop', title: 'Webshop', summary: 'De eigen winkel op het hoofdadres, met de bestellingen.', section: 'webshop', setting: { key: 'storefront' }, mainOnly: true },
     { id: 'webshop-bestellen', partOf: 'webshop', title: 'Bestellen en afrekenen', setting: { key: 'shopOrdering' }, mainOnly: true },
@@ -88,6 +93,7 @@
     { id: 'webshop-planner', partOf: 'webshop', title: 'Planner in de webshop', setting: { key: 'shopPlanner' }, mainOnly: true },
     { id: 'webshop-analytics', partOf: 'webshop', title: 'Google Analytics', section: 'webshop', setting: { key: 'shopAnalytics', field: 'enabled' }, mainOnly: true },
     { id: 'webshop-clarity', partOf: 'webshop', title: 'Microsoft Clarity', section: 'webshop', setting: { key: 'shopClarity', field: 'enabled' }, mainOnly: true },
+    { id: 'installatiedossier', partOf: 'portaal', title: 'Installatiedossier per adres', configuration: { blocked: ['/api/portal/locations/*'] } },
     { id: 'seizoensherinneringen', partOf: 'portaal', title: 'Seizoensherinneringen', section: 'season', setting: { key: 'seasonReminders', field: 'enabled' } },
     { id: 'ai-koppeling', category: 'koppelingen', title: 'AI-koppeling', summary: 'Claude of ChatGPT laten meewerken in de Hub.', section: 'ai-connector', setting: { key: 'aiConnector' } },
   ];
@@ -503,11 +509,11 @@
   const switchIds = () => switchTree().flatMap((category) => category.cards.flatMap((card) => [card.id, ...card.parts.map((part) => part.id)]));
 
   /**
-   * De modules die uit staan en een `configuration` hebben.
-   * @param {object} [flags] De instelling `modules`.
-   * @returns {object[]} De configuratie-blokken van modules die uit staan.
+   * De modules en onderdelen die uit staan en een `configuration` hebben.
+   * @param {object} [flags] De vlaggen zoals ze gelden.
+   * @returns {object[]} De configuratie-blokken van wat uit staat.
    */
-  const offConfigurations = (flags) => MODULES.filter((module) => module.configuration && !isOn(flags, module.id)).map((module) => module.configuration);
+  const offConfigurations = (flags) => [...MODULES, ...FEATURES].filter((entry) => entry.configuration && !isOn(flags, entry.id)).map((entry) => entry.configuration);
 
   /**
    * Id's van de Beheer-secties die bij uitgezette modules horen (Beheer verbergt ze).
@@ -530,6 +536,42 @@
    */
   const lockedRoutes = (flags) => offConfigurations(flags).flatMap((configuration) => configuration.routes || []);
 
+  /**
+   * API-adressen die helemaal dicht zijn (ook lezen) omdat het onderdeel zelf is uitgezet: patronen waarin `*` voor
+   * precies één deel van het pad staat (zie `configuration.blocked` in het register). Staat alleen de module erboven
+   * uit, dan geldt de bestaande regel van die module (schrijven dicht, lezen blijft).
+   * @param {object} [flags] De vlaggen zoals ze gelden.
+   * @returns {string[]} De patronen.
+   */
+  const blockedRoutes = (flags) => [...MODULES, ...FEATURES].filter((entry) => (flags || {})[entry.id] === false).flatMap((entry) => (entry.configuration && entry.configuration.blocked) || []);
+
+  /**
+   * Past een pad bij een patroon uit `blocked`? Per deel vergeleken, `*` = één willekeurig deel, even veel delen; een
+   * patroon dat op `/**` eindigt geldt voor het adres ervoor en alles eronder.
+   * @param {string} pattern Het patroon uit `configuration.blocked`.
+   * @param {string} routePath Het pad in kleine letters, zonder slash aan het eind.
+   * @returns {boolean} true als het pad onder het patroon valt.
+   */
+  function matchesRoute(pattern, routePath) {
+    const open = pattern.endsWith('/**');
+    const wanted = (open ? pattern.slice(0, -3) : pattern).split('/');
+    const given = routePath.split('/');
+    if (open ? given.length < wanted.length : given.length !== wanted.length) return false;
+    return wanted.every((part, index) => part === '*' || part === given[index]);
+  }
+
+  /**
+   * Vraagt (via het gedeelde verzoek api/config van de pagina) of een module of onderdeel aan staat. Bij twijfel (geen
+   * antwoord, file://) aan: de server weigert zelf wat uit staat.
+   * @param {string} id Id van de module of het onderdeel.
+   * @returns {Promise<boolean>} true als het aan staat.
+   */
+  function featureOn(id) {
+    const common = root.AquatechCommon;
+    if (!common || !common.getJson) return Promise.resolve(true);
+    return common.getJson('api/config').then((config) => isOn((config && config.modules) || {}, id)).catch(() => true);
+  }
+
   root.AquatechModules = MODULES;
   /**
    * Aantal nieuwe items bij Nieuws (api/me `news`) als bolletje; de pagina Nieuws
@@ -539,7 +581,7 @@
    */
   const newsBadge = (count) => (count > 0 ? `<span class="news-count" data-news-count title="Nieuw sinds je vorige bezoek">${count > 9 ? '9+' : count}</span>` : '');
 
-  root.AquatechModuleTools = { ICONS, NAV_GROUPS, CATEGORIES, FEATURES, ALWAYS_ON, entryOf, titleOf, switchTree, switchIds, icon, visible, usesSidebar, navSections, newsBadge, isOn, hiddenSections, lockedSettings, lockedRoutes };
+  root.AquatechModuleTools = { ICONS, NAV_GROUPS, CATEGORIES, FEATURES, ALWAYS_ON, entryOf, titleOf, switchTree, switchIds, icon, visible, usesSidebar, navSections, newsBadge, isOn, hiddenSections, lockedSettings, lockedRoutes, blockedRoutes, matchesRoute, featureOn };
   // Voor de server: de hulpfuncties hangen als `tools` aan de geëxporteerde lijst (niet-opsombaar, de lijst blijft een gewone array).
   if (typeof module !== 'undefined' && module.exports) module.exports = Object.defineProperty(MODULES, 'tools', { value: root.AquatechModuleTools });
 })(typeof window !== 'undefined' ? window : globalThis);

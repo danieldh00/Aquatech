@@ -20,6 +20,9 @@
     async function loadTemplates() {
       if (state.klant || state.templatesRequested) return;
       state.templatesRequested = true;
+      // Offertesjablonen uit (Beheer > Modules): de kaart verdwijnt en er wordt niets opgehaald.
+      state.templatesOff = !(await window.AquatechModuleTools.featureOn('offertesjablonen'));
+      if (state.templatesOff) { if (state.quote) renderTemplates(); return; }
       try {
         state.templates = (await api('quote-templates')).templates || [];
       } catch (error) {
@@ -33,7 +36,7 @@
       loadTemplates();
       const templates = state.templates || [];
       const open = Boolean(state.quote) && !locked() && !state.klant;
-      $('#e-tpl').hidden = !open || (!templates.length && !state.admin);
+      $('#e-tpl').hidden = state.templatesOff || !open || (!templates.length && !state.admin);
       if ($('#e-tpl').hidden) return;
       const select = $('#e-tpl-select');
       const previous = select.value;

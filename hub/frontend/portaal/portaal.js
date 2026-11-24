@@ -144,7 +144,8 @@
     renderQuotes(portal);
     renderInvoices(portal);
     renderPlans(portal);
-    if (window.PortalLocations) window.PortalLocations.render(portal);
+    // Het installatiedossier per adres kan in Beheer > Modules uit staan.
+    if (window.PortalLocations) window.AquatechModuleTools.featureOn('installatiedossier').then((on) => { if (on) window.PortalLocations.render(portal); });
     if (!portal.quotes.length && !(portal.invoices || []).length && !portal.workorders.length && !portal.plans.length && !(portal.requests || []).length && !(portal.reminders || []).length) {
       message('Er staat nog niets voor u klaar. Zodra wij een offerte voor u hebben opgesteld of werkzaamheden hebben ingepland, ziet u die hier.');
     } else message('');
