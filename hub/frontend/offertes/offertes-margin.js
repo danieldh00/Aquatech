@@ -45,6 +45,8 @@
       } catch (error) {
         // Geen recht of onderdeel uit: de marge blijft weg.
         if (error.status === 403 || error.status === 409) state.marginOff = true;
+        // Bij elke andere fout (netwerk, 500, 429) niet meteen opnieuw vragen: de codes blijven 'geen kostprijs'.
+        else for (const code of missing) state.costs[code] = null;
       }
       for (const code of missing) state.costsPending.delete(code);
       if (state.quote) updateMargin();
