@@ -72,8 +72,9 @@ h2 .h2-link:hover { text-decoration: underline; }
   .topbar > .brand:has(.brand-name) { flex: 0 1 auto; margin-right: auto; }
   .brand:has(.brand-name) .brand-logo, .brand:has(.brand-name) .brand-sep { display: none; }
   .brand-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .topbar > .account, .topbar-right { flex: none; }
-  .topbar-right { min-width: 0; gap: 8px; }
+  /* De rechterkant mag krimpen (organisatiewisselaar, naam), anders steekt de kopbalk uit (L-03). */
+  .topbar > .account, .topbar-right { flex: 0 1 auto; min-width: 0; }
+  .topbar-right { gap: 8px; }
   .account { min-width: 0; gap: 8px; font-size: 12px; }
   .account > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 34vw; }
   .account > span:first-child .role { display: none; }
@@ -84,7 +85,7 @@ h2 .h2-link:hover { text-decoration: underline; }
 /* Omgevingswisselaar (live/test, tenants) in de kopbalk. */
 .account .env-select { font: inherit; color: #fff; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 6px; padding: 3px 6px; max-width: 220px; }
 .account .env-select option { color: #172f5e; }
-@media (max-width: 640px) { .account .env-select { max-width: 30vw; } }
+@media (max-width: 640px) { .account .env-select { flex: 0 1 auto; min-width: 0; max-width: 30vw; } }
 @media (max-width: 640px) {
   .topbar:has(.env-select) .env-badge, .account:has(.env-select) > span { display: none; }
 }
@@ -104,7 +105,7 @@ h2 .h2-link:hover { text-decoration: underline; }
 
 /* Gebruikersmenu rechtsboven: rondje met initialen + naam, met daaronder
    Mijn profiel en Uitloggen. */
-.user-menu { position: relative; min-width: 0; }
+.user-menu { position: relative; min-width: 0; flex: none; }
 .account .user-btn { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 260px; padding: 3px 10px 3px 3px; border-radius: 999px; }
 .user-btn .avatar { flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--at-teal); color: #fff; font-weight: 700; font-size: 11px; letter-spacing: 0.02em; }
 .user-btn .user-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -122,7 +123,7 @@ h2 .h2-link:hover { text-decoration: underline; }
 .account .user-pop a:hover, .account .user-pop button:hover { background: #eef3f8; }
 /* Meldingenbelletje met teller links van het gebruikersmenu (account.js, setupBell) */
 .bell-menu { position: relative; flex: none; }
-.account .bell-btn { position: relative; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border-radius: 50%; }
+.account .bell-btn { position: relative; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border-radius: 50%; }
 .bell-count { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box; border-radius: 9px; background: var(--at-green); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px var(--at-navy); }
 .bell-count[hidden] { display: none; }
 .bell-pop { position: absolute; right: 0; top: calc(100% + 8px); z-index: 60; width: 300px; max-width: calc(100vw - 24px); background: #fff; color: #1f2a33; border-radius: 10px; box-shadow: 0 10px 30px rgba(23, 47, 94, 0.22); padding: 6px; font-size: 14px; }
