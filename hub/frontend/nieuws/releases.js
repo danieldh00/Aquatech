@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.35.1',
+      date: '2026-11-24',
+      title: 'Modules: onderdelen met een eigen schakelaar (voorbereiding nieuw scherm)',
+      items: [
+        { text: 'De Webshopbestellingen staan alleen nog in het menu als de eigen webshop aan staat, en Uitbesteden alleen als Werkorders aan staat.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.35.0',
       date: '2026-11-24',
       title: 'Webshop: knoppen en pictogram op mobiel hersteld',
