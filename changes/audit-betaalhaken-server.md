@@ -16,3 +16,4 @@ Audit 1.33.0, thema webshopbetalingen en facturen, deel 4 (bedrading in `server.
 - **B-13**: `app.locals.webPaymentsRelease` loopt elke vijf minuten (niet tijdens onderhoud) en geeft de voorraad van onbetaalde online bestellingen vrij.
 - **Betaling na creditering**: `invoicePayments.onPaidAfterCredit` → auditregel `factuur_betaald_na_creditering` en melding `factuurbetaling-na-creditering` in Bewaking.
 - **T-03**: online factuurbetalen is hard beperkt tot de hoofdtenant (`mainTenantId` in `createInvoicePayments`): in een andere omgeving geen knop in het portaal, geen betaallink in de mail en geen betaling; de webhook en de betaallink zonder inlog kenden al alleen de hoofdtenant.
+- **B-31, reviewpunt**: de uploadlimiet per bestelling voor de eigen pakbon telt per account (`pakbon-bestelling:<account>:<bestelling>`), zodat een ander account de limiet van de eigenaar niet kan opmaken.
