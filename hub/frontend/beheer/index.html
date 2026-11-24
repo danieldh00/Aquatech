@@ -528,13 +528,26 @@
           <div class="row"><button class="btn primary" type="submit">Opslaan</button><a class="btn" href="../uitbesteden/">Naar Uitbesteden</a></div>
           <div class="err" role="alert"></div>
         </form>
-        <form id="s-modules" class="card-form settings">
-          <h3>Modules</h3>
-          <p class="muted small">Zet hier modules aan of uit. Uitgezette modules verdwijnen uit de zijbalk en van het dashboard. Beheer blijft altijd zichtbaar voor beheerders.</p>
-          <div id="s-module-list" class="checks"></div>
-          <div class="row"><button class="btn primary" type="submit">Opslaan</button></div>
-          <div class="err" role="alert"></div>
-        </form>
+      </section>
+      <section id="tab-modules" class="tabpane" hidden>
+        <p class="muted small md-lead">Zet uit wat je niet gebruikt. Een uitgezette module verdwijnt uit het menu, het dashboard en Beheer. Gegevens en instellingen blijven bewaard en komen terug zodra je hem weer aanzet.</p>
+        <div class="md-bar">
+          <input type="search" id="md-search" placeholder="Zoek een module of onderdeel…" aria-label="Zoek een module of onderdeel" autocomplete="off">
+          <div class="md-filter" id="md-filter" role="group" aria-label="Filter">
+            <button type="button" data-filter="alles">Alles</button><button type="button" data-filter="aan">Aan</button><button type="button" data-filter="uit">Uit</button>
+          </div>
+          <span class="md-count" id="md-count"></span>
+          <button class="btn primary" type="button" id="md-save" disabled>Opslaan</button>
+          <span class="md-dirty small" id="md-dirty" role="status"></span>
+        </div>
+        <div id="md-err" class="err" role="alert"></div>
+        <nav class="md-jump" id="md-jump" aria-label="Categorieën"></nav>
+        <div id="md-categories"></div>
+        <p class="muted small" id="md-none" hidden>Niets gevonden. Probeer een ander woord of kies <i>Alles</i>.</p>
+        <section class="md-category">
+          <div class="md-category-head"><h3>Altijd aan</h3><span class="md-rule"></span></div>
+          <div class="md-fixed">Deze onderdelen heeft de Hub nodig om te werken en kun je niet uitzetten.<ul id="md-always"></ul></div>
+        </section>
       </section>
       <section id="tab-webshop" class="tabpane" hidden>
         <p class="muted small">Koppel de webshop van je organisatie: de stuklijst in de planner, de Excel-export en nieuwe offertes gebruiken dan de naam, prijs en link uit de webshop. Een testomgeving heeft een eigen koppeling.</p>
@@ -1230,6 +1243,7 @@
   <script src="webshop-menu.js"></script>
   <script src="webshop-inhoud.js"></script>
   <script src="kortingen.js"></script>
+  <script src="modules.js"></script>
   <script src="levermethodes.js"></script>
   <script src="sproeiers.js"></script>
   <script src="rollen.js"></script>

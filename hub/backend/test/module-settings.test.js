@@ -194,6 +194,8 @@ test('register: elke schakelaar hoort bij een categorie, heeft een unieke id en 
       if (feature.setting.field) assert.strictEqual(typeof definition.sanitize({ [feature.setting.field]: true })[feature.setting.field], 'boolean', `${feature.id}: veld bestaat`);
     }
   }
+  const indexing = fs.readFileSync(path.join(FRONTEND_DIR, 'beheer', 'indeling.js'), 'utf8');
+  for (const feature of Tools.FEATURES) if (feature.section) assert.ok(indexing.includes(`{ id: '${feature.section}', label:`), `${feature.id}: sectie ${feature.section} staat niet in beheer/indeling.js`);
   for (const entry of [...MODULES, ...Tools.FEATURES]) if (entry.needs) assert.ok(ids.includes(entry.needs), `${entry.id}: nodig ${entry.needs}`);
   assert.strictEqual(Tools.titleOf('offerte-opvolging'), 'Automatische opvolging');
 });

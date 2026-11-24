@@ -28,11 +28,12 @@
 // werken). Een nieuwe module met eigen instellingen vult alleen dit veld; Beheer en de
 // server volgen vanzelf (zie `isOn`, `hiddenSections`, `lockedSettings`, `lockedRoutes`).
 // **Modules aan/uit (Beheer > Modules)**: een module met `category` (sleutel uit CATEGORIES) krijgt daar een kaart met
-// een schakelaar en de korte tekst `summary`. Een onderdeel met een eigen schakelaar is een module met `partOf` en
+// een schakelaar en de korte tekst `summary` (`switchTitle` = een andere naam op die kaart). Een onderdeel met een eigen schakelaar is een module met `partOf` en
 // `ownSwitch: true`, of een regel in FEATURES (schakelaars zonder eigen pagina; met `category` een eigen kaart, met
 // `partOf` een onderdeel van een kaart). `needs` = werkt alleen als die andere module aan staat. Een regel in FEATURES
 // met `setting` bedient een bestaande instelling uit settings.js (één waarheid: `{ key }` voor een ja/nee-instelling,
-// `{ key, field }` voor een veld in een object); `mainOnly` = alleen in de hoofdtenant. Een nieuw onderdeel staat
+// `{ key, field }` voor een veld in een object); `mainOnly` = alleen in de hoofdtenant; `section` = de sectie van Beheer
+// (id uit beheer/indeling.js) met de verdere instellingen, voor de link Instellen. Een nieuw onderdeel staat
 // standaard aan (wat ontbreekt in de vlaggen staat aan) en krijgt hier zijn regel in dezelfde PR als de functie zelf:
 // een schakelaar verschijnt pas als de server hem ook echt volgt.
 // De API controleert de rechten ook zelf. Beheerders en hoofdbeheerders zien de
@@ -76,25 +77,26 @@
    * Met `setting` is de schakelaar de bestaande instelling zelf; zonder `setting` staat hij in de vlaggen van `modules`.
    */
   const FEATURES = [
-    { id: 'offerte-opvolging', partOf: 'offertes', title: 'Automatische opvolging', setting: { key: 'quoteFollowUp', field: 'enabled' } },
-    { id: 'betalingsherinneringen', partOf: 'facturen', title: 'Betalingsherinneringen en aanmaningen', setting: { key: 'paymentReminders', field: 'enabled' } },
-    { id: 'tekening-indienen', partOf: 'beregening', title: 'Tekening indienen zonder account', setting: { key: 'drawingRequests' } },
+    { id: 'offerte-opvolging', partOf: 'offertes', title: 'Automatische opvolging', section: 'offerteopvolging', setting: { key: 'quoteFollowUp', field: 'enabled' } },
+    { id: 'betalingsherinneringen', partOf: 'facturen', title: 'Betalingsherinneringen en aanmaningen', section: 'paymentreminders', setting: { key: 'paymentReminders', field: 'enabled' } },
+    { id: 'tekening-indienen', partOf: 'beregening', title: 'Tekening indienen zonder account', section: 'access', setting: { key: 'drawingRequests' } },
     { id: 'bestelvoorstellen-automatisch', partOf: 'voorraad', title: 'Automatische bestelvoorstellen', setting: { key: 'purchaseProposals', field: 'enabled' } },
-    { id: 'webshop', category: 'webshop', title: 'Webshop', summary: 'De eigen winkel op het hoofdadres, met de bestellingen.', setting: { key: 'storefront' }, mainOnly: true },
+    { id: 'webshop', category: 'webshop', title: 'Webshop', summary: 'De eigen winkel op het hoofdadres, met de bestellingen.', section: 'webshop', setting: { key: 'storefront' }, mainOnly: true },
     { id: 'webshop-bestellen', partOf: 'webshop', title: 'Bestellen en afrekenen', setting: { key: 'shopOrdering' }, mainOnly: true },
     { id: 'webshop-gast', partOf: 'webshop', title: 'Bestellen als gast', setting: { key: 'shopPayment', field: 'guestCheckout' }, mainOnly: true },
     { id: 'webshop-offerte', partOf: 'webshop', title: 'Offerte aanvragen', setting: { key: 'shopPayment', field: 'quoteRequest' }, mainOnly: true },
     { id: 'webshop-planner', partOf: 'webshop', title: 'Planner in de webshop', setting: { key: 'shopPlanner' }, mainOnly: true },
-    { id: 'webshop-analytics', partOf: 'webshop', title: 'Google Analytics', setting: { key: 'shopAnalytics', field: 'enabled' }, mainOnly: true },
-    { id: 'webshop-clarity', partOf: 'webshop', title: 'Microsoft Clarity', setting: { key: 'shopClarity', field: 'enabled' }, mainOnly: true },
-    { id: 'seizoensherinneringen', partOf: 'portaal', title: 'Seizoensherinneringen', setting: { key: 'seasonReminders', field: 'enabled' } },
-    { id: 'ai-koppeling', category: 'koppelingen', title: 'AI-koppeling', summary: 'Claude of ChatGPT laten meewerken in de Hub.', setting: { key: 'aiConnector' } },
+    { id: 'webshop-analytics', partOf: 'webshop', title: 'Google Analytics', section: 'webshop', setting: { key: 'shopAnalytics', field: 'enabled' }, mainOnly: true },
+    { id: 'webshop-clarity', partOf: 'webshop', title: 'Microsoft Clarity', section: 'webshop', setting: { key: 'shopClarity', field: 'enabled' }, mainOnly: true },
+    { id: 'seizoensherinneringen', partOf: 'portaal', title: 'Seizoensherinneringen', section: 'season', setting: { key: 'seasonReminders', field: 'enabled' } },
+    { id: 'ai-koppeling', category: 'koppelingen', title: 'AI-koppeling', summary: 'Claude of ChatGPT laten meewerken in de Hub.', section: 'ai-connector', setting: { key: 'aiConnector' } },
   ];
 
   const MODULES = [
     {
       id: 'portaal',
       category: 'klantcontact',
+      switchTitle: 'Klantportaal',
       summary: 'Klanten zien hun offertes, afspraken, werkorders en facturen.',
       navGroup: 'top',
       title: 'Mijn portaal',
@@ -204,6 +206,7 @@
     {
       id: 'voorraad',
       category: 'magazijn',
+      switchTitle: 'Artikelen en voorraad',
       summary: 'Artikelen, voorraadstanden, inkoop en leveranciers.',
       navGroup: 'artikelen',
       title: 'Artikelen',
@@ -470,7 +473,7 @@
    * @param {string} id Id uit MODULES of FEATURES.
    * @returns {string} De titel (de id zelf als die onbekend is).
    */
-  const titleOf = (id) => { const entry = entryOf(id); return entry ? entry.title : id; };
+  const titleOf = (id) => { const entry = entryOf(id); return entry ? entry.switchTitle || entry.title : id; };
 
   /**
    * De indeling van Beheer > Modules: per categorie de kaarten (modules en losse schakelaars) met hun onderdelen.
@@ -489,7 +492,7 @@
     return CATEGORIES.map((category) => ({
       ...category,
       cards: candidates.filter((entry) => entry.category === category.key && !entry.partOf && entry.status !== 'gepland')
-        .map((entry) => ({ id: entry.id, title: entry.title, summary: entry.summary || '', needs: entry.needs || '', parts: partsOf(entry.id) })),
+        .map((entry) => ({ id: entry.id, title: entry.switchTitle || entry.title, summary: entry.summary || '', needs: entry.needs || '', parts: partsOf(entry.id) })),
     })).filter((category) => category.cards.length);
   }
 
