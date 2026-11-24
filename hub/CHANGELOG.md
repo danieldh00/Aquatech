@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.36.3
+
+- Schakelaars `visma` (heeft Facturen nodig; adressen `/api/visma/**` dicht, niet meer automatisch doorsturen), `dashboard-cijfers` (`/api/kpis`, instelling `dashboardKpis`), `dashboard-taken` (`/api/tasks`, blok en bel) en `webshop-voorraadmelding` (formulier op de productpagina en de mails).
+- De winkel krijgt `featureOn(id)` mee van de server.
+- Een bladwijzer naar een tabblad van Artikelen waarvan het onderdeel uit staat (zoals Telling) opent dat tabblad niet meer.
+
 ## 1.36.2
 
 - Schakelaars `etiketten`, `voorraadtelling` en `inkoop-inlezen` (onderdelen van de module voorraad) en een eigen schakelaar voor `ontvangst`; de adressen van een uitgezet onderdeel geven 409 `module_off`.

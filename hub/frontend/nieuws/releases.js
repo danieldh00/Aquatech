@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.36.3',
+      date: '2026-11-24',
+      title: 'Visma, KPI\'s, openstaande taken en voorraadmelding apart aan of uit',
+      items: [
+        { text: 'In Beheer > Modules aan/uit staan nu ook de koppeling met Visma, de KPI\'s en de openstaande taken van het dashboard en de voorraadmelding van de webshop. Wat uit staat verdwijnt uit het scherm en doet niets meer op de achtergrond.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.36.2',
       date: '2026-11-24',
       title: 'Onderdelen van Magazijn en inkoop apart aan of uit',
