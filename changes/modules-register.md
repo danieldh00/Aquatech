@@ -11,3 +11,5 @@ Voorbereiding voor het nieuwe scherm Beheer > Modules (geen migratie).
 - Een schakelaar met `setting` bedient een bestaande instelling (offerte-opvolging, betalingsherinneringen, tekening indienen, automatische bestelvoorstellen, de webshop met bestellen, gastbestellen, offerte aanvragen, planner, Google Analytics en Clarity, seizoensherinneringen, AI-koppeling): er blijft één waarheid.
 - `platform/module-switches.js`: `flagsOf` (de vlaggen zoals ze gelden, ook in `GET /api/config`), `lockedOf` (uitbesteden zonder multitenancy, de webshop buiten de hoofdtenant) en `apply`. Routes `GET|PUT /api/admin/modules` (recht `beheer`, alles of niets, audit `modules_gewijzigd`; onbekende id 400, op slot 409 `module_locked`, onderdeel van een uitgezette module 409 `module_off`).
 - Plannenoverzicht is een onderdeel van de Beregeningsplanner, Webshopbestellingen van de Webshop.
+
+- Planner op een telefoon: de menuknop van de zijbalk is in de kopbalk even hoog als de andere knoppen (layoutcheck).
