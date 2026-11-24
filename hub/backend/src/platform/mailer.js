@@ -187,22 +187,23 @@ function createMailer(settings, { createTransport = nodemailer.createTransport, 
   /**
    * Verstuurt een e-mail via de mailserver van de tenant.
    * @param {{ to: string|string[], subject: string, text?: string, html?: string, replyTo?: string, bcc?: string, attachments?: object[] }} message Het bericht; attachments: [{ filename, content (Buffer), contentType }], hoogstens 5.
+   * @param {{ system?: boolean }} [options] system: true voor systeemmeldingen (Bewaking): die tellen niet mee voor het dagmaximum en worden er ook niet door geblokkeerd.
    * @returns {Promise<object>} Het resultaat van nodemailer.
    * @throws {Error} Met code not_configured, invalid_to of invalid_host.
    */
-  async function send({ to, subject, text, html, replyTo, bcc, attachments }) {
+  async function send({ to, subject, text, html, replyTo, bcc, attachments }, { system = false } = {}) {
     if (!modeAllowed(config())) throw Object.assign(new Error('De Exchange-connector is alleen beschikbaar voor de hoofdorganisatie; kies SMTP of Microsoft Graph.'), { code: 'connector_not_allowed' });
     if (!configured()) throw Object.assign(new Error('Er is geen mailserver ingesteld.'), { code: 'not_configured' });
     const list = (Array.isArray(to) ? to : [to]).filter(validEmail);
     if (!list.length) throw Object.assign(new Error('Geen geldig e-mailadres.'), { code: 'invalid_to' });
     const counter = counterFor(String(settings.tenantId || ''), now().toISOString().slice(0, 10));
-    if (counter.count >= dailyLimit) throw Object.assign(new Error(`Het dagmaximum van ${dailyLimit} e-mails voor deze organisatie is bereikt; morgen kan het weer.`), { code: 'daily_limit' });
-    counter.count += 1;
+    if (!system && counter.count >= dailyLimit) throw Object.assign(new Error(`Het dagmaximum van ${dailyLimit} e-mails voor deze organisatie is bereikt; morgen kan het weer.`), { code: 'daily_limit' });
+    if (!system) counter.count += 1;
     try {
       return await sendNow({ list, subject, text, html, replyTo, bcc, attachments });
     } catch (error) {
       // Een mislukte poging telt niet mee voor het dagmaximum.
-      counter.count -= 1;
+      if (!system) counter.count -= 1;
       throw error;
     }
   }

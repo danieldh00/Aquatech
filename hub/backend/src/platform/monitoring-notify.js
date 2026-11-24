@@ -211,7 +211,7 @@ function createNotifier({ mailerFor, fetchImpl = null, resolveHost = publicAddre
       return { ok: false, message: 'De mailserver is niet te gebruiken.' };
     }
     try {
-      await mailer.send({ to: recipients, subject: notice.subject, text: notice.text });
+      await mailer.send({ to: recipients, subject: notice.subject, text: notice.text }, { system: true });
       return { ok: true, message: `Verstuurd naar ${recipients.length} ${recipients.length === 1 ? 'ontvanger' : 'ontvangers'}.` };
     } catch (error) {
       return { ok: false, message: redact(mailFailure(error), 300) };

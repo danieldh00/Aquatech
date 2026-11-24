@@ -124,3 +124,12 @@ test('AI-koppeling: een batch heeft hoogstens 5 berichten en elk bericht telt vo
   }
   assert.ok(refused > 0, 'na 120 berichten per minuut moeten berichten geweigerd worden');
 });
+
+test('systeemmail (Bewaking) valt buiten het dagmaximum', async () => {
+  const transport = fakeTransport();
+  const mailer = createMailer(fakeSettings({ mailServer: sanitizeMail(SMTP), mailPassword: '' }, { tenantId: 'plafond-systeem' }), { ...transport, resolveHost: async (host) => host, dailyLimit: 1, now: () => new Date('2026-11-24T10:00:00Z') });
+  await mailer.send({ to: 'x@example.com', subject: 's', text: 't' });
+  await assert.rejects(mailer.send({ to: 'x@example.com', subject: 's', text: 't' }), { code: 'daily_limit' });
+  await mailer.send({ to: 'x@example.com', subject: 'melding', text: 't' }, { system: true });
+  assert.equal(transport.sent.length, 2);
+});
