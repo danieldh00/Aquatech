@@ -11,6 +11,7 @@ const { mailStyleOf } = require('../platform/mail-layout');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
+const { LIST_LIMIT, pageSize, pageOffset, pageOf, pagedBody } = require('../platform/list-paging');
 const crypto = require('crypto');
 const { transaction } = require('../database/db');
 const { createVault } = require('../beveiliging/vault');
@@ -87,7 +88,7 @@ function appointmentOf(workOrderRow, data) {
  * Maakt de opslag voor werkorders en de afspraaklink.
  * @param {object} db De database.
  * @param {{ vault?: object, staffRoles?: Function, customerScopeOf?: Function }} [options] Kluis voor het token; rollen die een werkorder kunnen uitvoeren (per tenant); (tenantId) => { tenantIds, roleKeys } = waar de klanten van een omgeving wonen en welke rollen klant zijn (voor `autoLink`).
- * @returns {object} list, listAsync, get, day, quoteOf, staff, create, createReceived, update, schedule, share, unshare, markSent, byToken, markViewed, shareLink, publicView, respond, remove, purge, nextNumber, autoLink en countUnlinked.
+ * @returns {object} list, listAsync, listPage, get, day, quoteOf, staff, create, createReceived, update, schedule, share, unshare, markSent, byToken, markViewed, shareLink, publicView, respond, remove, purge, nextNumber, autoLink en countUnlinked.
  */
 function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['beheerder', 'installateur'], customerScopeOf = () => null } = {}) {
   /**
@@ -167,15 +168,18 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
   /**
    * Bouwt de lijstquery van de werkorders (gedeeld door list en listAsync).
    * @param {string} tenantId Id van de omgeving.
-   * @param {{ quoteId?: string, customerId?: string }} filters Alleen van die offerte; alleen van dat klantaccount.
-   * @returns {{ sql: string, args: Array, customerId: string|null }} De query, de parameters en het klantaccount.
+   * @param {{ quoteId?: string, customerId?: string, limit?: number, offset?: number }} filters Alleen van die offerte; alleen van dat klantaccount; limit en offset voor een pagina.
+   * @returns {{ sql: string, countSql: string, args: Array, customerId: string|null }} De query, de telquery met dezelfde parameters en het klantaccount.
    */
-  function listQuery(tenantId, { quoteId = null, customerId = null } = {}) {
+  function listQuery(tenantId, { quoteId = null, customerId = null, limit = LIST_LIMIT, offset = 0 } = {}) {
     const args = [tenantId];
-    let sql = `${LIST_SELECT} WHERE w.tenant_id = ? AND w.deleted_at IS NULL`;
-    if (quoteId) { sql += ' AND w.quote_id = ?'; args.push(String(quoteId)); }
-    if (customerId) { sql += OF_CUSTOMER; args.push(String(customerId), String(customerId)); }
-    return { sql: `${sql} ORDER BY w.updated_at DESC`, args, customerId };
+    let extra = '';
+    if (quoteId) { extra += ' AND w.quote_id = ?'; args.push(String(quoteId)); }
+    if (customerId) { extra += OF_CUSTOMER; args.push(String(customerId), String(customerId)); }
+    return {
+      sql: `${LIST_SELECT} WHERE w.tenant_id = ? AND w.deleted_at IS NULL${extra} ORDER BY w.updated_at DESC LIMIT ${pageSize(limit)} OFFSET ${pageOffset(offset)}`,
+      countSql: `SELECT COUNT(*) AS n FROM work_orders w WHERE w.tenant_id = ? AND w.deleted_at IS NULL${extra}`, args, customerId,
+    };
   }
 
   /**
@@ -211,6 +215,24 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
     if (!db.async) return list(tenantId, filters);
     const query = listQuery(tenantId, filters);
     return workOrdersFromRows(await db.async.all(query.sql, ...query.args), query.customerId);
+  }
+
+  /**
+   * Eén pagina werkorders met het totaal (de telquery draait alleen als de pagina vol is of niet bij het begin begint).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object} [filters] Zie list, met limit en offset.
+   * @returns {Promise<{ items: object[], total: number, truncated: boolean }>} De pagina, het totaal en of er meer zijn.
+   */
+  async function listPage(tenantId, filters = {}) {
+    const page = { limit: pageSize(filters.limit), offset: pageOffset(filters.offset) };
+    const items = await listAsync(tenantId, { ...filters, ...page });
+    let total = items.length;
+    if (items.length >= page.limit || page.offset > 0) {
+      const query = listQuery(tenantId, filters);
+      const counted = db.async ? await db.async.get(query.countSql, ...query.args) : prepare(query.countSql).get(...query.args);
+      total = Number(counted.n);
+    }
+    return { ...pagedBody(items, total, page) };
   }
 
   /**
@@ -673,7 +695,7 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
     });
   }
 
-  return { list, listAsync, get, day, quoteOf, staff, create, createReceived, update, schedule, share, unshare, markSent, byToken, markViewed, shareLink, publicView, respond, remove, purge, nextNumber, autoLink, countUnlinked };
+  return { list, listAsync, listPage, get, day, quoteOf, staff, create, createReceived, update, schedule, share, unshare, markSent, byToken, markViewed, shareLink, publicView, respond, remove, purge, nextNumber, autoLink, countUnlinked };
 }
 
 /**
@@ -832,7 +854,8 @@ function registerWorkOrderRoutes(app, ctx) {
     const marks = outsourcingOf(tenantOf(req));
     // Geboekte uren en materiaalregels per werkorder (één query, zie worklog.js).
     const logged = loggedOf(tenantOf(req));
-    res.json({ items: (await workorders.listAsync(tenantOf(req), { quoteId: req.query.quote || null })).map((workOrder) => ({ ...workOrder, outsourcing: marks[workOrder.id] || null, logged: logged[workOrder.id] || null })) });
+    const page = await workorders.listPage(tenantOf(req), { quoteId: req.query.quote || null, ...pageOf(req.query) });
+    res.json({ ...page, items: page.items.map((workOrder) => ({ ...workOrder, outsourcing: marks[workOrder.id] || null, logged: logged[workOrder.id] || null })) });
   });
 
   app.get('/api/workorders/:id', requireWo, (req, res) => {

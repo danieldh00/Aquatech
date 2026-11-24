@@ -303,7 +303,9 @@
   async function load() {
     const from = $('#f-from').value;
     const to = $('#f-to').value;
-    state.items = (await api(`invoices?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)).items;
+    const result = await api(`invoices?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+    state.items = result.items;
+    if (window.AquatechCommon) window.AquatechCommon.truncationNotice(result, 'facturen');
     renderStats();
     renderList();
     renderOrders();

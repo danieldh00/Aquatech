@@ -106,7 +106,7 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
    * Bouwt de query voor de factuurlijst, nieuwste eerst (hooguit LIST_LIMIT).
    * @param {string} tenantId Id van de tenant.
    * @param {object} [filters] status, from en to (factuurdatum), workOrderId, customerId (alleen facturen van die klant), kinds ('factuur'/'credit') en statuses (meerdere statussen).
-   * @returns {{ sql: string, args: Array }} De query en de parameters.
+   * @returns {{ sql: string, countSql: string, args: Array }} De query, de telquery met dezelfde parameters en de parameters.
    */
   function listQuery(tenantId, { status = '', from = '', to = '', workOrderId = '', customerId = '', kinds = null, statuses = null } = {}) {
     const args = [tenantId];
@@ -118,7 +118,7 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
     if (customerId) { sql += ' AND customer_id = ?'; args.push(String(customerId)); }
     if (Array.isArray(kinds) && kinds.length) { sql += ` AND kind IN (${marks(kinds.length)})`; args.push(...kinds); }
     if (Array.isArray(statuses) && statuses.length) { sql += ` AND status IN (${marks(statuses.length)})`; args.push(...statuses); }
-    return { sql: `${sql} ORDER BY invoice_date DESC, created_at DESC LIMIT ${LIST_LIMIT}`, args };
+    return { sql: `${sql} ORDER BY invoice_date DESC, created_at DESC LIMIT ${LIST_LIMIT}`, countSql: `SELECT COUNT(*) AS n ${sql.slice(sql.indexOf('FROM invoices'))}`, args };
   }
 
   /**
@@ -142,6 +142,18 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
     if (!db.async) return list(tenantId, filters);
     const query = listQuery(tenantId, filters);
     return (await db.async.all(query.sql, ...query.args)).map(toInvoice);
+  }
+
+  /**
+   * Het totaal aantal facturen met deze filters (voor de melding dat de lijst is ingekort).
+   * @param {string} tenantId Id van de tenant.
+   * @param {object} [filters] Zie listQuery.
+   * @returns {Promise<number>} Het aantal.
+   */
+  async function countList(tenantId, filters = {}) {
+    const query = listQuery(tenantId, filters);
+    const counted = db.async ? await db.async.get(query.countSql, ...query.args) : prepare(query.countSql).get(...query.args);
+    return Number(counted.n);
   }
 
   /**
@@ -546,7 +558,7 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
     return row ? { id: row.id, number: row.number, status: row.status, customerId: row.customer_id || null, data: JSON.parse(row.data) } : null;
   }
 
-  return { list, listAsync, get, create, update, finalize, onFinalized, setPaid, credit, remove, exportList, markExported, nextNumber, workOrder, quote, byShopOrders, markSent };
+  return { list, listAsync, countList, get, create, update, finalize, onFinalized, setPaid, credit, remove, exportList, markExported, nextNumber, workOrder, quote, byShopOrders, markSent };
 }
 
 /**
@@ -605,7 +617,10 @@ function registerInvoiceRoutes(app, ctx) {
     // Laatste verstuurde betalingsherinnering erbij (alleen voor facturen over de vervaldatum, één query).
     const overdueIds = items.filter((invoice) => invoice.overdue).map((invoice) => invoice.id);
     const latest = ctx.paymentReminders && overdueIds.length ? ctx.paymentReminders.latestByInvoice(tenantOf(req), overdueIds) : new Map();
-    res.json({ items: items.map((invoice) => (latest.has(invoice.id) ? { ...invoice, reminder: latest.get(invoice.id) } : invoice)) });
+    // Staat er meer dan de lijst toont (hooguit LIST_LIMIT), dan weet de pagina dat het totaal groter is.
+    const truncated = items.length >= LIST_LIMIT;
+    const total = truncated ? await invoices.countList(tenantOf(req), { status: String(req.query.status || ''), from: String(req.query.from || ''), to: String(req.query.to || ''), workOrderId: String(req.query.workOrderId || '') }) : items.length;
+    res.json({ items: items.map((invoice) => (latest.has(invoice.id) ? { ...invoice, reminder: latest.get(invoice.id) } : invoice)), total, truncated: total > items.length });
   });
 
   // Instellingen en artikelen vóór /:id.

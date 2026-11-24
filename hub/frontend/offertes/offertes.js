@@ -163,7 +163,9 @@
    */
   async function loadList() {
     try {
-      state.items = (await api(`quotes${showAll() ? '?all=1' : ''}`)).items || [];
+      const result = await api(`quotes${showAll() ? '?all=1' : ''}`);
+      state.items = result.items || [];
+      if (window.AquatechCommon) window.AquatechCommon.truncationNotice(result, 'offertes');
     } catch (error) {
       $('#l-table').innerHTML = `<tr><td class="empty">Kan de offertes niet laden (${esc(error.message)}).</td></tr>`;
       return;
