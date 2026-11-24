@@ -33,6 +33,11 @@ if [[ "$new_tag" == "$current_tag" ]]; then
   log "Staging draait al $new_tag."
   exit 0
 fi
+# Een eerder afgewezen build (niet healthy) niet elke 10 minuten opnieuw proberen: pas bij een andere build weer.
+if [[ -f "$APP_DIR/.rejected" && "$(head -c 40 "$APP_DIR/.rejected")" == "$new_tag" ]]; then
+  log "Build $new_tag is eerder afgewezen (niet healthy); wacht op een nieuwe build."
+  exit 0
+fi
 
 log "Uitrollen: $current_tag -> $new_tag ($version)"
 docker pull -q "$IMAGE:$new_tag" >/dev/null
@@ -48,12 +53,14 @@ done
 if [[ -z "$healthy" ]]; then
   log "Nieuwe staging-versie werd niet healthy; terug naar $current_tag."
   docker logs --tail 40 aquatech-stg || true
+  printf '%s\n' "$new_tag" > "$APP_DIR/.rejected"
   if [[ -n "$current_tag" ]]; then
     env_set AQUATECH_TAG "$current_tag"
     docker compose up -d aquatech
   fi
   exit 1
 fi
+rm -f "$APP_DIR/.rejected"
 log "Staging draait nu $new_tag."
 
 # Oude staging-tags opruimen (de draaiende en twee vorige blijven).
