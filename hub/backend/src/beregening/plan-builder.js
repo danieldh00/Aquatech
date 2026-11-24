@@ -21,7 +21,7 @@ const ELEMENT_KINDS = ['source', 'controller', 'valvebox', 'outlet'];
 /** Beregeningsmethodes per soort vlak die de bouwer toestaat. */
 const DRIP_METHODS = { bed: ['dripline', 'drippers', 'none'], hedge: ['dripline', 'drippers', 'none'], planter: ['drippers', 'dripline', 'none'] };
 /** Grenzen: genoeg voor elke woontuin, maar geen rekentijd die de server vastzet. */
-const LIMITS = { areas: 40, points: 60, coordinate: 500, minAreaM2: 0.5, lawnM2: 2500, totalLawnM2: 5000, lawns: 8, elements: 12 };
+const LIMITS = { areas: 40, points: 60, coordinate: 500, minAreaM2: 0.5, lawnM2: 2500, totalLawnM2: 5000, lawns: 8, elements: 12, leadElements: 200 };
 /** Standaardwaarden die als aanname worden gemeld als de gebruiker ze niet gaf. */
 const DEFAULT_PRESSURE = 3.5;
 const DEFAULT_FLOW = 2.0;
@@ -258,4 +258,22 @@ function quoteLinesFromPlan(planData, tenantData = {}, profile = {}) {
   return plain(QuoteCore.fromPlan(state, lab, profile));
 }
 
-module.exports = { buildPlan, summarizePlan, quoteLinesFromPlan, sanitizeInput, AREA_TYPES, ELEMENT_KINDS, LIMITS };
+/**
+ * Controleert of een ingediend plan binnen de grenzen van de rekenkern blijft (aantal vlakken, hoekpunten, elementen en coördinaten), vóór het dure rekenwerk.
+ * @param {object} planData Plangegevens van de browser ({ areas, elements, ... }).
+ * @returns {boolean} true als het plan klein genoeg is om te berekenen.
+ */
+function planWithinLimits(planData) {
+  if (!planData || typeof planData !== 'object') return false;
+  const areas = Array.isArray(planData.areas) ? planData.areas : [];
+  if (areas.length > LIMITS.areas) return false;
+  for (const list of [planData.elements, planData.sprinklers, planData.zones]) {
+    if (list != null && (!Array.isArray(list) || list.length > LIMITS.leadElements)) return false;
+  }
+  const placed = [...(planData.elements || []), ...(planData.sprinklers || [])];
+  if (!placed.every((item) => item && validCoordinate(item.x) && validCoordinate(item.y))) return false;
+  return areas.every((area) => area && Array.isArray(area.pts) && area.pts.length <= LIMITS.points
+    && area.pts.every((point) => point && validCoordinate(point.x) && validCoordinate(point.y)));
+}
+
+module.exports = { planWithinLimits, buildPlan, summarizePlan, quoteLinesFromPlan, sanitizeInput, AREA_TYPES, ELEMENT_KINDS, LIMITS };

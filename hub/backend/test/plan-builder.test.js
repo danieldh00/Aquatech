@@ -113,3 +113,31 @@ test('quoteLinesFromPlan: geeft offerteregels en slaat kapotte vlakken over', ()
   assert.strictEqual(broken.lines.length, clean.lines.length);
   assert.ok(Array.isArray(broken.warnings));
 });
+
+test('planWithinLimits: weigert te veel vlakken, hoekpunten of vreemde coördinaten vóór het rekenen', () => {
+  const { planWithinLimits } = require('../src/beregening/plan-builder');
+  /**
+   * Maakt een gazon met het gevraagde aantal hoekpunten.
+   * @param {number} count Aantal hoekpunten.
+   * @returns {object} Het vlak.
+   */
+  const area = (count) => ({ type: 'lawn', pts: Array.from({ length: count }, (_, index) => ({ x: index, y: index % 7 })) });
+  assert.strictEqual(planWithinLimits({ areas: [area(4)], elements: [] }), true);
+  assert.strictEqual(planWithinLimits({ areas: Array.from({ length: 41 }, () => area(4)) }), false);
+  assert.strictEqual(planWithinLimits({ areas: [area(61)] }), false);
+  assert.strictEqual(planWithinLimits({ areas: [{ type: 'lawn', pts: [{ x: 0, y: 0 }, { x: 1e9, y: 0 }, { x: 0, y: 1 }] }] }), false);
+  assert.strictEqual(planWithinLimits({}), true);
+  assert.strictEqual(planWithinLimits(null), false);
+  assert.strictEqual(planWithinLimits({ areas: [], sprinklers: Array.from({ length: 201 }, () => ({ x: 1, y: 1 })) }), false);
+  assert.strictEqual(planWithinLimits({ areas: [], zones: Array.from({ length: 201 }, () => ({})) }), false);
+  assert.strictEqual(planWithinLimits({ areas: [], elements: [{ x: 1e9, y: 0 }] }), false);
+  assert.strictEqual(planWithinLimits({ areas: [], sprinklers: [{ x: 1, y: 2 }], elements: [{ x: 3, y: 4 }], zones: [{}] }), true);
+});
+
+test('runPlanTask: de rij voor leads is klein en vult nooit de rij van de AI-koppeling', async () => {
+  const slow = Array.from({ length: 12 }, () => runPlanTask('bestaatNiet', [], 'lead'));
+  const outcomes = await Promise.all(slow);
+  assert.ok(outcomes.some((outcome) => outcome.problems && /veel plannen/.test(outcome.problems[0])));
+  const main = await runPlanTask('bestaatNiet', []);
+  assert.ok(main.problems && !/veel plannen/.test(main.problems[0]));
+});
