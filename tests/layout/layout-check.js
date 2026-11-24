@@ -1,6 +1,6 @@
 /**
  * Layoutcheck: start de app in dit proces (PostgreSQL via TEST_DATABASE_URL), vult een testomgeving met testdata en
- * doorloopt met Playwright alle app- en shoppagina's per rol op 1440 en 375 px. Elke pagina gaat door de detectoren in
+ * doorloopt met Playwright alle app- en shoppagina's per rol (ook hoofdbeheerder) op 1440 en 375 px. Elke pagina gaat door de detectoren in
  * detectors.js. Gebruik: `node layout-check.js [--rol=klant] [--update-baseline]`; bevindingen die niet in
  * baseline.json staan laten het proces falen (exitcode 1). Rapport: layout-rapport.json (en een tabel in de uitvoer).
  */
@@ -40,6 +40,7 @@ function pagesPerRole(sections) {
     beheerder: [...modules, ...ARTICLE_TABS.map((tab) => `artikelen/#${tab}`), ...sections.map((id) => `beheer/#${id}`)],
     installateur: ['', 'nieuws/', 'profiel/', 'plannen/', 'offertes/', 'klanten/', 'werkorders/', 'planning/', 'meldingen/', 'artikelen/', 'beregening/'],
     planner: ['', 'planning/', 'werkorders/', 'plannen/'],
+    hoofdbeheerder: ['', 'hoofdbeheer/', 'facturen/', 'webshop-bestellingen/', 'klanten/', 'offertes/', ...sections.map((id) => `beheer/#${id}`)],
     picker: ['', 'orderpick/', 'orderpick/#ontvangst', 'orderpick/#tellen'],
     klant: ['', 'portaal/', 'nieuws/', 'plannen/', 'profiel/', 'offertes/', 'beregening/'],
   };
@@ -85,6 +86,8 @@ async function buildWorld() {
     const at = pair.indexOf('=');
     shopper.jar.set(pair.slice(0, at), pair.slice(at + 1));
   }
+  // De hoofdbeheerder ('baas') in de hoofdtenant ziet alle Beheer-secties en Hoofdbeheer.
+  jars.hoofdbeheerder = admin.jar;
   return { base, server, jars, shopper: shopper.jar, adminJar: admin.jar };
 }
 
@@ -124,6 +127,9 @@ async function checkPage(browser, { role, url, viewport, cookies, base }) {
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
+  const consoleErrors = [];
+  page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text().slice(0, 160)); });
+  page.on('response', (reply) => { if (reply.status() >= 400 && !/favicon/.test(reply.url())) consoleErrors.push(`HTTP ${reply.status()} ${reply.url().replace(/^https?:\/\/[^/]+/, '')}`.slice(0, 160)); });
   try {
     const response = await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
     await page.waitForTimeout(400);
@@ -135,6 +141,7 @@ async function checkPage(browser, { role, url, viewport, cookies, base }) {
     const findings = await page.evaluate(detectLayoutProblems, { tolerance: 2 });
     const label = url.replace(base, '');
     const redirected = shown !== label && !label.includes('#') ? ` (doorgestuurd naar ${shown})` : '';
+    for (const message of [...new Set(consoleErrors)]) findings.push({ kind: 'console-fout', selector: '', detail: message });
     const result = findings.map((finding) => ({ role, page: label, viewport: viewport.name, ...finding }));
     if (response && response.status() >= 400) result.push({ role, page: label, viewport: viewport.name, kind: 'http-fout', selector: '', detail: `status ${response.status()}` });
     for (const message of errors) result.push({ role, page: label, viewport: viewport.name, kind: 'scriptfout', selector: '', detail: message.slice(0, 160) });
@@ -161,7 +168,7 @@ const keyOf = (finding) => [finding.role, finding.page, finding.viewport, findin
 async function main() {
   const onlyRole = (process.argv.find((arg) => arg.startsWith('--rol=')) || '').slice(6);
   const world = await buildWorld();
-  const browser = await chromium.launch();
+  const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH, args: ['--no-sandbox'] } : {});
   const roles = pagesPerRole(adminSections());
   const jobs = [];
   for (const [role, pages] of Object.entries(roles)) {

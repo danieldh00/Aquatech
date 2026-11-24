@@ -181,7 +181,65 @@ function detectLayoutProblems({ tolerance }) {
     }
   }
 
-  return findings;
+  /**
+   * Strengere controles op stijl en inhoud: lettertype, te kleine tekst, foutmeldingen in de tekst, te kleine tikdoelen
+   * (alleen op smalle schermen), kapotte afbeeldingen en knoppen in één rij met verschillende hoogte. Draait in de browser.
+   * @param {{ narrow: boolean }} options narrow: waar bij een smal scherm (dan gelden tikdoelen).
+   * @returns {Array<{ kind: string, selector: string, detail: string }>} De bevindingen.
+   */
+  function detectStyleProblems({ narrow }) {
+    const out = [];
+    const seen = new Set();
+    const visible = (element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none' && !element.closest('[hidden]');
+    };
+    const pathOf = (element) => {
+      let part = element.tagName.toLowerCase();
+      if (element.id) part += `#${element.id}`;
+      else if (element.classList.length) part += `.${[...element.classList].slice(0, 2).join('.')}`;
+      return part;
+    };
+    const textOf = (element) => (element.textContent || element.value || element.getAttribute('aria-label') || '').trim().replace(/\s+/g, ' ').slice(0, 30);
+    const add = (kind, element, detail) => {
+      const key = kind + pathOf(element);
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ kind, selector: pathOf(element), detail: `${detail} ("${textOf(element)}")` });
+    };
+    for (const element of document.querySelectorAll('body *')) {
+      if (!visible(element)) continue;
+      const style = getComputedStyle(element);
+      const ownText = [...element.childNodes].some((node) => node.nodeType === 3 && node.textContent.trim());
+      if (ownText) {
+        if (!/montserrat|monospace|mono|courier|consolas/i.test(style.fontFamily) && !element.closest('svg, canvas, pre, code')) add('stijl-lettertype', element, style.fontFamily.slice(0, 40));
+        if (parseFloat(style.fontSize) < 11) add('stijl-lettertje-klein', element, style.fontSize);
+        if (element.children.length === 0 && /not defined|undefined|\bNaN\b|\[object|null\b|Cannot read|is not a function|Unexpected token/.test(element.textContent)) add('inhoud-foutmelding', element, element.textContent.trim().slice(0, 80));
+      }
+      if (narrow && element.matches('button, a.btn, .btn, input[type=submit]')) {
+        const rect = element.getBoundingClientRect();
+        if (rect.height < 36) add('tikdoel-klein', element, `${Math.round(rect.width)}x${Math.round(rect.height)}`);
+      }
+      if (element.matches('img') && element.loading !== 'lazy' && (!element.complete || element.naturalWidth === 0)) add('afbeelding-kapot', element, element.src.slice(-60));
+    }
+    for (const container of document.querySelectorAll('.actions, .form-actions, .row.actions, .toolbar, .btn-row, .buttons, header, .head')) {
+      const controls = [...container.querySelectorAll(':scope > button, :scope > a.btn, :scope > .btn, :scope > select, :scope > input')].filter(visible);
+      if (controls.length < 2) continue;
+      const lines = new Map();
+      for (const control of controls) {
+        const rect = control.getBoundingClientRect();
+        const line = Math.round(rect.top / 10);
+        lines.set(line, [...(lines.get(line) || []), Math.round(rect.height)]);
+      }
+      for (const heights of lines.values()) {
+        if (heights.length > 1 && Math.max(...heights) - Math.min(...heights) > 3) { add('stijl-knophoogte-verschil', container, heights.join('/')); break; }
+      }
+    }
+    return out;
+  }
+
+  return findings.concat(detectStyleProblems({ narrow: viewportWidth < 600 }));
 }
 
 module.exports = { detectLayoutProblems };
