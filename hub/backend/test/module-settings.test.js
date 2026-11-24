@@ -76,7 +76,7 @@ test('register klopt met de code: secties bestaan in Beheer, instellingen in set
     for (const section of module.configuration.sections || []) assert.ok(sectionIds.has(section), `${module.id}: sectie ${section} staat niet in beheer/indeling.js`);
     for (const key of module.configuration.settings || []) assert.ok(FIELDS[key], `${module.id}: instelling ${key} bestaat niet`);
     for (const route of module.configuration.routes || []) assert.match(route, /^\/api\/[a-z-]+(\/[a-z-]+)*$/, `${module.id}: ${route}`);
-    assert.ok(!module.partOf, `${module.id}: een onderdeel heeft geen eigen configuratie (hoort bij de hoofdmodule)`);
+    assert.ok(!module.partOf || module.ownSwitch, `${module.id}: een onderdeel zonder eigen schakelaar heeft geen eigen configuratie (hoort bij de hoofdmodule)`);
   }
 });
 
@@ -337,5 +337,32 @@ test('server: een uitgezet onderdeel weigert ook lezen op zijn adressen, aan wer
   // De werkorders zelf blijven gewoon werken.
   assert.strictEqual((await adminA.get('/app/api/workorders')).status, 200);
   assert.strictEqual((await adminA.put('/app/api/admin/modules', { flags: Object.fromEntries(Object.keys(off).map((key) => [key, true])) })).status, 200);
+  for (const [method, url, body] of routes) assert.notStrictEqual((await adminA[method](url, body)).status, 409, `weer aan: ${method} ${url}`);
+});
+
+test('server: onderdelen van Magazijn en inkoop zijn uit helemaal dicht, de rest van de module blijft werken', async () => {
+  const { adminA } = await setup();
+  const id = '3f0e6f5c-0d5e-4d0b-9a57-0c1f1b9d2a11';
+  const routes = [
+    ['get', '/app/api/stock/label-templates'], ['post', '/app/api/stock/labels', { template: 'x', items: [] }],
+    ['get', '/app/api/stock-counts'], ['get', `/app/api/stock-counts/${id}`], ['get', '/app/api/orderpick/counts/open'],
+    ['post', '/app/api/purchase-orders/read', {}],
+    ['get', '/app/api/orderpick/receipts'], ['post', `/app/api/orderpick/receipts/${id}/receive`, { lines: [] }],
+  ];
+  for (const [method, url, body] of routes) assert.notStrictEqual((await adminA[method](url, body)).status, 409, `aan: ${method} ${url}`);
+  const off = { etiketten: false, voorraadtelling: false, 'inkoop-inlezen': false, ontvangst: false };
+  assert.strictEqual((await adminA.put('/app/api/admin/modules', { flags: off })).status, 200);
+  for (const [method, url, body] of routes) {
+    const response = await adminA[method](url, body);
+    assert.strictEqual(response.status, 409, `uit: ${method} ${url}`);
+    assert.strictEqual(response.body.error, 'module_off');
+  }
+  // Artikelen, inkooporders en picken blijven werken; de instelling van de etiketsjablonen is op slot.
+  assert.strictEqual((await adminA.get('/app/api/stock')).status, 200);
+  assert.strictEqual((await adminA.get('/app/api/purchase-orders')).status, 200);
+  assert.strictEqual((await adminA.get('/app/api/orderpick/orders')).status, 200);
+  assert.strictEqual((await adminA.put('/app/api/admin/settings', { labelTemplates: { templates: [] } })).status, 409);
+  const on = { etiketten: true, voorraadtelling: true, 'inkoop-inlezen': true, ontvangst: true };
+  assert.strictEqual((await adminA.put('/app/api/admin/modules', { flags: on })).status, 200);
   for (const [method, url, body] of routes) assert.notStrictEqual((await adminA[method](url, body)).status, 409, `weer aan: ${method} ${url}`);
 });

@@ -36,6 +36,8 @@
 // (id uit beheer/indeling.js) met de verdere instellingen, voor de link Instellen. Een nieuw onderdeel staat
 // standaard aan (wat ontbreekt in de vlaggen staat aan) en krijgt hier zijn regel in dezelfde PR als de functie zelf:
 // een schakelaar verschijnt pas als de server hem ook echt volgt.
+// Een vast stuk van een pagina dat bij een onderdeel hoort krijgt `data-feature="<id>"`: het verdwijnt vanzelf als het
+// onderdeel uit staat (`applyFeatures`, aangeroepen door shared/sidebar.js).
 // De API controleert de rechten ook zelf. Beheerders en hoofdbeheerders zien de
 // modules in een vaste zijbalk (shared/sidebar.js) in plaats van als tegels; een
 // nieuwe module verschijnt daar vanzelf.
@@ -85,6 +87,9 @@
     { id: 'plan-herkennen-ai', partOf: 'beregening', title: 'Plan herkennen met AI', section: 'ai', configuration: { blocked: ['/api/plan/analyze'] } },
     { id: 'tekening-indienen', partOf: 'beregening', title: 'Tekening indienen zonder account', section: 'access', setting: { key: 'drawingRequests' } },
     { id: 'afspraaklink', partOf: 'planning', title: 'Afspraaklink voor de klant', configuration: { blocked: ['POST /api/workorders/*/share', '/api/workorders/*/send'] } },
+    { id: 'etiketten', partOf: 'voorraad', title: 'Etiketten en streepjescodes', section: 'labels', configuration: { sections: ['labels'], settings: ['labelTemplates'], blocked: ['/api/stock/labels', '/api/stock/label-templates'] } },
+    { id: 'voorraadtelling', partOf: 'voorraad', title: 'Voorraadtelling', configuration: { blocked: ['/api/stock-counts/**', '/api/orderpick/counts/**'] } },
+    { id: 'inkoop-inlezen', partOf: 'voorraad', title: 'Leveranciersdocument inlezen met AI', section: 'ai', configuration: { blocked: ['/api/purchase-orders/read'] } },
     { id: 'bestelvoorstellen-automatisch', partOf: 'voorraad', title: 'Automatische bestelvoorstellen', setting: { key: 'purchaseProposals', field: 'enabled' } },
     { id: 'webshop', category: 'webshop', title: 'Webshop', summary: 'De eigen winkel op het hoofdadres, met de bestellingen.', section: 'webshop', setting: { key: 'storefront' }, mainOnly: true },
     { id: 'webshop-bestellen', partOf: 'webshop', title: 'Bestellen en afrekenen', setting: { key: 'shopOrdering' }, mainOnly: true },
@@ -166,6 +171,8 @@
       id: 'ontvangst',
       navGroup: 'magazijn',
       partOf: 'voorraad',
+      ownSwitch: true,
+      configuration: { blocked: ['/api/orderpick/receipts/**'] },
       title: 'Goederenontvangst',
       navTitle: 'Ontvangst',
       description: 'Geleverde goederen van een inkooporder ontvangen: de order kiezen of het ordernummer scannen, de artikelen scannen, aantallen bevestigen (deelontvangst kan) en inboeken. Wachtende backorders staan daarna weer klaar om te picken.',
@@ -576,6 +583,18 @@
     return common.getJson('api/config').then((config) => isOn((config && config.modules) || {}, id)).catch(() => true);
   }
 
+  /**
+   * Verbergt op een pagina alles met `data-feature="<id>"` waarvan de module of het onderdeel uit staat (klasse
+   * `feature-off` uit shared/brand.css, zodat het los staat van het eigen `hidden` van een pagina) en toont het weer als
+   * het aan staat. shared/sidebar.js roept dit op elke pagina aan zodra api/config binnen is.
+   * @param {object} [flags] De vlaggen uit api/config (`modules`).
+   * @returns {void}
+   */
+  function applyFeatures(flags) {
+    if (typeof document === 'undefined') return;
+    document.querySelectorAll('[data-feature]').forEach((element) => { element.classList.toggle('feature-off', !isOn(flags, element.dataset.feature)); });
+  }
+
   root.AquatechModules = MODULES;
   /**
    * Aantal nieuwe items bij Nieuws (api/me `news`) als bolletje; de pagina Nieuws
@@ -585,7 +604,7 @@
    */
   const newsBadge = (count) => (count > 0 ? `<span class="news-count" data-news-count title="Nieuw sinds je vorige bezoek">${count > 9 ? '9+' : count}</span>` : '');
 
-  root.AquatechModuleTools = { ICONS, NAV_GROUPS, CATEGORIES, FEATURES, ALWAYS_ON, entryOf, titleOf, switchTree, switchIds, icon, visible, usesSidebar, navSections, newsBadge, isOn, hiddenSections, lockedSettings, lockedRoutes, blockedRoutes, matchesRoute, featureOn };
+  root.AquatechModuleTools = { ICONS, NAV_GROUPS, CATEGORIES, FEATURES, ALWAYS_ON, entryOf, titleOf, switchTree, switchIds, icon, visible, usesSidebar, navSections, newsBadge, isOn, hiddenSections, lockedSettings, lockedRoutes, blockedRoutes, matchesRoute, featureOn, applyFeatures };
   // Voor de server: de hulpfuncties hangen als `tools` aan de geëxporteerde lijst (niet-opsombaar, de lijst blijft een gewone array).
   if (typeof module !== 'undefined' && module.exports) module.exports = Object.defineProperty(MODULES, 'tools', { value: root.AquatechModuleTools });
 })(typeof window !== 'undefined' ? window : globalThis);

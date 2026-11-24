@@ -102,3 +102,6 @@
 
 /* Knoppen erven het lettertype van de pagina (anders valt de browser terug op Arial). */
 button { font-family: inherit; }
+
+/* Een stuk van een pagina dat bij een uitgezet onderdeel hoort (data-feature, zie dashboard/modules.js applyFeatures). */
+.feature-off { display: none !important; }

@@ -45,7 +45,7 @@
         <button class="tab" data-tab="suppliers" data-purchasing role="tab">Leveranciers</button>
         <button class="tab" data-tab="orders" data-purchasing role="tab">Inkooporders</button>
         <button class="tab" data-tab="pricefactor" data-purchasing role="tab">Prijsfactor</button>
-        <button class="tab" data-tab="counts" role="tab">Telling</button>
+        <button class="tab" data-tab="counts" data-feature="voorraadtelling" role="tab">Telling</button>
         <button class="tab" data-tab="media" role="tab">Afbeeldingen</button>
         <button class="tab" data-tab="texts" role="tab">Teksten <span id="t-texts" class="count"></span></button>
       </nav>
@@ -68,9 +68,9 @@
         <div id="s-bulk" class="bulk-bar" hidden>
           <b id="s-bulk-count"></b>
           <button id="s-bulk-archive" class="btn small" type="button">Archiveren</button>
-          <label class="inline">Etiketten per artikel <input id="s-bulk-qty" type="number" min="1" max="500" value="1" step="1"></label>
-          <select id="s-bulk-template" aria-label="Etiketsjabloon"></select>
-          <button id="s-bulk-labels" class="btn small primary" type="button">Etiketten printen</button>
+          <label class="inline" data-feature="etiketten">Etiketten per artikel <input id="s-bulk-qty" type="number" min="1" max="500" value="1" step="1"></label>
+          <select id="s-bulk-template" data-feature="etiketten" aria-label="Etiketsjabloon"></select>
+          <button id="s-bulk-labels" class="btn small primary" type="button" data-feature="etiketten">Etiketten printen</button>
           <button id="s-bulk-clear" class="btn small ghost" type="button">Selectie wissen</button>
         </div>
 
@@ -222,7 +222,7 @@
           </label>
           <span class="spacer"></span>
           <button class="btn" id="b-po-excel" type="button" title="Excel met de getoonde orders en een overzicht per leverancier">Excel</button>
-          <button class="btn" id="b-po-read" type="button" title="Leest een PDF of foto van een offerte, orderbevestiging, pakbon of factuur van een leverancier met AI">Inlezen uit document</button>
+          <button class="btn" id="b-po-read" type="button" data-feature="inkoop-inlezen" title="Leest een PDF of foto van een offerte, orderbevestiging, pakbon of factuur van een leverancier met AI">Inlezen uit document</button>
           <input id="po-read-file" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" hidden>
           <button class="btn primary" id="b-po-new" type="button">+ Inkooporder</button>
         </div>
@@ -278,7 +278,7 @@
         <div class="tablewrap"><table class="grid" id="po-table"></table></div>
       </section>
 
-      <section id="tab-counts" class="tabpane" hidden>
+      <section id="tab-counts" class="tabpane" data-feature="voorraadtelling" hidden>
         <div id="ct-list">
           <div class="filters">
             <p class="muted small">Een jaarlijkse of tussentijdse voorraadtelling: de tellijst wordt bevroren, de tellers tellen blind in de orderpick-app en jij sluit af met de verschillen.</p>
@@ -655,7 +655,7 @@
         <p class="muted small" id="d-image-note">Wordt getoond in de webshop. JPEG, PNG of WebP; grote afbeeldingen worden verkleind.</p>
         <div class="err" role="alert"></div>
       </section>
-      <section class="card-form" id="d-labels">
+      <section class="card-form" id="d-labels" data-feature="etiketten">
         <h3>Etiketten</h3>
         <p class="muted small" id="l-hint">Druk de PDF af op een labelprinter (bijvoorbeeld Zebra) via het afdrukvenster: kies daar het etiketformaat en schaal 100%. Sjablonen beheer je in Beheer → Instellingen → Etiketten.</p>
         <form id="labels-form" class="row" novalidate>
