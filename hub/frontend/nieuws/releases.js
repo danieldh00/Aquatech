@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.36.6',
+      date: '2026-11-24',
+      title: 'Veiliger mail, klantlinks en AI-koppeling',
+      items: [
+        { text: 'Nieuw: Beheer > Instellingen > Openbaar adres van de app. Klantlinks in mails (digitale offerte, afspraak) en de AI-koppeling gebruiken dat adres. Vul het eenmalig in; zonder dit adres (en zonder webadres van de webshop) maakt de app geen klantlinks meer.', for: ['beheer'] },
+        { text: 'E-mail: de Exchange-connector is er alleen nog voor de hoofdorganisatie, de testmail is beperkt tot 5 per 10 minuten en er geldt een dagmaximum voor uitgaande mail.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.36.5',
       date: '2026-11-24',
       title: 'Back-up en herstel veiliger',
