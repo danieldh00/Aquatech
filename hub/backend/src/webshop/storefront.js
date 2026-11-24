@@ -1310,8 +1310,9 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
           slipLimiter(req, { setHeader: (name, value) => res.setHeader(name, value), status: () => ({ json: () => { refused = true; } }) }, () => {});
           return refused;
         };
-        // Per bestelling hoogstens een paar uploads per minuut (B-31): elke upload start een zware controle.
-        const slipOrderLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 10, keyFn: (req) => `pakbon-bestelling:${String(req.params.id).slice(0, 64)}` });
+        // Per bestelling hoogstens een paar uploads per minuut (B-31): elke upload start een zware controle. De sleutel bevat het
+        // account, zodat iemand anders die het bestelnummer kent de limiet van de eigenaar niet kan opmaken.
+        const slipOrderLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 10, keyFn: (req) => `pakbon-bestelling:${(accounts.viewer(req) || {}).id || ''}:${String(req.params.id).slice(0, 64)}` });
         /**
          * Past de uploadlimiet per bestelling toe zonder eigen antwoord.
          * @param {object} req Het verzoek.
