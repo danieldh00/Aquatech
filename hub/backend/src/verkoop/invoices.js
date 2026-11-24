@@ -617,13 +617,14 @@ function registerInvoiceRoutes(app, ctx) {
   const validData = (data) => data && typeof data === 'object' && !Array.isArray(data);
 
   app.get('/api/invoices', requireInvoices, async (req, res) => {
-    const items = await invoices.listAsync(tenantOf(req), { status: String(req.query.status || ''), from: String(req.query.from || ''), to: String(req.query.to || ''), workOrderId: String(req.query.workOrderId || '') });
+    const filters = { status: String(req.query.status || ''), from: String(req.query.from || ''), to: String(req.query.to || ''), workOrderId: String(req.query.workOrderId || '') };
+    const items = await invoices.listAsync(tenantOf(req), filters);
     // Laatste verstuurde betalingsherinnering erbij (alleen voor facturen over de vervaldatum, één query).
     const overdueIds = items.filter((invoice) => invoice.overdue).map((invoice) => invoice.id);
     const latest = ctx.paymentReminders && overdueIds.length ? ctx.paymentReminders.latestByInvoice(tenantOf(req), overdueIds) : new Map();
     // Staat er meer dan de lijst toont (hooguit LIST_LIMIT), dan weet de pagina dat het totaal groter is.
     const truncated = items.length >= LIST_LIMIT;
-    const total = truncated ? await invoices.countList(tenantOf(req), { status: String(req.query.status || ''), from: String(req.query.from || ''), to: String(req.query.to || ''), workOrderId: String(req.query.workOrderId || '') }) : items.length;
+    const total = truncated ? await invoices.countList(tenantOf(req), filters) : items.length;
     res.json({ items: items.map((invoice) => (latest.has(invoice.id) ? { ...invoice, reminder: latest.get(invoice.id) } : invoice)), total, truncated: total > items.length });
   });
 
