@@ -53,7 +53,7 @@ function createModuleSwitches({ ModuleTools, settingsFor, mainTenantId, multiten
    * @param {string} tenantId Id van de omgeving.
    * @param {object} wanted Id → true (aan) of false (uit).
    * @param {string|null} userId Wie het wijzigt.
-   * @returns {{ ok: true, on: string[], off: string[] }|{ ok: false, status: number, error: string, field: string, message: string }} Wat er echt veranderde, of de weigering.
+   * @returns {{ ok: true, on: string[], off: string[], settings: string[] }|{ ok: false, status: number, error: string, field: string, message: string }} Wat er echt veranderde, of de weigering.
    */
   function apply(tenantId, wanted, userId) {
     const known = new Set(ModuleTools.switchIds());
@@ -66,7 +66,7 @@ function createModuleSwitches({ ModuleTools, settingsFor, mainTenantId, multiten
     const changes = entries.filter(([id, value]) => (before[id] !== false) !== value);
     const refused = changes.find(([id]) => locked[id]);
     if (refused) return { ok: false, status: 409, error: 'module_locked', field: refused[0], message: `${ModuleTools.titleOf(refused[0])}: ${locked[refused[0]]}` };
-    if (!changes.length) return { ok: true, on: [], off: [] };
+    if (!changes.length) return { ok: true, on: [], off: [], settings: [] };
     const settings = settingsFor(tenantId);
     // Een instelling van een module die (na deze wijziging) uit staat wordt niet gewijzigd, net als in Beheer > Instellingen.
     const lockedKeys = ModuleTools.lockedSettings({ ...before, ...Object.fromEntries(changes) });
@@ -80,7 +80,7 @@ function createModuleSwitches({ ModuleTools, settingsFor, mainTenantId, multiten
       else patch[feature.setting.key] = value;
     }
     settings.update(patch, userId);
-    return { ok: true, on: changes.filter(([, value]) => value).map(([id]) => id), off: changes.filter(([, value]) => !value).map(([id]) => id) };
+    return { ok: true, on: changes.filter(([, value]) => value).map(([id]) => id), off: changes.filter(([, value]) => !value).map(([id]) => id), settings: Object.keys(patch).filter((key) => key !== 'modules') };
   }
 
   return { flagsOf, lockedOf, apply };
@@ -102,7 +102,7 @@ function registerModuleRoutes(app, { moduleSwitches, requireJson, audit }) {
     if (!wanted || typeof wanted !== 'object' || Array.isArray(wanted)) return res.status(400).json({ error: 'invalid_module', message: 'Geef de schakelaars mee als flags.' });
     const result = moduleSwitches.apply(req.tenantId, wanted, req.user?.id);
     if (!result.ok) return res.status(result.status).json({ error: result.error, field: result.field, message: result.message });
-    if (result.on.length || result.off.length) audit(req, 'modules_gewijzigd', { aan: result.on, uit: result.off });
+    if (result.on.length || result.off.length) audit(req, 'modules_gewijzigd', { aan: result.on, uit: result.off, ...(result.settings.length ? { instellingen: result.settings } : {}) });
     res.json({ flags: moduleSwitches.flagsOf(req.tenantId), locked: moduleSwitches.lockedOf(req.tenantId), on: result.on, off: result.off });
   });
 }
