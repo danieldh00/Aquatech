@@ -4,46 +4,51 @@ const { Worker } = require('worker_threads');
 
 /** Hoelang een berekening hoogstens mag duren. */
 const TIMEOUT_MS = 20000;
-/** Hoeveel berekeningen tegelijk draaien; de rest wacht (zo kan één account het geheugen niet vullen). */
-const MAX_CONCURRENT = 2;
-/** Hoeveel berekeningen er hoogstens wachten; daarboven meldt de koppeling dat het druk is. */
-const MAX_WAITING = 20;
-let running = 0;
-/** @type {Function[]} */
-const waiting = [];
+/**
+ * Rijen met elk een eigen plafond: `main` voor de AI-koppeling, `lead` voor tekeningen van bezoekers zonder account.
+ * Een aanval op het openbare formulier vult zo alleen de rij van de leads, nooit die van betaalde AI-plannen.
+ * `concurrent` = hoeveel berekeningen tegelijk draaien (zo vult één account het geheugen niet), `waiting` = hoeveel er hoogstens wachten.
+ */
+const LANES = {
+  main: { concurrent: 2, waiting: 20, running: 0, queue: [] },
+  lead: { concurrent: 1, waiting: 5, running: 0, queue: [] },
+};
 
 /**
  * Voert een functie van plan-builder.js uit in een werkthread.
  * @param {'buildPlan'|'summarizePlan'|'quoteLinesFromPlan'} method De functie.
  * @param {Array} args De argumenten (gewone, kopieerbare waarden).
+ * @param {'main'|'lead'} [laneName] De rij: `lead` voor openbare tekeningen, anders `main`.
  * @returns {Promise<object>} De uitkomst van de functie; bij te lang rekenen of een fout { problems }.
  */
-function runPlanTask(method, args) {
+function runPlanTask(method, args, laneName = 'main') {
+  const lane = LANES[laneName] || LANES.main;
   return new Promise((resolve) => {
-    if (waiting.length >= MAX_WAITING) return resolve({ problems: ['Er worden nu veel plannen berekend. Probeer het over een minuut opnieuw.'] });
-    waiting.push(async () => {
+    if (lane.queue.length >= lane.waiting) return resolve({ problems: ['Er worden nu veel plannen berekend. Probeer het over een minuut opnieuw.'] });
+    lane.queue.push(async () => {
       let outcome;
       try {
         outcome = await runNow(method, args);
       } catch {
         outcome = { problems: ['Het plan kon niet verwerkt worden: de gegevens in het plan kloppen niet.'] };
       }
-      running--;
-      next();
+      lane.running--;
+      next(lane);
       resolve(outcome);
     });
-    next();
+    next(lane);
   });
 }
 
 /**
- * Start wachtende berekeningen zolang er plek is.
+ * Start wachtende berekeningen van een rij zolang er plek is.
+ * @param {object} lane De rij uit LANES.
  * @returns {void}
  */
-function next() {
-  while (running < MAX_CONCURRENT && waiting.length) {
-    running++;
-    waiting.shift()();
+function next(lane) {
+  while (lane.running < lane.concurrent && lane.queue.length) {
+    lane.running++;
+    lane.queue.shift()();
   }
 }
 

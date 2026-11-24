@@ -258,4 +258,17 @@ function quoteLinesFromPlan(planData, tenantData = {}, profile = {}) {
   return plain(QuoteCore.fromPlan(state, lab, profile));
 }
 
-module.exports = { buildPlan, summarizePlan, quoteLinesFromPlan, sanitizeInput, AREA_TYPES, ELEMENT_KINDS, LIMITS };
+/**
+ * Controleert of een ingediend plan binnen de grenzen van de rekenkern blijft (aantal vlakken, hoekpunten, elementen en coördinaten), vóór het dure rekenwerk.
+ * @param {object} planData Plangegevens van de browser ({ areas, elements, ... }).
+ * @returns {boolean} true als het plan klein genoeg is om te berekenen.
+ */
+function planWithinLimits(planData) {
+  const areas = Array.isArray(planData && planData.areas) ? planData.areas : [];
+  if (areas.length > LIMITS.areas) return false;
+  if (Array.isArray(planData.elements) && planData.elements.length > 200) return false;
+  return areas.every((area) => area && Array.isArray(area.pts) && area.pts.length <= LIMITS.points
+    && area.pts.every((point) => point && validCoordinate(point.x) && validCoordinate(point.y)));
+}
+
+module.exports = { planWithinLimits, buildPlan, summarizePlan, quoteLinesFromPlan, sanitizeInput, AREA_TYPES, ELEMENT_KINDS, LIMITS };

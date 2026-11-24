@@ -111,6 +111,7 @@ const { createPurchaseOrderMailer } = require('./artikelen/purchase-order-mail')
 const { createNewsStore, registerNewsRoutes, unreadCount } = require('./platform/news');
 const { createSprinklerStore, registerSprinklerRoutes } = require('./beregening/sprinklers');
 const { runPlanTask } = require('./beregening/plan-runner');
+const { planWithinLimits } = require('./beregening/plan-builder');
 const { registerDrawingRoutes, RETENTION_DAYS: DRAWING_RETENTION_DAYS } = require('./beregening/drawings');
 /** Gasten zonder activiteit worden na zoveel dagen opgeruimd (audit T-11). */
 const GUEST_RETENTION_DAYS = 30;
@@ -2256,7 +2257,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     createLeadQuote: async (tenantId, { plan, planData, customer }) => {
       if (!ModuleTools.isOn(moduleFlagsOf(tenantId), 'offertes')) return null;
       const profile = settingsFor(tenantId).get('quoteProfile');
-      const converted = await runPlanTask('quoteLinesFromPlan', [{ ...planData, background: undefined }, planTenantData(tenantId), profile]);
+      if (!planWithinLimits(planData)) return null;
+      const converted = await runPlanTask('quoteLinesFromPlan', [{ ...planData, background: undefined }, planTenantData(tenantId), profile], 'lead');
       if (converted.problems || !(converted.lines || []).length) return null;
       const date = new Date().toISOString().slice(0, 10);
       const note = [`Lead via de planner zonder account (plan ${plan.reference}). Controleer regels en aantallen, vul het adres aan en verstuur de offerte zelf.`, ...(converted.warnings || [])].join('\n');
