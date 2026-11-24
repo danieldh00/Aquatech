@@ -1,0 +1,110 @@
+# AquaTech Hub staging op de aparte VM stg01. Staat op de server in /opt/apps/aquatech-staging/compose.yml;
+# .env, data/ en secrets/ staan alleen daar. Het image komt uit GHCR (gebouwd door .github/workflows/staging.yml vanaf develop).
+#
+# Egress-beleid: app, database en Mailpit hangen alleen aan het interne netwerk (`internal: true`, geen uitgang naar
+# internet of LAN), dus staging kan geen echte mail sturen en niets koppelen (Mollie, Visma, DPD, AI...). Alleen de
+# tunnel (cloudflared) hangt ook aan `edge` om naar Cloudflare te bellen. Er zijn geen gepubliceerde poorten: staging
+# is alleen bereikbaar via staging.<domein> achter Cloudflare Access.
+name: aquatech-staging
+
+services:
+  db:
+    image: postgres:17
+    container_name: aquatech-staging-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=aquatech
+      - POSTGRES_DB=aquatech
+      - POSTGRES_PASSWORD=${STAGING_DB_PASSWORD:?STAGING_DB_PASSWORD ontbreekt in .env}
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aquatech"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  aquatech:
+    image: ghcr.io/danieldh00/aquatech-staging:${STAGING_TAG:-latest}
+    container_name: aquatech-staging
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - PORT=3300
+      - DATA_DIR=/data
+      - TZ=${TZ:-Europe/Amsterdam}
+      - AQUATECH_MASTER_KEY_FILE=/run/secrets/master-key
+      - DATABASE_URL=postgres://aquatech:${STAGING_DB_PASSWORD}@db:5432/aquatech?sslmode=disable
+      - AQUATECH_STAGING=1
+      # Alleen de interne tunnel-container (cloudflared) bereikt de app; proxykoppen komen van het interne netwerk.
+      - TRUSTED_PROXIES=${TRUSTED_PROXIES:-}
+    volumes:
+      - ./data:/data
+    secrets:
+      - master-key
+    networks: [internal]
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3300/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  # Vangt alle mail van staging op (SMTP op mailpit:1025 invullen in Beheer > Instellingen > E-mail); de web-UI
+  # (poort 8025) is alleen via de tunnel bereikbaar, op een eigen hostnaam achter Cloudflare Access.
+  mailpit:
+    image: axllent/mailpit:v1.21.8
+    container_name: aquatech-staging-mailpit
+    restart: unless-stopped
+    environment:
+      - MP_MAX_MESSAGES=2000
+      - MP_DATABASE=/data/mailpit.db
+    volumes:
+      - ./mailpit:/data
+    networks: [internal]
+    security_opt:
+      - no-new-privileges:true
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c
+    container_name: aquatech-staging-cloudflared
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${STAGING_TUNNEL_TOKEN}
+    depends_on:
+      aquatech:
+        condition: service_healthy
+    networks: [internal, edge]
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+networks:
+  # Geen uitgang: containers hier kunnen niets buiten dit netwerk bereiken.
+  internal:
+    internal: true
+  edge: {}
+
+secrets:
+  master-key:
+    file: ./secrets/master-key
