@@ -1,0 +1,129 @@
+# Aquatech-staging op stg01 (Proxmox-VM, los van productie; zie docs/STAGING.md). Staat op de server in
+# /opt/apps/aquatech-stg/compose.yml; .env, pgdata/ en secrets/ staan alleen daar.
+#
+# Het image komt uit het EIGEN pakket ghcr.io/danieldh00/aquatech-staging (gebouwd door .github/workflows/staging.yml
+# vanaf develop). Welke versie draait staat in .env (AQUATECH_TAG); update-staging.sh past die aan.
+# Eigen database (PostgreSQL 17) met testdata, eigen hoofdsleutel, mail naar Mailpit (er gaat niets echt de deur uit).
+name: aquatech-stg
+
+services:
+  aquatech:
+    image: ghcr.io/danieldh00/aquatech-staging:${AQUATECH_TAG:?AQUATECH_TAG ontbreekt in .env}
+    container_name: aquatech-stg
+    restart: unless-stopped
+    # Alleen lokaal op de VM (voor de tunnel en ssh-beheer); niets op het LAN.
+    ports:
+      - "127.0.0.1:3300:3300"
+    environment:
+      - PORT=3300
+      - DATA_DIR=/data
+      - TZ=${TZ:-Europe/Amsterdam}
+      - AQUATECH_MASTER_KEY_FILE=/run/secrets/master-key
+      - DATABASE_URL_FILE=/run/secrets/database-url
+      # Terugzetten naar het vorige image na een gemigreerde database (migraties zijn alleen toevoegingen); zie update-staging.sh.
+      - AQUATECH_ALLOW_NEWER_SCHEMA=1
+    volumes:
+      - ./data:/data
+    secrets:
+      - master-key
+      - database-url
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3300/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  postgres:
+    # Images op tag, niet op digest (anders dan cloudflared): staging bevat alleen testdata. Pinnen op digest volgt apart.
+    image: postgres:17
+    container_name: aquatech-stg-postgres
+    restart: unless-stopped
+    shm_size: 128mb
+    environment:
+      - POSTGRES_DB=aquatech
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres-password
+      - POSTGRES_INITDB_ARGS=--encoding=UTF8 --auth-host=scram-sha-256 --data-checksums
+      - TZ=${TZ:-Europe/Amsterdam}
+    # Afgestemd op stg01 (3 GB RAM).
+    command:
+      - postgres
+      - -c
+      - max_connections=40
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - effective_cache_size=512MB
+      - -c
+      - work_mem=4MB
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+    secrets:
+      - postgres-password
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d aquatech"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Vangt alle uitgaande mail van staging op. In de app: Beheer > Instellingen > E-mail, SMTP-server `mailpit`, poort 1025,
+  # zonder gebruikersnaam en wachtwoord. Het scherm staat alleen lokaal op de VM (127.0.0.1:8025).
+  mailpit:
+    image: axllent/mailpit:v1.27
+    container_name: aquatech-stg-mailpit
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8025:8025"
+    environment:
+      - MP_MAX_MESSAGES=500
+      - TZ=${TZ:-Europe/Amsterdam}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c
+    container_name: aquatech-stg-cloudflared
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    command: tunnel --no-autoupdate run --token-file /run/secrets/tunnel-token
+    secrets:
+      - tunnel-token
+    depends_on:
+      aquatech:
+        condition: service_healthy
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+secrets:
+  master-key:
+    file: ./secrets/master-key
+  database-url:
+    file: ./secrets/database-url
+  postgres-password:
+    file: ./secrets/postgres-password
+  tunnel-token:
+    file: ./secrets/tunnel-token
