@@ -89,6 +89,8 @@
     me: null, admin: false, all: false, klant: false, profile: null, documentLayout: null, canEdit: false, mail: false,
     items: [], sort: { key: 'updatedAt', dir: -1 },
     quote: null, saveTimer: null, saving: null, dirty: false, warnings: [],
+    // Marge (offertes-margin.js): inkoopprijzen per artikelcode die al zijn opgehaald, lopende aanvragen en of het onderdeel uit staat.
+    costs: {}, costsPending: new Set(), marginOff: false,
   };
 
   /**
@@ -649,7 +651,7 @@
       <td class="c-price"><input data-l="price" class="num" type="number" step="0.01" value="${Number(line.price).toFixed(2)}" aria-label="Prijs per eenheid"></td>
       <td class="c-vat"><select data-l="vat" aria-label="Btw">${vat}</select></td>
       <td class="c-kind"><select data-l="kind" aria-label="Soort regel" title="Een optie kiest de klant zelf; 'Optie (aan)' staat standaard aangevinkt">${kinds}</select></td>
-      <td class="c-total num" data-total>${eur(QuoteCore.lineTotal(line))}</td>
+      <td class="c-total num"><span data-total>${eur(QuoteCore.lineTotal(line))}</span><span class="line-margin" data-lm></span></td>
       <td class="c-del"><button class="btn ghost icon" data-del title="Regel verwijderen">✕</button></td>
     </tr>`;
   }
@@ -686,6 +688,7 @@
       ${totals.discount ? `<tr><td>${esc(QuoteCore.discountCaption(totals, 'Korting', nl(totals.discountPct)))}</td><td class="num">− ${eur(totals.discount)}</td></tr><tr><td>Totaal excl. btw</td><td class="num">${eur(totals.net)}</td></tr>` : ''}
       ${totals.shifted ? '' : totals.vat.filter((vatRow) => vatRow.base).map((vatRow) => `<tr><td>Btw ${vatRow.rate}% over ${eur(vatRow.base)}</td><td class="num">${eur(vatRow.amount)}</td></tr>`).join('')}
       <tr class="grand"><td>${totals.shifted ? 'Totaal (btw verlegd)' : 'Totaal incl. btw'}</td><td class="num">${eur(totals.total)}</td></tr>`;
+    if (marginPart) marginPart.updateMargin();
   }
 
   /** Markeert de offerte als gewijzigd en slaat na een korte pauze op. */
@@ -1182,6 +1185,7 @@
   const { printQuote, download, XLSX_TYPE, NAVY, exportQuoteXlsx } = expPart;
   const bulkPart = window.Offertes.createBulk({ QuoteCore, statusOf, statusLabel, state, toast, api, showAll, loadList, visible, shareBase, download, XLSX_TYPE, NAVY, $ });
   const { renderBulkBar, mailSelected, closeSelected, exportListXlsx } = bulkPart;
+  const marginPart = window.Offertes.createMargin({ QuoteCore, esc, state, api, $ });
   const tplPart = window.Offertes.createTemplates({ QuoteCore, esc, state, toast, api, locked, renderLines, changed, save, $ });
   const { renderTemplates, applyTemplate, saveTemplate, deleteTemplate, openProfile, saveProfile } = tplPart;
 

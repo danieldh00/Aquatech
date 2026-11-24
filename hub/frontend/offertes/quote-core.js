@@ -288,6 +288,42 @@
   }
 
   /**
+   * Marge van een offerte (alleen intern): per regel de marge en in totaal opbrengst, kosten en marge over de regels met een
+   * bekende kostprijs (materiaal met artikelcode en inkoopprijs, arbeid in uren met een kostprijs per uur). Opbrengst is netto,
+   * dus na korting. Regels zonder bekende kostprijs tellen niet mee en staan in `unknown`.
+   * @param {object} quote Offertegegevens (zoals bij totals).
+   * @param {Object<string, number|null>} costs Inkoopprijs per artikelcode in hoofdletters (null = onbekend).
+   * @param {number} hourlyCost Kostprijs per uur (0 = onbekend).
+   * @returns {{ lines: Object<string, { cost: number, margin: number, pct: number|null }>, unknown: string[], revenue: number, cost: number, margin: number, pct: number|null }} De marge per regel-id en in totaal.
+   */
+  function margin(quote, costs, hourlyCost) {
+    const all = totals(quote);
+    const factor = all.subtotal ? all.net / all.subtotal : 1;
+    const lines = {};
+    const unknown = [];
+    let revenue = 0;
+    let cost = 0;
+    for (const line of (quote && quote.lines) || []) {
+      if (!included(line)) continue;
+      const total = lineTotal(line);
+      const qty = Number(line.qty) || 0;
+      const purchase = line.code ? (costs || {})[String(line.code).toUpperCase()] : null;
+      let lineCost = null;
+      if (purchase != null && Number.isFinite(Number(purchase))) lineCost = qty * Number(purchase);
+      else if (line.section === 'arbeid' && /^(uur|uren|u)$/i.test(String(line.unit || '').trim()) && Number(hourlyCost) > 0) lineCost = qty * Number(hourlyCost);
+      if (lineCost === null) {
+        if (total > 0) unknown.push(line.description || line.code || 'Regel');
+        continue;
+      }
+      const net = total * factor;
+      lines[line.id] = { cost: round2(lineCost), margin: round2(net - lineCost), pct: net > 0 ? round2(((net - lineCost) / net) * 100) : null };
+      revenue += net;
+      cost += lineCost;
+    }
+    return { lines, unknown, revenue: round2(revenue), cost: round2(cost), margin: round2(revenue - cost), pct: revenue > 0 ? round2(((revenue - cost) / revenue) * 100) : null };
+  }
+
+  /**
    * Omschrijving van de kortingsregel: het woord, het percentage (alleen bij een percentage) en het bijschrift.
    * @param {object} totals De uitkomst van totals().
    * @param {string} word Het woord voor korting in de taal van het document.
@@ -423,7 +459,7 @@
     return { lines, summary, warnings };
   }
 
-  const api = { SECTIONS, VAT_RATES, vatShifted, discountOf, discountCaption, sanitizePaymentDays, STATUSES, LABOR, MAX_LINES, sanitize, sanitizeLine, totals, lineTotal, included, chooseOptions, fromPlan, today, addDays, round2 };
+  const api = { SECTIONS, VAT_RATES, vatShifted, discountOf, discountCaption, sanitizePaymentDays, STATUSES, LABOR, MAX_LINES, sanitize, sanitizeLine, totals, margin, lineTotal, included, chooseOptions, fromPlan, today, addDays, round2 };
   root.QuoteCore = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -83,7 +83,7 @@
     { id: 'offerte-opvolging', partOf: 'offertes', title: 'Automatische opvolging', section: 'offerteopvolging', setting: { key: 'quoteFollowUp', field: 'enabled' } },
     { id: 'betalingsherinneringen', partOf: 'facturen', title: 'Betalingsherinneringen en aanmaningen', section: 'paymentreminders', setting: { key: 'paymentReminders', field: 'enabled' } },
     { id: 'factuur-online-betalen', partOf: 'facturen', title: 'Online betalen (klantportaal en betaallink)' },
-    { id: 'nacalculatie', category: 'verkoop', needs: 'werkorders', title: 'Nacalculatie', summary: 'Opbrengst, kosten en marge per werkorder.', configuration: { blocked: ['/api/workorders/*/costing'] } },
+    { id: 'nacalculatie', category: 'verkoop', needs: 'werkorders', title: 'Nacalculatie', summary: 'Opbrengst, kosten en marge per werkorder.', configuration: { blocked: ['/api/workorders/*/costing', '/api/quote-costs'] } },
     { id: 'plan-herkennen-ai', partOf: 'beregening', title: 'Plan herkennen met AI', section: 'ai', configuration: { blocked: ['/api/plan/analyze'] } },
     { id: 'tekening-indienen', partOf: 'beregening', title: 'Tekening indienen zonder account', section: 'access', setting: { key: 'drawingRequests' } },
     { id: 'afspraaklink', partOf: 'planning', title: 'Afspraaklink voor de klant', configuration: { blocked: ['POST /api/workorders/*/share', '/api/workorders/*/send'] } },

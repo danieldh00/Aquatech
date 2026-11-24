@@ -141,3 +141,32 @@ table.lines .c-kind { width: 112px; }
 .bulk-bar[hidden] { display: none; }
 .grid .c-select { width: 32px; text-align: center; }
 .grid tr.picked td { background: color-mix(in srgb, var(--at-teal) 10%, var(--at-surface)); }
+
+/* Marge (alleen intern, offertes-margin.js): per regel een klein regeltje en onder de totalen een kaart. */
+.line-margin { display: block; font-size: 11px; font-weight: 500; color: var(--muted); margin-top: 1px; }
+.line-margin:empty { display: none; }
+.line-margin.low { color: #c62828; font-weight: 700; }
+.line-margin.unknown { font-style: italic; }
+.margin-card { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; margin-top: 16px; }
+.margin-card[hidden] { display: none; }
+.margin-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.margin-head h3 { margin: 0; font-size: 16px; color: var(--primary-dark); }
+.margin-tag { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; background: var(--primary-soft); color: var(--primary-dark); border-radius: 99px; padding: 3px 9px; }
+.margin-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.margin-tile { display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: #fafbfc; }
+.margin-tile .k { font-size: 12px; color: var(--muted); }
+.margin-tile .v { font-size: 20px; font-weight: 700; color: var(--primary-dark); }
+.margin-tile.low { background: #fff5f5; border-color: #f3c4c4; }
+.margin-tile.low .v { color: #c62828; }
+.margin-scale { position: relative; height: 10px; border-radius: 99px; background: #e8edf2; margin: 16px 0 6px; }
+.margin-scale i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 99px; background: var(--at-green); }
+.margin-scale i.low { background: #c62828; }
+.margin-scale b { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--primary-dark); }
+.margin-scale-labels { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+.margin-note { margin: 12px 0 0; padding: 10px 12px; border-radius: 8px; background: #fff8e1; border: 1px solid #ffe082; font-size: 13px; }
+@media (max-width: 600px) {
+  .margin-tiles { grid-template-columns: 1fr; }
+  .margin-tile { flex-direction: row; justify-content: space-between; align-items: baseline; }
+  .margin-tile .v { font-size: 17px; }
+}
+@media print { .margin-card, .line-margin { display: none !important; } }
