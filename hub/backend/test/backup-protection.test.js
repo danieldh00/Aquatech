@@ -48,13 +48,18 @@ async function start() {
   const { server, base } = await listen(app);
   const baas = createClient(base, { followRedirects: false });
   await baas.post('/app/api/auth/login', { username: 'baas', password: PW });
-  return { dir, db, baas, names, server, cleanup() { server.close(); fs.rmSync(dir, { recursive: true, force: true }); } };
+  return { dir, db, store, tenantId, base, baas, names, server, cleanup() { server.close(); fs.rmSync(dir, { recursive: true, force: true }); } };
 }
 
 test('een back-up verwijderen vraagt het wachtwoord, de nieuwste blijft staan en het komt in het auditlog', async () => {
   const world = await start();
   try {
     const [oldest, , newest] = world.names;
+    const gewoon = createClient(world.base, { followRedirects: false });
+    await world.store.createAccount(world.tenantId, { username: 'jan', role: 'beheerder', password: PW });
+    await gewoon.post('/app/api/auth/login', { username: 'jan', password: PW });
+    assert.strictEqual((await gewoon.del(`${BASE}/${oldest}`, { password: PW })).status, 403);
+    assert.ok(fs.existsSync(path.join(world.dir, oldest)));
     assert.strictEqual((await world.baas.del(`${BASE}/${oldest}`, {})).status, 401);
     assert.strictEqual((await world.baas.del(`${BASE}/${oldest}`, { password: 'Fout-wachtwoord-2026!' })).status, 401);
     assert.ok(fs.existsSync(path.join(world.dir, oldest)), 'zonder goed wachtwoord blijft hij staan');

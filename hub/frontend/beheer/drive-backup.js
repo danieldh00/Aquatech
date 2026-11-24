@@ -179,9 +179,9 @@
       const credentials = await window.BeheerReauth.ask('Verbinden met Google Drive', 'Bevestig met je wachtwoord om de koppeling te starten.');
       if (!credentials) return;
       run(button, async () => {
-      const { url } = await call('/connect', { method: 'POST', body: credentials });
-      location.href = url;
-      return 'Je gaat naar Google…';
+        const { url } = await call('/connect', { method: 'POST', body: credentials });
+        location.href = url;
+        return 'Je gaat naar Google…';
       });
     });
     byId('d-sync').addEventListener('click', (event) => run(event.currentTarget, async () => {
