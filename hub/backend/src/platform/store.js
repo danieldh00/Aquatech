@@ -36,6 +36,7 @@ const TENANT_COLS = TENANT_COLUMNS.join(', ');
 const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
 const DocText = require(path.join(FRONTEND_DIR, 'shared', 'doc-text.js'));
 const { createRoleStore } = require('./roles');
+const { withHiddenCause } = require('./error-report');
 const ROLES = Object.keys(Roles.ROLES);
 /** Hoogste vaste groothandelskorting (%) die een beheerder bij een klant kan instellen. */
 const MAX_WHOLESALE_DISCOUNT = 50;
@@ -869,7 +870,8 @@ function createStore(db) {
       return transaction(db, callback);
     } catch (error) {
       console.error(`${action} mislukt:`, error);
-      return { error: `${action} is mislukt; er is niets gewist. Oorzaak: ${String(error.message || error).slice(0, 300)}`, status: 500 };
+      // Vaste melding; de databasefout zelf (tabel- en constraintnamen) staat alleen in het log en, met debugmodus, in `debug` (audit B-34).
+      return withHiddenCause({ error: `${action} is mislukt; er is niets gewist. Zie het logboek van de server voor de oorzaak.`, status: 500 }, error);
     }
   }
 

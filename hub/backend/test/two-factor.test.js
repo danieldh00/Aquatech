@@ -40,7 +40,7 @@ async function setup() {
  * @returns {Promise<{ secret: string, recoveryCodes: string[] }>} Het geheim en de herstelcodes.
  */
 async function enable(client) {
-  const started = await client.post('/app/api/account/totp/setup', {});
+  const started = await client.post('/app/api/account/totp/setup', { password: PW });
   assert.strictEqual(started.status, 200, JSON.stringify(started.body));
   assert.match(started.body.uri, /^otpauth:\/\/totp\/AquaTech%3A/);
   const confirmed = await client.post('/app/api/account/totp/confirm', { code: Totp.codeAt(started.body.secret, Totp.stepOf()) });
@@ -81,7 +81,8 @@ test('inloggen met tweestapsverificatie: code nodig, geen hergebruik, herstelcod
   assert.strictEqual((await piet.get('/app/api/account/totp')).body.enabled, false);
   const { secret, recoveryCodes } = await enable(piet);
   assert.strictEqual(recoveryCodes.length, 10);
-  assert.strictEqual((await piet.post('/app/api/account/totp/setup', {})).status, 409);
+  assert.strictEqual((await piet.post('/app/api/account/totp/setup', { password: PW })).status, 409);
+  assert.strictEqual((await (await login('klaas')).post('/app/api/account/totp/setup', { password: 'Verkeerd-Wachtwoord-1!' })).body.error, 'wrong_password', 'aanzetten vraagt het wachtwoord (B-35)');
 
   const client = createClient(base);
   const missing = await client.post('/app/api/auth/login', { username: 'piet', password: PW });
@@ -155,4 +156,15 @@ test('een klant met tweestapsverificatie logt niet via de winkel in', async () =
   const answer = await postForm(base, shop, '/inloggen/', { login: 'klaas', password: PW });
   assert.notStrictEqual(answer.status, 303);
   assert.match(answer.text, /tweestapsverificatie/);
+});
+
+test('B-20: een gebruiker van een uitgeschakelde organisatie komt niet meer bij profiel, wachtwoord en 2FA', async () => {
+  const { store, login } = await setup();
+  const vreemd = await login('vreemd', 'ander');
+  assert.strictEqual((await vreemd.get('/app/api/account/profile')).status, 200);
+  store.updateTenant(store.getTenantBySlug('ander').id, { disabled: true });
+  assert.strictEqual((await vreemd.get('/app/api/account/profile')).status, 401);
+  assert.strictEqual((await vreemd.get('/app/api/account/totp')).status, 401);
+  assert.strictEqual((await vreemd.post('/app/api/account/totp/setup', { password: PW })).status, 401);
+  assert.strictEqual((await vreemd.post('/app/api/account/password', { currentPassword: PW, newPassword: 'Nieuw-Wachtwoord-2026!' })).status, 401);
 });

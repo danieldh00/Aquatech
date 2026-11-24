@@ -242,7 +242,9 @@ test('een mislukte verwijdering geeft een duidelijke melding en wist niets', asy
   const out = store.deleteEnvironment(env.id);
   db.prepare = original;
   assert.strictEqual(out.status, 500);
-  assert.match(out.error, /Testomgeving verwijderen is mislukt; er is niets gewist\. Oorzaak: foreign key constraint failed/);
+  assert.match(out.error, /Testomgeving verwijderen is mislukt; er is niets gewist\./);
+  assert.ok(!out.error.includes('foreign key'), 'de databasefout staat niet in de melding (B-34)');
+  assert.ok(!Object.keys(out).includes('cause') && /foreign key/.test(out.cause.message), 'oorzaak alleen verborgen bij de uitkomst');
   assert.ok(store.getTenant(env.id), 'omgeving staat er nog');
 });
 

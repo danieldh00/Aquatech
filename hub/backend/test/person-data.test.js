@@ -176,7 +176,7 @@ test('wissen wordt geweigerd zolang er een onafgehandelde bestelling of werkorde
 
 test('wissen vraagt bij tweestapsverificatie ook de code', async () => {
   const { admin, db, customer } = await setup();
-  const started = await admin.post('/app/api/account/totp/setup', {});
+  const started = await admin.post('/app/api/account/totp/setup', { password: PW });
   assert.strictEqual((await admin.post('/app/api/account/totp/confirm', { code: Totp.codeAt(started.body.secret, Totp.stepOf()) })).status, 200);
   const body = { confirm: 'Piet Jansen', password: PW };
   const missing = await admin.post(`/app/api/customers/${customer.id}/anonymize`, body);

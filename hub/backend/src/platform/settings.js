@@ -445,6 +445,8 @@ function createSettings({ db, tenantId, mainTenantId = null, env = {}, vault = c
     for (const [key, def] of Object.entries(FIELDS)) {
       // Grote waarden die alleen hun eigen scherm nodig heeft (zoals het logo van de documentopmaak) horen niet bij elke instellingenlijst.
       if (def.notInView) continue;
+      // Interne en platforminstellingen hebben hun eigen scherm en API (audit B-22); ze gaan niet mee in de algemene lijst, ook niet naar andere beheerders.
+      if (def.internal || def.platform) continue;
       const value = get(key);
       if (def.type === 'secret') {
         out[key] = { set: Boolean(value), source: source(key) };

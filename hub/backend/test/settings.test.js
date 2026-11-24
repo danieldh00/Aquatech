@@ -300,3 +300,12 @@ test('kengetallen kiezen: instelling bewaren, module uit verbergt de KPI, volgor
     server.close();
   }
 });
+
+test('B-22: de algemene instellingenlijst bevat geen interne of platforminstellingen', () => {
+  const settings = freshSettings();
+  const keys = Object.keys(settings.view());
+  for (const [key, definition] of Object.entries(settings.FIELDS)) {
+    if (definition.internal || definition.platform) assert.ok(!keys.includes(key), `${key} hoort er niet in`);
+  }
+  assert.ok(keys.includes('guestAccess'), 'gewone instellingen blijven');
+});

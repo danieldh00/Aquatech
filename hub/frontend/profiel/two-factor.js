@@ -69,7 +69,8 @@
   async function startSetup() {
     say('');
     try {
-      const out = await api('account/totp/setup', {});
+      const out = await api('account/totp/setup', { password: $('tf-start-password').value });
+      $('tf-start-password').value = '';
       $('tf-qr').innerHTML = window.QrCode.svg(out.uri, { label: 'QR-code voor je authenticator-app' });
       $('tf-secret').textContent = out.secret.replace(/(.{4})/g, '$1 ').trim();
       $('tf-link').href = out.uri;
