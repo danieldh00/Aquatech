@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.37.1',
+      date: '2026-11-24',
+      title: 'Server en toegangscode aangescherpt',
+      items: [
+        { text: 'Met de toegangscode kun je weer inloggen als iemand anders eerder de gezamenlijke pogingengrens vol deed.' },
+      ],
+    },
+    {
       version: '1.37.0',
       date: '2026-11-24',
       title: 'Account- en instellingenroutes aangescherpt',
