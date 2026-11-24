@@ -137,7 +137,17 @@ test('inloggen: blokkade per account en bezoeker, ruime grens per account, verzo
      */
     const tryCode = (code) => createClient(codeBase).request('POST', '/app/api/auth/login', { code }, { 'X-Forwarded-For': `198.51.100.${ip++}` });
     for (let i = 0; i < 30; i++) assert.strictEqual((await tryCode(`fout-${i}`)).status, 401);
-    assert.strictEqual((await tryCode('juiste-code-123')).status, 429, 'na 30 fouten in totaal even dicht');
+    // Gezamenlijke grens bereikt: een bezoeker zonder eigen mislukte pogingen komt met de juiste code nog binnen (B-21)...
+    assert.strictEqual((await tryCode('juiste-code-123')).status, 200, 'een verse bezoeker met de juiste code mag nog');
+    // ...maar raden gaat niet door: een bezoeker met een eigen mislukte poging is dicht, ook met de juiste code.
+    /**
+     * Eén poging met de toegangscode vanaf het adres van de gokker.
+     * @param {string} code De code.
+     * @returns {Promise<object>} Het antwoord.
+     */
+    const guesser = (code) => createClient(codeBase).request('POST', '/app/api/auth/login', { code }, { 'X-Forwarded-For': '198.51.100.250' });
+    assert.strictEqual((await guesser('fout')).status, 401, 'eerste gok van een nieuwe bezoeker');
+    assert.strictEqual((await guesser('juiste-code-123')).status, 429, 'daarna dicht zolang de gezamenlijke grens geldt');
   } finally {
     codeServer.close();
   }

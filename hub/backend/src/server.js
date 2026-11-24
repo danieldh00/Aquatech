@@ -117,6 +117,7 @@ const GUEST_RETENTION_DAYS = 30;
 const { createAiUsageStore } = require('./platform/ai-usage');
 const { createAppLog } = require('./platform/app-log');
 const { createErrorReport, catchAsync, withCause, errorCounter } = require('./platform/error-report');
+const { installProcessGuard } = require('./platform/process-guard');
 const { createSystemUpdate } = require('./platform/system-update');
 const { registerBackupRestoreRoutes } = require('./platform/backup-restore-routes');
 const { createIdentityConfirm } = require('./platform/identity-confirm');
@@ -761,24 +762,36 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     auth.prefetch(req).then(() => next(), () => next());
     return undefined;
   });
+  /**
+   * Een JSON-parser met een ruime limiet, maar alleen voor wie al een sessie heeft (of als gasten aan staan: dan is er geen
+   * account nodig). Een bezoeker zonder sessie krijgt de kleine standaardlimiet, zodat hij de server niet herhaald
+   * megabytes laat inlezen en parsen vóór de inlogcontrole (audit B-26). De sessie is hier al opgehaald door de prefetch.
+   * @param {string} limit De ruime limiet, bijv. '12mb'.
+   * @returns {Function} De middleware.
+   */
+  const gatedJson = (limit) => {
+    const large = express.json({ limit });
+    const small = express.json({ limit: '16kb' });
+    return (req, res, next) => (auth.session(req) || guestsAllowed() ? large : small)(req, res, next);
+  };
   // Grote limiet alleen voor de plananalyse (afbeelding als base64).
-  app.use('/api/plan/analyze', express.json({ limit: '12mb' }));
+  app.use('/api/plan/analyze', gatedJson('12mb'));
   // Kleurtellingen van een herkend plan (zie recognitions.js).
   app.use('/api/plan/learn', express.json({ limit: '256kb' }));
   // Documentopmaak: het logo komt als data-adres mee (hoogstens 300 kB, met de overhead van base64 dus ruim 400 kB).
-  app.use('/api/admin/document-layout', express.json({ limit: '600kb' }));
-  app.use('/api/admin/mail-layout', express.json({ limit: '600kb' }));
+  app.use('/api/admin/document-layout', gatedJson('600kb'));
+  app.use('/api/admin/mail-layout', gatedJson('600kb'));
   // Tekening + eindplan voor het meetcorpus (alleen als de organisatie dat aanzet, zie /api/plan/corpus).
-  app.use('/api/plan/corpus', express.json({ limit: '12mb' }));
+  app.use('/api/plan/corpus', gatedJson('12mb'));
   // Een plan bevat de achtergrondafbeelding (base64).
-  app.use('/api/plans', express.json({ limit: '12mb' }));
+  app.use('/api/plans', gatedJson('12mb'));
   // Een offerte met veel regels en lange teksten past niet in 16 kB.
   // Status van een webshopbestelling wijzigen (web-orders.js): alleen { status }.
   app.use('/api/admin/web-orders/packing-slips', express.json({ limit: '16kb' }));
   app.use('/api/admin/web-orders', express.json({ limit: '4kb' }));
   // Orderpick-app (webshop/orderpick.js): de gepickte regels (hoogstens MAX_LINES) en het aantal bekende zendingen.
   app.use('/api/orderpick', express.json({ limit: '16kb' }));
-  app.use('/api/quotes', express.json({ limit: '1mb' }));
+  app.use('/api/quotes', gatedJson('1mb'));
   // Offertesjablonen (60 regels, intro en voorwaarden) en het bedrijfsprofiel passen niet altijd in de standaardgrens van 16 kB (T-12).
   app.use(['/api/quote-templates', '/api/quote-profile'], express.json({ limit: '128kb' }));
   // Tekening indienen zonder inloggen (drawings.js): plan met achtergrond.
@@ -786,26 +799,26 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Akkoord via de openbare link: met handtekening (PNG).
   app.use('/api/public', express.json({ limit: '512kb' }));
   // Foto's bij een werkorder (base64, verkleind in de browser): vóór de 1 MB hieronder.
-  app.use(/^\/api\/workorders\/[^/]+\/photos$/, express.json({ limit: '8mb' }));
+  app.use(/^\/api\/workorders\/[^/]+\/photos$/, gatedJson('8mb'));
   // Uren en materiaal boeken (worklog.js): kleine regels.
   app.use(/^\/api\/workorders\/[^/]+\/(hours|materials)(\/[^/]+)?$/, express.json({ limit: '32kb' }));
-  app.use('/api/workorders', express.json({ limit: '1mb' }));
+  app.use('/api/workorders', gatedJson('1mb'));
   // Meldingen van klanten: foto's (base64, verkleind in de browser) en de tekst.
-  app.use(/^\/api\/portal\/requests\/[^/]+\/photos$/, express.json({ limit: '8mb' }));
+  app.use(/^\/api\/portal\/requests\/[^/]+\/photos$/, gatedJson('8mb'));
   app.use(['/api/portal/requests', '/api/service-requests'], express.json({ limit: '64kb' }));
   app.use('/api/news', express.json({ limit: '64kb' }));
-  app.use('/api/admin/shop-content/images', express.json({ limit: '8mb' }));
-  app.use('/api/admin/shop-content', express.json({ limit: '512kb' }));
+  app.use('/api/admin/shop-content/images', gatedJson('8mb'));
+  app.use('/api/admin/shop-content', gatedJson('512kb'));
   // Sproeierbibliotheek uit Excel (sprinklers.js): max. 300 behuizingen en 1000 nozzles.
-  app.use('/api/sprinkler-library', express.json({ limit: '2mb' }));
+  app.use('/api/sprinkler-library', gatedJson('2mb'));
   // Afbeelding bij een artikel (base64, verkleind in de browser): vóór de 256 kB hieronder.
-  app.use(/^\/api\/stock\/items\/[^/]+\/image$/, express.json({ limit: '8mb' }));
+  app.use(/^\/api\/stock\/items\/[^/]+\/image$/, gatedJson('8mb'));
   app.use('/api/stock', express.json({ limit: '256kb' }));
   app.use('/api/suppliers', express.json({ limit: '32kb' }));
   // Leveranciersdocument inlezen (order-read-route.js): PDF of foto als base64, vóór de 256 kB hieronder.
-  app.use('/api/purchase-orders/read', express.json({ limit: '12mb' }));
+  app.use('/api/purchase-orders/read', gatedJson('12mb'));
   app.use('/api/purchase-orders', express.json({ limit: '256kb' }));
-  app.use('/api/invoices', express.json({ limit: '1mb' }));
+  app.use('/api/invoices', gatedJson('1mb'));
   app.use('/api/debtors', express.json({ limit: '16kb' }));
   app.use('/api/visma', express.json({ limit: '32kb' }));
   // AI-koppeling (mcp/mcp-server.js): een concept-offerte met tot 100 regels.
@@ -1128,12 +1141,17 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (!getAccessCode()) {
       return res.status(400).json({ error: 'username_required', message: 'Vul je gebruikersnaam en wachtwoord in.' });
     }
-    if (lockedOut(CODE_KEY, CODE_MAX_FAILURES)) {
+    // Twee grenzen: per bezoeker (10) en voor alle pogingen samen (30). Is alleen de gezamenlijke grens bereikt, dan mag een
+    // bezoeker zonder eigen mislukte pogingen nog wel proberen (een juiste code werkt dan gewoon): anders houdt één
+    // anonieme bezoeker de code-login voor iedereen dicht (audit B-21). Elke mislukte poging telt voor allebei.
+    const visitorKey = `${CODE_KEY}@${clientKey(req)}`;
+    if (lockedOut(visitorKey, 10) || (lockedOut(CODE_KEY, CODE_MAX_FAILURES) && (failures.get(visitorKey)?.count || 0) > 0)) {
       audit(req, 'inloggen_geblokkeerd', { via: 'toegangscode' }, null);
       return res.status(429).json({ error: 'locked', message: 'Te veel mislukte pogingen met de toegangscode. Probeer het over een kwartier opnieuw.' });
     }
     if (!auth.checkCode(String(req.body?.code ?? req.body?.password ?? ''))) {
       failed(CODE_KEY);
+      failed(visitorKey);
       audit(req, 'inloggen_mislukt', { via: 'toegangscode' }, null);
       return res.status(401).json({ error: 'wrong_code', message: 'Onjuiste toegangscode.' });
     }
@@ -2053,8 +2071,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const tid = req.tenantId || tenant.id;
     const user = identify(req);
     if (req.body.recognitionId) {
-      // alleen bij een AI-herkenning van deze omgeving, en maar één keer
-      if (!recognitions.addSamples(tid, req.body.recognitionId, samples)) return res.status(404).json({ error: 'not_found', message: 'Herkenning niet gevonden.' });
+      // alleen bij een AI-herkenning van deze omgeving die deze gebruiker liet doen, en maar één keer (B-18)
+      if (!recognitions.addSamples(tid, req.body.recognitionId, samples, user ? user.id : null)) return res.status(404).json({ error: 'not_found', message: 'Herkenning niet gevonden.' });
       return res.json({ ok: true });
     }
     if (req.body.planId) {
@@ -3438,6 +3456,8 @@ if (require.main === module) {
         .catch((error) => console.warn('Opwarmen van de webshop mislukt:', error.message)), 2000).unref();
     }
   });
+  // Vangnet voor niet-afgevangen fouten in timers en achtergrondtaken (T-14): logboek + Bewaking, uitzondering stopt gecontroleerd.
+  installProcessGuard({ appLog: app.locals.appLog, errorCounter, server });
   // Netjes stoppen bij `docker stop` (SIGTERM) in plaats van na 10 s geforceerd.
   for (const sig of ['SIGTERM', 'SIGINT']) {
     process.on(sig, () => {
