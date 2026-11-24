@@ -2,12 +2,12 @@ name: Versie
 
 # Een PR verhoogt het versienummer niet zelf en past CHANGELOG.md en releases.js niet aan: dat doet
 # release.yml na het mergen vanuit het bestand changes/<naam>.md. Deze controle bewaakt dat.
-# De naam van de job (version-must-increase) staat als verplichte controle in de ruleset van master;
-# wijzig hem alleen samen met die ruleset.
+# De naam van de job (version-must-increase) staat als verplichte controle in de ruleset van master en develop;
+# wijzig hem alleen samen met die rulesets. Draait ook voor PR's naar develop (de Vue-migratie, zie docs/STAGING.md).
 
 on:
   pull_request:
-    branches: [master]
+    branches: [master, develop]
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
 permissions:

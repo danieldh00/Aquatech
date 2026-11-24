@@ -1,0 +1,107 @@
+name: Staging
+
+# Bouwt het image voor de stagingomgeving (VM stg01, zie docs/STAGING.md) naar een EIGEN pakket:
+#   ghcr.io/danieldh00/aquatech-staging:sha-<commit>  en  :staging
+# De productie-update (deploy/apps01/update.sh) haalt alleen ghcr.io/danieldh00/aquatech:latest op en
+# controleert de handtekening van release.yml; een staging-image kan daar dus nooit terechtkomen.
+# Bouwt bij elke push naar develop en op afroep voor een andere ref (bijv. een PR-branch die eerst op staging moet).
+# Geen cosign en geen versiebump: de versie is <package.json>-staging.<commit>.
+# Geen tests hier: PR's naar develop hebben CI en de Claude-reviews al gehad; dit bouwt en rookt alleen.
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - "hub/**"
+      - "changes/**"
+      - ".github/workflows/staging.yml"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag of commit om op staging te zetten (leeg = develop)"
+        type: string
+        default: ""
+      promote:
+        description: "Ook de tag :staging verplaatsen (stg01 rolt dan dit image uit)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: staging
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/danieldh00/aquatech-staging
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref != '' && inputs.ref || 'develop' }}
+
+      - name: Versie en tags bepalen
+        id: version
+        env:
+          PROMOTE: ${{ github.event_name == 'push' || inputs.promote }}
+        run: |
+          short=$(git rev-parse --short=8 HEAD)
+          base=$(jq -r .version hub/backend/package.json)
+          echo "short=$short" >> "$GITHUB_OUTPUT"
+          echo "version=$base-staging.$short" >> "$GITHUB_OUTPUT"
+          {
+            echo "tags<<EOF"
+            echo "$IMAGE:sha-$short"
+            if [ "$PROMOTE" = "true" ]; then echo "$IMAGE:staging"; fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Bouwen (lokaal laden voor de smoketest)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: hub
+          platforms: linux/amd64
+          load: true
+          tags: aquatech:staging-smoke
+          cache-from: type=gha,scope=staging
+          cache-to: type=gha,mode=max,scope=staging
+
+      - name: Smoketest
+        run: |
+          docker network create smokenet
+          docker run -d --name smokedb --network smokenet -e POSTGRES_PASSWORD=smoke postgres:17
+          for i in $(seq 1 30); do docker exec smokedb pg_isready -U postgres && break; sleep 2; done
+          docker run -d --name smoke --network smokenet -p 3300:3300 -e DATABASE_URL="postgres://postgres:smoke@smokedb:5432/postgres?sslmode=disable" aquatech:staging-smoke
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3300/api/health && exit 0; sleep 2; done
+          docker logs smoke
+          exit 1
+
+      # Pas na een geslaagde smoketest naar GHCR: :staging wijst nooit naar een kapot image.
+      - name: Pushen naar GHCR
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: hub
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.version.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+          cache-from: type=gha,scope=staging

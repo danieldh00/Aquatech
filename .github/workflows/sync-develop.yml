@@ -1,0 +1,89 @@
+name: Sync develop
+
+# Voegt master automatisch samen in develop, zodat develop (de integratiebranch van de Vue-migratie, zie
+# docs/STAGING.md) nooit achterloopt en er niets gemist wordt. Draait na elke push naar master, na elke
+# afgeronde Release (de releasecommit heeft [skip ci], dus een push-trigger zou die missen), dagelijks en op afroep.
+# Alleen code die op master al door CI en de Claude-reviews is gekomen, wordt zo overgenomen.
+# Zonder conflict: een mergecommit direct op develop (vereist secret RELEASE_PUSH_TOKEN, met bypass op de ruleset
+# van develop; zonder dat secret weigert de ruleset de push). Met een conflict: één open issue "Sync master naar
+# develop: conflict" dat de migratiethread oplost; de job faalt dan expres, zodat het zichtbaar is.
+# Bestaat develop nog niet, dan doet de workflow niets.
+
+on:
+  push:
+    branches: [master]
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+    branches: [master]
+  schedule:
+    - cron: "43 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: sync-develop
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: master naar develop
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Bestaat develop?
+        id: exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git ls-remote --exit-code --heads "https://github.com/${{ github.repository }}" develop >/dev/null 2>&1; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "develop bestaat nog niet; niets te doen."
+          fi
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        if: steps.exists.outputs.found == 'true'
+        with:
+          ref: develop
+          fetch-depth: 0
+          # Het push-token staat niet in de git-config: alleen de push-stap gebruikt het (via PUSH_TOKEN).
+          persist-credentials: false
+      - name: master in develop samenvoegen
+        if: steps.exists.outputs.found == 'true'
+        env:
+          PUSH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN || github.token }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          auth_header="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$PUSH_TOKEN" | base64 -w0)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          title="Sync master naar develop: conflict"
+          for attempt in 1 2 3; do
+            git -c "http.https://github.com/.extraheader=$auth_header" fetch origin master develop
+            git reset --hard origin/develop
+            if git merge-base --is-ancestor origin/master HEAD; then
+              echo "develop bevat master al."
+              exit 0
+            fi
+            if ! git merge --no-ff --no-edit -m "Merge master in develop" origin/master; then
+              git merge --abort || true
+              if [ -z "$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number --jq '.[0].number')" ]; then
+                gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" \
+                  --body "master laat zich niet automatisch in develop samenvoegen. Los het op in een branch vanaf develop: git merge origin/master, conflicten oplossen en een PR naar develop. Dit issue sluit je daarna zelf. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+              fi
+              echo "::error::Mergeconflict tussen master en develop."
+              exit 1
+            fi
+            if git -c "http.https://github.com/.extraheader=$auth_header" push origin HEAD:develop; then
+              exit 0
+            fi
+            echo "Push mislukt (poging $attempt); opnieuw op de nieuwste develop."
+            [ "$attempt" = 3 ] && exit 1
+            sleep $((attempt * 5))
+          done
