@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.39.4
+
+V-04 beschikbaarheid: `plan-runner.js` kent twee rijen (`main`: 2 tegelijk, 20 wachtend voor de AI-koppeling; `lead`: 1 tegelijk, 5 wachtend voor openbare tekeningen), `runPlanTask(methode, args, rij)`. `planWithinLimits` (plan-builder.js) weigert vóór het rekenen een plan met te veel vlakken, hoekpunten, elementen of vreemde coördinaten (de tekening komt wel binnen, zonder concept-offerte). Tests: `plan-builder.test.js`.
+
 ## 1.39.3
 
 Openbare planner als verkoopkanaal (V-04), deel 2: server.js sluit `plannerCatalogOf` aan bij `registerDrawingRoutes` (`ordering` alleen voor de hoofdtenant met `storefront` en `shopOrdering` aan) en `createLeadQuote`: bij `POST /api/public/drawing` maakt de server met `quoteLinesFromPlan` (zelfde werkthread als de AI-koppeling) een conceptofferte, eigenaar is het gastaccount van de indiener (`submitDrawing` geeft nu `ownerId` terug), zonder klantrecord, met de contactgegevens in `customer` en een interne notitie. Alleen met de module Offertes aan; een fout of een plan zonder regels laat het indienen zelf slagen. Auditregel `tekening_ingediend` bevat `quoteId`, de melding aan het bedrijf noemt het offertenummer. Tests: `public-planner-lead.test.js`.

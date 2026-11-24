@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.39.4',
+      date: '2026-11-24',
+      title: 'Openbare planner: eigen rekenrij voor tekeningen van bezoekers',
+      items: [
+        { text: 'Tekeningen van bezoekers zonder account kunnen de berekening van AI-plannen niet meer ophouden: ze hebben een eigen, kleine rekenrij en worden vooraf op grootte gecontroleerd.' },
+      ],
+    },
+    {
       version: '1.39.3',
       date: '2026-11-24',
       title: 'Planner zonder account: prijs, bestellen en offerte-lead',
