@@ -1,6 +1,7 @@
 // API-routes van de voorraad (artikelen, eenheden, mutaties, varianten, samenvoegen, import en
 // werkorderverbruik). Letterlijk uit stock.js verplaatst; de opslag komt binnen via ctx.stock.
 const { respondShopError } = require('../webshop/woocommerce');
+const { registerItemImportRoutes } = require('./item-import');
 const { KINDS, GROUPS, EXPORT_LIMIT, shopCodeOf, isDate } = require('./stock-helpers');
 
 /**
@@ -108,6 +109,9 @@ function registerStockRoutes(app, ctx) {
     audit(req, 'voorraad_artikel_aangemaakt', { itemId: out.item.id, code: out.item.code });
     res.status(201).json(out.item);
   });
+
+  // Artikelen importeren uit Excel (V-05).
+  registerItemImportRoutes(app, ctx);
 
   app.post('/api/stock/import', requireJson, requireStock, (req, res) => {
     const out = stock.importCatalog(tenantOf(req), req.user, req.body?.codes);

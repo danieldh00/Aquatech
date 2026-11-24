@@ -1062,6 +1062,15 @@
     $('#b-images').onclick = () => { window.ArtikelenMedia.openImagesImport(); };
     window.StockBulk.init({ api, toast, reload: load, rerender: renderStock, items: () => state.items });
     /**
+     * Opent het importvenster: Excel kiezen, controleren en verwerken.
+     * @returns {void}
+     */
+    $('#b-import-excel').onclick = () => window.AquatechExcelImport.open({
+      title: 'Artikelen importeren uit Excel', subject: 'De artikelen', keyLabel: 'Artikelcode', templateName: 'artikelen-importeren-voorbeeld.xlsx', api,
+      intro: 'Een artikel wordt herkend op de artikelcode. Lege cellen laten een bestaand artikel ongemoeid; de beginvoorraad geldt alleen voor nieuwe artikelen. Eerst volgt een controle; er wordt pas iets opgeslagen als je op Verwerken drukt.',
+      fieldsPath: 'stock/import-excel/fields', importPath: 'stock/import-excel', onDone: () => load().catch((error) => toast(error.message, true)),
+    });
+    /**
      * Exporteert de voorraad.
      * @returns {Promise<void>}
      */

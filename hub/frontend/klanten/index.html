@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="../dashboard/dashboard.css">
   <link rel="stylesheet" href="../beheer/beheer.css">
   <link rel="stylesheet" href="../shared/layout.css">
+  <link rel="stylesheet" href="../shared/excel-import.css">
   <link rel="stylesheet" href="klanten.css">
   <script src="../shared/common.js"></script>
 </head>
@@ -42,6 +43,7 @@
       </select>
       <button id="k-new" class="btn primary" type="button">Nieuwe klant</button>
       <button id="k-export" class="btn" type="button">Exporteer naar Excel</button>
+      <button id="k-import" class="btn" type="button" title="Klanten uit een Excel-bestand toevoegen of bijwerken, met eerst een controle">Importeren uit Excel</button>
     </div>
     <div class="tablewrap"><table class="grid" id="k-table"></table></div>
     <div class="pager">
@@ -107,6 +109,7 @@
   <script src="../dashboard/account.js"></script>
   <script src="../shared/address-lookup.js"></script>
   <script src="../shared/doc-text.js"></script>
+  <script src="../shared/excel-import.js"></script>
   <script src="klanten.js"></script>
 </body>
 </html>

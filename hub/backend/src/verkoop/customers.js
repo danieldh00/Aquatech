@@ -92,6 +92,8 @@ function createCustomerStore(db) {
 function registerCustomerRoutes(app, ctx) {
   const { store, customers, requireRight, requireJson, audit, addressGuard, tenantsOf } = ctx;
   const requireCustomers = requireRight('klanten');
+  // Importeren uit Excel (V-05); vóór de routes met :id registreren, zodat /import niet als id geldt.
+  require('./customer-import').registerCustomerImportRoutes(app, ctx);
   /**
    * Antwoordt 404 voor een onbekende klant.
    * @param {object} res Het antwoord.
