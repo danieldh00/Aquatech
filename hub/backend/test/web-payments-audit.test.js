@@ -386,6 +386,31 @@ test('bedrading: een mislukte bevestigingsmail na het betalen wordt in een later
   assert.ok(mailsWith(world.sent, new RegExp(done.number)).some((message) => message.to === done.email), 'de klant heeft de bevestiging alsnog');
 });
 
+test('bedrading: mislukt alleen de melding aan het bedrijf, dan krijgt de klant de bevestiging bij de nieuwe poging niet nog een keer', async () => {
+  const world = await setup({ mollie: true });
+  const [customer] = world.shoppers;
+  const company = 'info@aquatech.example';
+  assert.strictEqual((await world.admin.put('/app/api/admin/settings', { quoteProfile: { companyName: 'AquaTech', email: company } })).status, 200);
+  const { id, paymentId } = await placeOnline(world, customer);
+  world.mailFailing.to = company;
+  world.mollie.set(paymentId, 'paid');
+  await webhook(world, id, paymentId);
+  const failed = await eventually(async () => { const current = await adminOrder(world, id); return current.pay.hooks && current.pay.hooks.tries && current.pay.hooks.tries.bevestiging ? current : null; });
+  assert.strictEqual(failed.mail.sent, false);
+  assert.strictEqual(failed.mail.customerSent, true, 'de klant heeft zijn bevestiging al');
+  world.mailFailing.to = '';
+  const row = JSON.parse(world.db.prepare('SELECT data FROM web_orders WHERE id = ?').get(id).data);
+  const long = new Date(Date.now() - 3600 * 1000).toISOString();
+  row.pay.paidAt = long;
+  row.pay.hooks.lastTryAt = long;
+  world.db.prepare('UPDATE web_orders SET data = ? WHERE id = ?').run(JSON.stringify(row), id);
+  await world.app.locals.webPaymentsExpire();
+  const done = await eventually(async () => { const current = await adminOrder(world, id); return current.mail && current.mail.sent ? current : null; });
+  const about = mailsWith(world.sent, new RegExp(done.number));
+  assert.strictEqual(about.filter((message) => message.to === done.email && !/factuur/i.test(message.subject)).length, 1, 'één bevestiging aan de klant');
+  assert.strictEqual(about.filter((message) => message.to === company).length, 1, 'het bedrijf heeft de melding alsnog');
+});
+
 test('bedrading: betaald na annuleren geeft een auditregel en een mail dat het bedrag teruggaat; de vrijgaveronde geeft voorraad vrij', async () => {
   const world = await setup({ mollie: true });
   const [customer] = world.shoppers;

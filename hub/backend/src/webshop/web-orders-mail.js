@@ -113,6 +113,9 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody, guestLink
     const link = guestLink(tenantId, order, settings);
     const details = `Bestelling ${order.number}\n\n${linesText(order)}\n\n${totalsText(order)}\n\n${shippingText(order)}${order.note ? `\n\nJe opmerking: ${order.note}` : ''}`;
     let error = '';
+    // Bij een nieuwe poging (stap 'bevestiging' na een betaling) krijgt de klant de bevestiging niet nog een keer als die al verstuurd was.
+    const before = (typeof orders.get === 'function' ? orders.get(tenantId, order.id) : null) || order;
+    let customerSent = Boolean(before.mail && before.mail.customerSent);
     try {
       const style = mailStyleOf(settings);
       const composed = composeFor(settings, paid ? 'order_betaald' : 'order_rekening', {
@@ -122,7 +125,10 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody, guestLink
       // De tekst over het herroepingsrecht is wettelijk en staat altijd onderaan, welke eigen tekst er ook is ingesteld.
       const withdrawal = `Als consument kun je binnen ${WITHDRAWAL_DAYS} dagen na ontvangst herroepen: ${link ? 'open je bestelling via de link hierboven' : 'log in'} en kies bij je bestelling Retour aanvragen, of antwoord op deze mail. Onze algemene voorwaarden, privacyverklaring en het herroepingsrecht met modelformulier staan onderaan elke pagina van de webshop.`;
       const customerMail = mailBody(profile, [...composed.paragraphs, withdrawal], undefined, style);
-      await mailer.send({ to: order.email, subject: composed.subject, text: customerMail.text, html: customerMail.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
+      if (!customerSent) {
+        await mailer.send({ to: order.email, subject: composed.subject, text: customerMail.text, html: customerMail.html, replyTo: validEmail(profile.email) ? profile.email : undefined });
+        customerSent = true;
+      }
       if (validEmail(profile.email)) {
         const shopMail = mailBody(profile, [`Nieuwe webshopbestelling ${order.number} van ${order.customer.company || order.customer.name} (${order.email})${paid ? ', online betaald' : ''}.`, details, ...(DeliveryTimes.etaSentence(order.shipping) ? [`Aan de klant doorgegeven: ${DeliveryTimes.etaSentence(order.shipping)}`] : [])], undefined, style);
         await mailer.send({ to: profile.email, subject: `Nieuwe webshopbestelling ${order.number}`, text: shopMail.text, html: shopMail.html });
@@ -130,7 +136,7 @@ function createOrderMailer({ orders, settingsFor, mailerFor, mailBody, guestLink
     } catch (failure) {
       error = mailFailure(failure).slice(0, 300);
     }
-    orders.updateData(tenantId, order.id, { mail: { sent: !error, error, at: new Date().toISOString() } });
+    orders.updateData(tenantId, order.id, { mail: { sent: !error, error, customerSent, at: new Date().toISOString() } });
   }
 
   /**
