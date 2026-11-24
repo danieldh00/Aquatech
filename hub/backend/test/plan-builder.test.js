@@ -127,6 +127,7 @@ test('planWithinLimits: weigert te veel vlakken, hoekpunten of vreemde coördina
   assert.strictEqual(planWithinLimits({ areas: [area(61)] }), false);
   assert.strictEqual(planWithinLimits({ areas: [{ type: 'lawn', pts: [{ x: 0, y: 0 }, { x: 1e9, y: 0 }, { x: 0, y: 1 }] }] }), false);
   assert.strictEqual(planWithinLimits({}), true);
+  assert.strictEqual(planWithinLimits(null), false);
 });
 
 test('runPlanTask: de rij voor leads is klein en vult nooit de rij van de AI-koppeling', async () => {
