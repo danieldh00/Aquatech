@@ -198,7 +198,7 @@ table.list.missing td { color: var(--danger); }
 .drawbar:not([hidden]) ~ .plan-legend { top: 64px; }
 .plan-legend-body { padding: 0 10px 8px; }
 .plan-legend .lg-sec + .lg-sec { margin-top: 6px; }
-.plan-legend .lg-title { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); margin: 2px 0; }
+.plan-legend .lg-title { font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); margin: 2px 0; }
 .plan-legend .lg-item { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
 .plan-legend .lg-sw { width: 26px; height: 16px; flex: none; }
 .plan-legend .lg-lbl { flex: 1; min-width: 0; color: var(--text); }
@@ -280,7 +280,10 @@ table.list.missing td { color: var(--danger); }
   .toolbar { position: relative; flex-wrap: nowrap; gap: 4px; padding: 5px 6px; }
   .toolbar > * { flex: none; }
   .toolbar > .sep { display: none; }
-  .tbtn { min-width: 40px; padding: 5px 8px; }
+  .tbtn { min-width: 40px; min-height: 40px; padding: 5px 8px; }
+  .topbar .btn.icon { min-width: 40px; min-height: 40px; }
+  .step { min-height: 40px; }
+  .step-nav .btn { min-height: 40px; }
   .tlbl { display: none; }
   .toolbar .layers-toggle { display: inline-block; margin-left: auto; }
   .layers-toggle[aria-expanded="true"] { background: var(--primary-soft); border-color: var(--primary); }
