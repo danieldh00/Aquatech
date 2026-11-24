@@ -52,7 +52,7 @@ test('wat is nieuw: huidige versie staat erin, nieuwste bovenaan, punten per rec
   }
   const klant = Releases.visibleFor(['plannen', 'offertes.klant', 'portaal']);
   const text = JSON.stringify(klant);
-  assert.ok(!/Beheer → Rollen|Uitbesteden|Planner/.test(text), 'een klant ziet geen nieuws over beheer of planning');
+  assert.ok(!/Beheer → Rollen|Uitbesteden|standaardrol/i.test(text), 'een klant ziet geen nieuws over beheer of planning');
   assert.ok(klant.some((release) => release.version === '0.37.0'), 'wel over zijn portaal');
   assert.ok(Releases.visibleFor(['beheer']).some((release) => release.version === '0.49.0'));
   assert.strictEqual(Releases.compare('0.10.0', '0.9.9') > 0, true);

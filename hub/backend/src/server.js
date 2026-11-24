@@ -17,6 +17,7 @@ const { withScope, limitTo, bindStream, asSystem } = require('./database/tenant-
 const { createSettings } = require('./platform/settings');
 const { registerAccountRoutes } = require('./platform/account-routes');
 const { registerSettingsRoutes } = require('./platform/settings-routes');
+const { createModuleSwitches, registerModuleRoutes } = require('./platform/module-switches');
 const { registerAiUsageRoutes } = require('./platform/ai-usage-routes');
 const { registerThemeRoutes } = require('./platform/theme-routes');
 const { createVault, loadOrCreateMasterKey } = require('./beveiliging/vault');
@@ -411,15 +412,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Koppeling met het updatescript op de host (deploy/apps01/update.sh): zonder de twee mappen niet ingericht.
   const systemUpdate = createSystemUpdate({ statusDir: env.UPDATE_STATUS_DIR || '', requestDir: env.UPDATE_REQUEST_DIR || '', currentVersion: version });
   /**
-   * De aan/uit-vlaggen van de modules in een omgeving, zoals ze echt gelden: uitbesteden werkt tussen organisaties en staat
-   * dus uit zonder multitenancy, ook als de beheerder het niet zelf uitzette.
-   * @param {string} tenantId Id van de omgeving.
-   * @returns {object} Module-id → false voor modules die uit staan.
+   * De aan/uit-vlaggen van de modules en onderdelen in een omgeving, zoals ze echt gelden (platform/module-switches.js):
+   * uitbesteden werkt tussen organisaties en staat dus uit zonder multitenancy, ook als de beheerder het niet zelf uitzette.
    */
-  const moduleFlagsOf = (tenantId) => {
-    const flags = settingsFor(tenantId).get('modules');
-    return multitenancyOn() ? flags : { ...flags, uitbesteden: false };
-  };
+  const moduleSwitches = createModuleSwitches({ ModuleTools, settingsFor, mainTenantId: tenant.id, multitenancyOn });
+  const moduleFlagsOf = moduleSwitches.flagsOf;
   /**
    * Of een omgeving meedoet. Met multitenancy uit zijn dat de hoofdtenant en zijn testomgevingen; de gegevens van
    * andere organisaties blijven staan maar zijn niet bereikbaar tot multitenancy weer aan gaat.
@@ -1852,6 +1849,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
 
   registerSettingsRoutes(app, { tenant, auth, audit, requireJson, settingsFor, aiTenantOf, currentAnalyzer, moduleFlagsOf, ModuleTools });
+  registerModuleRoutes(app, { moduleSwitches, requireJson, audit });
 
   registerAiUsageRoutes(app, { store, aiUsage, settingsFor, aiTenantOf });
 

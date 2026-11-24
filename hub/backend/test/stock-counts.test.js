@@ -281,5 +281,5 @@ test('tellen met verpakkingen: de teller krijgt naam en factor als invoerhulp, n
   assert.deepStrictEqual(lines[0].packagings, [{ name: 'Bundel', factor: 10 }, { name: 'Pallet', factor: 100 }]);
   const other = (await world.picker.get(`/app/api/orderpick/counts/${count.id}/lines?location=A-10`)).body.lines;
   assert.deepStrictEqual(other[0].packagings, [], 'een artikel zonder verpakking krijgt een lege lijst');
-  assert.ok(!JSON.stringify(lines).includes('salePrice') && !JSON.stringify(lines).includes('55'), 'geen prijzen voor de teller');
+  assert.ok(!/salePrice|businessPrice|price/i.test(JSON.stringify(lines)) && !/[:\[,]\s*"?5[05](\.\d+)?"?\s*[,}\]]/.test(JSON.stringify(lines)), 'geen prijzen voor de teller');
 });

@@ -27,6 +27,14 @@
 // waarvan de server dan alle schrijfacties weigert met 409 `module_off`; lezen blijft
 // werken). Een nieuwe module met eigen instellingen vult alleen dit veld; Beheer en de
 // server volgen vanzelf (zie `isOn`, `hiddenSections`, `lockedSettings`, `lockedRoutes`).
+// **Modules aan/uit (Beheer > Modules)**: een module met `category` (sleutel uit CATEGORIES) krijgt daar een kaart met
+// een schakelaar en de korte tekst `summary`. Een onderdeel met een eigen schakelaar is een module met `partOf` en
+// `ownSwitch: true`, of een regel in FEATURES (schakelaars zonder eigen pagina; met `category` een eigen kaart, met
+// `partOf` een onderdeel van een kaart). `needs` = werkt alleen als die andere module aan staat. Een regel in FEATURES
+// met `setting` bedient een bestaande instelling uit settings.js (één waarheid: `{ key }` voor een ja/nee-instelling,
+// `{ key, field }` voor een veld in een object); `mainOnly` = alleen in de hoofdtenant. Een nieuw onderdeel staat
+// standaard aan (wat ontbreekt in de vlaggen staat aan) en krijgt hier zijn regel in dezelfde PR als de functie zelf:
+// een schakelaar verschijnt pas als de server hem ook echt volgt.
 // De API controleert de rechten ook zelf. Beheerders en hoofdbeheerders zien de
 // modules in een vaste zijbalk (shared/sidebar.js) in plaats van als tegels; een
 // nieuwe module verschijnt daar vanzelf.
@@ -48,9 +56,46 @@
     { key: 'footer', title: '', icon: 'user' },
   ];
 
+  /** De categorieën van Beheer > Modules, in volgorde. */
+  const CATEGORIES = [
+    { key: 'verkoop', title: 'Verkoop' },
+    { key: 'werk', title: 'Planner en werk' },
+    { key: 'magazijn', title: 'Magazijn en inkoop' },
+    { key: 'webshop', title: 'Webshop' },
+    { key: 'klantcontact', title: 'Klantcontact' },
+    { key: 'koppelingen', title: 'Koppelingen' },
+    { key: 'app', title: 'Dashboard en app' },
+  ];
+
+  /** Wat de Hub nodig heeft om te werken en dus geen schakelaar heeft (alleen ter informatie in Beheer > Modules). */
+  const ALWAYS_ON = ['Dashboard', 'Klanten', 'Gebruikers en rollen', 'Inloggen en tweestapsverificatie', 'Mijn profiel', 'Beheer en instellingen',
+    'Back-ups en hersteltest', 'Updates', 'Bewaking en logboek', 'Mail versturen'];
+
+  /**
+   * Schakelaars zonder eigen pagina: een eigen kaart (`category`) of een onderdeel van een module (`partOf`).
+   * Met `setting` is de schakelaar de bestaande instelling zelf; zonder `setting` staat hij in de vlaggen van `modules`.
+   */
+  const FEATURES = [
+    { id: 'offerte-opvolging', partOf: 'offertes', title: 'Automatische opvolging', setting: { key: 'quoteFollowUp', field: 'enabled' } },
+    { id: 'betalingsherinneringen', partOf: 'facturen', title: 'Betalingsherinneringen en aanmaningen', setting: { key: 'paymentReminders', field: 'enabled' } },
+    { id: 'tekening-indienen', partOf: 'beregening', title: 'Tekening indienen zonder account', setting: { key: 'drawingRequests' } },
+    { id: 'bestelvoorstellen-automatisch', partOf: 'voorraad', title: 'Automatische bestelvoorstellen', setting: { key: 'purchaseProposals', field: 'enabled' } },
+    { id: 'webshop', category: 'webshop', title: 'Webshop', summary: 'De eigen winkel op het hoofdadres, met de bestellingen.', setting: { key: 'storefront' }, mainOnly: true },
+    { id: 'webshop-bestellen', partOf: 'webshop', title: 'Bestellen en afrekenen', setting: { key: 'shopOrdering' }, mainOnly: true },
+    { id: 'webshop-gast', partOf: 'webshop', title: 'Bestellen als gast', setting: { key: 'shopPayment', field: 'guestCheckout' }, mainOnly: true },
+    { id: 'webshop-offerte', partOf: 'webshop', title: 'Offerte aanvragen', setting: { key: 'shopPayment', field: 'quoteRequest' }, mainOnly: true },
+    { id: 'webshop-planner', partOf: 'webshop', title: 'Planner in de webshop', setting: { key: 'shopPlanner' }, mainOnly: true },
+    { id: 'webshop-analytics', partOf: 'webshop', title: 'Google Analytics', setting: { key: 'shopAnalytics', field: 'enabled' }, mainOnly: true },
+    { id: 'webshop-clarity', partOf: 'webshop', title: 'Microsoft Clarity', setting: { key: 'shopClarity', field: 'enabled' }, mainOnly: true },
+    { id: 'seizoensherinneringen', partOf: 'portaal', title: 'Seizoensherinneringen', setting: { key: 'seasonReminders', field: 'enabled' } },
+    { id: 'ai-koppeling', category: 'koppelingen', title: 'AI-koppeling', summary: 'Claude of ChatGPT laten meewerken in de Hub.', setting: { key: 'aiConnector' } },
+  ];
+
   const MODULES = [
     {
       id: 'portaal',
+      category: 'klantcontact',
+      summary: 'Klanten zien hun offertes, afspraken, werkorders en facturen.',
       navGroup: 'top',
       title: 'Mijn portaal',
       description: 'Alles over uw tuinberegening op één plek: offertes, geplande afspraken, de voortgang van de aanleg, het opleverdossier met foto\'s en een storing of onderhoud melden.',
@@ -62,6 +107,8 @@
     },
     {
       id: 'nieuws',
+      category: 'klantcontact',
+      summary: 'Berichten voor collega\'s en klanten en wat er nieuw is in de app.',
       navGroup: 'top',
       title: 'Nieuws',
       description: 'Berichten van je organisatie en wat er nieuw is in de app sinds je vorige bezoek.',
@@ -71,6 +118,8 @@
     },
     {
       id: 'offertes',
+      category: 'verkoop',
+      summary: 'Offertes maken, versturen en digitaal laten tekenen.',
       navGroup: 'verkoop',
       title: 'Offertes',
       description: 'Offertes opbouwen uit een beregeningsplan: stuklijst en arbeid worden overgenomen, met bewerkbare prijzen, korting en btw, klantgegevens en export als PDF of Excel.',
@@ -83,6 +132,7 @@
     },
     {
       id: 'webshop-bestellingen',
+      partOf: 'webshop',
       navGroup: 'verkoop',
       title: 'Webshopbestellingen',
       navTitle: 'Bestellingen',
@@ -94,6 +144,8 @@
     },
     {
       id: 'orderpick',
+      category: 'magazijn',
+      summary: 'Picken en ontvangen met scanner of telefoon.',
       navGroup: 'magazijn',
       title: 'Orderpick',
       description: 'Bestellingen picken in het magazijn: de regels op volgorde van locatie, scannen met scanner of camera, aantal bevestigen, "niet aanwezig" melden en de order afmelden met pakbon en verzendlabel.',
@@ -126,6 +178,8 @@
     },
     {
       id: 'klantdossier',
+      category: 'klantcontact',
+      summary: 'Alle installaties en foto\'s per klant en locatie bij elkaar.',
       navGroup: 'verkoop',
       title: 'Klantdossiers',
       description: "Per klant alle installaties: oplevering, ontwerp en zones, geplaatste materialen en de foto's van voor, tijdens en na de aanleg. Af te drukken als opleverrapport (PDF).",
@@ -136,6 +190,8 @@
     },
     {
       id: 'facturen',
+      category: 'verkoop',
+      summary: 'Facturen, creditfacturen en debiteuren.',
       navGroup: 'verkoop',
       title: 'Facturen',
       description: 'Facturen maken vanuit een werkorder of als losse verkoop, met doorlopende nummering, btw per regel en PDF. Crediteren, betalingen bijhouden en exporteren naar de boekhouding (Visma) per omzetcategorie.',
@@ -147,6 +203,8 @@
     },
     {
       id: 'voorraad',
+      category: 'magazijn',
+      summary: 'Artikelen, voorraadstanden, inkoop en leveranciers.',
       navGroup: 'artikelen',
       title: 'Artikelen',
       description: 'Artikelen op voorraad met stand, locatie en minimumvoorraad. Werkorders reserveren hun materialen en boeken ze af bij verbruik of oplevering; ontvangsten, tellingen en correcties, met Excel-export.',
@@ -215,6 +273,8 @@
     },
     {
       id: 'beregening',
+      category: 'werk',
+      summary: 'Tuin tekenen, sproeiers plaatsen en een stuklijst maken.',
       navGroup: 'planner',
       title: 'Beregeningsplanner',
       description: 'Tuinberegening ontwerpen: vlakken tekenen of een plan laten herkennen, sproeiers, zones en leidingen, en een stuklijst met Excel-export.',
@@ -226,6 +286,8 @@
     },
     {
       id: 'plannen',
+      partOf: 'beregening',
+      ownSwitch: true,
       navGroup: 'planner',
       title: 'Plannenoverzicht',
       description: 'Alle beregeningsplannen in één tabel: projectnaam, klant, adres, oppervlaktes, sproeiers en zones, met Excel-export. Installateurs en beheerders zien de plannen van de hele organisatie.',
@@ -237,6 +299,8 @@
     },
     {
       id: 'planning',
+      category: 'werk',
+      summary: 'Agenda per dag, week en maand, met een afspraaklink voor de klant.',
       navGroup: 'planner',
       title: 'Planning',
       description: 'Weekagenda van de werkorders per uitvoerder: inplannen door te slepen, en de klant bevestigt de afspraak via een link.',
@@ -247,6 +311,8 @@
     },
     {
       id: 'werkorders',
+      category: 'werk',
+      summary: 'Uitvoering met werkstappen, uren, materiaal en foto\'s.',
       navGroup: 'planner',
       title: 'Werkorders',
       description: 'Werkorders uit geaccordeerde offertes: uitvoeringsplan met werkstappen en uren, zone-indeling, materiaallijst om te verzamelen, planning, toewijzing en een werkbon als PDF of Excel.',
@@ -257,6 +323,8 @@
     },
     {
       id: 'meldingen',
+      category: 'werk',
+      summary: 'Storingen en onderhoudsverzoeken van klanten.',
       navGroup: 'planner',
       title: 'Meldingen',
       description: 'Storingen en onderhoudsverzoeken die klanten via hun portaal melden, met foto\'s: reageren en er met één klik een werkorder van maken.',
@@ -267,6 +335,9 @@
     },
     {
       id: 'uitbesteden',
+      category: 'werk',
+      needs: 'werkorders',
+      summary: 'Werk doorgeven aan een andere organisatie op het platform.',
       navGroup: 'planner',
       title: 'Uitbesteden',
       description: 'Te veel werk? Bied een werkorder aan bij een andere organisatie op het platform, of neem opdrachten van anderen aan. Staat aan als de beheerder het in de instellingen aanzet.',
@@ -372,18 +443,61 @@
 
 
   /**
-   * Staat deze module aan? Een onderdeel (`partOf`) volgt zijn hoofdmodule; Beheer en Hoofdbeheer staan altijd aan.
-   * @param {object} [flags] De instelling `modules` (id → false = uit; wat ontbreekt staat aan).
-   * @param {string} id Id van de module.
-   * @returns {boolean} true als de module aan staat.
+   * Zoekt een module of schakelaar op.
+   * @param {string} id Id uit MODULES of FEATURES.
+   * @returns {object|undefined} De regel, of niets als de id onbekend is.
+   */
+  const entryOf = (id) => MODULES.find((module) => module.id === id) || FEATURES.find((feature) => feature.id === id);
+
+  /**
+   * Staat deze module of dit onderdeel aan? Een onderdeel (`partOf`) volgt zijn hoofdmodule en `needs` de module die
+   * het nodig heeft; Beheer en Hoofdbeheer staan altijd aan.
+   * @param {object} [flags] De vlaggen zoals ze gelden (id → false = uit; wat ontbreekt staat aan).
+   * @param {string} id Id van de module of het onderdeel.
+   * @returns {boolean} true als het aan staat.
    */
   function isOn(flags, id) {
     if (id === 'beheer' || id === 'hoofdbeheer') return true;
-    const own = MODULES.find((module) => module.id === id);
+    const own = entryOf(id);
     const off = flags || {};
-    if (own && own.partOf && off[own.partOf] === false) return false;
+    if (own && own.partOf && !isOn(off, own.partOf)) return false;
+    if (own && own.needs && !isOn(off, own.needs)) return false;
     return off[id] !== false;
   }
+
+  /**
+   * De titel van een module of schakelaar zoals Beheer > Modules hem toont.
+   * @param {string} id Id uit MODULES of FEATURES.
+   * @returns {string} De titel (de id zelf als die onbekend is).
+   */
+  const titleOf = (id) => { const entry = entryOf(id); return entry ? entry.title : id; };
+
+  /**
+   * De indeling van Beheer > Modules: per categorie de kaarten (modules en losse schakelaars) met hun onderdelen.
+   * @returns {{key: string, title: string, cards: {id: string, title: string, summary: string, needs: string, parts: {id: string, title: string}[]}[]}[]} De categorieën met minstens één kaart.
+   */
+  function switchTree() {
+    const candidates = [...MODULES, ...FEATURES];
+    /**
+     * De onderdelen met een eigen schakelaar van een kaart.
+     * @param {string} cardId Id van de kaart.
+     * @returns {{id: string, title: string}[]} De onderdelen, in de volgorde van het register.
+     */
+    const partsOf = (cardId) => candidates
+      .filter((entry) => entry.partOf === cardId && (entry.ownSwitch || FEATURES.includes(entry)))
+      .map((entry) => ({ id: entry.id, title: entry.title }));
+    return CATEGORIES.map((category) => ({
+      ...category,
+      cards: candidates.filter((entry) => entry.category === category.key && !entry.partOf && entry.status !== 'gepland')
+        .map((entry) => ({ id: entry.id, title: entry.title, summary: entry.summary || '', needs: entry.needs || '', parts: partsOf(entry.id) })),
+    })).filter((category) => category.cards.length);
+  }
+
+  /**
+   * Alle id's die in Beheer > Modules een schakelaar hebben.
+   * @returns {string[]} De id's van kaarten en onderdelen.
+   */
+  const switchIds = () => switchTree().flatMap((category) => category.cards.flatMap((card) => [card.id, ...card.parts.map((part) => part.id)]));
 
   /**
    * De modules die uit staan en een `configuration` hebben.
@@ -422,7 +536,7 @@
    */
   const newsBadge = (count) => (count > 0 ? `<span class="news-count" data-news-count title="Nieuw sinds je vorige bezoek">${count > 9 ? '9+' : count}</span>` : '');
 
-  root.AquatechModuleTools = { ICONS, NAV_GROUPS, icon, visible, usesSidebar, navSections, newsBadge, isOn, hiddenSections, lockedSettings, lockedRoutes };
+  root.AquatechModuleTools = { ICONS, NAV_GROUPS, CATEGORIES, FEATURES, ALWAYS_ON, entryOf, titleOf, switchTree, switchIds, icon, visible, usesSidebar, navSections, newsBadge, isOn, hiddenSections, lockedSettings, lockedRoutes };
   // Voor de server: de hulpfuncties hangen als `tools` aan de geëxporteerde lijst (niet-opsombaar, de lijst blijft een gewone array).
   if (typeof module !== 'undefined' && module.exports) module.exports = Object.defineProperty(MODULES, 'tools', { value: root.AquatechModuleTools });
 })(typeof window !== 'undefined' ? window : globalThis);
