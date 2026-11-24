@@ -112,6 +112,8 @@ const { createNewsStore, registerNewsRoutes, unreadCount } = require('./platform
 const { createSprinklerStore, registerSprinklerRoutes } = require('./beregening/sprinklers');
 const { runPlanTask } = require('./beregening/plan-runner');
 const { registerDrawingRoutes, RETENTION_DAYS: DRAWING_RETENTION_DAYS } = require('./beregening/drawings');
+/** Gasten zonder activiteit worden na zoveel dagen opgeruimd (audit T-11). */
+const GUEST_RETENTION_DAYS = 30;
 const { createAiUsageStore } = require('./platform/ai-usage');
 const { createAppLog } = require('./platform/app-log');
 const { createErrorReport, catchAsync, withCause, errorCounter } = require('./platform/error-report');
@@ -3149,6 +3151,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       removed.appLogs = appLog.prune(environment.id, environmentSettings.get('logRetentionDays'), environmentSettings.get('logErrorRetentionDays'));
       removed.aiUsage = aiUsage.prune(environment.id, environmentSettings.get('auditRetentionDays'));
       removed.drawings = store.purgeStaleDrawings(environment.id, DRAWING_RETENTION_DAYS);
+      removed.guests = store.purgeStaleGuests(environment.id, GUEST_RETENTION_DAYS);
       removed.accountTokens = accountTokens.purgeExpired(environment.id);
       removed.vismaLog = vismaLog.prune(environment.id, environmentSettings.get('auditRetentionDays'));
       removed.oauthGrants = oauthGrants.purge(environment.id);

@@ -17,6 +17,7 @@ const { requireVerifiedAddress } = require('../platform/address-lookup');
 const { clientKey } = require('../beveiliging/auth');
 const { inspectImage, fromBase64, MAX_IMAGE_BYTES, MAX_THUMB_BYTES, MAX_SIDE, MAX_THUMB_SIDE } = require('./photos');
 const { mailBody } = require('../verkoop/quotes');
+const { requireAccount } = require('./portal-access');
 
 const KINDS = { storing: 'Storing', onderhoud: 'Onderhoud', overig: 'Vraag of verzoek' };
 const STATUSES = {
@@ -526,7 +527,7 @@ function registerServiceRequestRoutes(app, ctx) {
     res.json(item);
   });
 
-  app.post('/api/portal/requests', requireJson, requirePortal, createLimiter, requireVerifiedAddress(ctx.addressGuard, (req) => req.body?.address, (req) => () => ctx.workorders.list(tenantOf(req), { customerId: req.user.id }).map((workOrder) => workOrder.address)), (req, res) => {
+  app.post('/api/portal/requests', requireJson, requirePortal, requireAccount, createLimiter, requireVerifiedAddress(ctx.addressGuard, (req) => req.body?.address, (req) => () => ctx.workorders.list(tenantOf(req), { customerId: req.user.id }).map((workOrder) => workOrder.address)), (req, res) => {
     const tenantId = tenantOf(req);
     const out = requests.create(req.user, tenantId, req.body, { installationOk: (id) => Boolean(portal.ownRow(tenantId, req.user.id, id)) });
     if (out.error) return fail(res, out);
@@ -535,14 +536,14 @@ function registerServiceRequestRoutes(app, ctx) {
     res.status(201).json(forCustomer(out.item));
   });
 
-  app.post('/api/portal/requests/:id/photos', requireJson, requirePortal, photoLimiter, (req, res) => {
+  app.post('/api/portal/requests/:id/photos', requireJson, requirePortal, requireAccount, photoLimiter, (req, res) => {
     const out = requests.addPhoto(tenantOf(req), req.params.id, req.user.id, req.body || {});
     if (out.error) return fail(res, out);
     audit(req, 'melding_foto_toegevoegd', { requestId: req.params.id, photoId: out.photo.id });
     res.status(201).json(out.photo);
   });
 
-  app.delete('/api/portal/requests/:id/photos/:pid', requirePortal, (req, res) => {
+  app.delete('/api/portal/requests/:id/photos/:pid', requirePortal, requireAccount, (req, res) => {
     const out = requests.removePhoto(tenantOf(req), req.params.id, req.user.id, req.params.pid);
     if (out.error) return fail(res, out);
     res.json({ ok: true });
@@ -554,7 +555,7 @@ function registerServiceRequestRoutes(app, ctx) {
     send(res, file);
   });
 
-  app.post('/api/portal/requests/:id/withdraw', requireJson, requirePortal, (req, res) => {
+  app.post('/api/portal/requests/:id/withdraw', requireJson, requirePortal, requireAccount, (req, res) => {
     const out = requests.withdraw(tenantOf(req), req.params.id, req.user.id);
     if (out.error) return fail(res, out);
     audit(req, 'melding_ingetrokken', { requestId: req.params.id });

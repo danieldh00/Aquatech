@@ -1285,6 +1285,39 @@ function createStore(db) {
   }
 
   /**
+   * Ruimt gasten op die al `days` dagen niet meer zijn gezien (of nooit zijn
+   * gezien) en nergens iets hebben achtergelaten: een gast met een plan of een
+   * andere verwijzing (die de database weigert te wissen) blijft staan. Sessies
+   * van een gast gaan mee. Hoogstens 200 per ronde, het uurlijkse onderhoud
+   * haalt de rest in (audit T-11).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {number} days Bewaartermijn in dagen.
+   * @returns {number} Aantal verwijderde gasten.
+   */
+  function purgeStaleGuests(tenantId, days) {
+    const cutoff = new Date(Date.now() - days * 86400000).toISOString();
+    const stale = prepare(`SELECT u.id FROM users u
+      WHERE u.tenant_id = ? AND u.kind = 'gast' AND u.created_at < ? AND (u.last_seen_at IS NULL OR u.last_seen_at < ?)
+        AND NOT EXISTS (SELECT 1 FROM plans p WHERE p.tenant_id = u.tenant_id AND p.owner_id = u.id)
+        AND NOT EXISTS (SELECT 1 FROM history h WHERE h.tenant_id = u.tenant_id AND h.user_id = u.id)
+      ORDER BY u.created_at LIMIT 2000`).all(tenantId, cutoff, cutoff);
+    let removed = 0;
+    for (const row of stale) {
+      if (removed >= 200) break;
+      try {
+        removed += transaction(db, () => {
+          prepare('DELETE FROM sessions WHERE tenant_id = ? AND user_id = ?').run(tenantId, row.id);
+          return prepare("DELETE FROM users WHERE tenant_id = ? AND id = ? AND kind = 'gast'").run(tenantId, row.id).changes;
+        });
+      } catch (error) {
+        // Een verwijzing elders (bijvoorbeeld historie): deze gast blijft staan.
+        if (!/foreign key|23503/i.test(String(error && (error.message || error.code)))) throw error;
+      }
+    }
+    return removed;
+  }
+
+  /**
    * Werkt het laatst-gezien-moment van een gebruiker bij, hooguit eens per vijf
    * minuten. Met de rij uit users (in plaats van alleen het id) wordt er niet
    * eens geschreven zolang last_seen_at nog vers is: geen query per verzoek.
@@ -1426,7 +1459,7 @@ function createStore(db) {
     getTenant, getTenantBySlug, tenantRow, listTenants, createTenant, updateTenant, createEnvironment, resetEnvironment, deleteEnvironment, deleteTenant, seedEnvironment,
     roles, accessibleTenants, countPlatformAdmins, dropEmptyTenant, accountProblem, listCustomers,
     ensureTenant, familyIds, systemUser, createGuest, createAccount, createCustomer, listCustomerPage, listCustomerPageAsync, getCustomer, createShopCustomer, businessProfile, saveBusinessProfile, loginNameFor, accountIdsByEmail, markEmailVerified, updateAccount, deleteAccount, changeOwnPassword, updateProfile, countAdmins, authenticate, loginTenant, loginTenantOfTestAccount, getUser, touchUser, listUsers, publicUser,
-    createSession, findSessionWithUser, prefetchSession, touchSession, deleteSession, dropSession, revokeSessions, audit, auditMany, listAudit, applyRetention,
+    createSession, findSessionWithUser, prefetchSession, touchSession, deleteSession, dropSession, revokeSessions, audit, auditMany, listAudit, applyRetention, purgeStaleGuests,
     record, listHistory, getHistory, listPlans, getPlan, savePlan, deletePlan, purgePlan,
     planReviewStatus, requestReview, reviewPlan, getPlanReview, submitDrawing, pendingDrawingChars, purgeStaleDrawings,
   };

@@ -16,6 +16,7 @@
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const { forCustomer } = require('./service-requests');
+const { requireAccount } = require('./portal-access');
 const { portalReminders } = require('./season-reminders');
 const { preferencesOf } = require('../platform/store');
 const { locationKey } = require('./photos');
@@ -211,7 +212,7 @@ function registerPortalRoutes(app, ctx) {
   });
 
   // Online betalen: geeft het adres van de betaalpagina bij Mollie.
-  app.post('/api/portal/invoices/:id/pay', requireJson, requirePortal, payLimiter, async (req, res) => {
+  app.post('/api/portal/invoices/:id/pay', requireJson, requirePortal, requireAccount, payLimiter, async (req, res) => {
     const invoice = ctx.invoicePayments ? ctx.invoicePayments.own(tenantOf(req), req.user.id, req.params.id) : null;
     if (!invoice) return invoiceNotFound(res);
     res.setHeader('Cache-Control', 'no-store');
@@ -222,7 +223,7 @@ function registerPortalRoutes(app, ctx) {
   });
 
   // Terug van de betaalpagina: de uitkomst eerst bij Mollie opvragen, want de webhook kan nog onderweg zijn.
-  app.post('/api/portal/invoices/:id/check', requireJson, requirePortal, payLimiter, async (req, res) => {
+  app.post('/api/portal/invoices/:id/check', requireJson, requirePortal, requireAccount, payLimiter, async (req, res) => {
     const invoice = ctx.invoicePayments ? ctx.invoicePayments.own(tenantOf(req), req.user.id, req.params.id) : null;
     if (!invoice) return invoiceNotFound(res);
     res.setHeader('Cache-Control', 'no-store');
@@ -236,7 +237,7 @@ function registerPortalRoutes(app, ctx) {
   });
 
   // Afspraak bevestigen of om een ander moment vragen.
-  app.post('/api/portal/workorders/:id/appointment', requireJson, requirePortal, (req, res) => {
+  app.post('/api/portal/workorders/:id/appointment', requireJson, requirePortal, requireAccount, (req, res) => {
     if (typeof workorders.respond !== 'function') return res.status(501).json({ error: 'not_available', message: 'Afspraken bevestigen is nog niet beschikbaar.' });
     const answer = req.body?.answer;
     if (answer !== 'bevestigd' && answer !== 'ander_moment') return res.status(400).json({ error: 'invalid_answer', message: 'Kies bevestigen of een ander moment.' });
