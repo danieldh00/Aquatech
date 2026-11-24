@@ -112,6 +112,21 @@ async function shopSamples(page, base) {
   return [pick(/groep\/[^/]+\/?$/), pick(/categorie\/[^/]+\/?$/), pick(/product\/[^/]+\/?$/)].filter(Boolean).map((href) => new URL(href, `${base}/`).pathname);
 }
 
+/**
+ * Stabiele sleutel van een consolemelding: CSP-meldingen (de tekst verschilt per Chromium-versie) worden
+ * `csp <richtlijn> <soort>`, de rest verliest adres, versie en id's.
+ * @param {string} message De melding.
+ * @returns {string} Sleutel voor de baseline.
+ */
+function consoleKey(message) {
+  if (/Content Security Policy/i.test(message)) {
+    const directive = (message.match(/directive[: ]+['"]?([a-z-]+)/i) || [])[1] || '?';
+    const kind = (message.match(/inline style|inline script|image|script|font|frame|connect/i) || ['?'])[0].toLowerCase();
+    return `csp ${directive} ${kind}`;
+  }
+  return message.replace(/https?:\/\/[^/\s]+/g, '').replace(/[?&]v=[\d.]+/g, '').replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g, 'uuid').slice(0, 80);
+}
+
 let jobCounter = 0;
 
 /**
@@ -141,7 +156,7 @@ async function checkPage(browser, { role, url, viewport, cookies, base }) {
     const findings = await page.evaluate(detectLayoutProblems, { tolerance: 2 });
     const label = url.replace(base, '');
     const redirected = shown !== label && !label.includes('#') ? ` (doorgestuurd naar ${shown})` : '';
-    for (const message of [...new Set(consoleErrors)]) findings.push({ kind: 'console-fout', selector: message.replace(/https?:\/\/[^/\s]+/g, '').replace(/[?&]v=[\d.]+/g, '').replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g, 'uuid').slice(0, 80), detail: message });
+    for (const message of [...new Set(consoleErrors)]) findings.push({ kind: 'console-fout', selector: consoleKey(message), detail: message });
     const result = findings.map((finding) => ({ role, page: label, viewport: viewport.name, ...finding }));
     if (response && response.status() >= 400) result.push({ role, page: label, viewport: viewport.name, kind: 'http-fout', selector: '', detail: `status ${response.status()}` });
     for (const message of errors) result.push({ role, page: label, viewport: viewport.name, kind: 'scriptfout', selector: '', detail: message.slice(0, 160) });
