@@ -34,6 +34,7 @@
 picture { display: contents; }
 body { margin: 0; font-family: var(--at-font); color: var(--at-ink); background: var(--at-page); line-height: 1.5; }
 a { color: var(--at-shop-navy); }
+button { font-family: inherit; }
 h1 { color: var(--at-shop-navy); font-size: 1.7rem; margin: 0.4em 0; }
 h2 { color: var(--at-shop-navy); font-size: 1.25rem; margin: 2em 0 0.7em; }
 svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
@@ -712,7 +713,7 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
 .product-card:hover { border-color: var(--at-shop-teal); box-shadow: 0 8px 22px rgba(27, 55, 104, 0.12); }
 .product-card .product-image { flex: none; aspect-ratio: auto; height: 190px; padding: 16px; box-sizing: border-box; background: color-mix(in srgb, var(--at-shop-navy) 5%, var(--at-white)); border-bottom: 0; }
 .product-card .product-image img { mix-blend-mode: multiply; }
-.product-card .stock { position: absolute; top: 10px; left: 10px; z-index: 1; padding: 4px 10px 4px 8px; font-size: 0.7rem; background: var(--at-shop-green-soft); border-radius: 999px; white-space: nowrap; }
+.product-card .stock { position: absolute; top: 10px; left: 10px; z-index: 1; padding: 4px 10px 4px 8px; font-size: 0.75rem; background: var(--at-shop-green-soft); border-radius: 999px; white-space: nowrap; }
 .product-card .stock.out { background: color-mix(in srgb, var(--at-stock-out) 12%, var(--at-white)); }
 .product-card .stock::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: currentColor; }
 .product-card > :not(.product-image):not(.stock) { margin-left: 16px; margin-right: 16px; }
@@ -736,12 +737,12 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
   .product-card .card-order .button::before { content: ""; display: inline-block; width: 22px; height: 22px; vertical-align: middle; background: var(--at-white); -webkit-mask: var(--cart-icon) center / contain no-repeat; mask: var(--cart-icon) center / contain no-repeat; }
   .product-card .product-price small { display: none; }
 }
-.product-card { --cart-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='20' r='1.5'/%3E%3Ccircle cx='18' cy='20' r='1.5'/%3E%3Cpath d='M2 3h3l2.7 12.4a1 1 0 0 0 1 .8h9.6a1 1 0 0 0 1-.8L21 7H6'/%3E%3C/svg%3E"); }
+.product-card { --cart-icon: url("icon-winkelwagen.svg"); }
 @media (max-width: 600px) {
   .product-grid, .browse .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .product-card .product-image { height: 130px; padding: 10px; }
   .product-card > :not(.product-image):not(.stock) { margin-left: 10px; margin-right: 10px; }
-  .product-card .stock { top: 6px; left: 6px; font-size: 0.62rem; }
+  .product-card .stock { top: 6px; left: 6px; font-size: 0.75rem; }
   .product-card .product-name, .product-card:hover .product-name, .product-card:focus-within .product-name, .product-card:active .product-name { font-size: 0.82rem; }
   .product-card .variant-pick, .product-card .card-sku { min-height: 48px; }
   .product-card .product-price strong { font-size: 1.15rem; }
@@ -758,3 +759,6 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
 .product-card .qty-step:disabled { opacity: .4; cursor: default; }
 @media (max-width: 600px) { .product-card .qty-step { width: 24px; } .product-card .qty-group input { width: 30px; } }
 @container (max-width: 215px) { .product-card .qty-step { width: 22px; } }
+
+/* Tikdoel van de zoekknop op smalle schermen: minimaal 44 px */
+@media (max-width: 600px) { .shop-search button { width: 44px; top: 0; bottom: 0; right: 0; } .shop-search input { padding-right: 52px; } }
