@@ -98,9 +98,13 @@
     { id: 'webshop-planner', partOf: 'webshop', title: 'Planner in de webshop', setting: { key: 'shopPlanner' }, mainOnly: true },
     { id: 'webshop-analytics', partOf: 'webshop', title: 'Google Analytics', section: 'webshop', setting: { key: 'shopAnalytics', field: 'enabled' }, mainOnly: true },
     { id: 'webshop-clarity', partOf: 'webshop', title: 'Microsoft Clarity', section: 'webshop', setting: { key: 'shopClarity', field: 'enabled' }, mainOnly: true },
+    { id: 'webshop-voorraadmelding', partOf: 'webshop', title: 'Mail mij als het weer op voorraad is', mainOnly: true },
     { id: 'installatiedossier', partOf: 'portaal', title: 'Installatiedossier per adres', configuration: { blocked: ['/api/portal/locations/*'] } },
     { id: 'seizoensherinneringen', partOf: 'portaal', title: 'Seizoensherinneringen', section: 'season', setting: { key: 'seasonReminders', field: 'enabled' } },
+    { id: 'visma', category: 'koppelingen', needs: 'facturen', title: 'Visma eAccounting', summary: 'Definitieve facturen en debiteuren doorsturen naar de boekhouding.', configuration: { blocked: ['/api/visma/**'] } },
     { id: 'ai-koppeling', category: 'koppelingen', title: 'AI-koppeling', summary: 'Claude of ChatGPT laten meewerken in de Hub.', section: 'ai-connector', setting: { key: 'aiConnector' } },
+    { id: 'dashboard-cijfers', category: 'app', title: 'KPI\'s op het dashboard', summary: 'De tegels met cijfers bovenaan het dashboard van beheerders.', section: 'kengetallen', configuration: { sections: ['kengetallen'], settings: ['dashboardKpis'], blocked: ['/api/kpis'] } },
+    { id: 'dashboard-taken', category: 'app', title: 'Openstaande taken', summary: 'Het blok en de bel met wat er nog te doen ligt.', configuration: { blocked: ['/api/tasks'] } },
   ];
 
   const MODULES = [

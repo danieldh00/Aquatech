@@ -174,7 +174,7 @@ test('seizoensherinneringen: zonder klantportaal (module uit) wordt er niets ver
 
 test('register: elke schakelaar hoort bij een categorie, heeft een unieke id en een bestaande instelling', () => {
   const tree = Tools.switchTree();
-  assert.deepStrictEqual(tree.map((category) => category.key), ['verkoop', 'werk', 'magazijn', 'webshop', 'klantcontact', 'koppelingen']);
+  assert.deepStrictEqual(tree.map((category) => category.key), ['verkoop', 'werk', 'magazijn', 'webshop', 'klantcontact', 'koppelingen', 'app']);
   const ids = Tools.switchIds();
   assert.strictEqual(new Set(ids).size, ids.length, 'geen dubbele id');
   for (const id of ids) assert.match(id, /^[a-z0-9-]{1,40}$/, `${id}: past in de vlaggen`);
@@ -365,4 +365,23 @@ test('server: onderdelen van Magazijn en inkoop zijn uit helemaal dicht, de rest
   const on = { etiketten: true, voorraadtelling: true, 'inkoop-inlezen': true, ontvangst: true };
   assert.strictEqual((await adminA.put('/app/api/admin/modules', { flags: on })).status, 200);
   for (const [method, url, body] of routes) assert.notStrictEqual((await adminA[method](url, body)).status, 409, `weer aan: ${method} ${url}`);
+});
+
+test('server: Visma, KPI\'s en openstaande taken zijn uit helemaal dicht', async () => {
+  const { adminA, adminB } = await setup();
+  const routes = [['get', '/app/api/visma'], ['get', '/app/api/visma/log'], ['get', '/app/api/visma/app'], ['get', '/app/api/kpis'], ['get', '/app/api/tasks']];
+  for (const [method, url, body] of routes) assert.notStrictEqual((await adminA[method](url, body)).status, 409, `aan: ${method} ${url}`);
+  assert.strictEqual((await adminA.put('/app/api/admin/modules', { flags: { visma: false, 'dashboard-cijfers': false, 'dashboard-taken': false } })).status, 200);
+  for (const [method, url, body] of routes) {
+    const response = await adminA[method](url, body);
+    assert.strictEqual(response.status, 409, `uit: ${method} ${url}`);
+    assert.strictEqual(response.body.error, 'module_off');
+  }
+  assert.strictEqual((await adminA.put('/app/api/admin/settings', { dashboardKpis: { items: [] } })).status, 409, 'de instelling van de KPI\'s is op slot');
+  assert.strictEqual((await adminA.get('/app/api/invoices')).status, 200, 'facturen zelf blijven werken');
+  assert.notStrictEqual((await adminB.get('/app/api/kpis')).status, 409, 'een andere organisatie merkt er niets van');
+  assert.strictEqual((await adminA.put('/app/api/admin/modules', { flags: { visma: true, 'dashboard-cijfers': true, 'dashboard-taken': true, facturen: false } })).status, 200);
+  assert.notStrictEqual((await adminA.get('/app/api/visma')).status, 409, 'alleen Facturen uit: de regel van die module geldt');
+  assert.notStrictEqual((await adminA.get('/app/api/kpis')).status, 409);
+  assert.strictEqual(Tools.isOn({ webshop: false }, 'webshop-voorraadmelding'), false);
 });

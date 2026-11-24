@@ -172,6 +172,10 @@
     const toggle = wrap.querySelector('.bell-btn');
     const popup = wrap.querySelector('.bell-pop');
     const badge = wrap.querySelector('.bell-count');
+    // Staat het onderdeel Openstaande taken uit (Beheer > Modules), dan is er geen bel en vraagt de pagina niets op.
+    const tools = window.AquatechModuleTools;
+    const bellOn = tools && tools.featureOn ? tools.featureOn('dashboard-taken') : Promise.resolve(true);
+    bellOn.then((on) => { wrap.hidden = !on; });
     /**
      * Tekent de teller en de lijst met taken.
      * @param {object[]} tasks Taken uit api/tasks.
@@ -195,6 +199,7 @@
      * @returns {Promise<void>}
      */
     const refresh = async (fresh) => {
+      if (!(await bellOn)) return;
       const data = await common.getJson('api/tasks', { fresh });
       if (data) draw(data.tasks || []);
     };

@@ -2134,7 +2134,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     db: database, settingsFor: (id) => settingsFor(id), vismaLog,
     debtors: debtorStore, invoices: invoiceStore, ...(vismaFetch ? { fetchImpl: vismaFetch } : {}),
   });
-  invoiceStore.onFinalized((tid) => visma.schedule(tid));
+  invoiceStore.onFinalized((tid) => { if (ModuleTools.isOn(moduleFlagsOf(tid), 'visma')) visma.schedule(tid); });
   // Materiaalverbruik op de werkorder boekt de voorraad af, in dezelfde
   // transactie als de verbruiksregel (zie stock.syncUsage).
   workLogStore.hook((tid, row, user) => stockStore.syncUsage(tid, {
@@ -2756,7 +2756,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    */
   app.locals.stockAlertsRun = async () => {
     const result = { sent: 0, purged: 0 };
-    if (stockAlertsBusy) return result;
+    if (stockAlertsBusy || !ModuleTools.isOn(moduleFlagsOf(tenant.id), 'webshop-voorraadmelding')) return result;
     stockAlertsBusy = true;
     try {
       result.purged = stockAlerts.purgeOld(tenant.id);
@@ -2989,6 +2989,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   storefrontRouter = createStorefront({
     addressLookup, addressGuard, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore, data: storefrontData, itemImages: itemImageStore,
     orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, orderSlips, returns: webReturns, guestOrders, stockAlerts, searchMisses, funnel, quoteRequests, payments: webPayments,
+    featureOn: (id) => ModuleTools.isOn(moduleFlagsOf(tenant.id), id),
     vies, captcha, captchaGate,
     onOrder: (req, order) => audit(req, 'webshop_bestelling_geplaatst', { number: order.number, total: order.total, ...(order.guest ? { gast: true } : {}) }, order.userId, tenant.id),
     onQuoteRequest: (req, quote, viewer, mailed) => audit(req, 'webshop_offerte_aangevraagd', { number: quote.number, mailed: Boolean(mailed) }, viewer.id, tenant.id),
@@ -3147,7 +3148,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    * Visma: omgevingen met automatisch doorsturen aan (vangnet naast het doorsturen direct na definitief).
    * @returns {Promise<*>} Uitkomst per omgeving.
    */
-  app.locals.vismaAll = () => visma.runAll(allEnvironmentIds());
+  app.locals.vismaAll = () => visma.runAll(allEnvironmentIds().filter((id) => ModuleTools.isOn(moduleFlagsOf(id), 'visma')));
   app.locals.visma = visma;
   // Seizoensherinneringen (season-reminders.js). Alleen klanten die in de
   // omgeving zelf wonen: een testomgeving mailt dus alleen haar testaccounts,
