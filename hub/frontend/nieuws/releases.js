@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.36.2',
+      date: '2026-11-24',
+      title: 'Onderdelen van Magazijn en inkoop apart aan of uit',
+      items: [
+        { text: 'In Beheer > Modules aan/uit kun je bij Artikelen en voorraad nu ook Etiketten, Voorraadtelling, Goederenontvangst en Inkooporder inlezen met AI apart uitzetten. Wat uit staat verdwijnt uit het scherm.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.36.1',
       date: '2026-11-24',
       title: 'Modules: nacalculatie, offertesjablonen, afspraaklink en meer apart uit te zetten',

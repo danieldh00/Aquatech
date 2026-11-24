@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.36.2
+
+- Schakelaars `etiketten`, `voorraadtelling` en `inkoop-inlezen` (onderdelen van de module voorraad) en een eigen schakelaar voor `ontvangst`; de adressen van een uitgezet onderdeel geven 409 `module_off`.
+- `data-feature="<id>"` op een element verbergt het als de module of het onderdeel uit staat (`applyFeatures` in dashboard/modules.js, aangeroepen door de zijbalk).
+
 ## 1.36.1
 
 Onderdelen met een eigen schakelaar voor Verkoop, Planner en werk en Klantcontact (geen migratie).
