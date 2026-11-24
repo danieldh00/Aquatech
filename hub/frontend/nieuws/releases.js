@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.36.1',
+      date: '2026-11-24',
+      title: 'Modules: nacalculatie, offertesjablonen, afspraaklink en meer apart uit te zetten',
+      items: [
+        { text: 'In Beheer > Modules staan zes nieuwe schakelaars: Nacalculatie, Offertesjablonen, Online betalen van facturen (klantportaal en betaallink), Plan herkennen met AI, Afspraaklink voor de klant en Installatiedossier per adres. Alles staat aan, tot je het zelf uitzet.', for: ['beheer'] },
+        { text: 'Zet je zo\'n onderdeel uit, dan verdwijnt het van het scherm (bijvoorbeeld het blok Nacalculatie op de werkorder) en weigert de server het ook. Wat al bewaard is blijft staan.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.36.0',
       date: '2026-11-24',
       title: 'Nieuw scherm Modules: alles per categorie aan of uit',
