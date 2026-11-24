@@ -305,8 +305,10 @@ test('hulpfuncties: adressen van een uitgezet onderdeel zijn helemaal dicht (pat
   assert.strictEqual(Tools.matchesRoute('/api/quote-templates/**', '/api/quote-templates/abc/nog-iets'), true);
   assert.strictEqual(Tools.matchesRoute('/api/quote-templates/**', '/api/quote-templatesx'), false);
   assert.strictEqual(Tools.matchesRoute('/api/quote-templates/**', '/api'), false);
+  assert.strictEqual(Tools.matchesRoute('POST /api/workorders/*/share', '/api/workorders/abc/share', 'post'), true);
+  assert.strictEqual(Tools.matchesRoute('POST /api/workorders/*/share', '/api/workorders/abc/share', 'DELETE'), false);
   for (const entry of [...MODULES, ...Tools.FEATURES]) {
-    for (const pattern of (entry.configuration && entry.configuration.blocked) || []) assert.match(pattern, /^\/api\/[a-z-]+(\/([a-z-]+|\*))*(\/\*\*)?$/, `${entry.id}: ${pattern}`);
+    for (const pattern of (entry.configuration && entry.configuration.blocked) || []) assert.match(pattern, /^((GET|POST|PUT|PATCH|DELETE) )?\/api\/[a-z-]+(\/([a-z-]+|\*))*(\/\*\*)?$/, `${entry.id}: ${pattern}`);
   }
 });
 
@@ -330,6 +332,8 @@ test('server: een uitgezet onderdeel weigert ook lezen op zijn adressen, aan wer
   assert.strictEqual((await adminA.get(`/app/api/Workorders/${id}/Costing/`)).status, 409);
   assert.strictEqual((await adminA.get('/app/api/QUOTE-TEMPLATES/')).status, 409);
   assert.notStrictEqual((await adminB.get('/app/api/quote-templates')).status, 409);
+  // Een eerder gedeelde afspraaklink intrekken kan nog wel.
+  assert.notStrictEqual((await adminA.del(`/app/api/workorders/${id}/share`)).status, 409);
   // De werkorders zelf blijven gewoon werken.
   assert.strictEqual((await adminA.get('/app/api/workorders')).status, 200);
   assert.strictEqual((await adminA.put('/app/api/admin/modules', { flags: Object.fromEntries(Object.keys(off).map((key) => [key, true])) })).status, 200);

@@ -883,9 +883,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use('/api', (req, res, next) => {
     // Express routeert zonder hoofdlettergevoeligheid en met of zonder slash aan het eind: beide tellen hier mee.
     const routePath = `/api${req.path}`.toLowerCase().replace(/\/+$/, '');
-    if (!everBlocked.some((pattern) => ModuleTools.matchesRoute(pattern, routePath))) return next();
+    if (!everBlocked.some((pattern) => ModuleTools.matchesRoute(pattern, routePath, req.method))) return next();
     if (!identify(req)) return next();
-    if (!ModuleTools.blockedRoutes(moduleFlagsOf(req.tenantId)).some((pattern) => ModuleTools.matchesRoute(pattern, routePath))) return next();
+    if (!ModuleTools.blockedRoutes(moduleFlagsOf(req.tenantId)).some((pattern) => ModuleTools.matchesRoute(pattern, routePath, req.method))) return next();
     res.status(409).json({ error: 'module_off', message: 'Dit onderdeel staat uit. Zet het eerst aan in Beheer > Modules aan/uit.' });
   });
   app.use('/api', (req, res, next) => {

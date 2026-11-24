@@ -84,7 +84,7 @@
     { id: 'nacalculatie', category: 'verkoop', needs: 'werkorders', title: 'Nacalculatie', summary: 'Opbrengst, kosten en marge per werkorder.', configuration: { blocked: ['/api/workorders/*/costing'] } },
     { id: 'plan-herkennen-ai', partOf: 'beregening', title: 'Plan herkennen met AI', section: 'ai', configuration: { blocked: ['/api/plan/analyze'] } },
     { id: 'tekening-indienen', partOf: 'beregening', title: 'Tekening indienen zonder account', section: 'access', setting: { key: 'drawingRequests' } },
-    { id: 'afspraaklink', partOf: 'planning', title: 'Afspraaklink voor de klant', configuration: { blocked: ['/api/workorders/*/share', '/api/workorders/*/send'] } },
+    { id: 'afspraaklink', partOf: 'planning', title: 'Afspraaklink voor de klant', configuration: { blocked: ['POST /api/workorders/*/share', '/api/workorders/*/send'] } },
     { id: 'bestelvoorstellen-automatisch', partOf: 'voorraad', title: 'Automatische bestelvoorstellen', setting: { key: 'purchaseProposals', field: 'enabled' } },
     { id: 'webshop', category: 'webshop', title: 'Webshop', summary: 'De eigen winkel op het hoofdadres, met de bestellingen.', section: 'webshop', setting: { key: 'storefront' }, mainOnly: true },
     { id: 'webshop-bestellen', partOf: 'webshop', title: 'Bestellen en afrekenen', setting: { key: 'shopOrdering' }, mainOnly: true },
@@ -547,14 +547,18 @@
 
   /**
    * Past een pad bij een patroon uit `blocked`? Per deel vergeleken, `*` = één willekeurig deel, even veel delen; een
-   * patroon dat op `/**` eindigt geldt voor het adres ervoor en alles eronder.
+   * patroon dat op `/**` eindigt geldt voor het adres ervoor en alles eronder. Begint het patroon met een methode
+   * (`POST /api/…`), dan geldt het alleen voor die methode.
    * @param {string} pattern Het patroon uit `configuration.blocked`.
    * @param {string} routePath Het pad in kleine letters, zonder slash aan het eind.
+   * @param {string} [method] De methode van het verzoek; weggelaten = elke methode.
    * @returns {boolean} true als het pad onder het patroon valt.
    */
-  function matchesRoute(pattern, routePath) {
-    const open = pattern.endsWith('/**');
-    const wanted = (open ? pattern.slice(0, -3) : pattern).split('/');
+  function matchesRoute(pattern, routePath, method) {
+    const [onlyMethod, address] = pattern.includes(' ') ? pattern.split(' ') : ['', pattern];
+    if (onlyMethod && method && onlyMethod !== String(method).toUpperCase()) return false;
+    const open = address.endsWith('/**');
+    const wanted = (open ? address.slice(0, -3) : address).split('/');
     const given = routePath.split('/');
     if (open ? given.length < wanted.length : given.length !== wanted.length) return false;
     return wanted.every((part, index) => part === '*' || part === given[index]);
