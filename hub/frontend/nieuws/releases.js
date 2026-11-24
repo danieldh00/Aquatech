@@ -13,6 +13,17 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.34.7',
+      date: '2026-11-24',
+      title: 'Betalingen: opnieuw proberen, terugstorten gemeld en voorraad sneller vrij',
+      items: [
+        { text: 'Mislukt de bevestigingsmail of de factuur na een online betaling, dan probeert de app het later vanzelf opnieuw.', for: ['beheer'] },
+        { text: 'Betaalt een klant een bestelling die al vervallen of geannuleerd was, of twee keer, dan krijgt hij een mail dat het bedrag teruggaat. Lukt terugstorten niet vanzelf, dan staat dat in Bewaking.', for: ['beheer'] },
+        { text: 'De voorraad van een online bestelling die niet betaald wordt komt nu binnen een half uur vrij (controle elke vijf minuten).', for: ['beheer'] },
+        { text: 'Een online betaling op een factuur die intussen gecrediteerd is staat in het logboek en in Bewaking.', for: ['facturen'] },
+      ],
+    },
+    {
       version: '1.34.6',
       date: '2026-11-24',
       title: 'Webshop: retour na account maken, pakbon-upload en afrekenlimiet',
