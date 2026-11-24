@@ -148,6 +148,9 @@ test('inloggen: blokkade per account en bezoeker, ruime grens per account, verzo
     const guesser = (code) => createClient(codeBase).request('POST', '/app/api/auth/login', { code }, { 'X-Forwarded-For': '198.51.100.250' });
     assert.strictEqual((await guesser('fout')).status, 401, 'eerste gok van een nieuwe bezoeker');
     assert.strictEqual((await guesser('juiste-code-123')).status, 429, 'daarna dicht zolang de gezamenlijke grens geldt');
+    // Verdeeld raden blijft begrensd: de gedeelde extra ruimte (20) raakt op, daarna is ook een verse bezoeker dicht.
+    for (let attempt = 0; attempt < 25; attempt++) await tryCode(`gok-${attempt}`);
+    assert.strictEqual((await tryCode('juiste-code-123')).status, 429, 'extra ruimte op: hard dicht, ook met de juiste code');
   } finally {
     codeServer.close();
   }

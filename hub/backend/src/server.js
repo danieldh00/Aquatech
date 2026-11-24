@@ -967,6 +967,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // voor alle pogingen samen (een IP-adres is achter een proxy te vervalsen).
   const CODE_KEY = 'toegangscode';
   const CODE_MAX_FAILURES = 30;
+  const CODE_EXTRA_KEY = 'toegangscode-extra';
+  const CODE_EXTRA_FAILURES = 20;
   /**
    * Telt een mislukte poging.
    * @param {string} name Sleutel (bijv. de gebruikersnaam).
@@ -1141,17 +1143,22 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (!getAccessCode()) {
       return res.status(400).json({ error: 'username_required', message: 'Vul je gebruikersnaam en wachtwoord in.' });
     }
-    // Twee grenzen: per bezoeker (10) en voor alle pogingen samen (30). Is alleen de gezamenlijke grens bereikt, dan mag een
-    // bezoeker zonder eigen mislukte pogingen nog wel proberen (een juiste code werkt dan gewoon): anders houdt één
-    // anonieme bezoeker de code-login voor iedereen dicht (audit B-21). Elke mislukte poging telt voor allebei.
+    // Drie grenzen: per bezoeker (10), voor alle mislukte pogingen samen (30) en, daarboven, een kleine gedeelde extra ruimte
+    // (20) voor bezoekers zonder eigen mislukte poging. Zonder die ruimte houdt één anonieme bezoeker de code-login voor
+    // iedereen dicht (audit B-21); met een onbegrensde uitzondering zou raden vanaf steeds nieuwe adressen weer kunnen. Zo
+    // zijn er per kwartier hoogstens 50 gokken te doen (30 + 20), ook met veel adressen, en komt een juiste code van een verse
+    // bezoeker binnen zolang die extra ruimte niet is opgebruikt. Een mislukte poging telt voor alle grenzen waar ze onder valt.
     const visitorKey = `${CODE_KEY}@${clientKey(req)}`;
-    if (lockedOut(visitorKey, 10) || (lockedOut(CODE_KEY, CODE_MAX_FAILURES) && (failures.get(visitorKey)?.count || 0) > 0)) {
+    const jointLocked = lockedOut(CODE_KEY, CODE_MAX_FAILURES);
+    const usesExtra = jointLocked && !lockedOut(visitorKey, 10) && !(failures.get(visitorKey)?.count > 0);
+    if (lockedOut(visitorKey, 10) || (jointLocked && !usesExtra) || (usesExtra && lockedOut(CODE_EXTRA_KEY, CODE_EXTRA_FAILURES))) {
       audit(req, 'inloggen_geblokkeerd', { via: 'toegangscode' }, null);
       return res.status(429).json({ error: 'locked', message: 'Te veel mislukte pogingen met de toegangscode. Probeer het over een kwartier opnieuw.' });
     }
     if (!auth.checkCode(String(req.body?.code ?? req.body?.password ?? ''))) {
       failed(CODE_KEY);
       failed(visitorKey);
+      if (usesExtra) failed(CODE_EXTRA_KEY);
       audit(req, 'inloggen_mislukt', { via: 'toegangscode' }, null);
       return res.status(401).json({ error: 'wrong_code', message: 'Onjuiste toegangscode.' });
     }
