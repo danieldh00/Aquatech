@@ -104,6 +104,20 @@ function contactOf(profile) {
 }
 
 /**
+ * Middleware: schrijfacties in het klantportaal alleen voor echte accounts; een
+ * gast (anonieme bezoeker met gasttoegang) mag het portaal alleen lezen, anders
+ * zijn meldingen, mails en foto's goedkoop in massa te maken (audit B-08).
+ * @param {object} req Het Express-verzoek.
+ * @param {object} res Het Express-antwoord.
+ * @param {Function} next Volgende stap.
+ * @returns {void}
+ */
+function requireAccount(req, res, next) {
+  if (req.user && req.user.kind === 'gast') return res.status(403).json({ error: 'account_required', message: 'Maak een account aan en log in om dit te doen.' });
+  return next();
+}
+
+/**
  * Registreert de API-routes van het klantportaal (recht 'portaal'; gegevens
  * van de actieve omgeving, net als offertes).
  * @param {object} app De Express-app.
@@ -211,7 +225,7 @@ function registerPortalRoutes(app, ctx) {
   });
 
   // Online betalen: geeft het adres van de betaalpagina bij Mollie.
-  app.post('/api/portal/invoices/:id/pay', requireJson, requirePortal, payLimiter, async (req, res) => {
+  app.post('/api/portal/invoices/:id/pay', requireJson, requirePortal, requireAccount, payLimiter, async (req, res) => {
     const invoice = ctx.invoicePayments ? ctx.invoicePayments.own(tenantOf(req), req.user.id, req.params.id) : null;
     if (!invoice) return invoiceNotFound(res);
     res.setHeader('Cache-Control', 'no-store');
@@ -222,7 +236,7 @@ function registerPortalRoutes(app, ctx) {
   });
 
   // Terug van de betaalpagina: de uitkomst eerst bij Mollie opvragen, want de webhook kan nog onderweg zijn.
-  app.post('/api/portal/invoices/:id/check', requireJson, requirePortal, payLimiter, async (req, res) => {
+  app.post('/api/portal/invoices/:id/check', requireJson, requirePortal, requireAccount, payLimiter, async (req, res) => {
     const invoice = ctx.invoicePayments ? ctx.invoicePayments.own(tenantOf(req), req.user.id, req.params.id) : null;
     if (!invoice) return invoiceNotFound(res);
     res.setHeader('Cache-Control', 'no-store');
@@ -236,7 +250,7 @@ function registerPortalRoutes(app, ctx) {
   });
 
   // Afspraak bevestigen of om een ander moment vragen.
-  app.post('/api/portal/workorders/:id/appointment', requireJson, requirePortal, (req, res) => {
+  app.post('/api/portal/workorders/:id/appointment', requireJson, requirePortal, requireAccount, (req, res) => {
     if (typeof workorders.respond !== 'function') return res.status(501).json({ error: 'not_available', message: 'Afspraken bevestigen is nog niet beschikbaar.' });
     const answer = req.body?.answer;
     if (answer !== 'bevestigd' && answer !== 'ander_moment') return res.status(400).json({ error: 'invalid_answer', message: 'Kies bevestigen of een ander moment.' });
