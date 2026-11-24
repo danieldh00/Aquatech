@@ -27,6 +27,8 @@ const MAX_PENDING_CHARS = 40 * 1024 * 1024;
 const RETENTION_DAYS = 60;
 const PER_IP_HOUR = 10;
 const PER_TENANT_DAY = 30;
+// Concept-offertes bij ingediende tekeningen per organisatie per uur (het rekenwerk loopt in een werkthread).
+const PER_TENANT_LEADS_HOUR = 20;
 
 /**
  * Maakt van een invoerwaarde nette tekst: zonder stuurtekens, getrimd en ingekort.
@@ -76,6 +78,18 @@ function registerDrawingRoutes(app, ctx) {
   const planLimiter = ctx.planLimiter || ((req, res, next) => next());
   const ipLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: PER_IP_HOUR, keyFn: clientKey });
   const tenantLimiter = createRateLimiter({ windowMs: 24 * 60 * 60 * 1000, max: PER_TENANT_DAY, keyFn: (req) => req.drawingTenant });
+  const leadLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: PER_TENANT_LEADS_HOUR, keyFn: (req) => req.drawingTenant });
+  /**
+   * Mag er voor deze organisatie nog een concept-offerte bij een ingediende tekening gemaakt worden (begrenzing per uur)?
+   * Daarboven slaagt het indienen wel, maar zonder offerte.
+   * @param {string} tenantId Id van de organisatie.
+   * @returns {boolean} true als er een offerte gemaakt mag worden.
+   */
+  const leadAllowed = (tenantId) => {
+    let allowed = false;
+    leadLimiter({ drawingTenant: tenantId }, { setHeader() {}, status() { return { json() {} }; } }, () => { allowed = true; });
+    return allowed;
+  };
   /**
    * Stuurt het antwoord 404 "plan niet gevonden".
    * @param {object} res Het Express-antwoord.
@@ -141,7 +155,7 @@ function registerDrawingRoutes(app, ctx) {
     // Geen persoonsgegevens in het auditlog.
     // Elke ingediende tekening wordt een lead met een concept-offerte voor de installateur; een fout hierin laat het indienen zelf slagen.
     let quote = null;
-    if (ctx.createLeadQuote) {
+    if (ctx.createLeadQuote && leadAllowed(found.tenant.id)) {
       try {
         quote = await ctx.createLeadQuote(found.tenant.id, { plan, planData: input.value.data, customer: { name: input.value.name, email: input.value.email, phone: input.value.phone, address: input.value.address } });
       } catch (error) {

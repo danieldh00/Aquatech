@@ -74,5 +74,12 @@ test('ingediende tekening wordt een concept-offerte voor de installateur', async
     assert.ok(data.lines.length > 0);
     assert.strictEqual(data.customer.name, 'Mark Jansen');
     assert.match(data.internalNote, /planner zonder account/);
+    // Module Offertes uit: de tekening komt wel binnen, maar er komt geen tweede offerte.
+    const baas = createClient(base);
+    await baas.login('baas', PW);
+    assert.strictEqual((await baas.put('/app/api/admin/modules', { flags: { offertes: false } })).status, 200);
+    assert.strictEqual((await anon.post('/app/api/public/drawing', submission({ name: 'Tweede Aanvrager' }))).status, 201);
+    assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM plans').get().n, 2);
+    assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM quotes').get().n, 1);
   } finally { server.close(); }
 });

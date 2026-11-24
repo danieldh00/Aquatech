@@ -15,6 +15,7 @@ const { listen } = require('./helpers/http-client');
  */
 async function setup(extra = {}, enabled = true) {
   const app = express();
+  app.use(express.json());
   const tenant = { id: 't-1', slug: 'default', name: 'Test' };
   registerDrawingRoutes(app, {
     store: { getTenantBySlug: (slug) => (slug === 'default' ? tenant : null) },
@@ -59,4 +60,24 @@ test('publicCatalogOf: alleen artikelen met prijs, zonder sku of adres, btw uit 
   assert.deepStrictEqual(Object.keys(result.articles), ['PE-32']);
   assert.deepStrictEqual(result.articles['PE-32'], { name: 'PE-buis', price: 2, vatRate: 9, inStock: true });
   assert.ok(result.assortment.includes('PE-32'));
+});
+
+test('ingediende tekening: een fout of ontbrekende offerte laat het indienen slagen, de offerte staat in de melding en het auditlog', async () => {
+  const submitted = [];
+  for (const createLeadQuote of [() => { throw new Error('rekenfout'); }, () => null, () => ({ id: 'q-1', number: 'O2026-0001' })]) {
+    const audits = [];
+    const { server, base } = await setup({
+      createLeadQuote, audit: (...args) => audits.push(args[2]),
+      store: { getTenantBySlug: () => ({ id: 't-1' }), submitDrawing: () => { submitted.push(1); return { id: 'p1', title: 'Tuin', reference: 'ABCD1234', ownerId: 'u1' }; }, pendingDrawingChars: () => 0 },
+      requireJson: (req, res, next) => next(),
+    });
+    try {
+      const body = { name: 'Mark', email: 'mark@voorbeeld.test', consent: true, website: '', data: { areas: [{ id: 'a', type: 'lawn', pts: [{ x: 0, y: 0 }, { x: 5, y: 0 }, { x: 5, y: 5 }] }], sprinklers: [], elements: [], zones: [], settings: {}, meta: {} } };
+      const res = await fetch(`${base}/api/public/drawing`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      assert.strictEqual(res.status, 201);
+      assert.strictEqual(audits.length, 1);
+      assert.strictEqual(Boolean(audits[0].quoteId), createLeadQuote.toString().includes('q-1'));
+    } finally { server.close(); }
+  }
+  assert.strictEqual(submitted.length, 3);
 });
