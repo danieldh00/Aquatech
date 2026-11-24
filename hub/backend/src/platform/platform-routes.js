@@ -2,6 +2,7 @@
 // gebruikers per organisatie. Uit server.js gehaald (doorlichtingspunt 12); het gedrag is gelijk gebleven.
 const { FIELDS, LIVE_ONLY_KEYS, valueForTest } = require('./settings');
 const { hashPassword, passwordProblem } = require('./store');
+const { withCause } = require('./error-report');
 const testdata = require('./test-data');
 const { validShareBase } = require('../verkoop/quotes');
 
@@ -20,7 +21,7 @@ function registerPlatformRoutes(app, { store, tenant, settings, settingsFor, set
    * @param {{ status?: number, error: string }} out De fout.
    * @returns {void}
    */
-  const platformError = (res, out) => res.status(out.status || 400).json({ error: 'invalid_tenant', message: out.error });
+  const platformError = (res, out) => (out.cause ? withCause(res, out.cause) : res).status(out.status || 400).json({ error: 'invalid_tenant', message: out.error });
 
   /**
    * Antwoord voor een handeling op een organisatie die niet meedoet omdat multitenancy uit staat.

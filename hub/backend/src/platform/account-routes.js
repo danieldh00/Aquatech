@@ -14,7 +14,9 @@ function registerAccountRoutes(app, { store, auth, identify, audit, requireJson,
   app.post('/api/account/password', requireJson, wrap(async (req, res) => {
     const session = auth.session(req);
     if (session?.via !== 'user') return res.status(400).json({ error: 'no_account', message: 'Log in met je eigen account om je wachtwoord te wijzigen.' });
-    if (identify(req)?.impersonation) return res.status(409).json({ error: 'impersonating', message: 'Ga eerst terug naar je eigen account.' });
+    const active = identify(req);
+    if (!active) return res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' });
+    if (active.impersonation) return res.status(409).json({ error: 'impersonating', message: 'Ga eerst terug naar je eigen account.' });
     const key = `wachtwoord:${session.user.id}`;
     if (lockedOut(key)) return res.status(429).json({ error: 'locked', message: 'Te veel mislukte pogingen. Probeer het over een kwartier opnieuw.' });
     const out = await store.changeOwnPassword(session.user.id, String(req.body?.currentPassword ?? '').slice(0, 1024), String(req.body?.newPassword ?? '').slice(0, 1024));
@@ -40,7 +42,9 @@ function registerAccountRoutes(app, { store, auth, identify, audit, requireJson,
   function profileOwner(req, res) {
     const session = auth.session(req);
     if (session?.via !== 'user') { res.status(400).json({ error: 'no_account', message: 'Log in met je eigen account om je profiel te bekijken.' }); return null; }
-    if (identify(req)?.impersonation) { res.status(409).json({ error: 'impersonating', message: 'Ga eerst terug naar je eigen account.' }); return null; }
+    const active = identify(req);
+    if (!active) { res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' }); return null; }
+    if (active.impersonation) { res.status(409).json({ error: 'impersonating', message: 'Ga eerst terug naar je eigen account.' }); return null; }
     return session.user;
   }
   /**

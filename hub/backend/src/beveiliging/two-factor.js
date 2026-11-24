@@ -144,7 +144,9 @@ function registerTwoFactorRoutes(app, { twoFactor, auth, store, identify, requir
   const ownAccount = (req, res) => {
     const session = auth.session(req);
     if (session?.via !== 'user') { res.status(400).json({ error: 'no_account', message: 'Log in met je eigen account.' }); return null; }
-    if (identify(req)?.impersonation) { res.status(409).json({ error: 'impersonating', message: 'Ga eerst terug naar je eigen account.' }); return null; }
+    const active = identify(req);
+    if (!active) { res.status(401).json({ error: 'not_logged_in', message: 'Log eerst in.' }); return null; }
+    if (active.impersonation) { res.status(409).json({ error: 'impersonating', message: 'Ga eerst terug naar je eigen account.' }); return null; }
     return session.user;
   };
 
@@ -155,9 +157,18 @@ function registerTwoFactorRoutes(app, { twoFactor, auth, store, identify, requir
     res.json(twoFactor.stateOf(user.tenant_id, user.id));
   });
 
-  app.post('/api/account/totp/setup', requireJson, (req, res) => {
+  // Aanzetten vraagt het huidige wachtwoord, net als uitzetten: een open sessie op een gedeelde computer is niet genoeg
+  // om een eigen authenticator te koppelen en de eigenaar buiten te sluiten (audit B-35).
+  app.post('/api/account/totp/setup', requireJson, async (req, res) => {
     const user = ownAccount(req, res);
     if (!user) return;
+    const key = `totp-instellen:${user.id}`;
+    if (guard.blocked(req, key)) return res.status(429).json({ error: 'locked', message: 'Te veel mislukte pogingen. Probeer het over een kwartier opnieuw.' });
+    const checked = await store.authenticate(user.tenant_id, user.username, String(req.body?.password ?? '').slice(0, 1024));
+    if (!checked || checked.id !== user.id) {
+      guard.fail(req, key);
+      return res.status(400).json({ error: 'wrong_password', message: 'Het wachtwoord klopt niet.' });
+    }
     const out = twoFactor.startSetup(user);
     if (out.error) return res.status(out.status).json({ error: 'totp_state', message: out.error });
     res.setHeader('Cache-Control', 'no-store');

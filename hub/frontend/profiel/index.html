@@ -94,6 +94,8 @@
         <h2>Tweestapsverificatie <span id="tf-status" class="tf-badge">Uit</span></h2>
         <div id="tf-off">
           <p class="hint">Bij het inloggen vraagt de app dan naast je wachtwoord om een code uit een authenticator-app op je telefoon (bijvoorbeeld Microsoft Authenticator, Google Authenticator of 1Password).</p>
+          <label class="field"><span class="label">Wachtwoord ter controle</span>
+            <input id="tf-start-password" type="password" autocomplete="current-password" maxlength="1024"></label>
           <div class="form-actions"><button class="btn primary" type="button" id="tf-start">Aanzetten</button></div>
         </div>
         <form id="tf-setup" hidden novalidate>
