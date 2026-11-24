@@ -267,7 +267,11 @@ function planWithinLimits(planData) {
   if (!planData || typeof planData !== 'object') return false;
   const areas = Array.isArray(planData.areas) ? planData.areas : [];
   if (areas.length > LIMITS.areas) return false;
-  if (Array.isArray(planData.elements) && planData.elements.length > LIMITS.leadElements) return false;
+  for (const list of [planData.elements, planData.sprinklers, planData.zones]) {
+    if (list != null && (!Array.isArray(list) || list.length > LIMITS.leadElements)) return false;
+  }
+  const placed = [...(planData.elements || []), ...(planData.sprinklers || [])];
+  if (!placed.every((item) => item && validCoordinate(item.x) && validCoordinate(item.y))) return false;
   return areas.every((area) => area && Array.isArray(area.pts) && area.pts.length <= LIMITS.points
     && area.pts.every((point) => point && validCoordinate(point.x) && validCoordinate(point.y)));
 }

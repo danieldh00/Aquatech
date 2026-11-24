@@ -128,6 +128,10 @@ test('planWithinLimits: weigert te veel vlakken, hoekpunten of vreemde coördina
   assert.strictEqual(planWithinLimits({ areas: [{ type: 'lawn', pts: [{ x: 0, y: 0 }, { x: 1e9, y: 0 }, { x: 0, y: 1 }] }] }), false);
   assert.strictEqual(planWithinLimits({}), true);
   assert.strictEqual(planWithinLimits(null), false);
+  assert.strictEqual(planWithinLimits({ areas: [], sprinklers: Array.from({ length: 201 }, () => ({ x: 1, y: 1 })) }), false);
+  assert.strictEqual(planWithinLimits({ areas: [], zones: Array.from({ length: 201 }, () => ({})) }), false);
+  assert.strictEqual(planWithinLimits({ areas: [], elements: [{ x: 1e9, y: 0 }] }), false);
+  assert.strictEqual(planWithinLimits({ areas: [], sprinklers: [{ x: 1, y: 2 }], elements: [{ x: 3, y: 4 }], zones: [{}] }), true);
 });
 
 test('runPlanTask: de rij voor leads is klein en vult nooit de rij van de AI-koppeling', async () => {
