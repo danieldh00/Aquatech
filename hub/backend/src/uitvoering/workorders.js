@@ -88,7 +88,7 @@ function appointmentOf(workOrderRow, data) {
  * Maakt de opslag voor werkorders en de afspraaklink.
  * @param {object} db De database.
  * @param {{ vault?: object, staffRoles?: Function, customerScopeOf?: Function }} [options] Kluis voor het token; rollen die een werkorder kunnen uitvoeren (per tenant); (tenantId) => { tenantIds, roleKeys } = waar de klanten van een omgeving wonen en welke rollen klant zijn (voor `autoLink`).
- * @returns {object} list, listAsync, listPage, get, day, quoteOf, staff, create, createReceived, update, schedule, share, unshare, markSent, byToken, markViewed, shareLink, publicView, respond, remove, purge, nextNumber, autoLink en countUnlinked.
+ * @returns {object} list, listAsync, listPage, get, day, quoteOf, staff, create, createReceived, createForAcceptedQuote, listToSchedule, update, schedule, share, unshare, markSent, byToken, markViewed, shareLink, publicView, respond, remove, purge, nextNumber, autoLink en countUnlinked.
  */
 function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['beheerder', 'installateur'], customerScopeOf = () => null } = {}) {
   /**
@@ -451,6 +451,37 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
   }
 
   /**
+   * Zet bij een geaccordeerde offerte automatisch een werkorder klaar (status open, dus In te plannen), zonder planning of
+   * uitvoerder. Doet niets als de offerte niet op akkoord staat of er al een werkorder van is (ook niet na een tweede akkoord).
+   * Eigenaar van de werkorder is de eigenaar van de offerte.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} quoteId Id van de offerte.
+   * @returns {{ workOrder: object, owner: { id: string, tenant_id: string } }|null} De nieuwe werkorder en de eigenaar, of null als er niets is aangemaakt.
+   */
+  function createForAcceptedQuote(tenantId, quoteId) {
+    const quote = quoteOf(tenantId, quoteId);
+    if (!quote || quote.status !== 'akkoord') return null;
+    if (prepare('SELECT 1 AS found FROM work_orders WHERE tenant_id = ? AND quote_id = ? AND deleted_at IS NULL LIMIT 1').get(tenantId, quote.id)) return null;
+    const ownerRow = prepare('SELECT owner_id FROM quotes WHERE tenant_id = ? AND id = ?').get(tenantId, quote.id);
+    if (!ownerRow) return null;
+    const owner = { id: ownerRow.owner_id, tenant_id: tenantId };
+    return { workOrder: create(owner, quote, undefined, {}), owner };
+  }
+
+  /**
+   * Werkorders die nog ingepland moeten worden (geen datum, niet gereed of geannuleerd), voor de openstaande taken.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {number} [limit] Hoeveel er in de lijst komen (standaard 5).
+   * @returns {{ total: number, items: { id: string, number: string, customer: string, title: string, createdAt: string }[] }} Het aantal en de oudste werkorders.
+   */
+  function listToSchedule(tenantId, limit = 5) {
+    const total = Number(prepare("SELECT COUNT(*) AS n FROM work_orders WHERE tenant_id = ? AND deleted_at IS NULL AND planned_date IS NULL AND status NOT IN ('gereed', 'geannuleerd')").get(tenantId).n);
+    const items = prepare("SELECT id, number, customer, title, created_at FROM work_orders WHERE tenant_id = ? AND deleted_at IS NULL AND planned_date IS NULL AND status NOT IN ('gereed', 'geannuleerd') ORDER BY created_at, id LIMIT ?").all(tenantId, Math.max(1, Math.min(20, Number(limit) || 5)))
+      .map((workOrderRow) => ({ id: workOrderRow.id, number: workOrderRow.number, customer: workOrderRow.customer || '', title: workOrderRow.title || '', createdAt: workOrderRow.created_at }));
+    return { total, items };
+  }
+
+  /**
    * Werkorder zonder offerte: de kopie van een uitbestede opdracht in de
    * omgeving van de organisatie die hem heeft aangenomen (outsourcing.js), of
    * een klus uit een melding van een klant (service-requests.js). Draait
@@ -695,7 +726,7 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
     });
   }
 
-  return { list, listAsync, listPage, get, day, quoteOf, staff, create, createReceived, update, schedule, share, unshare, markSent, byToken, markViewed, shareLink, publicView, respond, remove, purge, nextNumber, autoLink, countUnlinked };
+  return { list, listAsync, listPage, get, day, quoteOf, staff, create, createReceived, createForAcceptedQuote, listToSchedule, update, schedule, share, unshare, markSent, byToken, markViewed, shareLink, publicView, respond, remove, purge, nextNumber, autoLink, countUnlinked };
 }
 
 /**

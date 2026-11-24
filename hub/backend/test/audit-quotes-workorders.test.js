@@ -74,7 +74,8 @@ test('B-23: dossiers tonen offertes met totaal alleen met het recht offertes', a
   const monteur = await as('monteur'), planner = await as('planner1');
   const quote = (await monteur.post('/app/api/quotes', { data: quoteData(), customerId })).body;
   await monteur.put(`/app/api/quotes/${quote.id}`, { status: 'akkoord' });
-  const workOrder = (await monteur.post('/app/api/workorders', { quoteId: quote.id })).body;
+  // Het akkoord heeft automatisch een werkorder klaargezet (V-01).
+  const workOrder = (await monteur.get('/app/api/workorders')).body.items[0];
   assert.ok(workOrder.id);
   const withRight = (await monteur.get(`/app/api/dossiers/a-${customerId}`)).body;
   assert.strictEqual(withRight.quotes.length, 1);

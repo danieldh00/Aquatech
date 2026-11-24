@@ -35,7 +35,7 @@ test('offertes en werkorders: pagina, totaal en ingekort', async () => {
   const main = store.ensureTenant().id;
   await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { mustChangePassword: false });
   await store.createAccount(main, { username: 'monteur', displayName: 'Monteur', role: 'installateur', password: PW }, { mustChangePassword: false });
-  const { server, base } = await listen(createApp({ env: { APP_PUBLIC_URL: 'https://aquatech.example/' }, secret: 'e'.repeat(64), db, addressFetch: createPdokFake().fetchImpl, loginDelayMs: 0 }));
+  const { server, base } = await listen(createApp({ env: { AUTO_WORK_ORDER: '0', APP_PUBLIC_URL: 'https://aquatech.example/' }, secret: 'e'.repeat(64), db, addressFetch: createPdokFake().fetchImpl, loginDelayMs: 0 }));
   servers.push(server);
   const monteur = await createLogin(base, { password: PW })('monteur');
   /**

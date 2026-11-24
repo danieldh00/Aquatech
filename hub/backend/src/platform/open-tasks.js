@@ -1,5 +1,5 @@
 // Openstaande taken voor het dashboard: wat er voor de ingelogde gebruiker nog te doen ligt (bestellingen
-// verwerken, bestelvoorstellen goedkeuren, artikelen zonder leverancier).
+// verwerken, bestelvoorstellen goedkeuren, artikelen zonder leverancier, werkorders in te plannen).
 // Elke taak hoort bij een recht; wie het recht niet heeft, krijgt de taak niet te zien.
 const Roles = require('../../../frontend/shared/roles.js');
 
@@ -25,11 +25,18 @@ function remembered(key, compute) {
 /**
  * Bouwt de lijst met openstaande taken voor een gebruiker en omgeving.
  * @param {{ user: object, tenantId: string, canHostTasks?: boolean }} viewer De gebruiker (met rechten), de omgeving en of de gebruiker de servertaken mag zien (canUpdate).
- * @param {{ orders: object, purchaseOrders: object, proposalsEnabled: Function, shopEnabled: Function, stockEnabled: Function }} sources De opslag per soort taak (hostTasks = de servertaken, mag ontbreken); shopEnabled en stockEnabled zeggen of de webshop en de module voorraad aan staan.
+ * @param {{ orders: object, purchaseOrders: object, proposalsEnabled: Function, shopEnabled: Function, stockEnabled: Function, workorders?: object, planningEnabled?: Function }} sources De opslag per soort taak (hostTasks = de servertaken, workorders met planningEnabled = de werkorders in te plannen; mogen ontbreken); shopEnabled en stockEnabled zeggen of de webshop en de module voorraad aan staan, planningEnabled of de module planning aan staat.
  * @returns {{ key: string, title: string, count: number, href: string, items: { label: string, meta: string, href: string }[] }[]} Alleen taken met minstens één openstaand punt.
  */
-function buildTasks({ user, tenantId, canHostTasks = false }, { hostTasks, orders, purchaseOrders, proposalsEnabled, shopEnabled, stockEnabled }) {
+function buildTasks({ user, tenantId, canHostTasks = false }, { hostTasks, orders, purchaseOrders, proposalsEnabled, shopEnabled, stockEnabled, workorders, planningEnabled }) {
   const tasks = [];
+  if (workorders && Roles.can(user, 'planning') && planningEnabled && planningEnabled(tenantId)) {
+    const open = workorders.listToSchedule(tenantId, 5);
+    tasks.push({
+      key: 'in-te-plannen', title: 'Werkorders in te plannen', count: open.total, href: 'planning/',
+      items: open.items.map((workOrder) => ({ label: `${workOrder.number} · ${workOrder.customer || workOrder.title || 'Werkorder'}`, meta: `Aangemaakt ${workOrder.createdAt.slice(0, 10)}`, href: `werkorders/?id=${encodeURIComponent(workOrder.id)}` })),
+    });
+  }
   if (Roles.can(user, 'beheer') && shopEnabled(tenantId)) {
     const open = orders.listUnprocessed(tenantId, 5);
     tasks.push({
