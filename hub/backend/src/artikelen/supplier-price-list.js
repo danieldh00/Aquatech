@@ -83,7 +83,7 @@ function numbersOf(values) {
 /**
  * Controleert een prijslijst tegen de artikelen: per regel nieuw, wijzigt, ongewijzigd, niet gevonden of fout. Schrijft niets.
  * @param {{ stock: object, suppliers: object, tenantId: string, supplierId: string, body: object }} options De opslagen, omgeving, leverancier en het verzoek ({ headers, rows }).
- * @returns {{ error: string }|{ unknown: string[], results: object[], counts: object }} De controle of een melding.
+ * @returns {{ error: string }|{ unknown: string[], results: object[], entriesByItem: Map, counts: object }} De controle of een melding.
  */
 function planPriceList({ stock, suppliers, tenantId, supplierId, body }) {
   const table = readTable(body, FIELDS, { maxRows: MAX_LINES });
@@ -133,15 +133,20 @@ function planPriceList({ stock, suppliers, tenantId, supplierId, body }) {
     const status = !link ? 'nieuw' : (changes.length ? 'wijzigt' : 'ongewijzigd');
     return { ...base, ...itemLabel, status, warnings, changes, plan: { item, link, followsPrice, price: numbers.price, orderQty: numbers.orderQty, leadDays: numbers.leadDays, sku } };
   });
-  return { unknown: table.unknown, results, counts: { onbekend: 0, ...countStatuses(results) } };
+  return { unknown: table.unknown, results, entriesByItem: context.entriesByItem, counts: { onbekend: 0, ...countStatuses(results) } };
 }
 
+/** Een fout bij het verwerken van één regel: draait de transactie van die regel terug. */
+class LineError extends Error {}
+
 /**
- * Verwerkt de nieuwe en gewijzigde regels van een gecontroleerde prijslijst.
- * @param {{ stock: object, suppliers: object, tenantId: string, supplier: object, user: object, results: object[] }} options De opslagen, omgeving, leverancier, gebruiker en de uitkomst van planPriceList.
+ * Verwerkt de nieuwe en gewijzigde regels van een gecontroleerde prijslijst. Elke regel is één transactie (koppeling en
+ * inkoopprijs samen of niet); een mislukte regel komt in `failed` en de rest gaat door. De bestaande koppelingen komen
+ * uit de controle (`entriesByItem`), dus er is geen query per regel om ze op te halen.
+ * @param {{ stock: object, suppliers: object, tenantId: string, supplier: object, user: object, results: object[], entriesByItem: Map<string, object[]> }} options De opslagen, omgeving, leverancier, gebruiker, de uitkomst van planPriceList en de koppelingen per artikel.
  * @returns {{ created: number, updated: number, itemPrices: number, failed: { line: number, message: string }[] }} De aantallen.
  */
-function applyPriceList({ stock, suppliers, tenantId, supplier, user, results }) {
+function applyPriceList({ stock, suppliers, tenantId, supplier, user, results, entriesByItem }) {
   let created = 0;
   let updated = 0;
   let itemPrices = 0;
@@ -149,8 +154,7 @@ function applyPriceList({ stock, suppliers, tenantId, supplier, user, results })
   for (const result of results) {
     if (!['nieuw', 'wijzigt'].includes(result.status)) continue;
     const { item, link, followsPrice, price, orderQty, leadDays, sku } = result.plan;
-    const current = suppliers.forItem(tenantId, item.id) || [];
-    const entries = current.map((entry) => ({ supplierId: entry.supplierId, supplierSku: entry.supplierSku, costPrice: entry.costPrice, orderQty: entry.orderQty, leadDays: entry.leadDays, stockStatus: entry.stockStatus, preferred: entry.preferred }));
+    const entries = (entriesByItem.get(item.id) || []).map((entry) => ({ ...entry }));
     const entry = entries.find((candidate) => candidate.supplierId === supplier.id);
     if (entry) {
       entry.costPrice = price;
@@ -160,15 +164,22 @@ function applyPriceList({ stock, suppliers, tenantId, supplier, user, results })
     } else {
       entries.push({ supplierId: supplier.id, supplierSku: sku, costPrice: price, orderQty: orderQty === null ? 1 : orderQty, leadDays, stockStatus: '', preferred: !entries.length });
     }
-    const saved = suppliers.setForItem(tenantId, item.id, entries);
-    if (saved.error) { failed.push({ line: result.line, message: saved.error }); continue; }
-    if (link) updated += 1; else created += 1;
-    const itemChange = result.changes.some((change) => change.label === 'Inkoopprijs artikel');
-    if (followsPrice && itemChange) {
-      const out = stock.addCostPrice(tenantId, user, item.id, { price, note: `Prijslijst ${supplier.name}` });
-      if (out.error) failed.push({ line: result.line, message: `Prijs bij de leverancier is bijgewerkt, maar de inkoopprijs van het artikel niet: ${out.error}` });
-      else itemPrices += 1;
+    const itemChange = followsPrice && result.changes.some((change) => change.label === 'Inkoopprijs artikel');
+    try {
+      suppliers.atomically(() => {
+        const saved = suppliers.setForItem(tenantId, item.id, entries, { nested: true });
+        if (saved.error) throw new LineError(saved.error);
+        if (!itemChange) return;
+        const out = stock.addCostPrice(tenantId, user, item.id, { price, note: `Prijslijst ${supplier.name}` }, { nested: true });
+        if (out.error) throw new LineError(`De inkoopprijs van het artikel kon niet worden bijgewerkt: ${out.error}`);
+      });
+    } catch (error) {
+      if (!(error instanceof LineError)) throw error;
+      failed.push({ line: result.line, message: error.message });
+      continue;
     }
+    if (link) updated += 1; else created += 1;
+    if (itemChange) itemPrices += 1;
   }
   return { created, updated, itemPrices, failed };
 }
@@ -203,11 +214,12 @@ function registerPriceListRoutes(app, ctx) {
       const tenantId = req.tenantId || req.user.tenant_id;
       const supplier = suppliers.get(tenantId, req.params.supplierId);
       if (!supplier) return res.status(404).json({ error: 'not_found', message: 'Leverancier niet gevonden.' });
+      if (supplier.archived) return res.status(409).json({ error: 'supplier_archived', message: 'Deze leverancier is gearchiveerd; zet hem eerst terug uit het archief.' });
       const plan = planPriceList({ stock, suppliers, tenantId, supplierId: supplier.id, body });
       if (plan.error) return res.status(400).json({ error: 'invalid_import', message: plan.error });
       if (body.apply !== true) return res.json(previewOf(plan));
       if (plan.counts.fout && body.skipErrors !== true) return res.status(409).json({ error: 'has_errors', message: 'De prijslijst bevat regels met fouten. Herstel ze, of verwerk alleen de goede regels.', ...previewOf(plan) });
-      const done = applyPriceList({ stock, suppliers, tenantId, supplier, user: req.user, results: plan.results });
+      const done = applyPriceList({ stock, suppliers, tenantId, supplier, user: req.user, results: plan.results, entriesByItem: plan.entriesByItem });
       audit(req, 'leverancier_prijslijst_ingelezen', { leverancier: supplier.name, nieuw: done.created, gewijzigd: done.updated, artikelprijzen: done.itemPrices, onbekend: plan.counts.onbekend, overgeslagen: plan.counts.fout, mislukt: done.failed.length });
       return res.json({ ...done, skipped: plan.counts.fout + plan.counts.onbekend, unchanged: plan.counts.ongewijzigd });
     } catch (error) {

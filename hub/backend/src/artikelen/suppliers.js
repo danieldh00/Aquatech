@@ -283,12 +283,19 @@ function createSupplierStore(db) {
    * @param {string} tenantId Id van de omgeving.
    * @param {string} itemId Id van het artikel.
    * @param {*} entries De regels: [{ supplierId, supplierSku, costPrice, orderQty, preferred }].
+   * @param {{ nested?: boolean }} [options] Binnen de transactie van de aanroeper.
    * @returns {{ suppliers?: object[], error?: string, field?: string, status?: number }} De nieuwe lijst, of een fout.
    */
-  function setForItem(tenantId, itemId, entries) {
+  function setForItem(tenantId, itemId, entries, { nested = false } = {}) {
     const checked = sanitizeItemSuppliers(entries);
     if (checked.error) return checked;
-    return transaction(db, () => {
+    /**
+     * Voert het werk uit in een eigen transactie, of binnen die van de aanroeper.
+     * @param {Function} work Het werk.
+     * @returns {*} De uitkomst van het werk.
+     */
+    const run = (work) => (nested ? work() : transaction(db, work));
+    return run(() => {
       const item = prepare('SELECT id, has_variants FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, String(itemId || ''));
       if (!item) return { error: 'not_found', status: 404 };
       if (Number(item.has_variants) && checked.value.length) return { error: 'Een hoofdartikel heeft geen eigen leverancier; stel die in bij de varianten.', field: 'suppliers', status: 409 };
@@ -403,19 +410,35 @@ function createSupplierStore(db) {
   }
 
   /**
-   * De koppelingen van één leverancier en de artikelen die al een leverancier hebben, om een prijslijst te controleren.
+   * De koppelingen van één leverancier en van alle andere leveranciers per artikel, om een prijslijst te controleren en te verwerken (één query).
    * @param {string} tenantId Id van de omgeving.
    * @param {string} supplierId Id van de leverancier.
-   * @returns {{ links: Map<string, object>, linked: Set<string> }} De koppelingen van deze leverancier per artikel-id (artikelnummer, prijs, bestelhoeveelheid, levertijd, voorkeur) en alle artikelen met minstens één leverancier.
+   * @returns {{ links: Map<string, object>, linked: Set<string>, entriesByItem: Map<string, object[]> }} De koppelingen van deze leverancier per artikel-id (artikelnummer, prijs, bestelhoeveelheid, levertijd, voorkeur), alle artikelen met minstens één leverancier en per artikel alle koppelingen op volgorde van prioriteit (zoals `setForItem` ze verwacht).
    */
   function priceListContext(tenantId, supplierId) {
-    const links = new Map(prepare('SELECT item_id, supplier_sku, cost_price, order_qty, lead_days, preferred FROM item_suppliers WHERE tenant_id = ? AND supplier_id = ?').all(tenantId, String(supplierId))
-      .map((row) => [row.item_id, { supplierSku: row.supplier_sku, costPrice: row.cost_price == null ? null : Number(row.cost_price), orderQty: Number(row.order_qty), leadDays: row.lead_days == null ? null : Number(row.lead_days), preferred: Boolean(Number(row.preferred)) }]));
-    const linked = new Set(prepare('SELECT DISTINCT item_id FROM item_suppliers WHERE tenant_id = ?').all(tenantId).map((row) => row.item_id));
-    return { links, linked };
+    const wanted = String(supplierId);
+    const rows = prepare('SELECT item_id, supplier_id, supplier_sku, cost_price, order_qty, lead_days, stock_status, preferred FROM item_suppliers WHERE tenant_id = ? ORDER BY item_id, rank, created_at, id').all(tenantId);
+    const links = new Map();
+    const entriesByItem = new Map();
+    for (const row of rows) {
+      const entry = { supplierId: row.supplier_id, supplierSku: row.supplier_sku, costPrice: row.cost_price == null ? null : Number(row.cost_price), orderQty: Number(row.order_qty), leadDays: row.lead_days == null ? null : Number(row.lead_days), stockStatus: row.stock_status, preferred: Boolean(Number(row.preferred)) };
+      if (!entriesByItem.has(row.item_id)) entriesByItem.set(row.item_id, []);
+      entriesByItem.get(row.item_id).push(entry);
+      if (row.supplier_id === wanted) links.set(row.item_id, entry);
+    }
+    return { links, linked: new Set(entriesByItem.keys()), entriesByItem };
   }
 
-  return { list, get, create, update, remove, forItem, setForItem, preferredByItem, rememberSkus, skusOf, priceListContext };
+  /**
+   * Voert werk uit in één transactie: een gegooide fout draait alles terug.
+   * @param {Function} work Het werk (mag `setForItem`/`addCostPrice` met `{ nested: true }` aanroepen).
+   * @returns {*} De uitkomst van het werk.
+   */
+  function atomically(work) {
+    return transaction(db, work);
+  }
+
+  return { list, get, create, update, remove, forItem, setForItem, preferredByItem, rememberSkus, skusOf, priceListContext, atomically };
 }
 
 /**
