@@ -11,10 +11,10 @@ const MOLLIE_STATES = { paid: 'betaald', open: 'open', pending: 'open', authoriz
 
 /**
  * Maakt de betaalfuncties voor facturen.
- * @param {{ db: object, invoices: object, mollie: object, settingsFor: Function, linkKey?: Buffer, log?: object }} deps De database, de factuuropslag, de Mollie-client, de instellingen per omgeving en de sleutel voor de betaallinks (zonder sleutel geen links).
+ * @param {{ db: object, invoices: object, mollie: object, settingsFor: Function, linkKey?: Buffer, mainTenantId?: string, log?: object }} deps De database, de factuuropslag, de Mollie-client, de instellingen per omgeving, de sleutel voor de betaallinks (zonder sleutel geen links) en de hoofdtenant: met mainTenantId werkt online betalen alleen daar (T-03: de webhook en de betaallink zonder inlog kennen alleen die omgeving).
  * @returns {{ enabled: Function, payableState: Function, start: Function, sync: Function, onPaid: Function, onPaidAfterCredit: Function, listOwn: Function, own: Function, paymentsOf: Function, linkFor: Function, publicLinkCheck: Function, appUrl: Function }} De functies.
  */
-function createInvoicePayments({ db, invoices, mollie, settingsFor, linkKey = null, log = console }) {
+function createInvoicePayments({ db, invoices, mollie, settingsFor, linkKey = null, mainTenantId = null, log = console }) {
   const paidHooks = [];
   /**
    * Bereidt een SQL-opdracht voor.
@@ -45,11 +45,11 @@ function createInvoicePayments({ db, invoices, mollie, settingsFor, linkKey = nu
   const onPaidAfterCredit = (hook) => { afterCreditHooks.push(hook); };
 
   /**
-   * Of online betalen van facturen kan in deze omgeving (aan, sleutel en webadres kloppen).
+   * Of online betalen van facturen kan in deze omgeving (aan, sleutel en webadres kloppen; met mainTenantId alleen in de hoofdtenant).
    * @param {string} tenantId Id van de omgeving.
    * @returns {boolean} true als klanten kunnen betalen.
    */
-  const enabled = (tenantId) => configOf(settingsFor(tenantId)).online;
+  const enabled = (tenantId) => (!mainTenantId || tenantId === mainTenantId) && configOf(settingsFor(tenantId)).online;
 
   /**
    * Of deze factuur nog betaald kan worden: een definitieve, openstaande factuur (geen credit, geen bedrag van nul of lager,
@@ -164,6 +164,7 @@ function createInvoicePayments({ db, invoices, mollie, settingsFor, linkKey = nu
    * @returns {Promise<{ becamePaid: boolean, status?: string, ignored?: boolean }>} De uitkomst. Een fout van Mollie wordt doorgegeven.
    */
   async function sync(tenantId, invoiceId, { paymentId } = {}) {
+    if (mainTenantId && tenantId !== mainTenantId) return { becamePaid: false, ignored: true };
     const invoice = invoices.get(tenantId, invoiceId);
     if (!invoice) return { becamePaid: false, ignored: true };
     const attempts = paymentsOf(tenantId, invoice.id);
@@ -188,7 +189,7 @@ function createInvoicePayments({ db, invoices, mollie, settingsFor, linkKey = nu
    */
   async function start(tenantId, invoice, { returnUrl = '' } = {}) {
     const config = configOf(settingsFor(tenantId));
-    if (!config.online) return { error: 'Online betalen staat niet aan.', status: 409 };
+    if (!enabled(tenantId)) return { error: 'Online betalen staat niet aan.', status: 409 };
     if (invoice.status === 'betaald') return { paid: true };
     if (invoice.creditedAt) return { error: 'Deze factuur is gecrediteerd en hoeft niet meer betaald te worden.', status: 409 };
     if (!payable(invoice)) return { error: 'Deze factuur kan niet online betaald worden.', status: 409 };

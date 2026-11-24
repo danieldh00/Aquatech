@@ -434,3 +434,65 @@ test('webhook en betaallink raken een factuur van een andere organisatie niet (B
   // De andere organisatie ziet de factuur van de hoofdtenant niet en kan hem niet op betaald zetten.
   assert.strictEqual((await world.vreemd.post(`/app/api/invoices/${own.invoiceId}/paid`, { paid: true })).status, 404);
 });
+
+test('bedrading: een betaling op een gecrediteerde factuur komt in het auditlogboek en in Bewaking', async () => {
+  const world = await setup({ mollie: true });
+  const { invoiceId } = await finalInvoiceFor(world, 0);
+  await world.shoppers[0].client.post(`/app/api/portal/invoices/${invoiceId}/pay`, {});
+  const [paymentId] = [...world.mollie.payments.keys()];
+  const credit = await world.admin.post(`/app/api/invoices/${invoiceId}/credit`, {});
+  assert.strictEqual((await world.admin.post(`/app/api/invoices/${credit.body.id}/finalize`, {})).status, 200);
+  world.mollie.set(paymentId, 'paid');
+  await webhook(world, invoiceId, paymentId);
+  await webhook(world, invoiceId, paymentId);
+  assert.strictEqual((await world.admin.get(`/app/api/invoices/${invoiceId}`)).body.status, 'definitief');
+  const rows = world.db.prepare("SELECT detail FROM audit WHERE action = 'factuur_betaald_na_creditering'").all();
+  assert.strictEqual(rows.length, 1, 'één auditregel, ook na een tweede webhook');
+  const detail = typeof rows[0].detail === 'string' ? JSON.parse(rows[0].detail) : rows[0].detail;
+  assert.deepStrictEqual([detail.amount, detail.paymentId], [121, paymentId]);
+  let incident = null;
+  for (let attempt = 0; attempt < 100 && !incident; attempt++) {
+    incident = world.db.prepare("SELECT message FROM monitor_incidents WHERE check_key = 'factuurbetaling-na-creditering'").get();
+    if (!incident) await new Promise((resolve) => { setTimeout(resolve, 50); });
+  }
+  assert.ok(incident, 'er staat een melding in Bewaking');
+  assert.match(incident.message, /Betaal dit bedrag terug/);
+});
+
+test('online factuurbetalen werkt alleen in de hoofdtenant (T-03)', async () => {
+  const { createInvoicePayments } = require('../src/verkoop/invoice-payments');
+  const { createMollieFake } = require('./helpers/mollie-fake');
+  const { openDb } = require('../src/database/db');
+  const { createStore } = require('../src/platform/store');
+  const { createMollie } = require('../src/webshop/mollie');
+  const db = openDb();
+  const mainTenantId = createStore(db).ensureTenant().id;
+  const otherTenantId = randomUUID();
+  const invoice = { id: INVOICE_ONE, number: 'F1', status: 'definitief', kind: 'factuur', total: 50, customerId: CUSTOMER };
+  const invoices = {
+    /**
+     * De factuur.
+     * @returns {object} Een kopie.
+     */
+    get: () => ({ ...invoice }),
+    /**
+     * Zet de factuur op betaald.
+     * @returns {{ invoice: object }} De factuur.
+     */
+    setPaid: () => { invoice.status = 'betaald'; return { invoice: { ...invoice } }; },
+  };
+  const fake = createMollieFake();
+  /**
+   * Instellingen met online betalen aan, in elke omgeving.
+   * @returns {{ get: Function }} De instellingen.
+   */
+  const settingsFor = () => ({ get: (name) => (name === 'mollieApiKey' ? 'test_abcdefghij1234567' : { online: true, publicUrl: 'https://winkel.example/' }) });
+  const payments = createInvoicePayments({ db, invoices, mollie: createMollie({ fetchImpl: fake.fetchImpl }), settingsFor, linkKey: Buffer.alloc(32, 1), mainTenantId, log: { warn() {} } });
+  assert.deepStrictEqual([payments.enabled(mainTenantId), payments.enabled(otherTenantId)], [true, false]);
+  assert.strictEqual(payments.payableState(otherTenantId, invoice), false, 'geen knop in het portaal van een andere omgeving');
+  assert.strictEqual(payments.linkFor(otherTenantId, invoice), '', 'geen betaallink in de mail');
+  assert.strictEqual((await payments.start(otherTenantId, invoice)).status, 409);
+  assert.strictEqual(fake.payments.size, 0);
+  assert.deepStrictEqual(await payments.sync(otherTenantId, INVOICE_ONE, { paymentId: 'tr_test0001' }), { becamePaid: false, ignored: true });
+  assert.ok((await payments.start(mainTenantId, invoice)).checkoutUrl);
+});

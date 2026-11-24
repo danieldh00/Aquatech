@@ -2604,14 +2604,22 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Verstuurde seizoensherinneringen (season-reminders.js; de verzendronde staat onderaan).
   const seasonReminderStore = createSeasonReminderStore(database, { roles: store.roles });
   // Facturen online betalen door de klant (Mollie, zie invoice-payments.js); de webhook is openbaar en vraagt de uitkomst zelf bij Mollie op.
-  const invoicePayments = createInvoicePayments({ db: database, invoices: invoiceStore, mollie: createMollie(mollieFetch ? { fetchImpl: mollieFetch } : {}), settingsFor: (id) => settingsFor(id), linkKey: vault.derive('factuur-betaallink') });
+  const invoicePayments = createInvoicePayments({ db: database, invoices: invoiceStore, mollie: createMollie(mollieFetch ? { fetchImpl: mollieFetch } : {}), settingsFor: (id) => settingsFor(id), linkKey: vault.derive('factuur-betaallink'), mainTenantId: tenant.id });
   registerInvoicePayLinkRoutes(app, { invoicePayments, tenantId: tenant.id, scopeToTenant, limiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: (req) => `factuur-betaallink:${clientKey(req)}` }) });
   invoicePayments.onPaid((tenantId, invoice) => store.audit({ tenantId, userId: null, action: 'factuur_betaald_online', detail: { number: invoice.number, total: invoice.total } }));
+  // Een betaling die binnenkomt op een factuur die intussen gecrediteerd is: het geld moet met de hand terug, dus een auditregel en een melding in Bewaking.
+  invoicePayments.onPaidAfterCredit((tenantId, invoice, payment) => {
+    store.audit({ tenantId, userId: null, action: 'factuur_betaald_na_creditering', detail: { number: invoice.number, amount: payment.amount, paymentId: payment.id } });
+    return monitor.report(tenantId, 'factuurbetaling-na-creditering', {
+      ok: false, severity: 'warning', title: 'Betaling op een gecrediteerde factuur',
+      message: `Op de gecrediteerde factuur ${invoice.number} is online een betaling van ${Number(payment.amount).toFixed(2)} euro binnengekomen. Betaal dit bedrag terug via Mollie.`,
+    });
+  });
   const invoiceWebhookLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 120, keyFn: (req) => `mollie-factuur:${clientKey(req)}` });
   app.post('/api/public/invoice-payment/:invoiceId/webhook', invoiceWebhookLimiter, express.urlencoded({ extended: false, limit: '2kb' }), async (req, res) => {
     const paymentId = String(req.body && req.body.id || '');
     if (!validPaymentId(paymentId)) return res.status(200).end();
-    // Online factuurbetalen werkt alleen in de hoofdtenant (configOf in invoice-payments.js); wordt dat anders, dan hier de tenant van de factuur nemen.
+    // Online factuurbetalen werkt alleen in de hoofdtenant (mainTenantId in invoice-payments.js, T-03): het portaal van een andere omgeving biedt het niet aan.
     scopeToTenant(tenant.id);
     try {
       await invoicePayments.sync(tenant.id, String(req.params.invoiceId), { paymentId });
@@ -2765,18 +2773,57 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Een online bestelling wordt pas bevestigd (mail aan klant en bedrijf) als hij betaald is.
   webPayments.onPaid((tenantId, order) => store.audit({ tenantId, userId: order.userId || null, action: 'webshop_bestelling_betaald', detail: { number: order.number, total: order.total } }));
   // De factuur van een online betaalde bestelling ontstaat al bij de betaling (definitief en betaald) en gaat zo ingesteld meteen naar de klant.
+  // Met een sleutel onthoudt de bestelling of de stap gelukt is; een mislukte stap wordt later opnieuw geprobeerd (catchUpPaid, T-16).
   webPayments.onPaid(async (tenantId, order) => {
     const outcome = webOrderInvoices.ensureInvoice(tenantId, order.id, null);
     if (outcome.error) throw new Error(`Factuur bij ${order.number}: ${outcome.error}`);
     await webOrderInvoices.mailIfFinalized(tenantId, outcome);
+  }, { key: 'factuur' });
+  webPayments.onPaid(async (tenantId, order) => {
+    await webOrderMail.sendPlaced(tenantId, order);
+    // Een mislukte verzending telt als mislukte stap (opnieuw proberen); zonder mailserver valt er niets te herhalen.
+    const sent = webOrders.get(tenantId, order.id);
+    if (sent && sent.mail && !sent.mail.sent && webOrderMail.mailReady(tenantId)) throw new Error(`Bevestiging van ${order.number}: ${sent.mail.error || 'niet verstuurd'}`);
+  }, { key: 'bevestiging' });
+  // Een stap die na alle pogingen niet lukt: in het auditlogboek; de reden staat bij de bestelling (factuur- of mailfout).
+  webPayments.onHookFailed((tenantId, order, key, message) => {
+    console.error(`Stap '${key}' na het betalen van ${order.number} is definitief mislukt: ${message}`);
+    store.audit({ tenantId, userId: null, action: 'webshop_betaalstap_mislukt', detail: { number: order.number, step: key, message: String(message || '').slice(0, 200) } });
   });
-  webPayments.onPaid((tenantId, order) => webOrderMail.sendPlaced(tenantId, order));
+  // Betaald op een vervallen of geannuleerde bestelling, of een tweede keer betaald (T-08, T-17): auditregel, mail aan de klant en de stand in Bewaking.
+  webPayments.onLatePayment(async (tenantId, order, event) => {
+    store.audit({ tenantId, userId: null, action: 'webshop_betaling_teruggestort', detail: { number: order.number, reason: event.reason, amount: event.amount, paymentId: event.paymentId, refunded: Boolean(event.refunded) } });
+    reportLateRefunds(tenantId);
+    await webOrderMail.sendLatePayment(tenantId, order, event);
+  });
+  /**
+   * Zet in Bewaking of er bestellingen zijn waar na een late of dubbele betaling nog geld terug moet; sluit de melding als dat is opgelost.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {void}
+   */
+  function reportLateRefunds(tenantId) {
+    let numbers = [];
+    try { numbers = webOrders.lateRefundsNeeded(tenantId, new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString()); } catch (error) { console.error('Openstaande terugbetalingen tellen mislukt:', error.message); return; }
+    monitor.report(tenantId, 'webshop-terugbetalen', {
+      ok: !numbers.length, severity: 'warning', title: 'Webshop: betaling terugstorten',
+      message: `Bij ${numbers.length === 1 ? 'bestelling' : 'bestellingen'} ${numbers.join(', ')} is betaald na het vervallen of twee keer betaald, en het automatisch terugstorten is niet gelukt. Betaal terug bij de bestelling (Webshopbestellingen).`,
+    }).catch(() => {});
+  }
   webPayments.onPaid((tenantId) => { funnel.count(tenantId, 'paid'); });
   /**
    * Laat onbetaalde online webshopbestellingen vervallen die langer wachten dan de bewaartijd (elk uur).
    * @returns {Promise<{ expired: number }>} Het aantal vervallen bestellingen.
    */
   app.locals.webPaymentsExpire = () => webPayments.expireUnpaid(tenant.id);
+  /**
+   * Geeft de voorraad vrij van online bestellingen die na de korte betaaltijd nog onbetaald zijn en werkt de melding over terugbetalen bij (elke 5 minuten).
+   * @returns {Promise<{ released: number }>} Het aantal bestellingen waarvan de voorraad is vrijgegeven.
+   */
+  app.locals.webPaymentsRelease = async () => {
+    const out = webPayments.releaseHolds(tenant.id);
+    reportLateRefunds(tenant.id);
+    return out;
+  };
   /**
    * Stuurt de eenmalige betalingsherinnering bij online bestellingen die na een uur niet betaald zijn (elk uur).
    * @returns {Promise<{ sent: number }>} Het aantal verstuurde herinneringen.
@@ -3317,6 +3364,10 @@ if (require.main === module) {
   // Bewaking: elke 5 minuten (de monitor slaat zelf de eerste twee minuten na het starten en onderhoudsmodus over).
   setInterval(() => (app.locals.systemUpdate.maintenance().active ? Promise.resolve() : slowLog.trackTask('bewaking', () => app.locals.monitorRun())
     .catch((error) => console.error('Bewaking mislukt:', error.message))), 5 * 60 * 1000).unref();
+  // Voorraad van onbetaalde online bestellingen vrijgeven: elke 5 minuten, zodat de korte betaaltijd van een half uur ook echt kort is (B-13).
+  setInterval(() => (app.locals.systemUpdate.maintenance().active ? Promise.resolve() : slowLog.trackTask('voorraad onbetaalde bestellingen', () => app.locals.webPaymentsRelease())
+    .then((out) => { if (out && out.released) console.log(`Voorraad van onbetaalde online bestellingen vrijgegeven: ${out.released}`); })
+    .catch((error) => console.error('Voorraad van onbetaalde bestellingen vrijgeven mislukt:', error.message))), 5 * 60 * 1000).unref();
   // Eerst prijs en voorraad, daarna de bestellingen (dan is de verkoop al afgeboekt).
   try {
     app.locals.recordSystemUpdate();
