@@ -35,8 +35,9 @@ volledig los staat van productie. Plan en fasen: projectbestand `frontend-advies
    25 GB schijf, gebruiker `daniel` met je ssh-sleutel en `sudo` zonder wachtwoord (zoals op apps01), guest agent aan.
    Proxmox-firewall voor deze VM: inkomend alleen ssh vanaf de Proxmox-host; uitgaand niet naar apps01, de
    productiedatabase of andere interne netwerken (alleen internet: GHCR, Cloudflare, PDOK/VIES).
-2. **Cloudflare** (eenmalig, handmatig): een eigen tunnel `staging` met hostnaam `staging.aquatech.den-hollander.com` naar
-   `http://aquatech-stg:3300`, en een Access-toepassing op die hostnaam met een beleid dat alleen jouw e-mailadres toelaat.
+2. **Cloudflare** (eenmalig, handmatig): een eigen tunnel `aquatech-staging` met hostnaam `aquatech-staging.den-hollander.com` (één niveau onder het domein,
+   dus gedekt door het gratis Cloudflare-certificaat) naar `http://aquatech-stg:3300`, en een Access-toepassing op die
+   hostnaam met een beleid dat alleen jouw e-mailadres toelaat. Servertaak 012 maakt dit straks zelf aan (zie onder).
 3. **Master mergen, workflow Staging draaien** (push naar `develop` met wijzigingen in `hub/`, of Actions > Staging > Run workflow): dit bouwt het eerste
    image. Zet daarna het pakket `aquatech-staging` op openbaar.
 4. **Servertaak 012** (volgt in een aparte PR, na V-10) staat in Beheer > Systeem > Updates; je voert het ene vaste commando uit (zoals altijd, als root op de
