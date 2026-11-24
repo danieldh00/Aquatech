@@ -145,7 +145,7 @@ function applyItemImport({ stock, tenantId, user, results }) {
     if (!['nieuw', 'wijzigt'].includes(result.status)) continue;
     const { existing, raw } = result.plan;
     const out = existing
-      ? stock.update(tenantId, existing.id, Object.fromEntries(Object.entries(raw).filter(([key]) => key !== 'onHand' && key !== 'code')), user)
+      ? stock.update(tenantId, existing.id, Object.fromEntries(result.changes.map((change) => [change.field, raw[change.field]])), user)
       : stock.create(tenantId, user, { ...raw, onHand: raw.onHand === undefined ? 0 : round3(raw.onHand) });
     if (out.error) failed.push({ line: result.line, code: result.code, message: out.error });
     else if (existing) updated += 1;

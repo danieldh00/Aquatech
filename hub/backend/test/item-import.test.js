@@ -89,3 +89,23 @@ test('rechten, verplichte kolommen en scheiding tussen organisaties', async () =
   assert.strictEqual((await other.post('/app/api/stock/import-excel', { headers: HEADERS, rows })).body.counts.nieuw, 1);
   assert.strictEqual((await installer.get('/app/api/stock/import-excel/fields')).body.fields[0].key, 'code');
 });
+
+test('een artikel met prijsfactor houdt de factorprijs; alleen gewijzigde velden gaan naar het artikel; groot bestand past', async () => {
+  const { installer } = await setup();
+  const made = await installer.post('/app/api/stock/items', { code: 'F-1', name: 'Factorartikel', costPrice: 10, salePrice: 20, priceMode: 'factor', priceFactor: 2 });
+  assert.strictEqual(made.status, 201, JSON.stringify(made.body));
+  const before = made.body.salePrice;
+  const rows = [['F-1', 'Andere naam', '', '10', '99', '', '', '']];
+  const preview = await installer.post('/app/api/stock/import-excel', { headers: HEADERS, rows });
+  assert.deepStrictEqual(preview.body.rows[0].changes.map((change) => change.field), ['name']);
+  assert.ok(preview.body.rows[0].warnings.some((text) => /prijsfactor/.test(text)));
+  await installer.post('/app/api/stock/import-excel', { headers: HEADERS, rows, apply: true });
+  const after = (await installer.get(`/app/api/stock/items/${made.body.id}`)).body;
+  assert.strictEqual(after.name, 'Andere naam');
+  assert.strictEqual(after.salePrice, before);
+  // 1000 regels met lange omschrijvingen: geen kale 413 maar een gewone controle.
+  const big = Array.from({ length: 1000 }, (_, index) => [`G-${index}`, 'Omschrijving '.repeat(20), '', '', '', '', '', '']);
+  const bigPreview = await installer.post('/app/api/stock/import-excel', { headers: HEADERS, rows: big });
+  assert.strictEqual(bigPreview.status, 200);
+  assert.strictEqual(bigPreview.body.counts.nieuw, 1000);
+});
