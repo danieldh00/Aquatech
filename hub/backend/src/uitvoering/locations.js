@@ -11,6 +11,7 @@ const { jsonDigest } = require('../database/db');
 const { clientKey } = require('../beveiliging/auth');
 const { installationOf, completedOf, locationKey } = require('./photos');
 const { KINDS: REQUEST_KINDS, STATUSES: REQUEST_STATUSES } = require('./service-requests');
+const Roles = require('../../../frontend/shared/roles.js');
 const WorkOrderCore = require('../../../frontend/werkorders/workorder-core.js');
 
 const KEY_PATTERN = /^l-[0-9a-f]{16}$/;
@@ -173,10 +174,10 @@ function createLocationStore(db, { photos }) {
    * mag zien.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} key De locatiesleutel (l-<hash>).
-   * @param {{ customerId?: string }} [options] customerId: weergave voor het klantportaal.
+   * @param {{ customerId?: string, withQuotes?: boolean }} [options] customerId: weergave voor het klantportaal; withQuotes: de offertes (met totaal) tonen, alleen voor wie het recht offertes heeft (B-23).
    * @returns {object|null} Het dossier, of null als er niets op deze locatie is.
    */
-  function get(tenantId, key, { customerId = null } = {}) {
+  function get(tenantId, key, { customerId = null, withQuotes = true } = {}) {
     if (!KEY_PATTERN.test(String(key))) return null;
     const forCustomer = Boolean(customerId);
     const { workOrderIds, requestIds } = idsAt(tenantId, String(key), customerId);
@@ -201,7 +202,7 @@ function createLocationStore(db, { photos }) {
       : [];
 
     const quoteIds = [...new Set(rows.map((row) => row.quote_id).filter(Boolean))];
-    const quotes = quoteIds.length
+    const quotes = withQuotes && quoteIds.length
       ? prepare(`SELECT id, number, status, title, total_incl, created_at FROM quotes WHERE tenant_id = ? AND deleted_at IS NULL
         AND id IN (${placeholders(quoteIds)})${forCustomer ? " AND status <> 'concept' AND customer_id = ?" : ''} ORDER BY created_at DESC`)
         .all(tenantId, ...quoteIds, ...(forCustomer ? [String(customerId)] : []))
@@ -280,7 +281,7 @@ function registerLocationRoutes(app, ctx) {
 
   app.get('/api/locations/:key', requireRight('werkorders'), limiter, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    const dossier = locations.get(tenantOf(req), req.params.key);
+    const dossier = locations.get(tenantOf(req), req.params.key, { withQuotes: Roles.can(req.user, 'offertes') });
     if (!dossier) return notFound(res);
     res.json(dossier);
   });

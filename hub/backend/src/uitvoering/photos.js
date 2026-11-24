@@ -536,9 +536,10 @@ function createDossierStore(db, { photos }) {
    * Eén dossier: klantgegevens, installaties (nieuwste eerst) met foto's, en de offertes.
    * @param {string} tenantId Id van de tenant.
    * @param {string} key De dossiersleutel.
+   * @param {{ withQuotes?: boolean }} [options] withQuotes: ook de offertes (met totaal) tonen; alleen voor wie het recht offertes heeft (B-23).
    * @returns {object|null} Het dossier, of null.
    */
-  function get(tenantId, key) {
+  function get(tenantId, key, { withQuotes = true } = {}) {
     const mine = dossierRows(tenantId, String(key));
     if (!mine.length) return null;
     const photosOf = photos.listMany(tenantId, mine.map((row) => row.id));
@@ -554,7 +555,7 @@ function createDossierStore(db, { photos }) {
     if (accountId) { ors.push('customer_id = ?'); args.push(accountId); }
     if (quoteIds.length) { ors.push(`id IN (${quoteIds.map(() => '?').join(',')})`); args.push(...quoteIds); }
     where += `${ors.join(' OR ')})`;
-    const quoteList = (ors.length ? prepare(`SELECT id, number, status, title, total_incl, created_at FROM quotes WHERE ${where} ORDER BY created_at DESC`).all(...args) : [])
+    const quoteList = (withQuotes && ors.length ? prepare(`SELECT id, number, status, title, total_incl, created_at FROM quotes WHERE ${where} ORDER BY created_at DESC`).all(...args) : [])
       .map((quote) => ({ id: quote.id, number: quote.number, status: quote.status, title: quote.title, totalIncl: quote.total_incl, createdAt: quote.created_at }));
     return {
       key: String(key),
@@ -660,7 +661,7 @@ function registerPhotoRoutes(app, ctx) {
 
   app.get('/api/dossiers/:key', requireWo, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    const dossier = dossiers.get(tenantOf(req), req.params.key);
+    const dossier = dossiers.get(tenantOf(req), req.params.key, { withQuotes: Roles.can(req.user, 'offertes') });
     if (!dossier) return notFound(res, 'Dossier');
     res.json(dossier);
   });

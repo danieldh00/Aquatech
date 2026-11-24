@@ -51,6 +51,14 @@ const withoutInternal = (profile) => {
   for (const field of INTERNAL_PROFILE_FIELDS) delete out[field];
   return out;
 };
+// Velden van het profiel die het offertedocument voor een klant nodig heeft (kop en voet); al het andere (tarieven, opslag, voorrijkosten) blijft intern (B-24).
+const CUSTOMER_PROFILE_FIELDS = ['companyName', 'address', 'email', 'phone', 'website', 'kvk', 'vatNumber', 'iban'];
+/**
+ * Het bedrijfsprofiel voor een klant of een openbare link: alleen de gegevens die op het document staan.
+ * @param {object} profile Het bedrijfsprofiel (quoteProfile).
+ * @returns {object} Een kopie met alleen CUSTOMER_PROFILE_FIELDS.
+ */
+const customerProfile = (profile) => Object.fromEntries(CUSTOMER_PROFILE_FIELDS.filter((field) => profile[field] !== undefined).map((field) => [field, profile[field]]));
 const PROFILE_DEFAULTS = {
   companyName: 'AquaTech Service', address: '', email: '', phone: '', website: 'aquatechservice.nl', kvk: '', vatNumber: '', iban: '',
   numberPrefix: 'OF-',
@@ -227,6 +235,22 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
   }
 
   /**
+   * Versie van de inhoud die de klant te zien krijgt (hash over nummer en gegevens zonder interne notities, vóór de optiekeuze).
+   * De klant stuurt hem bij het akkoord terug; is de offerte intussen gewijzigd, dan weigert de server (B-09).
+   * @param {string} number Het offertenummer.
+   * @param {object} data De opgeslagen offertegegevens.
+   * @returns {string} De versie (SHA-256 in hex).
+   */
+  const versionOf = (number, data) => sha256(stableStringify({ number, data: withoutInternalNotes(data) }));
+
+  /**
+   * De versie (zie versionOf) van een opgehaalde offerterij.
+   * @param {object} quoteRow Een rij met number en data.
+   * @returns {string} De versie.
+   */
+  const versionOfRow = (quoteRow) => versionOf(quoteRow.number, JSON.parse(quoteRow.data));
+
+  /**
    * Wat een klant van een offerte te zien krijgt. Met de opmaak "totaal per
    * onderdeel" geen prijzen per regel, wel per onderdeel en btw-tarief de som
    * van de vaste regels (zodat de klantpagina bij een andere optiekeuze het
@@ -235,11 +259,12 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
    * @returns {object} De offerte voor de klant, zonder linkstand.
    */
   function forCustomer(quote) {
-    const { share, order, ...rest } = quote;
+    // Een klant ziet nooit wie van de medewerkers de offerte maakte (inlognaam en id, B-25).
+    const { share, order, owner, ...rest } = quote;
     // De interne notities (per regel en van de offerte) gaan nooit naar de klant.
     const customerData = withoutInternalNotes(quote.data);
     const lines = customerData.lines;
-    const out = { ...rest, data: { ...customerData, lines }, totals: Core.totals(quote.data) };
+    const out = { ...rest, data: { ...customerData, lines }, totals: Core.totals(quote.data), version: versionOf(quote.number, quote.data) };
     if (quote.data.layout === 'totaal') {
       // Zonder regelprijzen kan de klantpagina het totaal bij een andere
       // optiekeuze niet herberekenen; daarom per sectie en btw-tarief de som
@@ -289,7 +314,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
    */
   const quotesFromRows = (rows, customerId) => rows.map((quoteRow) => {
     const quote = toQuote(quoteRow, false);
-    if (customerId) delete quote.order;
+    if (customerId) { delete quote.order; delete quote.owner; }
     return quote;
   });
 
@@ -474,6 +499,8 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
       if (name.length < 2) return { error: 'invalid', message: 'Vul uw naam in.' };
       if (input.terms !== true) return { error: 'invalid', message: 'Ga akkoord met de voorwaarden.' };
       if (!validSignature(input.signature)) return { error: 'invalid', message: 'Zet uw handtekening.' };
+      // De klant tekent voor wat hij zag: is de offerte intussen aangepast, dan eerst opnieuw laden.
+      if (input.version !== versionOf(quoteRow.number, data)) return { error: 'changed' };
       data = Core.sanitize(Core.chooseOptions(data, input.options));
     }
     const at = currentTimestamp();
@@ -706,7 +733,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
     return prepare('DELETE FROM quotes WHERE tenant_id = ? AND id = ?').run(tenantId, String(id)).changes > 0;
   }
 
-  return { list, listAsync, get, create, update, respond, decide, share, unshare, markSent, followUpDue, claimFollowUp, releaseFollowUp, restoreDraft, byToken, markViewed, publicView, shareLink, remove, purge, acceptedNumber, isConverted, nextNumber };
+  return { list, listAsync, get, create, update, respond, decide, versionOfRow, share, unshare, markSent, followUpDue, claimFollowUp, releaseFollowUp, restoreDraft, byToken, markViewed, publicView, shareLink, remove, purge, acceptedNumber, isConverted, nextNumber };
 }
 
 /**
@@ -806,7 +833,9 @@ function registerQuoteRoutes(app, ctx) {
     const settings = settingsOf(req);
     const profile = settings.get('quoteProfile');
     const internal = Roles.can(user, 'beheer') || Roles.can(user, 'nacalculatie');
-    res.json({ profile: internal ? profile : withoutInternal(profile), canEdit: Roles.can(user, 'beheer'), mail: Roles.can(user, 'offertes') && mailerFor(settings).configured(),
+    // Een klant (alleen eigen offertes) krijgt alleen de documentgegevens, geen tarieven of opslag.
+    const isCustomer = Roles.can(user, 'offertes.klant') && !Roles.can(user, 'offertes') && !Roles.can(user, 'werkorders');
+    res.json({ profile: isCustomer ? customerProfile(profile) : internal ? profile : withoutInternal(profile), canEdit: Roles.can(user, 'beheer'), mail: Roles.can(user, 'offertes') && mailerFor(settings).configured(),
       // De opmaak van de afgedrukte documenten (logo, kop, kleuren, lettertype, voettekst), zie shared/doc-layout.js.
       documentLayout: sanitizeDocumentLayout(settings.get('documentLayout')) });
   });
@@ -1035,6 +1064,7 @@ function registerQuoteRoutes(app, ctx) {
     if (out.error === 'not_found') return notFound(res);
     if (out.error === 'answered') return res.status(409).json({ error: 'answered', message: `Deze offerte is al ${out.status === 'akkoord' ? 'geaccepteerd' : out.status === 'afgewezen' ? 'afgewezen' : 'beantwoord'}.` });
     if (out.error === 'expired') return res.status(409).json({ error: 'expired', message: 'Deze offerte is verlopen. Neem contact op voor een nieuwe offerte.' });
+    if (out.error === 'changed') return res.status(409).json({ error: 'changed', message: 'Deze offerte is gewijzigd terwijl u hem bekeek. Laad de pagina opnieuw en controleer de offerte voordat u akkoord geeft.' });
     return res.status(400).json({ error: 'invalid', message: out.message || 'Ongeldige invoer.' });
   }
   /**
@@ -1141,6 +1171,8 @@ function registerQuoteRoutes(app, ctx) {
     if (!recipientLimit.take(req.user.tenant_id, list)) return res.status(429).json({ error: 'recipient_limited', message: 'Naar een van deze e-mailadressen is het afgelopen uur al vaak gemaild. Probeer het later opnieuw.' });
     const base = pinShareBase(settings, url);
     if (base === null) { recipientLimit.release(req.user.tenant_id, list); return res.status(409).json(PUBLIC_URL_MISSING); }
+    // Was de offerte nog een concept? Dan zetten we hem terug als de mail mislukt (T-13).
+    const wasDraft = quotes.get(req.user, req.params.id)?.status === 'concept';
     const shared = quotes.share(req.user, req.params.id, base);
     if (shared.error) recipientLimit.release(req.user.tenant_id, list);
     if (shared.error === 'invalid_url') return res.status(400).json({ error: 'invalid_url', message: 'Ongeldig adres voor de link.' });
@@ -1157,6 +1189,7 @@ function registerQuoteRoutes(app, ctx) {
     } catch (error) {
       console.warn(`Offerte ${quote.number} niet verstuurd: ${error.code || ''} ${error.message}`);
       recipientLimit.release(req.user.tenant_id, list);
+      if (wasDraft) quotes.restoreDraft(req.tenantId || req.user.tenant_id, quote.id);
       return withCause(res, error).status(502).json({ error: 'send_failed', message: mailFailure(error) });
     }
     quotes.markSent(quote.id, list.join(', '));
@@ -1263,7 +1296,7 @@ function registerQuoteRoutes(app, ctx) {
     if (!quoteRow) return;
     if (req.query.preview !== '1') quotes.markViewed(quoteRow);
     const settings = settingsForTenant(quoteRow.tenant_id);
-    res.json({ quote: quotes.publicView(quoteRow), profile: withoutInternal(settings.get('quoteProfile')), theme: themeOf(quoteRow.tenant_id),
+    res.json({ quote: quotes.publicView(quoteRow), profile: customerProfile(settings.get('quoteProfile')), theme: themeOf(quoteRow.tenant_id),
       documentLayout: sanitizeDocumentLayout(settings.get('documentLayout')) });
   });
 

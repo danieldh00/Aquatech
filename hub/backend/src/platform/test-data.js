@@ -654,7 +654,7 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
       const row = prepare('SELECT id, tenant_id, number, status, data, acceptance FROM quotes WHERE id = ?').get(id);
       const customer = spec.customerKey ? seeded.users[spec.customerKey] : null;
       const out = quotes.decide(row, response.answer, {
-        name: response.name, terms: true, signature: signaturePng(i), reason: response.reason || '',
+        name: response.name, terms: true, version: quotes.versionOfRow(row), signature: signaturePng(i), reason: response.reason || '',
         options: (response.options || []).map((key) => `opt-${key}`),
       }, { via: response.via === 'account' && customer ? 'account' : 'link', userId: response.via === 'account' && customer ? customer.id : null,
         ip: '192.0.2.10', userAgent: 'Testdata (geen echte browser)' });
