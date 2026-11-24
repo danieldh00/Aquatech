@@ -296,7 +296,7 @@ test('server: zonder multitenancy staat uitbesteden op slot in Beheer > Modules'
 
 test('hulpfuncties: adressen van een uitgezet onderdeel zijn helemaal dicht (patronen met een sterretje)', () => {
   assert.deepStrictEqual(Tools.blockedRoutes({}), []);
-  assert.deepStrictEqual(Tools.blockedRoutes({ nacalculatie: false }), ['/api/workorders/*/costing']);
+  assert.deepStrictEqual(Tools.blockedRoutes({ nacalculatie: false }), ['/api/workorders/*/costing', '/api/quote-costs']);
   assert.deepStrictEqual(Tools.blockedRoutes({ werkorders: false, offertes: false }), [], 'alleen de module uit: de regel van de module geldt (lezen blijft)');
   assert.strictEqual(Tools.matchesRoute('/api/workorders/*/costing', '/api/workorders/abc/costing'), true);
   assert.strictEqual(Tools.matchesRoute('/api/workorders/*/costing', '/api/workorders/abc/costing/extra'), false);

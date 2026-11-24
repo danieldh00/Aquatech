@@ -215,6 +215,7 @@
         </div>
         <table id="e-totals" class="totals"></table>
       </div>
+      <div id="e-margin" class="margin-card" hidden></div>
     </section>
 
     <section class="card-form">
@@ -269,6 +270,7 @@
         </div>
         <div class="row2">
           <label>Kostprijs per uur (€, voor de nacalculatie)<input name="hourlyCost" type="number" min="0" step="0.01"></label>
+          <label>Minimummarge (%, waarschuwing in de offerte)<input name="minMarginPct" type="number" min="0" max="99" step="0.5"></label>
         </div>
         <div class="row3">
           <label>Btw-tarief<select name="vatRate"><option value="21">21%</option><option value="9">9%</option><option value="0">0%</option></select></label>
@@ -338,6 +340,7 @@
   <script src="offertes-share.js"></script>
   <script src="offertes-customers.js"></script>
   <script src="offertes-export.js"></script>
+  <script src="offertes-margin.js"></script>
   <script src="offertes-bulk.js"></script>
   <script src="offertes-templates.js"></script>
   <script src="offertes.js"></script>

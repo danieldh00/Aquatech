@@ -40,6 +40,16 @@ function registerCostingRoutes(app, ctx) {
       ...result,
     });
   });
+
+  // Inkoopprijzen voor de marge in de offerte-editor: per artikelcode de inkoopprijs (null = onbekend). Alleen met recht nacalculatie.
+  app.get('/api/quote-costs', requireRight('nacalculatie'), (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    const codes = [...new Set(String(req.query.codes || '').split(',').map((code) => code.trim().toUpperCase()).filter(Boolean))].slice(0, 300);
+    const articles = codes.length ? ctx.articlesOf(req.tenantId || req.user.tenant_id, codes) : {};
+    const costs = {};
+    for (const code of codes) costs[code] = articles[code] && articles[code].costPrice != null ? articles[code].costPrice : null;
+    res.json({ costs });
+  });
 }
 
 module.exports = { registerCostingRoutes, Core };
