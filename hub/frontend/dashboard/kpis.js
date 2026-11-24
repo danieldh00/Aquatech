@@ -45,6 +45,7 @@
     const container = document.getElementById('kpis');
     if (!container || !me || !me.user || location.protocol === 'file:') return;
     if (!Array.isArray(me.rights) || !me.rights.includes('beheer')) return;
+    if (!(await window.AquatechModuleTools.featureOn('dashboard-cijfers'))) return;
     try {
       const res = await fetch('api/kpis', { cache: 'no-store' });
       if (!res.ok) return;

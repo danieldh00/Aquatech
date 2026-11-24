@@ -1090,7 +1090,8 @@
     if (pending) pending.catch(() => {});
     const pendingConfig = api('invoices/settings');
     const pendingArticles = api('invoices/articles');
-    const pendingVisma = api('visma');
+    // Staat de koppeling met Visma uit (Beheer > Modules), dan vraagt de pagina de stand niet op.
+    const pendingVisma = window.AquatechModuleTools.featureOn('visma').then((on) => (on ? api('visma') : null));
     pendingVisma.catch(() => {});
     pendingConfig.catch(() => {});
     pendingArticles.catch(() => {});
