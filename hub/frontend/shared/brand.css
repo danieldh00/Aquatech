@@ -75,7 +75,16 @@
    een .tablewrap te breed worden, krijgt er een via AquatechCommon.wrapWideTables (shared/common.js). Op desktop verandert niets. */
 .tablewrap.auto-wrap { border: 0; background: none; border-radius: 0; overflow-x: auto; max-width: 100%; }
 @media (max-width: 700px) {
-  .tablewrap { overflow-x: auto; max-width: 100%; }
+  /* Schaduw aan de rand waar nog meer tabel verborgen is: laat zien dat je kunt schuiven (L-12). */
+  .tablewrap {
+    overflow-x: auto; max-width: 100%;
+    background:
+      linear-gradient(90deg, var(--at-surface), var(--at-surface)) left center / 24px 100% local no-repeat,
+      linear-gradient(270deg, var(--at-surface), var(--at-surface)) right center / 24px 100% local no-repeat,
+      radial-gradient(farthest-side at 0 50%, var(--at-shadow), transparent) left center / 10px 100% scroll no-repeat,
+      radial-gradient(farthest-side at 100% 50%, var(--at-shadow), transparent) right center / 10px 100% scroll no-repeat;
+    background-color: var(--at-surface);
+  }
   .tablewrap > table { border-collapse: separate; border-spacing: 0; }
   .tablewrap > table:not(:has(> tbody > tr > td:first-child > input[type=checkbox])) > :is(thead, tbody, tfoot) > tr > :is(th, td):first-child:not([colspan]),
   .tablewrap > table:has(> tbody > tr > td:first-child > input[type=checkbox]) > :is(thead, tbody, tfoot) > tr > :is(th, td):nth-child(2):not([colspan]) {
