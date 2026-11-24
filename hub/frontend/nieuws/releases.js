@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.35.0',
+      date: '2026-11-24',
+      title: 'Webshop: knoppen en pictogram op mobiel hersteld',
+      items: [
+        { text: 'De winkelwagenknop op productkaarten toont op een smal scherm weer het winkelwagenpictogram, de voorraadtekst is beter leesbaar en de zoekknop is groter om aan te tikken.' },
+      ],
+    },
+    {
       version: '1.34.9',
       date: '2026-11-24',
       title: 'Planner met grotere knoppen op mobiel',

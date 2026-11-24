@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.35.0
+
+Layoutpunten L-04 t/m L-07 uit de layoutcheck: het winkelwagenpictogram staat als eigen bestand `assets/icon-winkelwagen.svg` (CSP `img-src 'self'` blokkeerde de data-URI), `.svg` is toegevoegd aan de shop-assets, knoppen erven het lettertype (`button { font-family: inherit }`), voorraadlabel op productkaarten minimaal 12 px, zoekknop 44 px breed en hoog op smalle schermen, en het inline `style` van het honeypotveld op Registreren en Planner is vervangen door de klasse `.trap`.
+
 ## 1.34.9
 
 Planner (L-09): op schermen tot 760 px krijgen `.tbtn`, de ongedaan-maken/opnieuw-knoppen in de kopbalk en `.step`/`.step-nav .btn` een minimale hoogte van 40 px (voorheen alleen bij `pointer: coarse`); legendatitel van 10 naar 12 px.
