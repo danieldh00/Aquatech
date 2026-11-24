@@ -783,7 +783,7 @@ function mailBody(profile, paragraphs, button, style) {
  * klant ziet alleen de verzonden offertes die aan zijn account hangen en kan
  * die accepteren of afwijzen.
  * @param {object} app De Express-app.
- * @param {object} ctx quotes, tenantOf(req), settingsOf(req), customersOf(req), searchCustomers(req, search), identify, requireUser, requireAdmin, requireRight, requireJson, audit en optioneel settingsForTenant, themeOf, tenantActive, mailerFor, remoteIp, publicLimiter en planReviewOf.
+ * @param {object} ctx quotes, tenantOf(req), settingsOf(req), customersOf(req), searchCustomers(req, search), identify, requireUser, requireAdmin, requireRight, requireJson, audit en optioneel settingsForTenant, themeOf, tenantActive, mailerFor, remoteIp, publicLimiter, planReviewOf en onAccepted(tenantId, quoteId) (na een akkoord).
  */
 function registerQuoteRoutes(app, ctx) {
   const { quotes, identify, requireAdmin, requireRight, requireJson, settingsOf, customersOf, audit } = ctx;
@@ -1070,11 +1070,29 @@ function registerQuoteRoutes(app, ctx) {
     const { status } = body;
     const customerChoice = customerIdOf(req, req.body.customerId);
     if (customerChoice.error) return badCustomer(res);
+    const wasAccepted = status !== 'akkoord' || quotes.get(req.user, req.params.id)?.status === 'akkoord';
     const quote = quotes.update(req.user, req.params.id, data, status, customerChoice.value);
     if (!quote) return notFound(res);
+    if (!wasAccepted && quote.status === 'akkoord') afterAccepted(req.tenantId || req.user.tenant_id, quote.id);
     if (quote.locked) return res.status(409).json({ error: 'locked', message: 'Deze offerte is digitaal beantwoord en ligt vast. Maak een kopie om iets te wijzigen.' });
     res.json(quote);
   });
+
+  /**
+   * Na een akkoord op een offerte (klantaccount, openbare link of medewerker): laat de werkorder klaarzetten als de organisatie dat wil.
+   * Een fout daarbij laat het akkoord staan en wordt alleen gelogd.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} quoteId Id van de geaccordeerde offerte.
+   * @returns {void}
+   */
+  function afterAccepted(tenantId, quoteId) {
+    if (!ctx.onAccepted) return;
+    try {
+      ctx.onAccepted(tenantId, quoteId);
+    } catch (error) {
+      console.warn(`Werkorder bij akkoord op offerte ${quoteId} niet klaargezet: ${error.message}`);
+    }
+  }
 
   /**
    * Antwoord op een fout bij akkoord of afwijzen (klantaccount en openbare link).
@@ -1154,6 +1172,7 @@ function registerQuoteRoutes(app, ctx) {
     const out = quotes.respond(req.user, req.params.id, answer, req.body || {}, who(req));
     if (out.error) return decideError(res, out);
     audit(req, answer === 'akkoord' ? 'offerte_akkoord' : 'offerte_afgewezen', { quoteId: out.quote.id, number: out.quote.number, via: 'account' });
+    if (answer === 'akkoord') afterAccepted(req.tenantId || req.user.tenant_id, out.quote.id);
     notifyDecision(settingsOf(req), out.row);
     res.json(out.quote);
   });
@@ -1330,6 +1349,7 @@ function registerQuoteRoutes(app, ctx) {
     const out = quotes.decide(quoteRow, answer, req.body || {}, { ...who(req), via: 'link' });
     if (out.error) return decideError(res, out);
     audit(req, answer === 'akkoord' ? 'offerte_akkoord' : 'offerte_afgewezen', { quoteId: quoteRow.id, number: quoteRow.number, via: 'link' }, null, quoteRow.tenant_id);
+    if (answer === 'akkoord') afterAccepted(quoteRow.tenant_id, quoteRow.id);
     notifyDecision(settingsForTenant(quoteRow.tenant_id), out.row);
     res.json({ quote: quotes.publicView(out.row) });
   });

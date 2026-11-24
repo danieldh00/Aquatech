@@ -33,6 +33,18 @@ const AiModels = require(path.join(FRONTEND_DIR, 'shared', 'ai-models.js'));
 const { sanitizeDashboardKpis, DEFAULT_SETTING: DEFAULT_DASHBOARD_KPIS } = require('./kpi-catalog');
 
 /**
+ * Maakt de instelling voor de automatische werkorder bij akkoord schoon: alleen `enabled` (ja/nee), standaard aan.
+ * @param {*} raw De ingevoerde of opgeslagen waarde.
+ * @returns {{ enabled: boolean }} De schone instelling.
+ */
+function sanitizeAutoWorkOrder(raw) {
+  // Een omgevingsvariabele (AUTO_WORK_ORDER=0 of false) is een tekst; in de database staat een object.
+  if (typeof raw === 'string') return { enabled: !['0', 'false', 'nee', 'uit'].includes(raw.trim().toLowerCase()) };
+  const enabled = raw && typeof raw === 'object' && typeof raw.enabled === 'boolean' ? raw.enabled : true;
+  return { enabled };
+}
+
+/**
  * Maakt de instelling voor automatische bestelvoorstellen schoon: alleen `enabled` (ja/nee), al het andere valt weg.
  * Ontbreekt de waarde of is hij geen ja/nee, dan geldt de standaard (aan).
  * @param {*} raw De ingevoerde of opgeslagen waarde.
@@ -179,6 +191,10 @@ const FIELDS = {
   // KPI's op het beheerdersdashboard: welke aan staan, in welke volgorde, welke periode (platform/kpi-catalog.js).
   dashboardKpis: { type: 'object', default: DEFAULT_DASHBOARD_KPIS, sanitize: sanitizeDashboardKpis },
   purchaseProposals: { type: 'object', default: { enabled: true }, sanitize: sanitizePurchaseProposals },
+  // Werkorder automatisch klaarzetten bij een akkoord op een offerte (uitvoering/workorders.js, createForAcceptedQuote): status open
+  // (In te plannen), materiaal gereserveerd. Per omgeving, standaard aan (Beheer > Modules > Werkorders). Bewust geen liveOnly:
+  // er gaat niets naar buiten, het maakt alleen een werkorder in de eigen omgeving.
+  autoWorkOrder: { type: 'object', env: 'AUTO_WORK_ORDER', default: { enabled: true }, sanitize: sanitizeAutoWorkOrder },
   // Prijsfactor op de inkoopprijs (Artikelen > Prijsfactor; alleen via /api/stock/price-factors).
   priceFactors: { type: 'object', default: {}, sanitize: sanitizePriceFactors, internal: true },
   // Kleurthema (shared/theme.js): per organisatie te kiezen in Beheer > Kleuren (eigen

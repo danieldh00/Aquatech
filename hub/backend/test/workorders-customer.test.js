@@ -25,7 +25,7 @@ async function setup() {
   const bos = store.createCustomer(tenantId, { displayName: 'Piet Bos', business: { companyName: 'Bos Hoveniers BV', kvkNumber: '12345678', vatNumber: 'NL123456789B01' } }).user;
   const other = store.createTenant({ slug: 'ander', name: 'Ander BV' }).tenant;
   const stranger = store.createCustomer(other.id, { displayName: 'Vreemde Klant' }).user;
-  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, addressFetch: createPdokFake().fetchImpl, secret: 'test-secret-test-secret-test-secret', db, loginDelayMs: 0 }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1', AUTO_WORK_ORDER: '0' }, addressFetch: createPdokFake().fetchImpl, secret: 'test-secret-test-secret-test-secret', db, loginDelayMs: 0 }));
   return { server, base, as: createLogin(base, { password: PASSWORD }), db, store, tenantId, jansen, bos, stranger };
 }
 

@@ -60,7 +60,7 @@ test('samenvoegen via de API: voorraad, prijs, afbeelding en reserveringen blijv
   await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
   await store.createAccount(main, { username: 'pien', displayName: 'Pien', role: 'planner', password: PW });
   await store.createAccount(main, { username: 'klant', displayName: 'Klant', role: 'klant', password: PW });
-  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1', AUTO_WORK_ORDER: '0' }, secret: SECRET, db }));
   try {
     const as = createLogin(base, { password: PW });
     const baas = await as('baas');

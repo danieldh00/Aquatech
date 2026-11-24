@@ -2289,7 +2289,27 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // De btw-controle bij VIES: gedeeld door de offertes (btw verleggen) en de webshop.
   const vies = createVies(viesFetch ? { fetchImpl: viesFetch } : {});
 
+  /**
+   * Zet bij een geaccordeerde offerte automatisch een werkorder klaar (status open = In te plannen) en reserveert het materiaal.
+   * Doet niets als de organisatie het uit heeft staan, of als er al een werkorder van de offerte is.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} quoteId Id van de geaccordeerde offerte.
+   * @returns {void}
+   */
+  const createWorkOrderOnAccept = (tenantId, quoteId) => {
+    if (!ModuleTools.isOn(moduleFlagsOf(tenantId), 'werkorder-automatisch')) return;
+    const created = workOrderStore.createForAcceptedQuote(tenantId, quoteId);
+    if (!created) return;
+    store.audit({ tenantId, userId: created.owner.id, action: 'werkorder_automatisch_aangemaakt', detail: { workOrderId: created.workOrder.id, number: created.workOrder.number, quoteId } });
+    try {
+      stockStore.onWorkOrderChange(tenantId, created.workOrder.id, created.owner);
+    } catch (error) {
+      // De werkorder staat er al; de reservering komt bij de eerstvolgende wijziging van de werkorder alsnog.
+      console.warn(`Reservering voor automatische werkorder ${created.workOrder.id} (offerte ${quoteId}) mislukt: ${error.message}`);
+    }
+  };
   registerQuoteRoutes(app, {
+    onAccepted: createWorkOrderOnAccept,
     quotes: quoteStore, vies, identify, requireUser, requireAdmin, requireRight, requireJson, audit,
     // Een offerte uit een plan alleen als dat plan is goedgekeurd.
     planReviewOf: (tenantId, planId) => store.planReviewStatus(tenantId, planId),
@@ -2945,7 +2965,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.json(describeKpiCatalog(settingsFor(req.tenantId).get('dashboardKpis'), (moduleId) => ModuleTools.isOn(moduleFlagsOf(req.tenantId), moduleId)));
   });
   registerOpenTaskRoutes(app, { identify, canUpdate, sources: { hostTasks, orders: webOrders, purchaseOrders: purchaseOrderStore, proposalsEnabled,
-    shopEnabled: (tenantId) => Boolean(settingsFor(tenantId).get('storefront')), stockEnabled: (tenantId) => ModuleTools.isOn(moduleFlagsOf(tenantId), 'voorraad') } });
+    shopEnabled: (tenantId) => Boolean(settingsFor(tenantId).get('storefront')), stockEnabled: (tenantId) => ModuleTools.isOn(moduleFlagsOf(tenantId), 'voorraad'),
+    workorders: workOrderStore, planningEnabled: (tenantId) => ModuleTools.isOn(moduleFlagsOf(tenantId), 'planning') } });
 
   registerWebOrderRoutes(app, { orders: webOrders, requireJson, audit, invoices: webOrderInvoices, payments: webPayments, returns: webReturns });
   // Offerte omzetten naar bestelling (verkoop/quote-orders.js).
