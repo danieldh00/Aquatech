@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.34.5
+
+Audit 1.33.0, thema webshopbetalingen en facturen, deel 2. Geen migratie.
+
+- **T-02 Crediteren begrensd** (`verkoop/invoices.js`): bij definitief maken van een creditfactuur controleert `creditProblem` (met een rijslot op de oorspronkelijke factuur) dat de som van de definitieve credits niet boven het factuurbedrag komt en dat per artikelcode niet meer wordt gecrediteerd dan er gefactureerd is (409); daarmee komt ook de voorraad nooit vaker terug dan hij is afgeboekt. `credit()` maakt een nieuw concept met alleen de regels die nog niet definitief gecrediteerd zijn (`creditedSoFar`) en weigert als alles al gecrediteerd is.
+- **B-19 Betaald/onbetaald** (`POST /api/invoices/:id/paid`): auditregels `factuur_betaald` en `factuur_onbetaald` (alleen bij een echte wijziging). Terugzetten op openstaand van een factuur met een geslaagde online betaling (portaal, betaallink of online betaalde webshopbestelling) geeft 409 `confirm_required`; met `confirm: true` gaat het door en staat dat in de auditregel. Facturen vraagt de bevestiging.
+- **T-15 Visma-redirect** (`verkoop/visma.js`): de vaste standaard met het productiedomein en het oude pad buiten `/app` is weg. Zonder eigen redirect URI geldt het webadres uit Beheer > Webshop > Betalen + `app/api/visma/callback`; ontbreken beide, dan weigert verbinden met een duidelijke melding. Een ingevulde redirect URI moet met https beginnen en op `/app/api/visma/callback` eindigen, anders 400. Een eerder bewaarde waarde met het oude pad telt als leeg.
+- **Betaling op een gecrediteerde factuur** (`verkoop/invoice-payments.js`): nieuwe haak `onPaidAfterCredit`, één keer per betaling; de aansluiting op audit en Bewaking volgt in de laatste PR van dit thema (server.js).
+- Tests: crediteren (gedeeltelijk, te veel, alles), auditregels, bevestiging bij online betaald, de haak, en dat webhook en betaallink een factuur van een andere organisatie niet raken (B-12).
+
 ## 1.34.4
 
 Audit B-03 (vervolg): de Dockerfile en `deploy/apps01/compose.yml` zetten het basisimage `node:22-alpine` en `cloudflared` op digest vast (cloudflared op versie 2026.9.3 in plaats van `latest`). `update.sh` controleert na het ophalen de cosign-handtekening van het image (identiteit: `release.yml` op `master` van deze repo) voordat de onderhoudsmodus aan gaat; een ongeldige of ontbrekende handtekening stopt de update en slaat die versie over. De controle werkt zodra cosign op de server staat (nieuwe servertaak `011-image-handtekening-controleren`, die ook `update.sh` vernieuwt); `IMAGE_SIGNATURE` in `.env` kent `auto` (standaard), `required` en `off`. Het ondertekenen zelf zit in `release.yml` (aparte PR).

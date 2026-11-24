@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.34.5',
+      date: '2026-11-24',
+      title: 'Crediteren, betaald zetten en de Visma-redirect steviger',
+      items: [
+        { text: 'Een factuur kan niet meer vaker of voor meer gecrediteerd worden dan er gefactureerd is. Een volgende creditfactuur begint met wat er nog niet gecrediteerd is.', for: ['facturen'] },
+        { text: 'Betaald of weer openstaand zetten staat nu in het logboek. Een factuur die de klant online heeft betaald gaat pas na een bevestiging terug naar openstaand.', for: ['facturen'] },
+        { text: 'Visma: de redirect URI volgt uit het webadres van de omgeving als je hem leeg laat; een adres dat niet klopt wordt geweigerd in plaats van stil vervangen.', for: ['facturen'] },
+      ],
+    },
+    {
       version: '1.34.4',
       date: '2026-11-24',
       title: 'Image-handtekening controleren bij een update',
