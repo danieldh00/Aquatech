@@ -671,13 +671,15 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
   }
 
   /**
-   * Telt de nieuwe, nog niet betaalde online bestellingen als gast met dit e-mailadres (plafond op wat tegelijk openstaat, B-13).
+   * Telt de nieuwe, nog niet betaalde online bestellingen als gast met dit e-mailadres die nog voorraad vasthouden (plafond op wat tegelijk openstaat, B-13).
    * @param {string} tenantId Id van de omgeving.
    * @param {string} email Het e-mailadres.
    * @returns {number} Het aantal openstaande onbetaalde gastbestellingen.
    */
   function countOpenUnpaidGuest(tenantId, email) {
-    return Number(prepare("SELECT COUNT(*) AS n FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND user_id IS NULL AND lower(email) = ? AND data->>'payment' = 'online' AND COALESCE(data->'pay'->>'status', '') <> 'betaald'")
+    // `lower(email)` past op de index web_orders_email (tenant_id, lower(email)). Een bestelling waarvan de voorraad al is vrijgegeven telt niet meer:
+    // het plafond beschermt de voorraad, en zo kan niemand met het adres van een ander diens bestellen langer dan de vasthoudtijd hinderen.
+    return Number(prepare("SELECT COUNT(*) AS n FROM web_orders WHERE tenant_id = ? AND status = 'nieuw' AND user_id IS NULL AND lower(email) = ? AND data->>'payment' = 'online' AND COALESCE(data->'pay'->>'status', '') <> 'betaald' AND NOT jsonb_exists(data, 'reservationReleasedAt')")
       .get(tenantId, String(email || '').trim().toLowerCase()).n) || 0;
   }
 
@@ -695,14 +697,19 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
   }
 
   /**
-   * Koppelt een gastbestelling aan een (nieuw) account. Alleen als de bestelling nog van niemand is; een tweede poging doet niets.
+   * Koppelt een gastbestelling aan een (nieuw) account, met de retouren die als gast bij die bestelling zijn aangevraagd. Alleen als de bestelling nog van niemand is; een tweede poging doet niets.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van de bestelling.
    * @param {string} userId Id van het account.
    * @returns {boolean} true als de bestelling nu aan het account hangt.
    */
   function attachToUser(tenantId, id, userId) {
-    return prepare('UPDATE web_orders SET user_id = ? WHERE tenant_id = ? AND id = ? AND user_id IS NULL').run(String(userId), tenantId, String(id)).changes > 0;
+    return transaction(db, () => {
+      const attached = prepare('UPDATE web_orders SET user_id = ? WHERE tenant_id = ? AND id = ? AND user_id IS NULL').run(String(userId), tenantId, String(id)).changes > 0;
+      // De retouren die als gast bij deze bestelling zijn aangevraagd gaan mee naar het account (T-19).
+      if (attached) prepare('UPDATE web_returns SET user_id = ? WHERE tenant_id = ? AND order_id = ? AND user_id IS NULL').run(String(userId), tenantId, String(id));
+      return attached;
+    });
   }
 
   /**
