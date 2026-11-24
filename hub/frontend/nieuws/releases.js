@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.36.9',
+      date: '2026-11-24',
+      title: 'Gasten beter begrensd',
+      items: [
+        { text: 'Gasten (zonder account) kunnen in het klantportaal niets meer indienen of bevestigen; daarvoor is een account nodig.' },
+      ],
+    },
+    {
       version: '1.36.8',
       date: '2026-11-24',
       title: 'Lange lijsten blijven snel',
