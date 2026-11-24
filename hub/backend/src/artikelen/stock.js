@@ -1404,11 +1404,12 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @param {object} user Wie het doet.
    * @param {string} id Id van het artikel.
    * @param {{ price: *, validFrom?: string, note?: string }} raw De prijs, de datum (standaard vandaag) en een toelichting.
+   * @param {{ nested?: boolean }} [options] Binnen de transactie van de aanroeper.
    * @returns {object} { item }, of { error, field, status }.
    */
-  function addCostPrice(tenantId, user, id, raw) {
+  function addCostPrice(tenantId, user, id, raw, { nested = false } = {}) {
     const input = raw && typeof raw === 'object' ? raw : {};
-    return transaction(db, () => {
+    return inTransaction(() => {
       const existing = findItem(tenantId, id);
       if (!existing) return { error: 'not_found', status: 404 };
       if (Number(existing.has_variants)) return { error: 'Een hoofdartikel heeft zelf geen voorraad: geef de inkoopprijs per variant op.', status: 409 };
@@ -1416,7 +1417,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       if (out.error) return { ...out, status: 400 };
       repriceItem(tenantId, existing.id, 'inkoopprijs', user);
       return { item: get(tenantId, existing.id) };
-    });
+    }, nested);
   }
 
   /**

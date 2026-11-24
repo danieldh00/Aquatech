@@ -103,3 +103,18 @@ test('rechten, onbekende leverancier, ontbrekende kolommen en andere organisatie
   assert.strictEqual((await installer.post(`/app/api/stock/price-lists/${main1.id}`, { headers: ['Artikelnummer'], rows: [['RB-4000']] })).status, 400);
   assert.strictEqual((await installer.get('/app/api/stock/price-lists/fields')).body.fields.find((field) => field.key === 'costPrice').required, true);
 });
+
+test('een gearchiveerde leverancier wordt geweigerd en een regel wordt als geheel verwerkt', async () => {
+  const { installer, main1, backup, itemA } = await setup();
+  const rows = [['', '', 'A-1', '5,00', '', '']];
+  const archived = await installer.patch(`/app/api/suppliers/${backup.id}`, { archived: true });
+  assert.strictEqual(archived.status, 200, JSON.stringify(archived.body));
+  const refused = await installer.post(`/app/api/stock/price-lists/${backup.id}`, { headers: HEADERS, rows });
+  assert.strictEqual(refused.status, 409, JSON.stringify(refused.body));
+  assert.strictEqual(refused.body.error, 'supplier_archived');
+  const applied = await installer.post(`/app/api/stock/price-lists/${main1.id}`, { headers: HEADERS, rows, apply: true });
+  assert.strictEqual(applied.status, 200, JSON.stringify(applied.body));
+  const links = (await installer.get(`/app/api/stock/items/${itemA.id}/suppliers`)).body.items;
+  assert.strictEqual(links.find((link) => link.supplierId === main1.id).costPrice, 5);
+  assert.strictEqual((await installer.get(`/app/api/stock/items/${itemA.id}`)).body.costPrice, 5);
+});
