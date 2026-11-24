@@ -2237,13 +2237,22 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   registerDrawingRoutes(app, {
     store, identify, requireUser, requirePlans, requireRight, requireJson, audit, remoteIp, tenantActive, scopeToTenant, publicLimiter, planLimiter, mailerFor,
     settingsFor: (id) => settingsFor(id), canApprove: (user) => Roles.can(user, 'plannen.goedkeuren'), captcha, captchaGate,
-    // Catalogus voor de planner zonder account; bestellen (winkelwagen) alleen bij de hoofdtenant met een open webshop en bestellen aan.
+    /**
+     * Catalogus voor de planner zonder account; bestellen (winkelwagen) alleen bij de hoofdtenant met een open webshop en bestellen aan.
+     * @param {string} tenantId Organisatie waarvan de catalogus gevraagd wordt.
+     * @returns {object} Artikelen, assortiment en of bestellen mag.
+     */
     plannerCatalogOf: (tenantId) => {
       const mainSettings = settingsFor(tenant.id);
       const ordering = tenantId === tenant.id && Boolean(mainSettings.get('storefront')) && mainSettings.get('shopOrdering') === true;
       return { ...shopRoutes.publicCatalogOf(tenantId, settingsFor(tenantId)), ordering };
     },
-    // Concept-offerte bij een ingediende tekening (alleen met de module Offertes aan); materiaal en arbeid uit het plan, eigenaar is het gastaccount van de indiener.
+    /**
+     * Concept-offerte bij een ingediende tekening (alleen met de module Offertes aan); materiaal en arbeid uit het plan, eigenaar is het gastaccount van de indiener.
+     * @param {string} tenantId Organisatie van de tekening.
+     * @param {{plan: object, planData: object, customer: object}} details Het ingediende plan, de plangegevens en de contactgegevens.
+     * @returns {Promise<{id: string, number: string}|null>} De offerte, of null als er geen kwam.
+     */
     createLeadQuote: async (tenantId, { plan, planData, customer }) => {
       if (!ModuleTools.isOn(moduleFlagsOf(tenantId), 'offertes')) return null;
       const profile = settingsFor(tenantId).get('quoteProfile');

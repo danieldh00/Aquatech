@@ -64,7 +64,7 @@ test('publicCatalogOf: alleen artikelen met prijs, zonder sku of adres, btw uit 
 
 test('ingediende tekening: een fout of ontbrekende offerte laat het indienen slagen, de offerte staat in de melding en het auditlog', async () => {
   const submitted = [];
-  for (const createLeadQuote of [() => { throw new Error('rekenfout'); }, () => null, () => ({ id: 'q-1', number: 'O2026-0001' })]) {
+  for (const [createLeadQuote, expectedQuoteId] of [[() => { throw new Error('rekenfout'); }, undefined], [() => null, undefined], [() => ({ id: 'q-1', number: 'O2026-0001' }), 'q-1']]) {
     const audits = [];
     const { server, base } = await setup({
       createLeadQuote, audit: (...args) => audits.push(args[2]),
@@ -76,7 +76,7 @@ test('ingediende tekening: een fout of ontbrekende offerte laat het indienen sla
       const res = await fetch(`${base}/api/public/drawing`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
       assert.strictEqual(res.status, 201);
       assert.strictEqual(audits.length, 1);
-      assert.strictEqual(Boolean(audits[0].quoteId), createLeadQuote.toString().includes('q-1'));
+      assert.strictEqual(audits[0].quoteId, expectedQuoteId);
     } finally { server.close(); }
   }
   assert.strictEqual(submitted.length, 3);

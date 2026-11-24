@@ -76,6 +76,8 @@ webserver in Docker (poort 3300) met PostgreSQL als enige database (een eigen co
 
 Webapplicatie om een automatische tuinberegening te ontwerpen, geïnspireerd op de werkwijze van de DVS Beregnungsplaner: gebieden tekenen → systeemelementen → sproeiers → zones en leidingen → stuklijst.
 
+De openbare planner (`?tekenen`, zonder account) is ook een verkoopkanaal: bij de stuklijst staat een prijsindicatie incl. btw, met *Materiaal bestellen* (winkelwagen, alleen als de webshop open staat en bestellen aan is) en *Offerte voor aanleg aanvragen*. Elke ingediende tekening wordt een lead met een concept-offerte (alleen met de module Offertes aan; hoogstens 20 per organisatie per uur, daarboven komt de tekening wel binnen maar zonder offerte).
+
 De planner zelf is volledig client-side (HTML/JS, geen build-stap). Er zijn twee manieren om hem te draaien:
 
 | Manier | Hoe |
