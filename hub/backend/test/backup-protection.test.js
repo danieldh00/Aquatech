@@ -159,6 +159,28 @@ test('bewaking: een handmatig verwijderde back-up geeft 24 uur een waarschuwing'
   assert.deepStrictEqual(await run(now + 25 * 3600 * 1000), { ok: true });
 });
 
+test('de cache bewaart hoogstens het maximum: een nieuwe opening sluit de oudste ongebruikte', async () => {
+  let clock = 1000;
+  const cache = createBackupOpenCache({ ttlMs: 100, sweepMs: 3600 * 1000, maxEntries: 2, now: () => clock });
+  const closedKeys = [];
+  /**
+   * Nep-opening van een back-up met een naam.
+   * @param {string} key De naam.
+   * @returns {Function} De openfunctie.
+   */
+  const open = (key) => async () => ({ db: {}, close: () => closedKeys.push(key) });
+  try {
+    await cache.use('a', open('a'), async () => {});
+    clock += 10;
+    await cache.use('b', open('b'), async () => {});
+    clock += 10;
+    await cache.use('c', open('c'), async () => {});
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepStrictEqual(closedKeys, ['a']);
+    assert.strictEqual(cache.size(), 2);
+  } finally { cache.close(); }
+});
+
 test('een geopende back-up wordt hergebruikt, blijft bij gebruik staan en wordt na de bewaartijd gesloten', async () => {
   let clock = 1000;
   const cache = createBackupOpenCache({ ttlMs: 100, sweepMs: 3600 * 1000, now: () => clock });

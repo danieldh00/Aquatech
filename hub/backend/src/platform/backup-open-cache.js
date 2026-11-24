@@ -5,13 +5,15 @@
 
 const TTL_MS = 5 * 60 * 1000;
 const SWEEP_MS = 60 * 1000;
+/** Hoogstens zoveel geopende back-ups tegelijk (elk is een volledige kopie van de database in een tijdelijk schema). */
+const MAX_ENTRIES = 2;
 
 /**
  * Maakt de cache voor geopende back-ups.
- * @param {{ ttlMs?: number, sweepMs?: number, now?: Function }} [options] Bewaartijd, opruiminterval en klok (alleen tests).
+ * @param {{ ttlMs?: number, sweepMs?: number, maxEntries?: number, now?: Function }} [options] Bewaartijd, opruiminterval, het maximale aantal bewaarde back-ups (standaard 2) en klok (alleen tests).
  * @returns {{ use: Function, drop: Function, sweep: Function, size: Function, close: Function }} De functies van de cache.
  */
-function createBackupOpenCache({ ttlMs = TTL_MS, sweepMs = SWEEP_MS, now = () => Date.now() } = {}) {
+function createBackupOpenCache({ ttlMs = TTL_MS, sweepMs = SWEEP_MS, maxEntries = MAX_ENTRIES, now = () => Date.now() } = {}) {
   const entries = new Map();
 
   /**
@@ -50,6 +52,12 @@ function createBackupOpenCache({ ttlMs = TTL_MS, sweepMs = SWEEP_MS, now = () =>
   async function use(key, open, callback) {
     let entry = entries.get(key);
     if (!entry) {
+      // Bij een nieuwe opening de oudste ongebruikte back-up sluiten zodat er niet meer dan het maximum blijven staan.
+      while (entries.size >= maxEntries) {
+        const idle = [...entries].filter(([, candidate]) => candidate.users === 0).sort((left, right) => left[1].expiresAt - right[1].expiresAt)[0];
+        if (!idle) break;
+        drop(idle[0]);
+      }
       entry = { opened: null, users: 0, expiresAt: 0, doomed: false };
       entry.opened = Promise.resolve().then(open);
       entry.opened.catch(() => { if (entries.get(key) === entry) entries.delete(key); });

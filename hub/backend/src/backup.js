@@ -128,15 +128,17 @@ async function createBackup({ db, dir, vault, runId = '' }) {
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   const name = `aquatech-${stamp()}.db.enc`;
   const part = path.join(dir, `${name}.${runId ? `${runId}.` : ''}part`);
+  const rows = Readable.from(exportLines(db));
   try {
     // Alle rijen als regels JSON, gecomprimeerd en meteen versleuteld: er komt nooit een onversleutelde kopie op schijf.
-    const rows = Readable.from(exportLines(db));
     const gzip = zlib.createGzip();
     rows.on('error', (error) => gzip.destroy(error));
     await encryptStream(rows.pipe(gzip), part, keyOf(vault));
     fs.renameSync(part, path.join(dir, name));
   } finally {
     fs.rmSync(part, { force: true });
+    // Bij een fout verderop (schijf vol) de bron ook sluiten, zodat de leestransactie en verbinding vrijkomen.
+    rows.destroy();
   }
   const stats = fs.statSync(path.join(dir, name));
   return { name, size: stats.size, createdAt: stats.mtime.toISOString() };
