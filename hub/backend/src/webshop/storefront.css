@@ -761,4 +761,4 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
 @container (max-width: 215px) { .product-card .qty-step { width: 22px; } }
 
 /* Tikdoel van de zoekknop op smalle schermen: minimaal 44 px */
-@media (max-width: 600px) { .shop-search button { width: 44px; top: 0; bottom: 0; right: 0; } .shop-search input { padding-right: 52px; } }
+@media (max-width: 600px) { .shop-search button { width: 44px; top: 0; bottom: 0; right: 0; } .shop-search input { min-height: 44px; padding-right: 52px; } }
