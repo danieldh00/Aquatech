@@ -32,8 +32,23 @@
       <tbody>${state.suppliers.map((supplier) => `<tr class="${supplier.archived ? 'arch' : ''}">
         <td class="wrap">${esc(supplier.name)}${supplier.archived ? ' <span class="pill">Gearchiveerd</span>' : ''}</td><td>${esc(supplier.contactName)}</td>
         <td>${supplier.email ? `<a href="mailto:${esc(supplier.email)}">${esc(supplier.email)}</a>` : ''}</td><td>${esc(supplier.phone)}</td><td class="num">${supplier.itemCount}</td>
-        <td class="num"><button class="btn small" type="button" data-edit="${esc(supplier.id)}">Wijzigen</button></td></tr>`).join('')}</tbody>`
+        <td class="num"><button class="btn small" type="button" data-pricelist="${esc(supplier.id)}" title="Een prijslijst van deze leverancier uit Excel inlezen"${supplier.archived ? ' disabled' : ''}>Prijslijst inlezen</button> <button class="btn small" type="button" data-edit="${esc(supplier.id)}">Wijzigen</button></td></tr>`).join('')}</tbody>`
       : '<tbody><tr><td class="muted">Nog geen leveranciers.</td></tr></tbody>';
+  }
+
+  /**
+   * Opent het importvenster voor de prijslijst van een leverancier; daarna wordt de lijst ververst.
+   * @param {object} supplier De leverancier.
+   * @returns {void}
+   */
+  function openPriceList(supplier) {
+    window.AquatechExcelImport.open({
+      title: `Prijslijst van ${supplier.name} inlezen`, subject: 'De prijzen', keyLabel: 'Artikel', templateName: 'prijslijst-leverancier-voorbeeld.xlsx', api: context.api,
+      intro: 'Artikelen worden herkend op het artikelnummer van de leverancier, anders op EAN, anders op je eigen artikelcode. Artikelen die je niet hebt worden overgeslagen. Bij de voorkeursleverancier wordt het ook de inkoopprijs van het artikel, waarna de verkoopprijs via de prijsfactor volgt; een backup-leverancier verandert de prijs van het artikel niet.',
+      fieldsPath: 'stock/price-lists/fields', importPath: `stock/price-lists/${encodeURIComponent(supplier.id)}`,
+      cards: [['nieuw', 'Nieuwe koppeling'], ['wijzigt', 'Wijzigt'], ['ongewijzigd', 'Ongewijzigd'], ['onbekend', 'Niet gevonden'], ['fout', 'Met fouten']],
+      onDone: () => load().catch((error) => context.toast(error.message, true)),
+    });
   }
 
   /**
@@ -233,6 +248,12 @@
      * @param {MouseEvent} event de klik
      */
     $('#sup-table').onclick = (event) => {
+      const priceListButton = event.target.closest('[data-pricelist]');
+      if (priceListButton) {
+        const supplier = state.suppliers.find((candidate) => candidate.id === priceListButton.dataset.pricelist);
+        if (supplier) openPriceList(supplier);
+        return;
+      }
       const button = event.target.closest('[data-edit]');
       if (button) openForm(state.suppliers.find((supplier) => supplier.id === button.dataset.edit) || null);
     };
