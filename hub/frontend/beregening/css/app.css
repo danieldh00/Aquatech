@@ -343,3 +343,11 @@ body.anon #btn-myplans, body.anon .home-link, body.anon [data-shop-link], body.a
 .submit-card .hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
 .submit-card .err { color: var(--danger); min-height: 18px; font-size: 13px; }
 .submit-card .row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Prijsindicatie voor een bezoeker zonder account (stap 6). */
+.public-price { background: #fff; border: 1px solid #dbe3ee; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+.public-price h3 { margin-top: 0; }
+.public-price-total { font-size: 28px; font-weight: 800; color: var(--at-navy); line-height: 1.1; margin-bottom: 8px; }
+.public-price-total small { display: block; font-size: 12px; font-weight: 600; opacity: .7; margin-top: 4px; }
+.public-price .btn { display: block; width: 100%; text-align: center; margin-top: 8px; }
+.public-price .to-cart { margin: 0; }

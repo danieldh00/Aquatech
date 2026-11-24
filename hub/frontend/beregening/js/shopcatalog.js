@@ -39,8 +39,25 @@
       // Ook zonder webshop: verkoopprijzen uit voorraadbeheer.
       for (const [code, product] of Object.entries((info && info.articles) || {})) {
         if (!Catalog.articles[code]) continue;
-        Catalog.articles[code] = { ...Catalog.articles[code], name: product.name || Catalog.articles[code].name, price: product.price, sku: product.sku, url: product.url, inStock: product.inStock, shop: true };
+        Catalog.articles[code] = { ...Catalog.articles[code], name: product.name || Catalog.articles[code].name, price: product.price, vatRate: product.vatRate, sku: product.sku, url: product.url, inStock: product.inStock, shop: true };
       }
+    },
+
+    /**
+     * Haalt voor de planner zonder account het assortiment en de prijzen op (api/public/planner-catalog)
+     * en past ze toe. Zonder antwoord of zonder prijzen blijft de standaardcatalogus staan.
+     * @param {string} org Organisatiecode (leeg = hoofdtenant).
+     * @returns {Promise<{ ordering: boolean }|null>} De uitkomst, of null als er geen openbare prijzen zijn.
+     */
+    loadPublic(org) {
+      return fetch(`api/public/planner-catalog?org=${encodeURIComponent(org || '')}`, { cache: 'no-store' })
+        .then((res) => (res.ok ? res.json() : null)).catch(() => null)
+        .then((info) => {
+          if (!info || !info.enabled || !Object.keys(info.articles || {}).length) return null;
+          this.apply({ articles: info.articles, assortment: info.assortment });
+          this.publicInfo = { ordering: info.ordering === true };
+          return this.publicInfo;
+        });
     },
 
     /**
