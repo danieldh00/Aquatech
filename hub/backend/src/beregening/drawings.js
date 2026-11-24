@@ -65,7 +65,7 @@ function sanitizeSubmission(body) {
 /**
  * Registreert de routes voor tekeningen indienen en plannen controleren.
  * @param {object} app De Express-app.
- * @param {object} ctx store, identify, requirePlans (gebruiker met het recht plannen), requireRight, requireJson, audit, settingsFor(tenantId), tenantActive(id), mailerFor(settings), remoteIp, publicLimiter, planLimiter en plannerCatalogOf(tenantId) (catalogus voor de openbare planner, met `ordering`).
+ * @param {object} ctx store, identify, requirePlans (gebruiker met het recht plannen), requireRight, requireJson, audit, settingsFor(tenantId), tenantActive(id), mailerFor(settings), remoteIp, publicLimiter, planLimiter, plannerCatalogOf(tenantId) (catalogus voor de openbare planner, met `ordering`) en createLeadQuote(tenantId, { plan, planData, customer }) (maakt de concept-offerte bij een ingediende tekening, geeft { id, number } of null).
  */
 function registerDrawingRoutes(app, ctx) {
   const { store, identify, requirePlans, requireRight, requireJson, audit, settingsFor, remoteIp, publicLimiter } = ctx;
@@ -139,12 +139,22 @@ function registerDrawingRoutes(app, ctx) {
     if (!allowed) return;
     const plan = store.submitDrawing(found.tenant.id, { ...input.value, ip: remoteIp(req) });
     // Geen persoonsgegevens in het auditlog.
-    audit(req, 'tekening_ingediend', { planId: plan.id, via: 'openbaar' }, null, found.tenant.id);
+    // Elke ingediende tekening wordt een lead met een concept-offerte voor de installateur; een fout hierin laat het indienen zelf slagen.
+    let quote = null;
+    if (ctx.createLeadQuote) {
+      try {
+        quote = await ctx.createLeadQuote(found.tenant.id, { plan, planData: input.value.data, customer: { name: input.value.name, email: input.value.email, phone: input.value.phone, address: input.value.address } });
+      } catch (error) {
+        console.warn(`Concept-offerte bij een ingediende tekening niet gemaakt: ${error.message}`);
+      }
+    }
+    audit(req, 'tekening_ingediend', { planId: plan.id, via: 'openbaar', ...(quote ? { quoteId: quote.id } : {}) }, null, found.tenant.id);
     notify(found.tenant.id, [
       `${input.value.name} heeft zonder account een tekening ingediend en vraagt om een controle.`,
       `Plan: ${plan.title} (referentie ${plan.reference})`,
       `E-mail: ${input.value.email}${input.value.phone ? `\nTelefoon: ${input.value.phone}` : ''}${input.value.address ? `\nAdres: ${input.value.address}` : ''}`,
       input.value.question ? `Vraag: ${input.value.question}` : '',
+      quote ? `Er staat een concept-offerte klaar: ${quote.number} (controleer regels en aantallen in Offertes).` : '',
       'Je vindt de tekening in het Plannenoverzicht onder "Ter controle".',
     ], `Tekening ter controle: ${plan.title}`);
     res.status(201).json({ ok: true, reference: plan.reference });

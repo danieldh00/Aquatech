@@ -2237,6 +2237,26 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   registerDrawingRoutes(app, {
     store, identify, requireUser, requirePlans, requireRight, requireJson, audit, remoteIp, tenantActive, scopeToTenant, publicLimiter, planLimiter, mailerFor,
     settingsFor: (id) => settingsFor(id), canApprove: (user) => Roles.can(user, 'plannen.goedkeuren'), captcha, captchaGate,
+    // Catalogus voor de planner zonder account; bestellen (winkelwagen) alleen bij de hoofdtenant met een open webshop en bestellen aan.
+    plannerCatalogOf: (tenantId) => {
+      const mainSettings = settingsFor(tenant.id);
+      const ordering = tenantId === tenant.id && Boolean(mainSettings.get('storefront')) && mainSettings.get('shopOrdering') === true;
+      return { ...shopRoutes.publicCatalogOf(tenantId, settingsFor(tenantId)), ordering };
+    },
+    // Concept-offerte bij een ingediende tekening (alleen met de module Offertes aan); materiaal en arbeid uit het plan, eigenaar is het gastaccount van de indiener.
+    createLeadQuote: async (tenantId, { plan, planData, customer }) => {
+      if (!ModuleTools.isOn(moduleFlagsOf(tenantId), 'offertes')) return null;
+      const profile = settingsFor(tenantId).get('quoteProfile');
+      const converted = await runPlanTask('quoteLinesFromPlan', [{ ...planData, background: undefined }, planTenantData(tenantId), profile]);
+      if (converted.problems || !(converted.lines || []).length) return null;
+      const date = new Date().toISOString().slice(0, 10);
+      const note = [`Lead via de planner zonder account (plan ${plan.reference}). Controleer regels en aantallen, vul het adres aan en verstuur de offerte zelf.`, ...(converted.warnings || [])].join('\n');
+      const quote = quoteStore.create({ id: plan.ownerId, tenant_id: tenantId }, {
+        title: plan.title || 'Beregening', intro: profile.intro || '', terms: profile.terms || '', customer: { name: customer.name, email: customer.email, phone: customer.phone, address: customer.address || '' },
+        lines: converted.lines, date, validUntil: QuoteCore.addDays(date, profile.validDays || 30), internalNote: note,
+      }, { status: 'concept', prefix: profile.numberPrefix, customerId: null });
+      return { id: quote.id, number: quote.number };
+    },
   });
 
   // ---------- Offertes (module Offertes, zie quotes.js) ----------
