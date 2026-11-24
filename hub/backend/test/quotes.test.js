@@ -223,7 +223,19 @@ test('API: klant ziet alleen verzonden offertes voor zijn account en kan akkoord
 
     assert.strictEqual((await klaas.post(`/app/api/quotes/${quote.id}/respond`, { answer: 'misschien' })).status, 400);
     assert.strictEqual((await klaas.post(`/app/api/quotes/${quote.id}/respond`, { answer: 'akkoord' })).status, 400, 'naam, handtekening en voorwaarden nodig');
-    const ok = await klaas.post(`/app/api/quotes/${quote.id}/respond`, { answer: 'akkoord', name: 'Klaas Jansen', terms: true, signature: SIGNATURE });
+    // B-09: zonder of met een verouderde versie weigert de server het akkoord.
+    assert.strictEqual(seen.version.length, 64, 'de klant krijgt een versie van de inhoud mee');
+    assert.strictEqual((await klaas.post(`/app/api/quotes/${quote.id}/respond`, { answer: 'akkoord', name: 'Klaas Jansen', terms: true, signature: SIGNATURE })).status, 409, 'zonder versie');
+    const stale = await klaas.post(`/app/api/quotes/${quote.id}/respond`, { answer: 'akkoord', name: 'Klaas Jansen', terms: true, signature: SIGNATURE, version: 'x'.repeat(64) });
+    assert.strictEqual(stale.status, 409);
+    assert.strictEqual(stale.body.error, 'changed');
+    assert.strictEqual((await piet.get(`/app/api/quotes/${quote.id}`)).body.status, 'verzonden', 'niets vastgelegd');
+    // Een medewerker past de offerte aan terwijl de klant hem open heeft: de oude versie wordt geweigerd, de nieuwe werkt.
+    assert.strictEqual((await piet.put(`/app/api/quotes/${quote.id}`, { data: { ...data, lines: [{ section: 'materiaal', description: 'Sproeier', qty: 5, price: 10, vat: 21 }] } })).status, 200);
+    assert.strictEqual((await klaas.post(`/app/api/quotes/${quote.id}/respond`, { answer: 'akkoord', name: 'Klaas Jansen', terms: true, signature: SIGNATURE, version: seen.version })).status, 409, 'versie van vóór de wijziging');
+    const fresh = (await klaas.get(`/app/api/quotes/${quote.id}`)).body;
+    assert.notStrictEqual(fresh.version, seen.version);
+    const ok = await klaas.post(`/app/api/quotes/${quote.id}/respond`, { answer: 'akkoord', name: 'Klaas Jansen', terms: true, signature: SIGNATURE, version: fresh.version });
     assert.strictEqual(ok.status, 200);
     assert.strictEqual(ok.body.status, 'akkoord');
     assert.strictEqual((await klaas.post(`/app/api/quotes/${quote.id}/respond`, { answer: 'afgewezen' })).status, 409, 'maar één keer');
@@ -391,7 +403,8 @@ test('digitale offerte: link, openbare pagina, opties, tekenen, vastleggen en e-
     assert.strictEqual((await publicRequest(token, 'POST', { answer: 'akkoord', name: 'J. Jansen', signature: SIGNATURE })).status, 400);
     assert.strictEqual((await publicRequest(token, 'POST', { answer: 'akkoord', name: 'J', terms: true, signature: SIGNATURE })).status, 400);
     assert.strictEqual((await publicRequest(token, 'POST', { answer: 'akkoord', name: 'J. Jansen', terms: true, signature: 'data:image/png;base64,AAAA' })).status, 400);
-    const acc = await publicRequest(token, 'POST', { answer: 'akkoord', name: 'J. Jansen', terms: true, signature: SIGNATURE, options: ['r3', 'r1', 'onbekend'] });
+    assert.strictEqual((await publicRequest(token, 'POST', { answer: 'akkoord', name: 'J. Jansen', terms: true, signature: SIGNATURE, version: 'oud' })).status, 409, 'verouderde versie');
+    const acc = await publicRequest(token, 'POST', { answer: 'akkoord', name: 'J. Jansen', terms: true, signature: SIGNATURE, options: ['r3', 'r1', 'onbekend'], version: seen.body.quote.version });
     assert.strictEqual(acc.status, 200);
     assert.strictEqual(acc.body.quote.status, 'akkoord');
     assert.strictEqual(acc.body.quote.acceptance.name, 'J. Jansen');

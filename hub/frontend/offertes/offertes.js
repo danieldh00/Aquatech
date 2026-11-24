@@ -605,7 +605,7 @@
         termsLink: Boolean(quote.data.terms),
         total: () => QuoteView.totalsOf(quote).total,
         onRespond: async (payload) => {
-          const updated = await api(`quotes/${encodeURIComponent(quote.id)}/respond`, { method: 'POST', body: { ...payload, options: QuoteView.selectedOptions(quote) } });
+          const updated = await api(`quotes/${encodeURIComponent(quote.id)}/respond`, { method: 'POST', body: { ...payload, options: QuoteView.selectedOptions(quote), version: quote.version } });
           viewQuote(updated);
           toast(payload.answer === 'akkoord' ? 'Bedankt, de offerte is geaccordeerd' : 'De offerte is afgewezen');
         },

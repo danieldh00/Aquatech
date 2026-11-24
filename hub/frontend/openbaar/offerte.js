@@ -106,7 +106,7 @@
       language: lang,
       total: () => QuoteView.totalsOf(quote).total,
       async onRespond(payload) {
-        const out = await api('quote/respond', { ...payload, options: QuoteView.selectedOptions(quote) });
+        const out = await api('quote/respond', { ...payload, options: QuoteView.selectedOptions(quote), version: quote.version });
         state.quote = out.quote;
         render();
         window.scrollTo(0, 0);

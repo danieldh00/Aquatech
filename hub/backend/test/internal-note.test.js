@@ -106,7 +106,8 @@ test('het akkoordbewijs (contentHash) wordt berekend zonder interne notities', a
   const data = quoteData({ lines: [{ id: 'r1', section: 'materiaal', description: 'Sproeier', qty: 4, unit: 'st', price: 10, vat: 21, note: 'Prijs navragen' }] });
   const quote = (await installer.post('/app/api/quotes', { data, customerId })).body;
   assert.strictEqual((await installer.put(`/app/api/quotes/${quote.id}`, { status: 'verzonden' })).status, 200);
-  const answer = await customer.post(`/app/api/quotes/${quote.id}/respond`, { answer: 'akkoord', name: 'Klaas Jansen', terms: true, signature });
+  const version = (await customer.get(`/app/api/quotes/${quote.id}`)).body.version;
+  const answer = await customer.post(`/app/api/quotes/${quote.id}/respond`, { answer: 'akkoord', name: 'Klaas Jansen', terms: true, signature, version });
   assert.strictEqual(answer.status, 200, JSON.stringify(answer.body));
   const stored = (await installer.get(`/app/api/quotes/${quote.id}`)).body;
   assert.ok(stored.acceptance.contentHash, 'er is een hash');

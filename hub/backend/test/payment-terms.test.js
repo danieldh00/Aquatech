@@ -135,7 +135,8 @@ test('akkoord door de klant legt de betaaltermijn vast in het bewijs', async () 
   const customerId = (await klaas.get('/app/api/me')).body.user.id;
   const quote = (await installer.post('/app/api/quotes', { data: quoteData({ paymentDays: 21 }), customerId })).body;
   assert.strictEqual((await installer.put(`/app/api/quotes/${quote.id}`, { status: 'verzonden' })).status, 200);
-  const accepted = await klaas.post(`/app/api/quotes/${quote.id}/respond`, { answer: 'akkoord', name: 'Klaas Jansen', terms: true, signature: signaturePng() });
+  const version = (await klaas.get(`/app/api/quotes/${quote.id}`)).body.version;
+  const accepted = await klaas.post(`/app/api/quotes/${quote.id}/respond`, { answer: 'akkoord', name: 'Klaas Jansen', terms: true, signature: signaturePng(), version });
   assert.strictEqual(accepted.status, 200, JSON.stringify(accepted.body));
   assert.strictEqual(accepted.body.acceptance.paymentDays, 21);
   assert.strictEqual((await installer.get(`/app/api/quotes/${quote.id}`)).body.acceptance.paymentDays, 21);

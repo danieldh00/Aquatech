@@ -777,6 +777,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Orderpick-app (webshop/orderpick.js): de gepickte regels (hoogstens MAX_LINES) en het aantal bekende zendingen.
   app.use('/api/orderpick', express.json({ limit: '16kb' }));
   app.use('/api/quotes', express.json({ limit: '1mb' }));
+  // Offertesjablonen (60 regels, intro en voorwaarden) en het bedrijfsprofiel passen niet altijd in de standaardgrens van 16 kB (T-12).
+  app.use(['/api/quote-templates', '/api/quote-profile'], express.json({ limit: '128kb' }));
   // Tekening indienen zonder inloggen (drawings.js): plan met achtergrond.
   app.use('/api/public/drawing', express.json({ limit: '8mb' }));
   // Akkoord via de openbare link: met handtekening (PNG).

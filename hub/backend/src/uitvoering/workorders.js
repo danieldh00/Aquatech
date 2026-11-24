@@ -10,6 +10,7 @@
 const { mailStyleOf } = require('../platform/mail-layout');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
+const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
 const crypto = require('crypto');
 const { transaction } = require('../database/db');
 const { createVault } = require('../beveiliging/vault');
@@ -461,10 +462,10 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
    * @param {object|undefined} rawData Nieuwe data (undefined = ongewijzigd).
    * @param {string|undefined} status Nieuwe status (onbekend = ongewijzigd).
    * @param {string|null|undefined} assigneeId undefined = ongewijzigd, null = niemand.
-   * @param {{ ifBase?: string|null, customerId?: string|null }} [options] Alleen opslaan als de werkorder nog op die updatedAt staat (offline wijziging uit de wachtrij); klantrecord (undefined = ongewijzigd, null = ontkoppelen; de aanroeper controleert het id).
+   * @param {{ ifBase?: string|null, customerId?: string|null, keepPlanning?: boolean }} [options] keepPlanning: datum, tijden, werkdagen en uitvoerder blijven zoals ze waren (voor wie niet het recht planning heeft, B-32). Alleen opslaan als de werkorder nog op die updatedAt staat (offline wijziging uit de wachtrij); klantrecord (undefined = ongewijzigd, null = ontkoppelen; de aanroeper controleert het id).
    * @returns {object|null} De werkorder, { conflict: true, current }, of null als hij niet bestaat.
    */
-  function update(tenantId, id, rawData, status, assigneeId, { ifBase = null, customerId = undefined } = {}) {
+  function update(tenantId, id, rawData, status, assigneeId, { ifBase = null, customerId = undefined, keepPlanning = false } = {}) {
     return transaction(db, () => {
       const existing = find(tenantId, id, 'id, status, assignee_id, customer_id, data, updated_at');
       if (!existing) return null;
@@ -475,9 +476,11 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
       data.quoteId = old.quoteId;
       data.quoteNumber = old.quoteNumber;
       data.planId = old.planId;
+      // Zonder het recht planning verplaatst het gewone opslaan geen afspraken (de klant bevestigde een ander moment).
+      if (keepPlanning) for (const key of ['plannedDate', 'startTime', 'endTime', 'days']) data[key] = old[key];
       const columns = fields(data);
       const newStatus = STATUSES.includes(status) ? status : existing.status;
-      const assignee = assigneeId === undefined ? existing.assignee_id : assigneeId || null;
+      const assignee = keepPlanning || assigneeId === undefined ? existing.assignee_id : assigneeId || null;
       const newCustomerId = customerId === undefined ? existing.customer_id || null : customerId || null;
       prepare(`UPDATE work_orders SET status = ?, title = ?, customer = ?, address = ?, planned_date = ?, assignee_id = ?, data = ?, updated_at = ?, customer_id = ? WHERE tenant_id = ? AND id = ?`)
         .run(newStatus, columns.title, columns.customer, columns.address, columns.plannedDate, assignee, JSON.stringify(data), currentTimestamp(), newCustomerId, tenantId, existing.id);
@@ -875,7 +878,7 @@ function registerWorkOrderRoutes(app, ctx) {
     const customerPick = customerChoice(req, res);
     if (!customerPick) return;
     const wasDone = status === 'gereed' && workorders.get(tenantOf(req), req.params.id)?.status === 'gereed';
-    const workOrder = workorders.update(tenantOf(req), req.params.id, data, status, assignee.value, { ifBase: ifBaseOf(req), customerId: customerPick.value });
+    const workOrder = workorders.update(tenantOf(req), req.params.id, data, status, assignee.value, { ifBase: ifBaseOf(req), customerId: customerPick.value, keepPlanning: !Roles.can(req.user, 'planning') });
     if (!workOrder) return notFound(res);
     // Offline gemaakt terwijl een ander de werkorder wijzigde: de gebruiker kiest.
     if (workOrder.conflict) return res.status(409).json({ error: 'conflict', message: `Werkorder ${workOrder.current.number} is intussen door iemand anders gewijzigd.`, updatedAt: workOrder.current.updatedAt });
@@ -933,6 +936,7 @@ function registerWorkOrderRoutes(app, ctx) {
     if (!mailer.configured()) return res.status(409).json({ error: 'not_configured', message: 'Er is geen mailserver ingesteld (Beheer → Integraties → E-mail).' });
     const base = pinShareBase(settings, url, PAGE);
     if (base === null) return res.status(409).json(PUBLIC_URL_MISSING);
+    const hadLink = Boolean(current.share?.active);
     const shared = workorders.share(tenantOf(req), req.params.id, base);
     if (shared.error === 'invalid_url') return res.status(400).json({ error: 'invalid_url', message: 'Ongeldig adres voor de link.' });
     if (shared.error) return notFound(res);
@@ -947,6 +951,8 @@ function registerWorkOrderRoutes(app, ctx) {
       });
     } catch (error) {
       console.warn(`Afspraak ${workOrder.number} niet verstuurd: ${error.code || ''} ${error.message}`);
+      // Een link die alleen voor deze mislukte mail is gemaakt trekken we weer in (T-13).
+      if (!hadLink) workorders.unshare(tenantOf(req), req.params.id);
       return withCause(res, error).status(502).json({ error: 'send_failed', message: mailFailure(error) });
     }
     workorders.markSent(workOrder.id, list.join(', '));
