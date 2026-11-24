@@ -68,7 +68,7 @@ const ASSETS = {
   'favicon.png': { file: path.join(SHARED_DIR, 'icons', 'favicon-48.png'), type: 'image/png' },
 };
 /** Afbeeldingen van de shop zelf (logo, hero, merken, pictogrammen) uit de map assets/ naast dit bestand. */
-const IMAGE_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp' };
+const IMAGE_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml' };
 for (const name of fs.readdirSync(path.join(__dirname, 'assets'))) {
   const type = IMAGE_TYPES[path.extname(name)];
   if (type) ASSETS[name] = { file: path.join(__dirname, 'assets', name), type };
