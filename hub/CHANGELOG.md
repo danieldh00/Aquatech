@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.36.5
+
+Audit 1.33.0, thema Back-up/herstel:
+- B-01: een back-up wordt in één stroom gecomprimeerd en versleuteld (geen onversleutelde `.tmp-*.db` meer); het ontsleutelde tussenbestand van terugzetten wordt direct na het inlezen gewist; het uurlijkse onderhoud (en de start) wist resten ouder dan een uur (`backup.js` `sweepLeftovers`) en tijdelijke schema's `aqt_scratch_*` (`pgdb.js` `dropStaleScratch`, aanmaaktijd in de schemanaam).
+- B-17: `platform/identity-confirm.js` (herbevestiging, gedeeld met terugzetten) voor back-up verwijderen, Drive verbreken/koppelen en de Drive-kopie uitzetten; de nieuwste back-up is niet handmatig te wissen; Bewaking-controle `backup-verwijderd` (24 uur, uit het auditlog); frontend `beheer/reauth.js`.
+- B-27: Bewaking-controle `tenantafscherming` (fout bij multitenancy, anders waarschuwing).
+- T-09: `platform/backup-open-cache.js` bewaart een geopende back-up vijf minuten (teller, verlooptijd, opruimen).
+
 ## 1.36.4
 
 `beheer/indeling.js`: openklappen van een groep sluit de andere; alleen de laatst geopende groep wordt onthouden (oudere bewaarde keuzes met meerdere groepen tonen alleen de eerste).

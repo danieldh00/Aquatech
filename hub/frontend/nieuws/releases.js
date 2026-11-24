@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.36.5',
+      date: '2026-11-24',
+      title: 'Back-up en herstel veiliger',
+      items: [
+        { text: 'Een back-up verwijderen en de koppeling met Google Drive verbreken of opnieuw koppelen vragen nu je wachtwoord, net als terugzetten. De nieuwste back-up kan niet meer handmatig worden verwijderd.', for: ['beheer'] },
+        { text: 'Bewaking meldt als de databaseafscherming per organisatie uitstaat en als een back-up handmatig is verwijderd.', for: ['beheer'] },
+        { text: 'Terugzetten uit een back-up is sneller: een geopende back-up blijft vijf minuten bewaard in plaats van bij elke stap opnieuw te worden ingelezen.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.36.4',
       date: '2026-11-24',
       title: 'Beheer-menu: één groep tegelijk open',
