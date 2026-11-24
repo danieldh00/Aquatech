@@ -53,7 +53,7 @@ async function start() {
   const client = createClient(base, { followRedirects: false });
   await client.post('/app/api/auth/login', { username: 'baas', password: PW });
   await client.put(`${BASE}/drive`, { clientId: 'client-123', clientSecret: 'geheim-van-google-app', redirectUri: REDIRECT });
-  const started = await client.post(`${BASE}/drive/connect`);
+  const started = await client.post(`${BASE}/drive/connect`, { password: PW });
   await client.get(`${BASE}/drive/callback?code=goede-code&state=${encodeURIComponent(new URL(started.body.url).searchParams.get('state'))}`);
   await client.put(`${BASE}/drive`, { enabled: true });
   const made = await client.post(BASE);

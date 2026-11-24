@@ -447,3 +447,7 @@ dl.kv dd { margin: 0; }
   .md-filter button { flex: 1; }
   .md-all { display: none; }
 }
+
+/* Venster voor herbevestiging met wachtwoord (reauth.js). */
+.reauth-dialog { max-width: min(28rem, calc(100vw - 2rem)); width: 100%; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+.reauth-dialog::backdrop { background: var(--at-shadow); }

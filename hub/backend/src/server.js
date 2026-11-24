@@ -11,6 +11,7 @@ const { loadOrCreateSecret } = require('./beveiliging/session-secret');
 const { createPlanAnalyzer, AnalyzeError, PROMPT_VERSION } = require('./beregening/plan-analyzer');
 const { createRecognitionStore, sanitizeSamples, sanitizeFinalPlan, imageHash } = require('./beregening/recognitions');
 const { openDb, openDatabase } = require('./database/db');
+const { dropStaleScratch } = require('./database/pgdb');
 const { createSlowLog, timedFetch, normalizePath } = require('./platform/slow-log');
 const { createStore, withRequestCache, preferencesOf, fingerprintOf } = require('./platform/store');
 const { withScope, limitTo, bindStream, asSystem } = require('./database/tenant-scope');
@@ -115,6 +116,7 @@ const { createAppLog } = require('./platform/app-log');
 const { createErrorReport, catchAsync, withCause, errorCounter } = require('./platform/error-report');
 const { createSystemUpdate } = require('./platform/system-update');
 const { registerBackupRestoreRoutes } = require('./platform/backup-restore-routes');
+const { createIdentityConfirm } = require('./platform/identity-confirm');
 const { createMonitor } = require('./platform/monitoring');
 const { registerMonitoringRoutes } = require('./platform/monitoring-routes');
 const { createGraphSetup, registerGraphSetupRoutes } = require('./platform/mail-graph-setup');
@@ -1824,7 +1826,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   }));
 
   // ----- Back-ups naar Google Drive (platform/drive-backup-routes.js; vóór /:name) -----
-  registerDriveBackupRoutes(app, { driveBackup, settings, audit, requireJson, mainTenantId: tenant.id });
+  registerDriveBackupRoutes(app, { driveBackup, settings, audit, requireJson, mainTenantId: tenant.id, confirmIdentity: createIdentityConfirm({ store, loginGuard, twoFactor, audit, auditAction: 'backup_beheer_wachtwoord_fout' }) });
   // Hersteltest van de Google Drive-back-up: draait in de app zelf (platform/drive-restore-test.js), los van de lokale test.
   const driveRestoreTest = createDriveRestoreTest({ settings, driveBackup, backupDir, vault, database });
   registerDriveRestoreTestRoutes(app, { driveRestoreTest, audit, mainTenantId: tenant.id, canUpdate });
@@ -1842,16 +1844,26 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.download(path.join(backupDir, name), name);
   });
 
-  app.delete('/api/admin/backups/:name', (req, res) => {
+  // Een back-up verwijderen vraagt het wachtwoord (en de tweestapscode) opnieuw, net als terugzetten; de nieuwste blijft altijd staan
+  // en elke handmatige verwijdering komt in het auditlog en als waarschuwing in Bewaking (audit B-17).
+  const confirmBackupAction = createIdentityConfirm({ store, loginGuard, twoFactor, audit, auditAction: 'backup_beheer_wachtwoord_fout' });
+  const backupDeleteLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20, keyFn: (req) => `backup-delete:${req.user ? req.user.id : ''}` });
+  app.delete('/api/admin/backups/:name', requireJson, backupDeleteLimiter, wrap(async (req, res) => {
     const name = req.params.name;
     if (!backupDir || !backups.isBackupName(name) || !fs.existsSync(path.join(backupDir, name))) {
       return res.status(404).json({ error: 'not_found', message: 'Back-up niet gevonden.' });
     }
+    if (!(await confirmBackupAction(req, res))) return undefined;
+    const newest = backups.listBackups(backupDir)[0];
+    if (newest && newest.name === name) {
+      return res.status(409).json({ error: 'newest_backup', message: 'De nieuwste back-up kan niet handmatig worden verwijderd. Maak eerst een nieuwe back-up; oude worden vanzelf opgeruimd.' });
+    }
     fs.rmSync(path.join(backupDir, name), { force: true });
+    if (app.locals.backupOpenCache) app.locals.backupOpenCache.drop(`${name}`);
     console.log(`Back-up ${name} verwijderd door ${req.user.display_name}`);
     audit(req, 'backup_verwijderd', { name }, undefined, tenant.id);
-    res.json({ ok: true });
-  });
+    return res.json({ ok: true });
+  }));
 
   // Auditlog: beveiligingsgebeurtenissen.
   app.get('/api/admin/audit', (req, res) => {
@@ -3272,6 +3284,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     db: database, settingsFor: (id) => settingsFor(id), dataDir: env.DATA_DIR || (backupDir ? path.dirname(backupDir) : ''), backupDir,
     listBackups: backups.listBackups, systemUpdate, driveBackup, restoreTest, driveRestoreTest, errorCounter, mailerFor,
     mollie: createMollie(mollieFetch ? { fetchImpl: mollieFetch } : {}), visma, shop: shopStore,
+    tenantIsolation: { rlsOn: () => Boolean(database.tenantRls), multitenancyOn },
   }).forEach((check) => monitor.register(check));
   /**
    * Voert de controles van de bewaking uit die aan de beurt zijn (elke 5 minuten vanuit main) en ruimt oude incidenten op.
@@ -3327,6 +3340,14 @@ if (require.main === module) {
       if (total) console.log(`Bewaartermijnen toegepast: ${JSON.stringify(removed)}`);
     } catch (err) {
       console.error('Onderhoud mislukt:', err);
+    }
+    try {
+      // Resten van een afgebroken back-up, terugzetten of hersteltest (onversleutelde kopieën, tijdelijke schema's) opruimen (audit B-01).
+      const leftovers = backupDir ? backups.sweepLeftovers(backupDir) : [];
+      const schemas = slowLog.trackTask('tijdelijke schema\'s opruimen', () => dropStaleScratch(database));
+      if (leftovers.length || schemas.length) console.log(`Achtergebleven tijdelijke bestanden gewist: ${leftovers.length}, tijdelijke schema's verwijderd: ${schemas.length}`);
+    } catch (error) {
+      console.error('Tijdelijke resten opruimen mislukt:', error.message);
     }
     try {
       const freed = slowLog.trackTask('reserveringen vrijgeven', () => app.locals.webOrdersRelease());

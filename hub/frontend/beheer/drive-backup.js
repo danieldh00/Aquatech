@@ -165,22 +165,35 @@
       };
       const secret = form.elements.clientSecret.value.trim();
       if (secret) body.clientSecret = secret;
+      // De kopie uitzetten zet de back-up buiten de server stil: dat vraagt het wachtwoord opnieuw.
+      if (!body.enabled && lastStatus && lastStatus.config && lastStatus.config.enabled) {
+        const credentials = await window.BeheerReauth.ask('Kopie naar Google Drive uitzetten?', 'Er wordt dan niets meer naar Google Drive gekopieerd. Bevestig met je wachtwoord.');
+        if (!credentials) return;
+        Object.assign(body, credentials);
+      }
       await run(form.querySelector('[type=submit]'), async () => { await call('', { method: 'PUT', body }); return 'Opgeslagen.'; });
       form.querySelector('[type=submit]').disabled = false;
     });
-    byId('d-connect').addEventListener('click', (event) => run(event.currentTarget, async () => {
-      const { url } = await call('/connect', { method: 'POST' });
+    byId('d-connect').addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      const credentials = await window.BeheerReauth.ask('Verbinden met Google Drive', 'Bevestig met je wachtwoord om de koppeling te starten.');
+      if (!credentials) return;
+      run(button, async () => {
+      const { url } = await call('/connect', { method: 'POST', body: credentials });
       location.href = url;
       return 'Je gaat naar Google…';
-    }));
+      });
+    });
     byId('d-sync').addEventListener('click', (event) => run(event.currentTarget, async () => {
       const out = await call('/sync', { method: 'POST' });
       return out.error ? `Mislukt: ${out.error}` : `Klaar: ${out.uploaded.length} geüpload, ${out.removed.length} opgeruimd op Drive.`;
     }));
     byId('d-test').addEventListener('click', (event) => run(event.currentTarget, async () => (await call('/test', { method: 'POST' })).message));
-    byId('d-disconnect').addEventListener('click', (event) => {
-      if (!confirm('Verbinding met Google Drive verbreken?\n\nDe bestanden op Drive blijven staan; er wordt niets meer gekopieerd.')) return;
-      run(event.currentTarget, async () => { await call('/disconnect', { method: 'POST' }); return 'Verbinding verbroken.'; });
+    byId('d-disconnect').addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      const credentials = await window.BeheerReauth.ask('Verbinding met Google Drive verbreken?', 'De bestanden op Drive blijven staan; er wordt niets meer gekopieerd. Bevestig met je wachtwoord.');
+      if (!credentials) return;
+      run(button, async () => { await call('/disconnect', { method: 'POST', body: credentials }); return 'Verbinding verbroken.'; });
     });
   }
 

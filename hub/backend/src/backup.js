@@ -55,21 +55,31 @@ function stamp(date = new Date()) {
 }
 
 /**
+ * Versleutelt een stroom naar een bestand in het back-upformaat (kop + versleutelde inhoud + tag), zonder onversleuteld
+ * tussenbestand.
+ * @param {NodeJS.ReadableStream} input De stroom met de gecomprimeerde regels.
+ * @param {string} target Pad van de versleutelde back-up.
+ * @param {Buffer} key De back-upsleutel.
+ * @returns {Promise<void>}
+ */
+async function encryptStream(input, target, key) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  cipher.setAAD(MAGIC);
+  const output = fs.createWriteStream(target, { mode: 0o600 });
+  output.write(Buffer.concat([MAGIC, Buffer.from([VERSION]), iv]));
+  await pipeline(input, cipher, output, { end: false });
+  await new Promise((resolve, reject) => output.end(cipher.getAuthTag(), (err) => (err ? reject(err) : resolve())));
+}
+
+/**
  * Versleutelt een bestand naar het back-upformaat (kop + versleutelde inhoud + tag).
  * @param {string} source Pad van het onversleutelde bestand.
  * @param {string} target Pad van de versleutelde back-up.
  * @param {Buffer} key De back-upsleutel.
  * @returns {Promise<void>}
  */
-async function encryptFile(source, target, key) {
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-  cipher.setAAD(MAGIC);
-  const output = fs.createWriteStream(target, { mode: 0o600 });
-  output.write(Buffer.concat([MAGIC, Buffer.from([VERSION]), iv]));
-  await pipeline(fs.createReadStream(source), cipher, output, { end: false });
-  await new Promise((resolve, reject) => output.end(cipher.getAuthTag(), (err) => (err ? reject(err) : resolve())));
-}
+const encryptFile = (source, target, key) => encryptStream(fs.createReadStream(source), target, key);
 
 /**
  * Ontsleutelt een back-up naar een bestand met de gecomprimeerde regels. De tag wordt pas aan het eind
@@ -111,22 +121,21 @@ async function decryptFile(source, target, key) {
 
 /**
  * Maakt een versleutelde back-up van de database (ook terwijl de app draait).
- * @param {{ db: object, dir: string, vault: object, runId?: string }} options De database, de map voor back-ups, de kluis en optioneel een run-id dat in de namen van de tijdelijke bestanden komt (zo kan alleen de eigenaar ze opruimen).
+ * @param {{ db: object, dir: string, vault: object, runId?: string }} options De database, de map voor back-ups, de kluis en optioneel een run-id dat in de naam van het tijdelijke bestand komt (zo kan alleen de eigenaar het opruimen).
  * @returns {Promise<{ name: string, size: number, createdAt: string }>} Naam, grootte en tijdstip van de back-up.
  */
 async function createBackup({ db, dir, vault, runId = '' }) {
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   const name = `aquatech-${stamp()}.db.enc`;
-  const tag = runId ? `${runId}-` : '';
-  const tempFile = path.join(dir, `.tmp-${tag}${crypto.randomUUID()}.db`);
   const part = path.join(dir, `${name}.${runId ? `${runId}.` : ''}part`);
   try {
-    // Alle rijen als regels JSON, gecomprimeerd naar een tijdelijk bestand, en dat daarna versleuteld.
-    await pipeline(Readable.from(exportLines(db)), zlib.createGzip(), fs.createWriteStream(tempFile, { mode: 0o600 }));
-    await encryptFile(tempFile, part, keyOf(vault));
+    // Alle rijen als regels JSON, gecomprimeerd en meteen versleuteld: er komt nooit een onversleutelde kopie op schijf.
+    const rows = Readable.from(exportLines(db));
+    const gzip = zlib.createGzip();
+    rows.on('error', (error) => gzip.destroy(error));
+    await encryptStream(rows.pipe(gzip), part, keyOf(vault));
     fs.renameSync(part, path.join(dir, name));
   } finally {
-    fs.rmSync(tempFile, { force: true });
     fs.rmSync(part, { force: true });
   }
   const stats = fs.statSync(path.join(dir, name));
@@ -236,6 +245,33 @@ function pruneBackups(dir, keepDays) {
   return removed;
 }
 
+/** Tijdelijke bestanden en mappen in de back-upmap die een afgebroken proces kan achterlaten (namen of voorvoegsels). */
+const LEFTOVER_PATTERNS = [/^\.tmp-.*\.db$/, /\.part$/, /^\.restore-/, /^\.drive-restore-test-/];
+
+/**
+ * Wist achtergebleven tijdelijke bestanden en mappen uit de back-upmap (onversleutelde kopieën van een afgebroken
+ * back-up, `.part`-bestanden, ontsleutelde bestanden van het terugzetten en mappen van de hersteltests) die ouder zijn
+ * dan de gegeven tijd. Echte back-ups (aquatech-*.db.enc) blijven altijd staan.
+ * @param {string} dir De map met back-ups.
+ * @param {{ maxAgeMs?: number, now?: number }} [options] De maximale leeftijd (standaard een uur) en het huidige moment (voor tests).
+ * @returns {string[]} De namen van de gewiste resten.
+ */
+function sweepLeftovers(dir, { maxAgeMs = 3600 * 1000, now = Date.now() } = {}) {
+  let entries = [];
+  try { entries = fs.readdirSync(dir); } catch { return []; }
+  const removed = [];
+  for (const entry of entries) {
+    if (isBackupName(entry) || !LEFTOVER_PATTERNS.some((pattern) => pattern.test(entry))) continue;
+    const full = path.join(dir, entry);
+    try {
+      if (now - fs.lstatSync(full).mtimeMs < maxAgeMs) continue;
+      fs.rmSync(full, { recursive: true, force: true });
+      removed.push(entry);
+    } catch { /* al weg of niet te wissen: de volgende ronde probeert het opnieuw */ }
+  }
+  return removed;
+}
+
 /**
  * Of een naam de vorm van een back-upbestand heeft (aquatech-JJJJMMDD-UUMMSS.db.enc).
  * @param {string} name De bestandsnaam.
@@ -243,7 +279,7 @@ function pruneBackups(dir, keepDays) {
  */
 const isBackupName = (name) => NAME.test(String(name));
 
-module.exports = { createBackup, createBackupInChild, listBackups, pruneBackups, decryptFile, isBackupName, keyOf };
+module.exports = { createBackup, createBackupInChild, listBackups, pruneBackups, sweepLeftovers, decryptFile, isBackupName, keyOf };
 
 if (require.main === module) {
   const [command, source, target] = process.argv.slice(2);
