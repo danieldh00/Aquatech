@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.34.4',
+      date: '2026-11-24',
+      title: 'Image-handtekening controleren bij een update',
+      items: [],
+    },
+    {
       version: '1.34.3',
       date: '2026-11-24',
       title: 'Online betalen in de webshop steviger',
