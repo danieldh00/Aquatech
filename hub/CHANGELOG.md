@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.34.8
+
+Layoutcheck-bevindingen L-02, L-03, L-10, L-12 en L-13 (thema Beheer + app-shell mobiel):
+- `beheer.css`: `.sc-block`, labels en keuzelijsten krimpen (min-width: 0), zodat de fieldsets op 375 px niet breder zijn dan het scherm; `.btn.small` (ook als `a`) is op smal scherm 40 px hoog.
+- `dashboard.css`: organisatiewisselaar mag krimpen, gebruikersmenu en belknop niet; belknop 40x40 px.
+- `brand.css`: scrollschaduw op `.tablewrap` onder 700 px; `sidebar.css`: nieuwsbadge 11 px.
+- `profiel/ai-connections.js`: een klant vraagt de AI-koppelingen niet meer op (voorkomt een 403 in de console).
+
 ## 1.34.7
 
 Audit 1.33.0, thema webshopbetalingen en facturen, deel 4 (bedrading in `server.js`). Geen migratie.

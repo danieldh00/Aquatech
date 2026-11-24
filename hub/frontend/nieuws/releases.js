@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.34.8',
+      date: '2026-11-24',
+      title: 'Beheer en kopbalk netter op de telefoon',
+      items: [
+        { text: 'Beheer > Webshop-inhoud scrolt op de telefoon niet meer zijwaarts.', for: ['beheer'] },
+        { text: 'De kopbalk past op een smal scherm ook met de organisatiewisselaar en de belknop is groter om te tikken.' },
+        { text: 'Brede tabellen (zoals Beheer > Gebruikers) tonen op de telefoon een schaduw aan de rand waar je nog kunt schuiven.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.34.7',
       date: '2026-11-24',
       title: 'Betalingen: opnieuw proberen, terugstorten gemeld en voorraad sneller vrij',
