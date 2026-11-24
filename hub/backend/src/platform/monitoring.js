@@ -276,7 +276,7 @@ function createMonitor({
       let settings = null;
       try { settings = settingsFor(owner); } catch { settings = null; }
       const [mailResult, webhookResult] = await Promise.all([
-        settings ? notifier.mail(settings, settingsConfig.recipients, notice) : Promise.resolve({ ok: false, message: 'Instellingen niet te lezen.' }),
+        settings ? notifier.mail(settings, settingsConfig.recipients, notice, { system: true }) : Promise.resolve({ ok: false, message: 'Instellingen niet te lezen.' }),
         notifier.webhook(settingsConfig.webhookUrl, notice.payload),
       ]);
       const problems = [];
