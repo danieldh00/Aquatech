@@ -149,10 +149,16 @@ test('hoofdbeheerder verwijdert een back-up; ongeldige namen niet', async () => 
     await baas.login('baas', PW);
     const made = await baas.post('/app/api/admin/backups');
     assert.strictEqual(made.status, 201);
-    assert.strictEqual((await baas.del('/app/api/admin/backups/..%2Fmaster-key')).status, 404);
-    assert.strictEqual((await baas.del(`/app/api/admin/backups/${made.body.name}`)).status, 200);
-    assert.strictEqual((await baas.get('/app/api/admin/backups')).body.items.length, 0);
-    assert.ok(!fs.existsSync(path.join(dir, made.body.name)));
+    // Een oudere back-up (de nieuwste mag niet handmatig weg) en het wachtwoord is nodig.
+    const older = 'aquatech-20200101-000000.db.enc';
+    fs.writeFileSync(path.join(dir, older), 'x');
+    fs.utimesSync(path.join(dir, older), new Date('2020-01-01T00:00:00Z'), new Date('2020-01-01T00:00:00Z'));
+    assert.strictEqual((await baas.del('/app/api/admin/backups/..%2Fmaster-key', { password: PW })).status, 404);
+    assert.strictEqual((await baas.del(`/app/api/admin/backups/${made.body.name}`, { password: PW })).status, 409);
+    assert.strictEqual((await baas.del(`/app/api/admin/backups/${older}`, {})).status, 401);
+    assert.strictEqual((await baas.del(`/app/api/admin/backups/${older}`, { password: PW })).status, 200);
+    assert.strictEqual((await baas.get('/app/api/admin/backups')).body.items.length, 1);
+    assert.ok(!fs.existsSync(path.join(dir, older)));
   } finally {
     server.close();
     fs.rmSync(dir, { recursive: true, force: true });
