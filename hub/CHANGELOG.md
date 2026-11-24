@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.34.9
+
+Planner (L-09): op schermen tot 760 px krijgen `.tbtn`, de ongedaan-maken/opnieuw-knoppen in de kopbalk en `.step`/`.step-nav .btn` een minimale hoogte van 40 px (voorheen alleen bij `pointer: coarse`); legendatitel van 10 naar 12 px.
+
 ## 1.34.8
 
 Layoutcheck-bevindingen L-02, L-03, L-10, L-12 en L-13 (thema Beheer + app-shell mobiel):

@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.34.9',
+      date: '2026-11-24',
+      title: 'Planner met grotere knoppen op mobiel',
+      items: [
+        { text: 'In de planner zijn de werkbalkknoppen, ongedaan maken/opnieuw en de stappen op een telefoon groter en makkelijker te raken.', for: ['plannen'] },
+      ],
+    },
+    {
       version: '1.34.8',
       date: '2026-11-24',
       title: 'Beheer en kopbalk netter op de telefoon',
