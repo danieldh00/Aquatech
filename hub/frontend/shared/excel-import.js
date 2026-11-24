@@ -107,7 +107,7 @@
 
   /**
    * Opent het importvenster.
-   * @param {{ title: string, intro?: string, subject: string, templateName: string, api: Function, fieldsPath: string, importPath: string, extraBody?: object, onDone?: Function }} options Titel, uitleg, wat er geïmporteerd wordt (meervoud, bijv. "klanten"), bestandsnaam van het voorbeeld, de api-functie van de pagina (path, { method, body }) en de paden van de velden en de import; extraBody gaat mee in elk verzoek; onDone wordt na het verwerken aangeroepen.
+   * @param {{ title: string, intro?: string, subject: string, keyLabel?: string, cards?: string[][], templateName: string, api: Function, fieldsPath: string, importPath: string, extraBody?: object, onDone?: Function }} options Titel, uitleg, wat er geïmporteerd wordt (meervoud, bijv. "klanten"), bestandsnaam van het voorbeeld, de api-functie van de pagina (path, { method, body }) en de paden van de velden en de import; keyLabel is de kop van de eerste kolom, cards de tellers bovenaan ([status, label]), extraBody gaat mee in elk verzoek; onDone wordt na het verwerken aangeroepen.
    * @returns {void}
    */
   function open(options) {
@@ -194,11 +194,11 @@
       const counts = preview.counts;
       const box = $('review');
       box.hidden = false;
-      const cards = [['nieuw', 'Nieuw'], ['wijzigt', 'Wijzigt'], ['ongewijzigd', 'Ongewijzigd'], ['fout', 'Met fouten']]
+      const cards = (options.cards || [['nieuw', 'Nieuw'], ['wijzigt', 'Wijzigt'], ['ongewijzigd', 'Ongewijzigd'], ['fout', 'Met fouten']])
         .map(([key, label]) => `<div class="xi-count ${key}"><b>${counts[key] || 0}</b>${label}</div>`).join('');
       const unknown = preview.unknown && preview.unknown.length ? `<p class="xi-note warn">Niet herkende kolommen worden genegeerd: ${esc(preview.unknown.join(', '))}.</p>` : '';
       box.innerHTML = `<div class="xi-counts">${cards}</div>${unknown}
-        <label class="xi-note">Tonen: <select data-xi="filter"><option value="">Alle regels</option><option value="fout">Alleen fouten</option><option value="nieuw">Alleen nieuw</option><option value="wijzigt">Alleen wijzigingen</option></select></label>
+        <label class="xi-note">Tonen: <select data-xi="filter"><option value="">Alle regels</option><option value="fout">Alleen fouten</option><option value="nieuw">Alleen nieuw</option><option value="onbekend">Alleen niet gevonden</option><option value="wijzigt">Alleen wijzigingen</option></select></label>
         <div class="xi-table-wrap"><table class="xi-table"><thead><tr><th>Regel</th><th>Status</th><th>${esc(options.keyLabel || 'Naam')}</th><th>Wat er gebeurt</th></tr></thead><tbody data-xi="rows"></tbody></table></div>
         <p class="xi-note" data-xi="more" hidden></p>`;
       /**

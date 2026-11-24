@@ -402,7 +402,20 @@ function createSupplierStore(db) {
     return out;
   }
 
-  return { list, get, create, update, remove, forItem, setForItem, preferredByItem, rememberSkus, skusOf };
+  /**
+   * De koppelingen van één leverancier en de artikelen die al een leverancier hebben, om een prijslijst te controleren.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} supplierId Id van de leverancier.
+   * @returns {{ links: Map<string, object>, linked: Set<string> }} De koppelingen van deze leverancier per artikel-id (artikelnummer, prijs, bestelhoeveelheid, levertijd, voorkeur) en alle artikelen met minstens één leverancier.
+   */
+  function priceListContext(tenantId, supplierId) {
+    const links = new Map(prepare('SELECT item_id, supplier_sku, cost_price, order_qty, lead_days, preferred FROM item_suppliers WHERE tenant_id = ? AND supplier_id = ?').all(tenantId, String(supplierId))
+      .map((row) => [row.item_id, { supplierSku: row.supplier_sku, costPrice: row.cost_price == null ? null : Number(row.cost_price), orderQty: Number(row.order_qty), leadDays: row.lead_days == null ? null : Number(row.lead_days), preferred: Boolean(Number(row.preferred)) }]));
+    const linked = new Set(prepare('SELECT DISTINCT item_id FROM item_suppliers WHERE tenant_id = ?').all(tenantId).map((row) => row.item_id));
+    return { links, linked };
+  }
+
+  return { list, get, create, update, remove, forItem, setForItem, preferredByItem, rememberSkus, skusOf, priceListContext };
 }
 
 /**

@@ -2,6 +2,7 @@
 // werkorderverbruik). Letterlijk uit stock.js verplaatst; de opslag komt binnen via ctx.stock.
 const { respondShopError } = require('../webshop/woocommerce');
 const { registerItemImportRoutes } = require('./item-import');
+const { registerPriceListRoutes } = require('./supplier-price-list');
 const { KINDS, GROUPS, EXPORT_LIMIT, shopCodeOf, isDate } = require('./stock-helpers');
 
 /**
@@ -112,6 +113,8 @@ function registerStockRoutes(app, ctx) {
 
   // Artikelen importeren uit Excel (V-05).
   registerItemImportRoutes(app, ctx);
+  // Prijslijst van een leverancier inlezen (V-30).
+  if (ctx.suppliers) registerPriceListRoutes(app, ctx);
 
   app.post('/api/stock/import', requireJson, requireStock, (req, res) => {
     const out = stock.importCatalog(tenantOf(req), req.user, req.body?.codes);

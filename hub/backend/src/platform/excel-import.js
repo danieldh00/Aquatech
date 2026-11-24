@@ -71,14 +71,15 @@ function parseYesNo(value) {
 /**
  * Controleert de ruwe tabel uit het verzoek en begrenst hem.
  * @param {*} body Het verzoek: { headers: string[], rows: any[][] }.
+ * @param {number} [maxRows] Hoeveel rijen hoogstens (standaard MAX_ROWS).
  * @returns {{ headers: string[], rows: any[][] }|{ error: string }} De tabel, of een melding.
  */
-function cleanTable(body) {
+function cleanTable(body, maxRows = MAX_ROWS) {
   const headers = body && body.headers;
   const rows = body && body.rows;
   if (!Array.isArray(headers) || !Array.isArray(rows)) return { error: 'Het bestand kon niet worden gelezen.' };
   if (!headers.length || headers.length > MAX_COLUMNS) return { error: `Een bestand heeft 1 tot ${MAX_COLUMNS} kolommen.` };
-  if (rows.length > MAX_ROWS) return { error: `Hoogstens ${MAX_ROWS} regels per keer; splits het bestand.` };
+  if (rows.length > maxRows) return { error: `Hoogstens ${maxRows} regels per keer; splits het bestand.` };
   /**
    * Maakt één rij schoon: hoogstens zoveel cellen als kolommen, tekst ingekort.
    * @param {*} row De rij.
@@ -147,10 +148,11 @@ function countStatuses(results) {
  * Leest de tabel uit een verzoek en koppelt de kolommen; geeft de rijen of een foutmelding voor het antwoord.
  * @param {*} body Het verzoek.
  * @param {{ key: string, label: string, aliases?: string[], required?: boolean }[]} fields De velden van de import.
+ * @param {{ maxRows?: number }} [options] maxRows: hoeveel rijen hoogstens (standaard MAX_ROWS).
  * @returns {{ rows: object[], unknown: string[], columns: Object<string, number> }|{ error: string }} Het resultaat.
  */
-function readTable(body, fields) {
-  const table = cleanTable(body);
+function readTable(body, fields, { maxRows = MAX_ROWS } = {}) {
+  const table = cleanTable(body, maxRows);
   if (table.error) return table;
   const mapped = mapColumns(table.headers, fields);
   if (mapped.missing.length) return { error: `Kolom ontbreekt: ${mapped.missing.join(', ')}. Gebruik het voorbeeldbestand als begin.` };

@@ -23,6 +23,8 @@
 .xi-badge.wijzigt { color: var(--at-teal); }
 .xi-badge.ongewijzigd { color: var(--at-muted); }
 .xi-badge.fout { color: var(--at-danger); }
+.xi-badge.onbekend { color: var(--at-warn); }
+.xi-count.onbekend b { color: var(--at-warn); }
 .xi-problem { color: var(--at-danger); }
 .xi-warning { color: var(--at-warn); }
 .xi-change { white-space: nowrap; }
