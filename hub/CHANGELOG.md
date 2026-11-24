@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.37.2
+
+Openbare planner als verkoopkanaal (V-04), deel 1. Nieuwe route `GET /api/public/planner-catalog` (drawings.js; zelfde organisatie, instelling en limiet als tekening indienen) met assortiment en consumentenprijzen uit `registerShopRoutes().publicCatalogOf` (alleen naam, prijs excl. btw, btw-tarief en voorraad). De planner (`shopcatalog.js` `loadPublic`, `app.js` `_publicPriceCard`) toont in stap 6 het totaal incl. btw, de knop *Materiaal bestellen* (bestaand `/winkelwagen/planner`, alleen als bestellen bij de hoofdtenant aan staat) en *Offerte voor aanleg aanvragen* (indienformulier). Tot de route in server.js is aangesloten (`plannerCatalogOf` bij `registerDrawingRoutes`) geeft hij `enabled: false` en blijft de planner zoals hij was. De concept-offerte bij een ingediende tekening volgt apart.
+
 ## 1.37.1
 
 Audit 1.33.0, thema Accounts en toegang, deel 3.

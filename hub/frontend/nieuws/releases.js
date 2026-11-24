@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.37.2',
+      date: '2026-11-24',
+      title: 'Prijsindicatie en bestellen in de planner zonder account',
+      items: [
+        { text: 'In de planner zonder account ziet een bezoeker straks een prijsindicatie van het materiaal en kan hij het in één keer in de winkelwagen zetten om te laten bezorgen, of een offerte voor de aanleg aanvragen.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.37.1',
       date: '2026-11-24',
       title: 'Server en toegangscode aangescherpt',
