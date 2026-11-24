@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.37.0',
+      date: '2026-11-24',
+      title: 'Account- en instellingenroutes aangescherpt',
+      items: [
+        { text: 'Tweestapsverificatie aanzetten vraagt nu je wachtwoord, net als uitzetten.' },
+      ],
+    },
+    {
       version: '1.36.9',
       date: '2026-11-24',
       title: 'Gasten beter begrensd',
