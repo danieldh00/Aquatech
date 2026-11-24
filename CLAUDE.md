@@ -189,7 +189,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   (`jsonField`, `jsonWithout`, `listTables`, `tableColumns`, `foreignKeys`,
   `deferForeignKeys`, `schemaVersion`). **Nieuwe migratie: alleen in `PG_MIGRATIONS` (pgschema.js)**; `test/postgres.test.js`
   controleert schemaversie en RLS. Testsuite: `TEST_DATABASE_URL` is verplicht (`openDb()` zonder gooit een duidelijke fout; elke
-  `openDb()` een eigen schema `aqt_test_*`; CI-job `test-postgres`; de job `test` doet alleen `npm audit` en blijft bestaan als verplichte controle).
+  `openDb()` een eigen schema `aqt_test_*`; een nieuw testschema is een kopie van één gemigreerd sjabloonschema `aqt_sjabloon_<hash van de migraties>` (`database/test-template.js`, ruim zes keer sneller dan alle migraties draaien; `test/test-template.test.js` eist dat de kopie exact gelijk is aan een gemigreerd schema; `TEST_DB_TEMPLATE=0` migreert weer echt; de app zelf migreert altijd echt); CI-job `test-postgres`; de job `test` doet alleen `npm audit` en blijft bestaan als verplichte controle).
   **Terugzetten uit back-up** leest het bestand in een tijdelijk schema `aqt_scratch_*` op dezelfde verbinding (`openScratch`/`dropScratch` in pgdb.js,
   `importLines` in table-rows.js) en ruimt dat altijd op. Lokaal: `/usr/lib/postgresql/16/bin` staat in de sandbox (`pg_ctlcluster 16 main start`,
   wachtwoord van `postgres` zetten, poort 5432). Smoketests in CI starten een `postgres:17`-container op een eigen netwerk (`?sslmode=disable`).
