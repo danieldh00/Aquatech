@@ -206,7 +206,7 @@ function detectLayoutProblems({ tolerance }) {
       const key = kind + pathOf(element);
       if (seen.has(key)) return;
       seen.add(key);
-      out.push({ kind, selector: pathOf(element), detail: `${detail} ("${textOf(element)}")` });
+      out.push({ kind, selector: element.id ? pathOf(element) : `${pathOf(element)}[${textOf(element).slice(0, 20)}]`, detail: `${detail} ("${textOf(element)}")` });
     };
     for (const element of document.querySelectorAll('body *')) {
       if (!visible(element)) continue;

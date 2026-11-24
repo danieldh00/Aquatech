@@ -141,7 +141,7 @@ async function checkPage(browser, { role, url, viewport, cookies, base }) {
     const findings = await page.evaluate(detectLayoutProblems, { tolerance: 2 });
     const label = url.replace(base, '');
     const redirected = shown !== label && !label.includes('#') ? ` (doorgestuurd naar ${shown})` : '';
-    for (const message of [...new Set(consoleErrors)]) findings.push({ kind: 'console-fout', selector: '', detail: message });
+    for (const message of [...new Set(consoleErrors)]) findings.push({ kind: 'console-fout', selector: message.replace(/https?:\/\/[^/\s]+/g, '').replace(/[?&]v=[\d.]+/g, '').replace(/[0-9a-f]{8}-[0-9a-f-]{27}/g, 'uuid').slice(0, 80), detail: message });
     const result = findings.map((finding) => ({ role, page: label, viewport: viewport.name, ...finding }));
     if (response && response.status() >= 400) result.push({ role, page: label, viewport: viewport.name, kind: 'http-fout', selector: '', detail: `status ${response.status()}` });
     for (const message of errors) result.push({ role, page: label, viewport: viewport.name, kind: 'scriptfout', selector: '', detail: message.slice(0, 160) });
