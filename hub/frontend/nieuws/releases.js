@@ -13,6 +13,23 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.38.0',
+      date: '2026-11-24',
+      title: 'Klanten en artikelen importeren uit Excel',
+      items: [
+        { text: 'Klanten importeer je nu uit een Excel-bestand: je krijgt een voorbeeldbestand, een controle (wat is nieuw, wat wijzigt, wat klopt niet) en verwerkt daarna alles in één keer.', for: ['klanten'] },
+        { text: 'Artikelen importeren of in bulk wijzigen kan nu ook uit Excel, met dezelfde controle vooraf.', for: ['voorraad'] },
+      ],
+    },
+    {
+      version: '1.37.3',
+      date: '2026-11-24',
+      title: 'Marge zichtbaar in de offerte',
+      items: [
+        { text: 'In de offerte zie je nu de marge: per regel en onder de totalen, met een waarschuwing als de marge onder je minimum ligt. Het minimum stel je in bij Bedrijfsgegevens. De marge staat nooit op het klantdocument.', for: ['nacalculatie', 'beheer'] },
+      ],
+    },
+    {
       version: '1.37.2',
       date: '2026-11-24',
       title: 'Prijsindicatie en bestellen in de planner zonder account',

@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.38.0
+
+Import uit Excel (V-05) voor klanten en artikelen. Het bestand wordt in de browser gelezen (ExcelJS, `shared/excel-import.js`) en als kopregel + rijen naar de server gestuurd; de server controleert en schrijft niets bij de controle.
+- `platform/excel-import.js`: gedeelde kern (kolomkoppen herkennen met synoniemen, Nederlandse getallen, grenzen: 1000 rijen, 40 kolommen).
+- `POST /api/customers/import` (+ `GET …/fields`, recht `klanten`): herkennen op e-mail, anders naam; adres bij PDOK (`addressGuard`); zakelijk en bedrijfsgegevens alleen met recht `beheer`; audit `klanten_geimporteerd`; hoogstens 500 klanten, 30 verzoeken per uur.
+- `POST /api/stock/import-excel` (+ `GET …/fields`, recht `voorraad`): herkennen op artikelcode, `stock.create`/`stock.update` (EAN, inkoopprijshistorie, prijsfactor), beginvoorraad alleen bij nieuwe artikelen; audit `voorraad_artikelen_geimporteerd`.
+- Verwerken is alles of niets op de controle: met fouten alleen met `skipErrors`.
+- `server.js`: één regel, JSON-limiet 256 kB voor `/api/customers/import`.
+
+## 1.37.3
+
+Marge in de offerte-editor (V-02). `QuoteCore.margin` rekent per regel en in totaal (na korting) over de regels met een bekende kostprijs: materiaal met artikelcode en inkoopprijs, arbeid in uren met de kostprijs per uur uit de bedrijfsgegevens. Regels zonder kostprijs tellen niet mee en worden gemeld. Nieuwe route `GET /api/quote-costs?codes=` (recht `nacalculatie`, hoogstens 300 codes, alleen de eigen voorraad) die de inkoopprijzen geeft; valt onder de module Nacalculatie (uit = 409). Nieuw profielveld `minMarginPct` (intern, 0 = geen waarschuwing, hoogstens 99) bij Offertes > Bedrijfsgegevens. De kaart en de regelmarges zitten alleen in de editor (`offertes-margin.js`), niet in document, PDF, mail of openbare link. Tests: `quote-margin.test.js`.
+
 ## 1.37.2
 
 Openbare planner als verkoopkanaal (V-04), deel 1. Nieuwe route `GET /api/public/planner-catalog` (drawings.js; zelfde organisatie, instelling en limiet als tekening indienen) met assortiment en consumentenprijzen uit `registerShopRoutes().publicCatalogOf` (alleen naam, prijs excl. btw, btw-tarief en voorraad). De planner (`shopcatalog.js` `loadPublic`, `app.js` `_publicPriceCard`) toont in stap 6 het totaal incl. btw, de knop *Materiaal bestellen* (bestaand `/winkelwagen/planner`, alleen als bestellen bij de hoofdtenant aan staat) en *Offerte voor aanleg aanvragen* (indienformulier). Tot de route in server.js is aangesloten (`plannerCatalogOf` bij `registerDrawingRoutes`) geeft hij `enabled: false` en blijft de planner zoals hij was. De concept-offerte bij een ingediende tekening volgt apart.
