@@ -585,6 +585,10 @@
     const codeState = $('[data-state="accessCode"]');
     codeState.textContent = code.set ? 'Ingesteld: inloggen kan ook met de code (als beheerder).' : 'Niet ingesteld: inloggen alleen met een eigen account.';
     $('#s-backup').backupKeepDays.value = view.backupKeepDays.value;
+    const addressForm = $('#s-app-address');
+    addressForm.appPublicUrl.value = view.appPublicUrl?.value?.url || '';
+    const shopUrl = view.shopPayment?.value?.publicUrl || '';
+    $('#s-app-address-info').textContent = addressForm.appPublicUrl.value ? '' : shopUrl ? `Leeg: het webadres van de webshop (${shopUrl}) wordt gebruikt.` : 'Nog niet ingesteld: klantlinks maken kan pas na het invullen van dit adres.';
     const securityForm = $('#s-security');
     for (const key of ['sessionIdleDays', 'sessionMaxDays', 'ipRetentionDays', 'auditRetentionDays', 'logRetentionDays', 'logErrorRetentionDays']) securityForm[key].value = view[key].value;
     const accessForm = $('#s-access');
@@ -1045,6 +1049,20 @@
         }
       };
     });
+    const addressForm = $('#s-app-address');
+    /**
+     * Slaat het openbare adres van de app op (basis van klantlinks en AI-koppeling).
+     * @param {Event} event Het indienen van het formulier.
+     */
+    addressForm.onsubmit = (event) => {
+      event.preventDefault();
+      const typed = addressForm.appPublicUrl.value.trim();
+      if (typed && !/^https:\/\/[^/\s]+/i.test(typed) && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(typed)) {
+        $('.err', addressForm).textContent = 'Vul een adres in dat met https:// begint.';
+        return;
+      }
+      saveSettings(addressForm, { appPublicUrl: { url: addressForm.appPublicUrl.value.trim() } }, 'Openbaar adres opgeslagen');
+    };
     const backupForm = $('#s-backup');
     /**
      * Slaat de bewaartermijn van back-ups op.

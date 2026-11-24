@@ -198,9 +198,10 @@ function createNotifier({ mailerFor, fetchImpl = null, resolveHost = publicAddre
    * @param {object} settings De instellingen van de omgeving (voor mailerFor).
    * @param {string[]} recipients De ontvangers.
    * @param {{ subject: string, text: string }} notice De mail (uit composeNotice).
+   * @param {{ system?: boolean }} [options] system: true alleen voor automatische meldingen (buiten het dagmaximum); een testmelding is een gebruikersactie en telt mee.
    * @returns {Promise<{ ok: boolean, message: string, skipped?: boolean }>} De uitkomst.
    */
-  async function mail(settings, recipients, notice) {
+  async function mail(settings, recipients, notice, { system = false } = {}) {
     if (!recipients || !recipients.length) return { ok: false, skipped: true, message: 'Geen ontvangers ingesteld.' };
     let mailer;
     try {
@@ -211,7 +212,7 @@ function createNotifier({ mailerFor, fetchImpl = null, resolveHost = publicAddre
       return { ok: false, message: 'De mailserver is niet te gebruiken.' };
     }
     try {
-      await mailer.send({ to: recipients, subject: notice.subject, text: notice.text });
+      await mailer.send({ to: recipients, subject: notice.subject, text: notice.text }, { system });
       return { ok: true, message: `Verstuurd naar ${recipients.length} ${recipients.length === 1 ? 'ontvanger' : 'ontvangers'}.` };
     } catch (error) {
       return { ok: false, message: redact(mailFailure(error), 300) };

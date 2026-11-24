@@ -28,7 +28,7 @@ const { createRateLimiter } = require('../beveiliging/rate-limit');
  * @returns {string|undefined} Het e-mailadres, of undefined.
  */
 const copyTo = (user) => (user && preferencesOf(user).mailCopy && validEmail(user.email) ? user.email : undefined);
-const { validShareBase, pinShareBase, mailBody } = require('../verkoop/quotes');
+const { validShareBase, pinShareBase, mailBody, PUBLIC_URL_MISSING } = require('../verkoop/quotes');
 
 const Core = require(path.join(FRONTEND_DIR, 'werkorders', 'workorder-core.js'));
 
@@ -902,7 +902,9 @@ function registerWorkOrderRoutes(app, ctx) {
 
   // ---------- Klantlink: de klant ziet en bevestigt de afspraak ----------
   app.post('/api/workorders/:id/share', requireJson, requireWo, requirePlanning, (req, res) => {
-    const out = workorders.share(tenantOf(req), req.params.id, pinShareBase(settingsOf(req), req.body?.url, PAGE));
+    const base = pinShareBase(settingsOf(req), req.body?.url, PAGE);
+    if (base === null) return res.status(409).json(PUBLIC_URL_MISSING);
+    const out = workorders.share(tenantOf(req), req.params.id, base);
     if (out.error === 'invalid_url') return res.status(400).json({ error: 'invalid_url', message: 'Ongeldig adres voor de link.' });
     if (out.error) return notFound(res);
     audit(req, 'afspraaklink_gemaakt', { workOrderId: out.workOrder.id, number: out.workOrder.number });
@@ -929,7 +931,9 @@ function registerWorkOrderRoutes(app, ctx) {
     const settings = settingsOf(req);
     const mailer = mailerFor(settings);
     if (!mailer.configured()) return res.status(409).json({ error: 'not_configured', message: 'Er is geen mailserver ingesteld (Beheer → Integraties → E-mail).' });
-    const shared = workorders.share(tenantOf(req), req.params.id, pinShareBase(settings, url, PAGE));
+    const base = pinShareBase(settings, url, PAGE);
+    if (base === null) return res.status(409).json(PUBLIC_URL_MISSING);
+    const shared = workorders.share(tenantOf(req), req.params.id, base);
     if (shared.error === 'invalid_url') return res.status(400).json({ error: 'invalid_url', message: 'Ongeldig adres voor de link.' });
     if (shared.error) return notFound(res);
     const workOrder = shared.workOrder;

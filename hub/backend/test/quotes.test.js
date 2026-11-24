@@ -324,6 +324,14 @@ test('digitale offerte: link, openbare pagina, opties, tekenen, vastleggen en e-
     const quote = (await piet.post('/app/api/quotes', { data })).body;
     assert.strictEqual(quote.share.active, false);
     const URL_OK = 'https://aquatech.example/pad/openbaar/offerte.html';
+    // Klantlinks gebruiken het openbare adres van de app, nooit dat uit de browser.
+    const missing = await piet.post(`/app/api/quotes/${quote.id}/share`, { url: 'https://elders.example/app/openbaar/offerte.html' });
+    assert.strictEqual(missing.status, 409);
+    assert.strictEqual(missing.body.error, 'public_url_missing');
+    assert.strictEqual((await baas.put('/app/api/admin/settings', { appPublicUrl: { url: 'https://aquatech.example/' } })).status, 200);
+    const refused = await piet.post(`/app/api/quotes/${quote.id}/share`, { url: 'https://elders.example/app/openbaar/offerte.html' });
+    assert.strictEqual(refused.status, 200, 'het adres uit de browser wordt vervangen door het openbare adres');
+    assert.ok(refused.body.share.url.startsWith('https://aquatech.example/'), refused.body.share.url);
     assert.strictEqual((await piet.post(`/app/api/quotes/${quote.id}/share`, { url: 'javascript:alert(1)//openbaar/offerte.html' })).status, 400);
     assert.strictEqual((await piet.post(`/app/api/quotes/${quote.id}/share`, { url: 'https://evil.example/elders.html' })).status, 400);
     const shared = (await piet.post(`/app/api/quotes/${quote.id}/share`, { url: URL_OK })).body;

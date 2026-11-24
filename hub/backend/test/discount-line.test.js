@@ -114,7 +114,7 @@ test('api: de korting wordt bewaard en de klant ziet bedrag en bijschrift', asyn
   const store = createStore(db);
   const main = store.ensureTenant().id;
   await store.createAccount(main, { username: 'monteur', displayName: 'Monteur', role: 'installateur', password: PW }, { mustChangePassword: false });
-  const { server, base } = await listen(createApp({ secret: 'f'.repeat(64), db, addressFetch: createPdokFake().fetchImpl, loginDelayMs: 0 }));
+  const { server, base } = await listen(createApp({ env: { APP_PUBLIC_URL: 'https://aquatech.example/' }, secret: 'f'.repeat(64), db, addressFetch: createPdokFake().fetchImpl, loginDelayMs: 0 }));
   servers.push(server);
   const installer = await createLogin(base, { password: PW })('monteur');
   const data = { title: 'Beregening', customer: { name: 'Fam. Jansen' }, discountType: 'amount', discountAmount: 25, discountNote: 'Seizoensactie',

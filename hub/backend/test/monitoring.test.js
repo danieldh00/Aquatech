@@ -22,20 +22,21 @@ function setup({ mainConfig = {}, otherConfig = {}, mailBroken = false, webhookS
   const configs = { [MAIN]: { recipients: ['beheer@example.nl'], ...mainConfig }, [OTHER]: { recipients: ['ander@example.nl'], ...otherConfig } };
   const clock = { time: Date.parse('2026-11-13T10:00:00Z'), advance(ms) { this.time += ms; } };
   const mails = [];
+  const systemFlags = [];
   const requests = [];
   const monitor = createMonitor({
     db, mainTenantId: MAIN, listTenantIds: () => [MAIN, OTHER],
     settingsFor: (id) => ({ get: (key) => (key === 'monitoring' ? configs[id] : undefined) }),
     mailerFor: () => ({
       configured: () => true,
-      /** Nepmailer. @param {object} message Het bericht. @returns {Promise<void>} Klaar. */
-      send: async (message) => { if (mailBroken) throw new Error('smtp weg'); mails.push(message); },
+      /** Nepmailer. @param {object} message Het bericht. @param {object} [options] De verzendopties. @returns {Promise<void>} Klaar. */
+      send: async (message, options = {}) => { if (mailBroken) throw new Error('smtp weg'); mails.push(message); systemFlags.push(Boolean(options.system)); },
     }),
     fetchImpl: async (url, init) => { requests.push({ url, method: init.method, body: init.body }); return { ok: webhookStatus < 400, status: webhookStatus }; },
     resolveHost: async () => '93.184.216.34',
     now: () => clock.time, log: { warn() {}, error() {} }, startGraceMs: 0, appLog,
   });
-  return { db, monitor, clock, mails, requests, configs };
+  return { db, monitor, clock, mails, requests, configs, systemFlags };
 }
 
 /**
@@ -48,7 +49,7 @@ function setup({ mainConfig = {}, otherConfig = {}, mailBroken = false, webhookS
 const fakeCheck = (key, state, scope = 'tenant') => ({ key, scope, title: `Controle ${key}`, intervalMinutes: 1, run: async () => state.result });
 
 test('een falende controle opent één incident en meldt het één keer', async () => {
-  const { monitor, mails, requests, configs } = setup();
+  const { monitor, mails, requests, configs, systemFlags } = setup();
   configs[MAIN].webhookUrl = 'https://hooks.example.nl/x';
   const state = { result: { ok: false, severity: 'fout', message: 'Database weg' } };
   monitor.register(fakeCheck('db', state, 'platform'));
@@ -59,6 +60,7 @@ test('een falende controle opent één incident en meldt het één keer', async 
   assert.strictEqual(open.length, 1);
   assert.strictEqual(open[0].occurrences, 2);
   assert.strictEqual(mails.length, 1, 'één mail, geen tweede bij herhaling');
+  assert.deepStrictEqual(systemFlags, [true], 'een automatische melding valt buiten het dagmaximum');
   assert.match(mails[0].subject, /Database|Storing/i);
   assert.strictEqual(requests.length, 1);
   assert.strictEqual(requests[0].method, 'POST');
@@ -219,12 +221,13 @@ test('heartbeat: gewoon adres zonder storing, /fail bij een open platformfout', 
 });
 
 test('testmelding gaat naar mail, webhook en heartbeat zonder incident op te slaan', async () => {
-  const { monitor, configs, mails } = setup();
+  const { monitor, configs, mails, systemFlags } = setup();
   configs[MAIN].webhookUrl = 'https://hooks.example.nl/x';
   configs[MAIN].heartbeatUrl = 'https://hc.example.nl/ping/abc';
   const out = await monitor.sendTest(MAIN);
   assert.ok(out.mail.ok && out.webhook.ok && out.heartbeat.ok);
   assert.strictEqual(mails.length, 1);
+  assert.deepStrictEqual(systemFlags, [false], 'een testmelding telt mee voor het dagmaximum');
   assert.strictEqual(monitor.list(MAIN).length, 0);
 });
 

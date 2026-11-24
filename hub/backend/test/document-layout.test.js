@@ -215,7 +215,7 @@ async function setup() {
   await store.createAccount(main, { username: 'klant1', displayName: 'Klant', role: 'klant', password: PW }, { mustChangePassword: false });
   const other = store.createTenant({ slug: 'ander', name: 'Ander BV' }).tenant;
   await store.createAccount(other.id, { username: 'vreemd', displayName: 'Vreemd', role: 'beheerder', password: PW }, { mustChangePassword: false });
-  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: SECRET, db, loginDelayMs: 0 }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1', APP_PUBLIC_URL: 'https://aquatech.example/' }, secret: SECRET, db, loginDelayMs: 0 }));
   servers.push(server);
   const as = createLogin(base, { password: PW });
   return { admin: await as('baas'), planner: await as('planner1'), customer: await as('klant1'), outsider: await as('vreemd', 'ander'), base };

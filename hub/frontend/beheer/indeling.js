@@ -39,6 +39,7 @@
     ] },
     { title: 'Koppelingen', sections: [
       { id: 'mail', label: 'E-mail', pane: 'settings', form: 's-mail', words: 'smtp exchange office 365 connector afzender wan ip offertes versturen' },
+      { id: 'app-address', label: 'Openbaar adres van de app', pane: 'settings', form: 's-app-address', words: 'webadres url domein klantlink offerte afspraak oauth ai-koppeling basis herkomst' },
       { id: 'ai', label: 'AI-herkenning', pane: 'settings', form: 's-ai', words: 'anthropic claude api sleutel model limiet koers dag uur' },
       { id: 'ai-connector', label: 'AI-koppeling (MCP)', pane: 'settings', form: 's-ai-connector', words: 'mcp claude chatgpt connector offerte concept koppelen oauth handleiding spraak' },
     ] },
@@ -67,7 +68,7 @@
   const ALIASES = { settings: 'modules' };
 
   /** Alle formulieren van het tabblad Instellingen: er is er telkens één zichtbaar. */
-  const SETTINGS_FORMS = ['s-outsourcing', 's-season', 's-payment-reminders', 's-quote-followup', 's-labels', 's-purchase-proposals', 's-kpis', 's-mail', 's-ai', 's-ai-connector', 's-access', 's-captcha', 's-security', 's-backup', 's-backup-drive', 's-vps', 's-restore', 's-debug'];
+  const SETTINGS_FORMS = ['s-outsourcing', 's-season', 's-payment-reminders', 's-quote-followup', 's-labels', 's-purchase-proposals', 's-kpis', 's-mail', 's-app-address', 's-ai', 's-ai-connector', 's-access', 's-captcha', 's-security', 's-backup', 's-backup-drive', 's-vps', 's-restore', 's-debug'];
 
   const OPEN_KEY = 'aquatech_beheer_groups';
 

@@ -44,7 +44,7 @@ function registerOrderReadRoute(app, ctx) {
       return res.status(409).json({ error: 'not_configured', message: 'Inlezen is niet ingesteld: een beheerder kan de API-sleutel invullen bij Beheer → Integraties → AI-herkenning.' });
     }
     const daily = dailyFor(tenantId);
-    if (daily.count >= settings.get('aiDailyLimit')) {
+    if (daily.count >= settingsFor(aiTenantOf(tenantId)).get('aiDailyLimit')) {
       return res.status(429).json({ error: 'daily_limit', message: 'Het dagelijkse maximum voor AI-verzoeken is bereikt. Probeer het morgen opnieuw.' });
     }
     daily.count += 1;

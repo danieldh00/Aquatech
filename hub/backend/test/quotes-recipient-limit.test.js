@@ -24,7 +24,7 @@ test('limiet per ontvanger: mislukte verzending telt niet, de zesde mail wordt g
   const tenantId = store.ensureTenant().id;
   await store.createAccount(tenantId, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PASSWORD });
   await store.createAccount(tenantId, { username: 'kees', displayName: 'Kees', role: 'installateur', password: PASSWORD });
-  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: 'z'.repeat(64), db, mailerFor }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1', APP_PUBLIC_URL: 'https://aquatech.example/' }, secret: 'z'.repeat(64), db, mailerFor }));
   const as = createLogin(base, { password: PASSWORD });
   try {
     const baas = await as('baas');

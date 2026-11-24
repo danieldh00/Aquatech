@@ -94,26 +94,56 @@ function tagServer(error, server) {
   return error;
 }
 
+/** Hoeveel berichten een organisatie per dag hoogstens verstuurt (bescherming tegen misbruik en een doorgeslagen taak). */
+const DAILY_MAIL_LIMIT = 1000;
+/** Verstuurde berichten per organisatie en dag (in het geheugen, één proces: na een herstart begint de teller opnieuw). */
+const sentPerDay = new Map();
+
+/**
+ * Telt de berichten van een organisatie vandaag; ruimt de tellers van eerdere dagen op.
+ * @param {string} key De organisatie (tenant-id).
+ * @param {string} day De dag (JJJJ-MM-DD).
+ * @returns {{ day: string, count: number }} De teller van vandaag.
+ */
+function counterFor(key, day) {
+  let counter = sentPerDay.get(key);
+  if (!counter || counter.day !== day) {
+    counter = { day, count: 0 };
+    sentPerDay.set(key, counter);
+    if (sentPerDay.size > 500) for (const [other, entry] of sentPerDay) if (entry.day !== day) sentPerDay.delete(other);
+  }
+  return counter;
+}
+
 /**
  * Maakt de mailer van een tenant. De mailserver moet een openbaar adres hebben
  * (zie netguard.js); er wordt verbonden met het gevonden adres, het certificaat
  * blijft op naam gecontroleerd.
  * @param {object} settings Instellingen van de tenant (mailServer en mailPassword).
- * @param {object} [options] createTransport, resolveHost en fetchImpl (voor Graph), te vervangen in tests.
+ * @param {object} [options] createTransport, resolveHost en fetchImpl (voor Graph), te vervangen in tests; dailyLimit (berichten per dag, standaard DAILY_MAIL_LIMIT) en now (de klok).
  * @returns {{ configured: Function, send: Function, verify: Function, config: Function }} De mailfuncties.
  */
-function createMailer(settings, { createTransport = nodemailer.createTransport, resolveHost = publicAddress, fetchImpl } = {}) {
+function createMailer(settings, { createTransport = nodemailer.createTransport, resolveHost = publicAddress, fetchImpl, dailyLimit = DAILY_MAIL_LIMIT, now = () => new Date() } = {}) {
   /**
    * De ingestelde mailserver.
    * @returns {object} De instelling mailServer.
    */
   const config = () => settings.get('mailServer');
   /**
+   * Of deze organisatie de ingestelde soort mailserver mag gebruiken. De Exchange-connector vertrouwt het IP-adres van
+   * de server (geen inlog): daarom alleen voor de hoofdtenant, anders kon elke organisatie via die connector mailen.
+   * Instellingen zonder tenantgegevens (tests) zijn niet beperkt.
+   * @param {object} server De instelling mailServer.
+   * @returns {boolean} false bij een connector in een andere organisatie dan de hoofdtenant.
+   */
+  const modeAllowed = (server) => server.mode !== 'connector' || settings.isMainTenant !== false;
+  /**
    * Of er een mailserver is ingesteld (host en afzender).
    * @returns {boolean} true als er gemaild kan worden.
    */
   const configured = () => {
     const server = config();
+    if (!modeAllowed(server)) return false;
     if (server.mode === 'graph') return Boolean(server.graphTenantId && server.graphClientId && parseSender(server.from).address && settings.get('mailGraphSecret'));
     return Boolean(server.host && server.from);
   };
@@ -157,13 +187,32 @@ function createMailer(settings, { createTransport = nodemailer.createTransport, 
   /**
    * Verstuurt een e-mail via de mailserver van de tenant.
    * @param {{ to: string|string[], subject: string, text?: string, html?: string, replyTo?: string, bcc?: string, attachments?: object[] }} message Het bericht; attachments: [{ filename, content (Buffer), contentType }], hoogstens 5.
+   * @param {{ system?: boolean }} [options] system: true voor systeemmeldingen (Bewaking): die tellen niet mee voor het dagmaximum en worden er ook niet door geblokkeerd.
    * @returns {Promise<object>} Het resultaat van nodemailer.
    * @throws {Error} Met code not_configured, invalid_to of invalid_host.
    */
-  async function send({ to, subject, text, html, replyTo, bcc, attachments }) {
+  async function send({ to, subject, text, html, replyTo, bcc, attachments }, { system = false } = {}) {
+    if (!modeAllowed(config())) throw Object.assign(new Error('De Exchange-connector is alleen beschikbaar voor de hoofdorganisatie; kies SMTP of Microsoft Graph.'), { code: 'connector_not_allowed' });
     if (!configured()) throw Object.assign(new Error('Er is geen mailserver ingesteld.'), { code: 'not_configured' });
     const list = (Array.isArray(to) ? to : [to]).filter(validEmail);
     if (!list.length) throw Object.assign(new Error('Geen geldig e-mailadres.'), { code: 'invalid_to' });
+    const counter = counterFor(String(settings.tenantId || ''), now().toISOString().slice(0, 10));
+    if (!system && counter.count >= dailyLimit) throw Object.assign(new Error(`Het dagmaximum van ${dailyLimit} e-mails voor deze organisatie is bereikt; morgen kan het weer.`), { code: 'daily_limit' });
+    if (!system) counter.count += 1;
+    try {
+      return await sendNow({ list, subject, text, html, replyTo, bcc, attachments });
+    } catch (error) {
+      // Een mislukte poging telt niet mee voor het dagmaximum.
+      if (!system) counter.count -= 1;
+      throw error;
+    }
+  }
+  /**
+   * Verstuurt een bericht aan een gecontroleerde ontvangerslijst, via Graph of de ingestelde SMTP-server.
+   * @param {{ list: string[], subject: string, text?: string, html?: string, replyTo?: string, bcc?: string, attachments?: object[] }} message Het bericht.
+   * @returns {Promise<object>} Het resultaat van de verzender.
+   */
+  async function sendNow({ list, subject, text, html, replyTo, bcc, attachments }) {
     const inline = inlineImages(html);
     if (config().mode === 'graph') {
       return graphSender().send({
@@ -194,6 +243,7 @@ function createMailer(settings, { createTransport = nodemailer.createTransport, 
    * @throws {Error} Met code not_configured of invalid_host, of de fout van nodemailer (zie mailFailure).
    */
   async function verify() {
+    if (!modeAllowed(config())) throw Object.assign(new Error('De Exchange-connector is alleen beschikbaar voor de hoofdorganisatie; kies SMTP of Microsoft Graph.'), { code: 'connector_not_allowed' });
     if (!configured()) throw Object.assign(new Error('Er is geen mailserver ingesteld.'), { code: 'not_configured' });
     if (config().mode === 'graph') return graphSender().verify();
     const { transport, server } = await openTransport();
@@ -236,7 +286,7 @@ function mailFailure(error) {
    * @returns {string} De volledige melding.
    */
   const withReply = (text) => `Versturen mislukt: ${text}${reply ? ` (mailserver: ${reply})` : ''}`;
-  if (['not_configured', 'invalid_to', 'invalid_host'].includes(code)) return `Versturen mislukt: ${error.message}`;
+  if (['not_configured', 'invalid_to', 'invalid_host', 'connector_not_allowed', 'daily_limit'].includes(code)) return `Versturen mislukt: ${error.message}`;
   // Geen code en geen antwoord: geen fout van de mailserver maar van de app (bijv. bij het opbouwen van de mail).
   if (!code && !reply) return 'Versturen mislukt door een interne fout; de oorzaak staat in het serverlog.';
   if (code === 'EGRAPH_AUTH') return withReply('Microsoft weigert de aanmelding van de app. Controleer tenant-ID, client-ID en het clientgeheim (een geheim verloopt; maak zo nodig een nieuw geheim aan in Entra).');
@@ -287,4 +337,4 @@ function mailFailure(error) {
 // Melding als de mailinstellingen zelf niet te lezen zijn (een interne fout: de oorzaak gaat naar het serverlog).
 const MAIL_SETUP_FAILED = 'Versturen mislukt: de mailinstellingen konden niet worden gelezen.';
 
-module.exports = { inlineImages, createMailer, sanitizeMail, validEmail, mailFailure, MAIL_SETUP_FAILED, MAIL_DEFAULTS };
+module.exports = { DAILY_MAIL_LIMIT, inlineImages, createMailer, sanitizeMail, validEmail, mailFailure, MAIL_SETUP_FAILED, MAIL_DEFAULTS };
