@@ -1299,6 +1299,7 @@ function createStore(db) {
     const stale = prepare(`SELECT u.id FROM users u
       WHERE u.tenant_id = ? AND u.kind = 'gast' AND u.created_at < ? AND (u.last_seen_at IS NULL OR u.last_seen_at < ?)
         AND NOT EXISTS (SELECT 1 FROM plans p WHERE p.tenant_id = u.tenant_id AND p.owner_id = u.id)
+        AND NOT EXISTS (SELECT 1 FROM history h WHERE h.tenant_id = u.tenant_id AND h.user_id = u.id)
       ORDER BY u.created_at LIMIT 2000`).all(tenantId, cutoff, cutoff);
     let removed = 0;
     for (const row of stale) {
@@ -1310,7 +1311,7 @@ function createStore(db) {
         });
       } catch (error) {
         // Een verwijzing elders (bijvoorbeeld historie): deze gast blijft staan.
-        if (!/foreign key|violates|23503/i.test(String(error && (error.message || error.code)))) throw error;
+        if (!/foreign key|23503/i.test(String(error && (error.message || error.code)))) throw error;
       }
     }
     return removed;
