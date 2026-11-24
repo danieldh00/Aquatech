@@ -51,7 +51,7 @@ services:
       retries: 3
 
   postgres:
-    # Images op tag; Renovate pint ze op digest (zoals cloudflared). Staging bevat alleen testdata.
+    # Images op tag, niet op digest (anders dan cloudflared): staging bevat alleen testdata. Pinnen op digest volgt apart.
     image: postgres:17
     container_name: aquatech-stg-postgres
     restart: unless-stopped
