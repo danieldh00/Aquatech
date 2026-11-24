@@ -32,6 +32,7 @@ const DocText = require(path.join(FRONTEND_DIR, 'shared', 'doc-text.js'));
 const { normalizeVatNumber, validVatNumber } = require('../webshop/vat');
 const { appBaseOf, isLoopbackUrl } = require('../platform/app-address');
 const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
+const { LIST_LIMIT, pageSize, pageOffset, pageOf, pagedBody } = require('../platform/list-paging');
 
 // Bedrijfsprofiel: tekstvelden met maximale lengte en getallen [min, max].
 const PROFILE_TEXT = {
@@ -290,20 +291,23 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
 
   /**
    * Bouwt de query voor de offertelijst van een tenant, laatst gewijzigd eerst.
-   * @param {{ tenantId: string, ownerId?: string|null, planId?: string|null, customerId?: string|null }} filters Tenant en filters (customerId: alleen de offertes van dat klantaccount, zonder concepten).
-   * @returns {{ sql: string, args: Array, customerId: string|null }} De query, de parameters en het klantfilter.
+   * @param {{ tenantId: string, ownerId?: string|null, planId?: string|null, customerId?: string|null, limit?: number, offset?: number }} filters Tenant en filters (customerId: alleen de offertes van dat klantaccount, zonder concepten; limit en offset voor een pagina).
+   * @returns {{ sql: string, countSql: string, args: Array, customerId: string|null }} De query, de telquery met dezelfde parameters en het klantfilter.
    */
-  function listQuery({ tenantId, ownerId = null, planId = null, customerId = null }) {
+  function listQuery({ tenantId, ownerId = null, planId = null, customerId = null, limit = LIST_LIMIT, offset = 0 }) {
     const args = [tenantId];
-    let sql = `SELECT q.id, q.number, q.status, q.title, q.customer, q.plan_id, q.total_excl, q.total_incl, q.created_at, q.updated_at,
+    // Het filter staat apart (alleen kolommen van q), zodat de lijst- en de telquery precies dezelfde voorwaarden hebben.
+    let filter = '';
+    if (ownerId) { filter += ' AND q.owner_id = ?'; args.push(ownerId); }
+    if (customerId) { filter += " AND q.customer_id = ? AND q.status <> 'concept'"; args.push(customerId); }
+    if (planId) { filter += ' AND q.plan_id = ?'; args.push(String(planId)); }
+    const sql = `SELECT q.id, q.number, q.status, q.title, q.customer, q.plan_id, q.total_excl, q.total_incl, q.created_at, q.updated_at,
         ${jsonField(db, 'q.data', 'validUntil')} AS valid_until, q.owner_id, u.username AS owner_username, u.display_name AS owner_name,
         q.customer_id, c.display_name AS customer_name, q.view_count, q.viewed_at, q.responded_at, q.order_id, q.converted_at, o.number AS order_number
       FROM quotes q JOIN users u ON u.id = q.owner_id LEFT JOIN users c ON c.id = q.customer_id LEFT JOIN web_orders o ON o.tenant_id = q.tenant_id AND o.id = q.order_id
-      WHERE q.tenant_id = ? AND q.deleted_at IS NULL`;
-    if (ownerId) { sql += ' AND q.owner_id = ?'; args.push(ownerId); }
-    if (customerId) { sql += " AND q.customer_id = ? AND q.status <> 'concept'"; args.push(customerId); }
-    if (planId) { sql += ' AND q.plan_id = ?'; args.push(String(planId)); }
-    return { sql: `${sql} ORDER BY q.updated_at DESC`, args, customerId };
+      WHERE q.tenant_id = ? AND q.deleted_at IS NULL${filter}
+      ORDER BY q.updated_at DESC, q.id LIMIT ${pageSize(limit)} OFFSET ${pageOffset(offset)}`;
+    return { sql, countSql: `SELECT COUNT(*) AS n FROM quotes q WHERE q.tenant_id = ? AND q.deleted_at IS NULL${filter}`, args, customerId };
   }
 
   /**
@@ -339,6 +343,24 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
     if (!db.async) return list(tenantId, filters);
     const query = listQuery({ tenantId, ...filters });
     return quotesFromRows(await db.async.all(query.sql, ...query.args), query.customerId);
+  }
+
+  /**
+   * Eén pagina offertes met het totaal (de telquery draait alleen als de pagina vol is of niet bij het begin begint).
+   * @param {string} tenantId Id van de tenant.
+   * @param {object} [filters] Zie list, met limit en offset.
+   * @returns {Promise<{ items: object[], total: number, truncated: boolean }>} De pagina, het totaal en of er meer zijn.
+   */
+  async function listPage(tenantId, filters = {}) {
+    const page = { limit: pageSize(filters.limit), offset: pageOffset(filters.offset) };
+    const items = await listAsync(tenantId, { ...filters, ...page });
+    let total = items.length;
+    if (items.length >= page.limit || page.offset > 0) {
+      const query = listQuery({ tenantId, ...filters });
+      const counted = db.async ? await db.async.get(query.countSql, ...query.args) : prepare(query.countSql).get(...query.args);
+      total = Number(counted.n);
+    }
+    return pagedBody(items, total, page);
   }
 
   /**
@@ -733,7 +755,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
     return prepare('DELETE FROM quotes WHERE tenant_id = ? AND id = ?').run(tenantId, String(id)).changes > 0;
   }
 
-  return { list, listAsync, get, create, update, respond, decide, versionOfRow, share, unshare, markSent, followUpDue, claimFollowUp, releaseFollowUp, restoreDraft, byToken, markViewed, publicView, shareLink, remove, purge, acceptedNumber, isConverted, nextNumber };
+  return { list, listAsync, listPage, get, create, update, respond, decide, versionOfRow, share, unshare, markSent, followUpDue, claimFollowUp, releaseFollowUp, restoreDraft, byToken, markViewed, publicView, shareLink, remove, purge, acceptedNumber, isConverted, nextNumber };
 }
 
 /**
@@ -997,10 +1019,10 @@ function registerQuoteRoutes(app, ctx) {
     const user = identify(req);
     if (!user) return res.json({ items: [] });
     if (!Roles.can(user, 'offertes')) {
-      return res.json({ items: Roles.can(user, 'offertes.klant') ? await quotes.listAsync(user.tenant_id, { customerId: user.id }) : [] });
+      return res.json(Roles.can(user, 'offertes.klant') ? await quotes.listPage(user.tenant_id, { customerId: user.id, ...pageOf(req.query) }) : { items: [], total: 0, truncated: false });
     }
     const all = req.query.all === '1' && Roles.can(user, 'offertes.alle');
-    res.json({ items: await quotes.listAsync(user.tenant_id, { ownerId: all ? null : user.id, planId: req.query.plan || null }) });
+    res.json(await quotes.listPage(user.tenant_id, { ownerId: all ? null : user.id, planId: req.query.plan || null, ...pageOf(req.query) }));
   });
 
   app.get('/api/quotes/:id', (req, res) => {

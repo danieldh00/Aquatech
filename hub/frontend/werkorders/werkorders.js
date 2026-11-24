@@ -72,7 +72,9 @@
    */
   async function loadList() {
     try {
-      state.items = (await take('list', 'workorders')).items || [];
+      const result = await take('list', 'workorders');
+      state.items = result.items || [];
+      if (window.AquatechCommon) window.AquatechCommon.truncationNotice(result, 'werkorders');
     } catch (error) {
       $('#l-table').innerHTML = `<tr><td class="empty">Kan de werkorders niet laden (${esc(error.message)}).</td></tr>`;
       return;

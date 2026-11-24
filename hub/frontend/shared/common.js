@@ -253,6 +253,22 @@
     maintenanceBar.textContent = 'Er wordt een update geïnstalleerd. Bekijken kan, opslaan even niet. Over een minuut werkt alles weer.';
     root.document.body.appendChild(maintenanceBar);
   }
+  // ---------- Ingekorte lijsten ----------
+  /**
+   * Meldt kort bovenin dat een lijst is ingekort (de server geeft hooguit een vast aantal rijen; zie platform/list-paging.js).
+   * @param {{ items?: object[], total?: number, truncated?: boolean }} result Het antwoord van de lijstroute.
+   * @param {string} noun Wat er in de lijst staat, meervoud (bijv. "offertes").
+   * @returns {void}
+   */
+  function truncationNotice(result, noun) {
+    if (!result || !result.truncated || !root.document || !root.document.body) return;
+    const bar = root.document.createElement('div');
+    bar.className = 'maintenance-bar';
+    bar.setAttribute('role', 'status');
+    bar.textContent = `Alleen de nieuwste ${(result.items || []).length} van ${result.total} ${noun} staan in de lijst. Verfijn de zoekopdracht of het filter om oudere te vinden.`;
+    root.document.body.appendChild(bar);
+    root.setTimeout(() => bar.remove(), 12000);
+  }
   if (typeof nativeFetch === 'function') {
     /**
      * fetch met debugmodus: gewoon fetch, maar een foutantwoord met details gaat ook naar het debugpaneel.
@@ -345,5 +361,5 @@
     if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
   }
 
-  root.AquatechCommon = { getJson, ownerOf, excel, origin, onReturn, leaving, offline, statusMessage, wrapWideTables };
+  root.AquatechCommon = { getJson, ownerOf, excel, origin, onReturn, leaving, offline, statusMessage, wrapWideTables, truncationNotice };
 })(window);
