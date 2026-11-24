@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.36.8',
+      date: '2026-11-24',
+      title: 'Lange lijsten blijven snel',
+      items: [
+        { text: 'Bij heel veel gegevens toont een lijst de nieuwste en meldt dat er meer zijn, zodat de pagina snel blijft.', for: ['offertes', 'werkorders', 'facturen'] },
+      ],
+    },
+    {
       version: '1.36.7',
       date: '2026-11-24',
       title: 'Offertes en werkorders: veiliger akkoord en minder zichtbare gegevens',
