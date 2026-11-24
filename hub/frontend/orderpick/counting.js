@@ -407,6 +407,8 @@
   async function init() {
     await Ui.ready;
     if (!Ui.allowed) return;
+    // Uitgezet in Beheer > Modules: het scherm doet niet mee (de knop is dan ook weg).
+    if (window.AquatechModuleTools && !(await window.AquatechModuleTools.featureOn('voorraadtelling'))) return;
     bind();
     if (window.AquatechOffline) window.AquatechOffline.on('synced', onQueueEvent);
     if (window.AquatechOffline) window.AquatechOffline.on('status', () => { reconcileWaiting().catch(() => {}); });

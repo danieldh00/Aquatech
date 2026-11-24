@@ -492,6 +492,8 @@
   async function init() {
     await Ui.ready;
     if (!Ui.allowed) return;
+    // Uitgezet in Beheer > Modules: het scherm doet niet mee (de knop is dan ook weg).
+    if (window.AquatechModuleTools && !(await window.AquatechModuleTools.featureOn('ontvangst'))) return;
     bind();
     const orderId = new URLSearchParams(location.search).get('ontvangst');
     if (orderId) {
