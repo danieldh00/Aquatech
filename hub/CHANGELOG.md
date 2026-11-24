@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.36.0
+
+Scherm Beheer > Modules (`frontend/beheer/modules.js`, eigen paneel `tab-modules`, stijl `.md-*` in beheer.css; geen migratie).
+- Tekent de indeling uit `switchTree()` en leest en schrijft via `GET|PUT /api/admin/modules`; alleen gewijzigde schakelaars gaan mee. Zoekveld, filter Alles/Aan/Uit, teller, snelkeuze per categorie, Alles aan/uit per categorie, blok Altijd aan.
+- Schakelaars zijn echte checkboxen met `role="switch"` (toetsenbord en schermlezer), tikdoel 40 px; op slot (webshop buiten de hoofdorganisatie, uitbesteden zonder multitenancy) met de reden erbij.
+- Register: `section` (link Instellen naar de sectie van Beheer) en `switchTitle` (naam op de kaart).
+- `AquatechNav.setDisabled(flags)` in `shared/sidebar.js`: de zijbalk volgt direct na het opslaan.
+- Het oude formulier `s-modules` is weg.
+
 ## 1.35.1
 
 Voorbereiding voor het nieuwe scherm Beheer > Modules (geen migratie).

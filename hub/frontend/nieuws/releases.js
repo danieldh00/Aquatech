@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.36.0',
+      date: '2026-11-24',
+      title: 'Nieuw scherm Modules: alles per categorie aan of uit',
+      items: [
+        { text: 'Beheer > Modules is vernieuwd: per categorie een kaart per module met een schakelaar, en daaronder de onderdelen met een eigen schakelaar (bijvoorbeeld offerte-opvolging, betalingsherinneringen, automatische bestelvoorstellen, bestellen als gast, Google Analytics en de AI-koppeling). Je kunt zoeken, filteren op aan of uit en ziet in één oogopslag hoeveel er aan staat.', for: ['beheer'] },
+        { text: 'Een onderdeel volgt zijn module: staat de module uit, dan zijn de onderdelen grijs. Gegevens en instellingen blijven bewaard. Bij een onderdeel met meer instellingen staat de link Instellen.', for: ['beheer'] },
+        { text: 'Na het opslaan past het menu links zich direct aan, zonder de pagina te verversen.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.35.1',
       date: '2026-11-24',
       title: 'Modules: onderdelen met een eigen schakelaar (voorbereiding nieuw scherm)',
