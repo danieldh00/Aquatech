@@ -221,7 +221,7 @@ test('visma: app instellen (hoofdbeheerder), verbinden, doorsturen, token vernie
     // Het refresh token staat versleuteld in de database.
     const row = db.prepare("SELECT value FROM settings WHERE tenant_id = ? AND key = 'vismaRefreshToken'").get(main);
     assert.ok(row && !row.value.includes('refresh-geheim'));
-    assert.strictEqual((await baas.get('/app/api/admin/settings')).body.settings.vismaRefreshToken.set, true);
+    assert.strictEqual((await baas.get('/app/api/admin/settings')).body.settings.vismaRefreshToken, undefined, 'interne instellingen staan niet in de algemene lijst (B-22)');
 
     // Keuzes uit Visma: alleen actieve artikelen.
     const opts = (await baas.get('/app/api/visma/options')).body;
