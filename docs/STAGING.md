@@ -29,3 +29,23 @@ volledig los staat van productie. Plan en fasen: projectbestand `frontend-advies
 3. **Branch `develop` aanmaken** vanaf `master` (pas als dit is gemerged en de ruleset staat).
 4. Pakket `aquatech-staging` (verschijnt na de eerste staging-build) op **openbaar** zetten, of een pull-token op stg01
    zetten (de servertaak vraagt erom). Het image bevat alleen de (openbare) code, geen geheimen.
+
+## stg01 aanmaken en inrichten
+1. **VM maken in Proxmox** (eenmalig, handmatig): Debian 12 of Ubuntu 24.04, naam `stg01`, 2 vCPU, 3 GB RAM (ballooning uit),
+   25 GB schijf, gebruiker `daniel` met je ssh-sleutel en `sudo` zonder wachtwoord (zoals op apps01), guest agent aan.
+   Proxmox-firewall voor deze VM: inkomend alleen ssh vanaf de Proxmox-host; uitgaand niet naar apps01, de
+   productiedatabase of andere interne netwerken (alleen internet: GHCR, Cloudflare, PDOK/VIES).
+2. **Cloudflare** (eenmalig, handmatig): een eigen tunnel `staging` met hostnaam `staging.aquatech.den-hollander.com` naar
+   `http://aquatech-stg:3300`, en een Access-toepassing op die hostnaam met een beleid dat alleen jouw e-mailadres toelaat.
+3. **Master mergen, workflow Staging draaien** (push naar `develop`, of Actions > Staging > Run workflow): dit bouwt het eerste
+   image. Zet daarna het pakket `aquatech-staging` op openbaar.
+4. **Servertaak 012** staat in Beheer > Systeem > Updates; je voert het ene vaste commando uit (zoals altijd, als root op de
+   Proxmox-host). De taak vraagt eenmalig om de tunnel-token (verborgen invoer) en richt stg01 in. Een andere naam of gebruiker:
+   `STG01_SSH=gebruiker@adres` voor het commando.
+5. **In de app op staging**: eerste beheerder aanmaken (installatiecode: `docker logs aquatech-stg`), E-mail naar `mailpit`
+   poort 1025 zetten (berichten bekijken op `127.0.0.1:8025` op de VM, via ssh-tunnel), geen koppelingen instellen (Mollie,
+   Visma, Drive, DPD), een eigen AI-sleutel met een lage daglimiet. Testdata: Hoofdbeheer > testomgeving aanmaken >
+   testdata vullen.
+
+Wat er nooit gebeurt: gegevens, hoofdsleutel of geheimen uit productie op stg01. Een geanonimiseerde kopie van productie komt
+later (bij de migratie van Facturen) als aparte, geteste servertaak.

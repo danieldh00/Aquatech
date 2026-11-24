@@ -390,7 +390,11 @@ HOST_TASK_IDS=(
   009-update-script-stopt-bij-mislukte-back-up
   010-back-up-integriteitscontrole
   011-image-handtekening-controleren
+  012-staging-stg01-inrichten
 )
+# Taken die op de Proxmox-host zelf draaien (niet op apps01): de apps01-functie meldt alleen code 75, deel 2 voert ze uit
+# en legt ze daarna vast met `taak-vastleggen`.
+HOST_SIDE_TASK_IDS=(012-staging-stg01-inrichten)
 HOST_TASKS_LEDGER="host-tasks.json"
 # Functienaam van een taak (streepjes worden underscores).
 hosttask_function() { printf 'hosttask_%s' "${1//-/_}"; }
@@ -555,6 +559,13 @@ hosttask_008_vertrouwde_proxy_instellen() {
 
 # Taak 006: alleen lezen. Toont de grootste tabellen en het gebruik van de indexen van de productiedatabase (voor de beslissing over
 # zware kolomomzettingen) en bewaart dezelfde uitvoer in update/status/db-stats.txt. Geen gegevens, alleen namen, aantallen en groottes.
+# Taak 012: de stagingomgeving op stg01 inrichten. Draait op de Proxmox-host (zie staging_setup in deel 2); hier alleen
+# de melding dat de taak daar wordt uitgevoerd (code 75 = overslaan zonder fout, niet vastleggen).
+hosttask_012_staging_stg01_inrichten() {
+  echo "Deze taak draait op de Proxmox-host (ssh naar stg01); na de taken op apps01."
+  return 75
+}
+
 hosttask_006_database_grootte_en_indexgebruik() {
   local out="$APP_DIR/update/status/db-stats.txt" tmp
   docker inspect aquatech-postgres >/dev/null 2>&1 || { echo "FOUT: geen eigen PostgreSQL-container (aquatech-postgres)." >&2; return 1; }
@@ -608,19 +619,36 @@ remote_openstaand_check() {
 }
 # Voert de openstaande taken één voor één uit en legt elke gelukte taak vast. Bij een fout stopt het (de rest blijft open).
 remote_openstaand_run() {
-  local id
+  local id rc
   need_tasks_ref
   for id in $(pending_host_tasks); do
     echo; echo "== Taak $id =="
-    if "$(hosttask_function "$id")"; then
+    "$(hosttask_function "$id")" && rc=0 || rc=$?
+    if [[ "$rc" == "0" ]]; then
       ledger_write "$id"
       echo "Taak $id gedaan en vastgelegd."
+    elif [[ "$rc" == "75" ]]; then
+      echo "Taak $id wordt op de Proxmox-host uitgevoerd."
     else
       echo "FOUT: taak $id is mislukt; de overige taken zijn niet uitgevoerd. Draai het commando opnieuw als het probleem opgelost is." >&2
       return 1
     fi
   done
-  echo; echo "Alle servertaken zijn gedaan."
+  echo; echo "Taken op apps01 zijn klaar."
+}
+# Id's van de openstaande taken, één per regel (voor deel 2 op de Proxmox-host).
+remote_openstaand_lijst() {
+  need_tasks_ref
+  pending_host_tasks
+}
+# Legt een taak vast die op de Proxmox-host is uitgevoerd (alleen een id uit HOST_SIDE_TASK_IDS).
+remote_taak_vastleggen() { # <id>
+  local id="${1:-}" known
+  for known in "${HOST_SIDE_TASK_IDS[@]}"; do
+    [[ "$known" == "$id" ]] && { ledger_write "$id"; echo "Taak $id vastgelegd."; return 0; }
+  done
+  echo "FOUT: $id is geen taak die op de Proxmox-host draait." >&2
+  return 2
 }
 
 remote_main() {
@@ -639,6 +667,8 @@ remote_main() {
     schijf-run) remote_disk_run ;;
     openstaand-check) remote_openstaand_check ;;
     openstaand-run) remote_openstaand_run ;;
+    openstaand-lijst) remote_openstaand_lijst ;;
+    taak-vastleggen) remote_taak_vastleggen "$@" ;;
     *) echo "Onbekende opdracht: $action" >&2; exit 2 ;;
   esac
 }
@@ -740,6 +770,56 @@ confirm() { # <tekst>
 
 if [[ "$MODE" == "pct" ]]; then echo "Server: LXC $GUEST_ID ($NAME), via pct exec"; else echo "Server: $SSH_TARGET, via ssh"; fi
 
+# ---------- Staging (taak 012): draait op deze Proxmox-host en gaat via ssh naar stg01 ----------
+# stg01 is een aparte VM (zie docs/STAGING.md); een andere gebruiker of naam kan met STG01_SSH (bijv. daniel@192.0.2.10).
+STG_SSH="${STG01_SSH:-daniel@stg01}"
+STG_DIR="${STG01_APP_DIR:-/opt/apps/aquatech-stg}"
+STG_SUDO=()
+if [[ "$STG_SSH" == *@* && "${STG_SSH%%@*}" != "root" ]]; then STG_SUDO=(sudo -n); fi
+stg_ssh() { ssh "${SSH_OPTS[@]}" "$STG_SSH" "$@"; }
+# Richt stg01 in: controleert de verbinding, vraagt (alleen als ze nog niet bestaat) de Cloudflare-tunnel-token, plaatst die
+# als bestand op stg01 (nooit in een argument of log) en draait deploy/staging/setup-staging.sh op de vaste commit.
+staging_setup() {
+  local dir token="" have_token="" command_line
+  stg_ssh true 2>/dev/null || die "stg01 ($STG_SSH) is niet bereikbaar via ssh. Maak eerst de VM volgens docs/STAGING.md (of zet STG01_SSH)."
+  # shellcheck disable=SC2029  # bewust: het pad wordt hier ingevuld
+  stg_ssh "${STG_SUDO[@]}" test -s "$STG_DIR/secrets/tunnel-token" 2>/dev/null && have_token=1
+  if [[ -z "$have_token" ]]; then
+    echo "Cloudflare-tunnel voor staging: plak de token (Zero Trust > Networks > Tunnels > staging > installatie), of laat leeg om zonder tunnel te starten."
+    printf 'Tunnel-token: ' >&2
+    { IFS= read -rs token </dev/tty; } 2>/dev/null || token=""
+    echo
+    if [[ -n "$token" ]]; then
+      [[ "$token" =~ ^[A-Za-z0-9+/=_-]{40,}$ ]] || die "Dit lijkt geen tunnel-token."
+      printf -v command_line '%q ' "${STG_SUDO[@]}" bash -c "install -d -m 700 '$STG_DIR/secrets' && umask 077 && cat > '$STG_DIR/secrets/tunnel-token'"
+      printf '%s' "$token" | stg_ssh "$command_line" || die "Token plaatsen op stg01 is mislukt."
+    fi
+  fi
+  dir="$(mktemp -d)"
+  fetch_task_file "$dir/setup-staging.sh" deploy/staging/setup-staging.sh || { rm -rf "$dir"; return 1; }
+  printf -v command_line '%q ' "${STG_SUDO[@]}" env "STAGING_REF=$TASKS_REF" "APP_DIR=$STG_DIR" bash -s
+  stg_ssh "$command_line" <"$dir/setup-staging.sh" || { rm -rf "$dir"; return 1; }
+  rm -rf "$dir"
+}
+# Voert de taken uit die op de Proxmox-host draaien en nog openstaan, en legt elke gelukte vast (via apps01).
+host_side_tasks() {
+  local pending id
+  pending="$(remote openstaand-lijst)"
+  for id in $pending; do
+    case "$id" in
+      012-staging-stg01-inrichten)
+        echo; echo "== Taak $id (op de Proxmox-host) =="
+        if staging_setup; then
+          remote taak-vastleggen "$id"
+        else
+          echo "FOUT: taak $id is mislukt; draai het commando opnieuw als het probleem opgelost is." >&2
+          exit 1
+        fi
+        ;;
+    esac
+  done
+}
+
 # Voert check + (na bevestiging) uitvoering uit. Check-uitgangscode 10 = er is iets te doen.
 two_step() { # <naam> <bevestigingstekst>
   local name="$1" question="$2" code=0
@@ -758,6 +838,7 @@ case "$ACTION" in
   logs) remote logs "${ARGS[@]:1}" ;;
   migraties) two_step migraties "De app wordt na een back-up herstart en is daarbij ca. 1 minuut niet beschikbaar; bij het starten draaien de migraties." ;;
   schijf) two_step schijf "Oude app-images, build-cache en oude journal worden verwijderd en update.sh op de server wordt bijgewerkt (de draaiende en de twee nieuwste versies blijven; volumes, back-ups en database blijven onaangeroerd). De app blijft gewoon draaien." ;;
-  openstaand) two_step openstaand "De openstaande servertaken worden nu uitgevoerd (ze staan hierboven; de app kan daarbij even herstarten). Elke gelukte taak wordt afgevinkt in de app." ;;
+  openstaand) two_step openstaand "De openstaande servertaken worden nu uitgevoerd (ze staan hierboven; de app kan daarbij even herstarten). Elke gelukte taak wordt afgevinkt in de app."
+    host_side_tasks ;;
   update) two_step update "De app wordt na een back-up vervangen door de nieuwste versie (ca. 1-3 minuten onderhoudsmodus). Lukt het niet, dan zet update.sh de vorige versie terug." ;;
 esac

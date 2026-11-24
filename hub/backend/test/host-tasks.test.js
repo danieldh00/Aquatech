@@ -20,6 +20,8 @@ const SETUP_SCRIPT = path.join(__dirname, '..', '..', '..', 'deploy', 'apps01', 
 const PW = 'Tuin-Plan-2026!';
 const REF = 'a'.repeat(40);
 const FIRST = HOST_TASKS[0].id;
+/** Taken die op de Proxmox-host draaien in plaats van op apps01 (HOST_SIDE_TASK_IDS in servertaken.sh). */
+const HOST_SIDE = ['012-staging-stg01-inrichten'];
 
 /**
  * Maakt een tijdelijke map.
@@ -69,10 +71,11 @@ function install(setupBody) {
    * Draait een opdracht van het script op de "server".
    * @param {string} command Bijv. openstaand-check.
    * @param {object} [extraEnv] Extra omgevingsvariabelen.
+   * @param {string[]} [commandArguments] Extra argumenten voor de opdracht (bijv. een taak-id).
    * @returns {{ status: number, stdout: string, stderr: string }} De uitkomst.
    */
-  const run = (command, extraEnv = {}) => {
-    const out = spawnSync('bash', [SCRIPT, command], {
+  const run = (command, extraEnv = {}, commandArguments = []) => {
+    const out = spawnSync('bash', [SCRIPT, command, ...commandArguments], {
       encoding: 'utf8',
       env: { PATH: `${bin}:${process.env.PATH}`, SERVERTAKEN_REMOTE: '1', APP_DIR: appDir, TASKS_BASE: `file://${path.join(root, 'repo')}`, SYSTEMD_DIR: systemdDir, FAKE_SYSTEMCTL_LOG: path.join(root, 'systemctl.log'), ...cosignEnv, ...extraEnv },
     });
@@ -111,7 +114,13 @@ test('hostscript: openstaand voert de taak uit, legt hem vast en doet daarna nie
   assert.strictEqual(done.status, 0, done.stderr + done.stdout);
   assert.ok(done.stdout.includes(`setup met ${REF}`), 'het script draait op de vaste commit');
   const ledger = JSON.parse(fs.readFileSync(path.join(appDir, 'update', 'status', 'host-tasks.json'), 'utf8'));
-  for (const task of HOST_TASKS) assert.ok(Date.parse(ledger.done[task.id]) > 0, `${task.id} is vastgelegd`);
+  for (const task of HOST_TASKS.filter((entry) => !HOST_SIDE.includes(entry.id))) assert.ok(Date.parse(ledger.done[task.id]) > 0, `${task.id} is vastgelegd`);
+  for (const id of HOST_SIDE) assert.strictEqual(ledger.done[id], undefined, `${id} draait op de Proxmox-host en wordt daar pas vastgelegd`);
+  assert.match(done.stdout, /wordt op de Proxmox-host uitgevoerd/);
+  assert.match(run('openstaand-lijst', { TASKS_REF: REF }).stdout, /012-staging-stg01-inrichten/, 'de host ziet dat taak 012 nog openstaat');
+  assert.notStrictEqual(run('taak-vastleggen', { TASKS_REF: REF }, [FIRST]).status, 0, 'alleen taken van de host mogen zo worden vastgelegd');
+  for (const id of HOST_SIDE) assert.strictEqual(run('taak-vastleggen', { TASKS_REF: REF }, [id]).status, 0);
+  assert.strictEqual(run('openstaand-lijst', { TASKS_REF: REF }).stdout.trim(), '', 'daarna staat er niets meer open');
   assert.ok(fs.existsSync(path.join(appDir, 'restore-test.sh')), 'taak 002 installeert restore-test.sh');
   assert.ok(fs.existsSync(path.join(appDir, 'restore-test-drive.sh')) && fs.existsSync(path.join(appDir, 'restore-app-check.sh')), 'taak 007 installeert de Drive-app-controle');
   assert.ok(fs.readFileSync(path.join(appDir, '.env'), 'utf8').split('\n').includes('TRUSTED_PROXIES=172.18.0.0/16'), 'taak 008 zet het subnet van het compose-netwerk in .env');
@@ -220,4 +229,27 @@ test('hostscript: taak 011 installeert cosign niet als de SHA-256 niet klopt', (
   assert.notStrictEqual(out.status, 0);
   assert.match(out.stderr, /SHA-256 van cosign klopt niet/);
   assert.ok(!fs.existsSync(path.join(root, 'cosign-geinstalleerd')), 'niets geïnstalleerd');
+});
+
+test('hostscript: de ids van de host-taken staan ook in de lijst van de app', () => {
+  const script = fs.readFileSync(SCRIPT, 'utf8');
+  const block = /HOST_SIDE_TASK_IDS=\(([^)]*)\)/.exec(script);
+  assert.ok(block, 'HOST_SIDE_TASK_IDS ontbreekt in servertaken.sh');
+  const hostSideIds = block[1].trim().split(/\s+/);
+  assert.deepStrictEqual(hostSideIds, HOST_SIDE);
+  for (const id of hostSideIds) assert.ok(HOST_TASKS.some((task) => task.id === id), `${id} staat niet in HOST_TASKS`);
+});
+
+test('staging: het updatescript rolt alleen het eigen staging-pakket uit, nooit het productie-image', () => {
+  const stagingDir = path.join(__dirname, '..', '..', '..', 'deploy', 'staging');
+  const update = fs.readFileSync(path.join(stagingDir, 'update-staging.sh'), 'utf8');
+  assert.match(update, /^IMAGE="ghcr\.io\/danieldh00\/aquatech-staging"$/m);
+  assert.ok(!/ghcr\.io\/danieldh00\/aquatech(?!-staging)[:"\s]/.test(update.replace(/#.*$/gm, '')), 'geen verwijzing naar het productie-image in de code');
+  const compose = fs.readFileSync(path.join(stagingDir, 'compose.yml'), 'utf8');
+  assert.match(compose, /image: ghcr\.io\/danieldh00\/aquatech-staging:/);
+  assert.ok(!/image: ghcr\.io\/danieldh00\/aquatech:/.test(compose));
+  for (const file of ['update-staging.sh', 'setup-staging.sh']) {
+    const check = spawnSync('bash', ['-n', path.join(stagingDir, file)], { encoding: 'utf8' });
+    assert.strictEqual(check.status, 0, `${file}: ${check.stderr}`);
+  }
 });
