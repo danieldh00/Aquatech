@@ -1,39 +1,62 @@
 #!/usr/bin/env bash
-# Staging bijwerken op stg01 (aquatech-staging-update.timer, elke 10 minuten): haalt ghcr.io/danieldh00/aquatech-staging:latest
-# op en vervangt de container als er een nieuw image is. Anders dan deploy/apps01/update.sh: geen onderhoudsmodus, geen
-# back-up en geen cosign (staging bevat alleen testdata); wel een healthcheck met terugval naar het vorige image.
-# Rolt NOOIT het productie-image `aquatech` uit.
+# Update van de stagingomgeving op stg01 (gestart door aquatech-stg-update.timer, elke 10 minuten).
+# Haalt het image ghcr.io/danieldh00/aquatech-staging:latest op (gebouwd door staging.yml vanaf develop) en rolt het uit
+# als het een andere commit is dan die nu draait (vaste tag develop-<12 tekens van de commit>). Lukt de uitrol niet (niet healthy), dan gaat de vorige tag terug.
+# Staging is wegwerp: geen back-up en geen onderhoudsmodus. Migraties zijn alleen toevoegingen, dus terugzetten van het
+# image werkt ook na een gemigreerde database.
+# De naam van het pakket staat hier vast: dit script kan nooit het productie-image (ghcr.io/danieldh00/aquatech) uitrollen.
 set -euo pipefail
 
-APP_DIR="${APP_DIR:-/opt/apps/aquatech-staging}"
-IMAGE="ghcr.io/danieldh00/aquatech-staging:latest"
+APP_DIR="${APP_DIR:-/opt/apps/aquatech-stg}"
+IMAGE="ghcr.io/danieldh00/aquatech-staging"
 HEALTH_TRIES="${HEALTH_TRIES:-40}"
+TAG_RE='^develop-[0-9a-f]{12}$'
 
 cd "$APP_DIR"
 log() { echo "[$(date '+%F %T')] $*"; }
+env_get() { sed -n "s/^$1=//p" .env | tail -n1; }
+env_set() {
+  if grep -q "^$1=" .env; then sed -i "s|^$1=.*|$1=$2|" .env; else echo "$1=$2" >> .env; fi
+}
+
 exec 9>"$APP_DIR/.update.lock"
 flock -n 9 || { log "Er loopt al een update; overslaan."; exit 0; }
 
-old_id="$(docker image inspect -f '{{.Id}}' "$IMAGE" 2>/dev/null || true)"
-docker pull -q "$IMAGE" >/dev/null || { log "Ophalen mislukt; later opnieuw."; exit 0; }
-new_id="$(docker image inspect -f '{{.Id}}' "$IMAGE")"
-running_id="$(docker inspect -f '{{.Image}}' aquatech-staging 2>/dev/null || true)"
-if [[ "$new_id" == "$running_id" ]]; then
-  log "Staging is actueel."
+docker pull -q "$IMAGE:latest" >/dev/null
+version="$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$IMAGE:latest")"
+revision="$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$IMAGE:latest")"
+[[ -n "$version" ]] || { log "Geen versielabel op het image; overslaan."; exit 1; }
+new_tag="develop-${revision:0:12}"
+[[ "$new_tag" =~ $TAG_RE ]] || { log "Geen geldige revisie op het image; overslaan."; exit 1; }
+current_tag="$(env_get AQUATECH_TAG)"
+if [[ "$new_tag" == "$current_tag" ]]; then
+  log "Staging draait al $new_tag."
   exit 0
 fi
 
-log "Nieuw stagingimage ${new_id:7:12}; container vervangen."
-docker compose up -d --remove-orphans aquatech >/dev/null
+log "Uitrollen: $current_tag -> $new_tag ($version)"
+docker pull -q "$IMAGE:$new_tag" >/dev/null
+env_set AQUATECH_TAG "$new_tag"
+docker compose up -d aquatech
+
+healthy=""
 for _ in $(seq 1 "$HEALTH_TRIES"); do
-  [[ "$(docker inspect -f '{{.State.Health.Status}}' aquatech-staging 2>/dev/null || true)" == "healthy" ]] && { log "Staging draait de nieuwe versie."; exit 0; }
+  status="$(docker inspect -f '{{.State.Health.Status}}' aquatech-stg 2>/dev/null || true)"
+  if [[ "$status" == "healthy" ]]; then healthy=1; break; fi
   sleep 3
 done
-
-log "FOUT: nieuwe versie wordt niet healthy."
-if [[ -n "$old_id" && "$old_id" != "$new_id" ]]; then
-  docker tag "$old_id" "$IMAGE"
-  docker compose up -d aquatech >/dev/null || true
-  log "Teruggezet naar het vorige image."
+if [[ -z "$healthy" ]]; then
+  log "Nieuwe staging-versie werd niet healthy; terug naar $current_tag."
+  docker logs --tail 40 aquatech-stg || true
+  if [[ -n "$current_tag" ]]; then
+    env_set AQUATECH_TAG "$current_tag"
+    docker compose up -d aquatech
+  fi
+  exit 1
 fi
-exit 1
+log "Staging draait nu $new_tag."
+
+# Oude staging-tags opruimen (de draaiende en twee vorige blijven).
+for old_tag in $(docker image ls --format '{{.Tag}}' "$IMAGE" | grep -E "$TAG_RE" | sort -r | tail -n +4); do
+  docker rmi "$IMAGE:$old_tag" >/dev/null 2>&1 || true
+done
