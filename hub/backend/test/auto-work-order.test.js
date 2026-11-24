@@ -32,7 +32,7 @@ async function setup() {
   await store.createAccount(main, { username: 'kees', displayName: 'Kees', role: 'installateur', password: PW }, { mustChangePassword: false });
   await store.createAccount(other.id, { username: 'vreemd', displayName: 'Vreemd', role: 'beheerder', password: PW }, { mustChangePassword: false });
   const customer = await store.createAccount(main, { username: 'klaas', displayName: 'Klaas', role: 'klant', password: PW }, { mustChangePassword: false });
-  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: 'v'.repeat(64), db, loginDelayMs: 0 }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1', APP_PUBLIC_URL: 'https://aquatech.example/' }, secret: 'v'.repeat(64), db, loginDelayMs: 0 }));
   return { server, base, as: createLogin(base, { password: PW }), customerId: customer.id || customer.user.id };
 }
 
@@ -86,6 +86,28 @@ test('akkoord door de klant zet ook een werkorder klaar; uitgezet in Beheer > Mo
     assert.strictEqual((await baas.get('/app/api/workorders')).body.items.length, 1, 'uit = geen automatische werkorder');
     // De handmatige knop blijft werken.
     assert.strictEqual((await baas.post('/app/api/workorders', { quoteId: second.id })).status, 201);
+  } finally {
+    server.close();
+  }
+});
+
+test('akkoord via de openbare link zet ook een werkorder klaar, met reservering', async () => {
+  const { server, base, as, customerId } = await setup();
+  try {
+    const baas = await as('baas');
+    assert.strictEqual((await baas.post('/app/api/stock/import', { codes: ['PE-25'] })).status, 200);
+    const quote = (await baas.post('/app/api/quotes', { data: quoteData(), customerId })).body;
+    const shared = (await baas.post(`/app/api/quotes/${quote.id}/share`, { url: 'https://aquatech.example/app/openbaar/offerte.html' })).body;
+    const token = shared.share.url.split('#t=')[1];
+    const seen = await (await fetch(`${base}/app/api/public/quote`, { headers: { 'X-Offerte-Token': token } })).json();
+    const answered = await fetch(`${base}/app/api/public/quote/respond`, {
+      method: 'POST', headers: { 'X-Offerte-Token': token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answer: 'akkoord', name: 'Klaas Jansen', terms: true, signature: SIGNATURE, version: seen.quote.version }),
+    });
+    assert.strictEqual(answered.status, 200);
+    const orders = (await baas.get('/app/api/workorders')).body.items;
+    assert.deepStrictEqual([orders.length, orders[0].status, orders[0].quoteId], [1, 'open', quote.id]);
+    assert.ok(JSON.stringify((await baas.get(`/app/api/stock/workorders/${orders[0].id}`)).body).includes('PE-25'), 'materiaal gereserveerd');
   } finally {
     server.close();
   }

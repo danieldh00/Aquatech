@@ -2295,8 +2295,13 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (!ModuleTools.isOn(moduleFlagsOf(tenantId), 'werkorder-automatisch')) return;
     const created = workOrderStore.createForAcceptedQuote(tenantId, quoteId);
     if (!created) return;
-    stockStore.onWorkOrderChange(tenantId, created.workOrder.id, created.owner);
     store.audit({ tenantId, userId: created.owner.id, action: 'werkorder_automatisch_aangemaakt', detail: { workOrderId: created.workOrder.id, number: created.workOrder.number, quoteId } });
+    try {
+      stockStore.onWorkOrderChange(tenantId, created.workOrder.id, created.owner);
+    } catch (error) {
+      // De werkorder staat er al; de reservering komt bij de eerstvolgende wijziging van de werkorder alsnog.
+      console.warn(`Reservering voor automatische werkorder ${created.workOrder.id} (offerte ${quoteId}) mislukt: ${error.message}`);
+    }
   };
   registerQuoteRoutes(app, {
     onAccepted: createWorkOrderOnAccept,
