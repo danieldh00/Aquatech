@@ -27,7 +27,7 @@
       { id: 'webshop', label: 'Webshop en WooCommerce', pane: 'webshop', words: 'woocommerce winkel sku prijzen voorraad synchroniseren koppeling kopje planner betalen mollie google analytics meten statistieken cookies cookiebanner toestemming ga4 meet-id microsoft clarity heatmap schermopnames project-id zoekmachines seo indexeren noindex robots sitemap vrijgeven live' },
     ] },
     { title: 'Modules', sections: [
-      { id: 'modules', label: 'Modules aan/uit', pane: 'settings', form: 's-modules', words: 'zijbalk dashboard uitzetten' },
+      { id: 'modules', label: 'Modules aan/uit', pane: 'modules', words: 'zijbalk dashboard uitzetten onderdelen schakelaar functies categorie altijd aan' },
       { id: 'sproeiers', label: 'Planner: sproeierbibliotheek', pane: 'sproeiers', words: 'behuizingen nozzles rotor sproeiers excel' },
       { id: 'outsourcing', label: 'Uitbesteden', pane: 'settings', form: 's-outsourcing', words: 'werkorders organisaties werkgebied ontvangen' },
       { id: 'season', label: 'Seizoensherinneringen', pane: 'settings', form: 's-season', words: 'mail herinnering winterklaar onderhoud klantportaal' },
@@ -67,7 +67,7 @@
   const ALIASES = { settings: 'modules' };
 
   /** Alle formulieren van het tabblad Instellingen: er is er telkens één zichtbaar. */
-  const SETTINGS_FORMS = ['s-modules', 's-outsourcing', 's-season', 's-payment-reminders', 's-quote-followup', 's-labels', 's-purchase-proposals', 's-kpis', 's-mail', 's-ai', 's-ai-connector', 's-access', 's-captcha', 's-security', 's-backup', 's-backup-drive', 's-vps', 's-restore', 's-debug'];
+  const SETTINGS_FORMS = ['s-outsourcing', 's-season', 's-payment-reminders', 's-quote-followup', 's-labels', 's-purchase-proposals', 's-kpis', 's-mail', 's-ai', 's-ai-connector', 's-access', 's-captcha', 's-security', 's-backup', 's-backup-drive', 's-vps', 's-restore', 's-debug'];
 
   const OPEN_KEY = 'aquatech_beheer_groups';
 

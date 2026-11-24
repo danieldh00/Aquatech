@@ -482,6 +482,16 @@
     close: () => { setOpen(false); },
     /** Tekent de markering opnieuw, bijvoorbeeld nadat een pagina van tabblad (#-adres) is gewisseld. */
     refresh: () => { if (lastData) render(lastData); },
+    /**
+     * Neemt nieuwe modulevlaggen over (na Beheer > Modules) en tekent de zijbalk opnieuw.
+     * @param {object} flags De vlaggen uit api/config (`modules`).
+     */
+    setDisabled: (flags) => {
+      if (!lastData) return;
+      const data = { ...lastData, disabled: flags || {} };
+      store.set(CACHE, JSON.stringify(data));
+      render(data);
+    },
   };
   root.addEventListener('hashchange', () => { if (lastData) render(lastData); });
 })(window);
