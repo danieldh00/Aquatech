@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.34.6',
+      date: '2026-11-24',
+      title: 'Webshop: retour na account maken, pakbon-upload en afrekenlimiet',
+      items: [
+        { text: 'Een retour die je als gast hebt aangevraagd kun je ook intrekken nadat je een account hebt gemaakt.' },
+        { text: 'De upload van een eigen pakbon (dropshipping) en het afrekenen zijn beter begrensd tegen overbelasting.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.34.5',
       date: '2026-11-24',
       title: 'Crediteren, betaald zetten en de Visma-redirect steviger',
