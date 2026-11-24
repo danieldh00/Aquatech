@@ -49,7 +49,6 @@ const CONTROL_CODES = ['paused', 'part_off', 'disconnecting'];
 /** De onderdelen die je los aan of uit kunt zetten (visma.parts), met hun naam voor het logboek. */
 const CONTROL_PARTS = { invoices: 'Verkoopfacturen doorsturen', credits: 'Creditfacturen doorsturen', customers: 'Klanten aanmaken in Visma' };
 const NOT_DONE = 'Aquatech wijzigt of verwijdert niets in Visma, komt niet aan boekingen, inkoop, bank of salaris en leest geen betalingen terug.';
-const DEFAULT_REDIRECT = 'https://aquatech.den-hollander.com/api/visma/callback';
 const TIMEOUT_MS = 20000;
 const STATE_TTL_MS = 15 * 60 * 1000;
 const BATCH = 50;
@@ -84,22 +83,41 @@ const cleanText = (value, maxLength = 200) => String(value == null ? '' : value)
  */
 const guid = (value) => (typeof value === 'string' && /^[0-9a-fA-F-]{32,36}$/.test(value) ? value : '');
 
+/** Het pad van de callback binnen de app; een redirect URI eindigt hier altijd op. */
+const CALLBACK_PATH = 'app/api/visma/callback';
+
 /**
- * Schoont de instelling vismaApp op (zonder secret; dat is een eigen geheim).
+ * Leest een redirect URI: https, zonder inloggegevens, en eindigend op de callback van de app (`/app/api/visma/callback`).
+ * @param {*} value De invoer.
+ * @returns {string} De opgeschoonde redirect URI, of een lege tekst als hij niet klopt.
+ */
+function cleanRedirect(value) {
+  try {
+    const parsed = new URL(cleanText(value, 300));
+    if (parsed.protocol === 'https:' && !parsed.username && !parsed.password && parsed.pathname.endsWith(`/${CALLBACK_PATH}`)) return `${parsed.origin}${parsed.pathname}`;
+  } catch { /* geen geldig adres */ }
+  return '';
+}
+
+/**
+ * De redirect URI die bij een webadres hoort (het webadres uit Beheer > Webshop > Betalen + de callback van de app).
+ * @param {string} publicUrl Het webadres, eindigend op een slash; leeg als het niet is ingevuld.
+ * @returns {string} De redirect URI, of een lege tekst zonder (geldig) webadres.
+ */
+const redirectFrom = (publicUrl) => (publicUrl ? cleanRedirect(`${String(publicUrl).replace(/\/+$/, '')}/${CALLBACK_PATH}`) : '');
+
+/**
+ * Schoont de instelling vismaApp op (zonder secret; dat is een eigen geheim). Een redirect URI die niet klopt wordt leeg:
+ * er is geen vaste standaard meer (T-15), het adres volgt dan uit het webadres van de omgeving (zie redirectFrom).
  * @param {object} raw De invoer.
  * @returns {{ clientId: string, environment: string, redirectUri: string }} De app-registratie.
  */
 function sanitizeVismaApp(raw) {
   const input = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
-  let redirectUri = DEFAULT_REDIRECT;
-  try {
-    const parsed = new URL(cleanText(input.redirectUri, 300));
-    if (parsed.protocol === 'https:' && !parsed.username && !parsed.password && parsed.pathname.endsWith('/api/visma/callback')) redirectUri = `${parsed.origin}${parsed.pathname}`;
-  } catch { /* standaard */ }
   return {
     clientId: cleanText(input.clientId, 120).replace(/[^\w.:-]/g, ''),
     environment: input.environment === 'production' ? 'production' : 'sandbox',
-    redirectUri,
+    redirectUri: cleanRedirect(input.redirectUri),
   };
 }
 
@@ -297,8 +315,14 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
     const settings = settingsFor(tenantId);
     const registration = settings.get('vismaApp');
     const secret = settings.get('vismaClientSecret');
-    return { ...registration, secret, configured: Boolean(registration.clientId && secret), hosts: HOSTS[registration.environment] };
+    return { ...registration, redirectUri: registration.redirectUri || defaultRedirectOf(tenantId), secret, configured: Boolean(registration.clientId && secret), hosts: HOSTS[registration.environment] };
   }
+  /**
+   * De redirect URI die geldt als er geen eigen is ingevuld: het webadres van de omgeving (Beheer > Webshop > Betalen) + de callback van de app.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {string} De redirect URI, of een lege tekst zonder webadres.
+   */
+  const defaultRedirectOf = (tenantId) => redirectFrom((settingsFor(tenantId).get('shopPayment') || {}).publicUrl);
   /**
    * De instelling visma van een omgeving.
    * @param {string} tenantId Id van de omgeving.
@@ -322,6 +346,7 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
   function authorizeUrl(tenantId, userId) {
     const registration = app(tenantId);
     if (!registration.configured) throw new VismaError('not_configured', 'Vul eerst de app-gegevens van Visma in (Facturen → Visma).', 409);
+    if (!registration.redirectUri) throw new VismaError('not_configured', 'Er is geen redirect URI: vul hem in bij de app-gegevens (Facturen → Visma) of vul het webadres in bij Beheer → Webshop → Betalen.', 409);
     const now = Date.now();
     for (const [key, entry] of states) if (entry.exp < now) states.delete(key);
     const state = crypto.randomBytes(24).toString('base64url');
@@ -734,7 +759,7 @@ function createVisma({ db, settingsFor, debtors, invoices, fetchImpl = fetch, lo
     };
   }
 
-  return { authorizeUrl, finishConnect, disconnect, connected, api, options, pushInvoice, sync, run, schedule, runAll, status, app, note, logbook: vismaLog };
+  return { authorizeUrl, finishConnect, disconnect, connected, api, options, pushInvoice, sync, run, schedule, runAll, status, app, defaultRedirectOf, note, logbook: vismaLog };
 }
 
 /**
@@ -876,11 +901,11 @@ function registerVismaRoutes(app, { visma, requireRight, requireJson, audit, set
   /**
    * De app-gegevens van een omgeving, zonder het secret.
    * @param {string} tenantId Id van de omgeving.
-   * @returns {{ app: object, secretSet: boolean, defaultRedirect: string }} De registratie, of het secret is ingevuld, en de standaard redirect URI.
+   * @returns {{ app: object, secretSet: boolean, defaultRedirect: string }} De registratie, of het secret is ingevuld, en de redirect URI die uit het webadres volgt (leeg zonder webadres).
    */
   const appView = (tenantId) => {
     const settings = settingsFor(tenantId);
-    return { app: settings.get('vismaApp'), secretSet: Boolean(settings.get('vismaClientSecret')), defaultRedirect: DEFAULT_REDIRECT };
+    return { app: settings.get('vismaApp'), secretSet: Boolean(settings.get('vismaClientSecret')), defaultRedirect: visma.defaultRedirectOf(tenantId) };
   };
   app.get('/api/visma/app', requireInvoices, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -889,6 +914,10 @@ function registerVismaRoutes(app, { visma, requireRight, requireJson, audit, set
   app.put('/api/visma/app', requireJson, requireInvoices, (req, res) => {
     const body = req.body || {};
     const patch = { vismaApp: sanitizeVismaApp(body) };
+    // Een ingevulde redirect URI die niet klopt wordt afgekeurd in plaats van stil vervangen (T-15).
+    if (typeof body.redirectUri === 'string' && body.redirectUri.trim() && !patch.vismaApp.redirectUri) {
+      return res.status(400).json({ error: 'invalid_setting', field: 'redirectUri', message: 'De redirect URI moet met https beginnen en op /app/api/visma/callback eindigen. Laat hem leeg om het webadres uit Beheer → Webshop → Betalen te gebruiken.' });
+    }
     // Het refresh token en het gecachte access token horen bij de oude app: een andere app of omgeving pas na verbreken.
     const current = settingsFor(tenantOf(req)).get('vismaApp');
     const changesApp = patch.vismaApp.clientId !== (current.clientId || '') || patch.vismaApp.environment !== (current.environment || 'sandbox')
@@ -914,4 +943,4 @@ function registerVismaRoutes(app, { visma, requireRight, requireJson, audit, set
   });
 }
 
-module.exports = { createVisma, registerVismaRoutes, describeConnection, CONTROL_PARTS, sanitizeVisma, sanitizeVismaApp, splitAddress, customerBody, invoiceBody, VismaError, HOSTS, SCOPES };
+module.exports = { createVisma, registerVismaRoutes, describeConnection, CONTROL_PARTS, sanitizeVisma, sanitizeVismaApp, redirectFrom, splitAddress, customerBody, invoiceBody, VismaError, HOSTS, SCOPES };

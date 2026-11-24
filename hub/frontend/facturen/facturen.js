@@ -804,18 +804,25 @@
      */
     $('#e-paid').onclick = async () => {
       const paid = state.invoice.status !== 'betaald';
+      const address = `invoices/${encodeURIComponent(state.invoice.id)}/paid`;
       try {
-        state.invoice = await api(`invoices/${encodeURIComponent(state.invoice.id)}/paid`, { method: 'POST', body: { paid } });
+        try {
+          state.invoice = await api(address, { method: 'POST', body: { paid } });
+        } catch (error) {
+          // Online betaald: de server vraagt eerst een bevestiging voordat de factuur weer openstaat.
+          if (error.code !== 'confirm_required' || !confirm(`${error.message}\n\nToch terugzetten op openstaand?`)) throw error.code === 'confirm_required' ? null : error;
+          state.invoice = await api(address, { method: 'POST', body: { paid, confirm: true } });
+        }
         renderInvoice();
         toast(paid ? 'Gemarkeerd als betaald' : 'Weer openstaand');
-      } catch (error) { toast(error.message, true); }
+      } catch (error) { if (error) toast(error.message, true); }
     };
     /**
      * Maakt een creditfactuur en opent die.
      * @returns {Promise<void>}
      */
     $('#e-credit').onclick = async () => {
-      if (!confirm(`Een creditfactuur maken voor ${state.invoice.number}? Je krijgt een concept met dezelfde regels in min; pas het aan voor een gedeeltelijke creditering.`)) return;
+      if (!confirm(`Een creditfactuur maken voor ${state.invoice.number}? Je krijgt een concept met de regels die nog niet gecrediteerd zijn, in min; pas het aan voor een gedeeltelijke creditering.`)) return;
       try {
         const credit = await api(`invoices/${encodeURIComponent(state.invoice.id)}/credit`, { method: 'POST', body: {} });
         openInvoice(credit.id, true);
