@@ -33,9 +33,11 @@ function openDb(file = ':memory:') {
  * @returns {object} De database in PostgreSQL.
  */
 function openTestPg(url, file) {
-  const { openPg } = require('./pgdb');
   const id = file === ':memory:' ? crypto.randomUUID() : path.resolve(file);
-  return openPg(url, { schema: `aqt_test_${crypto.createHash('sha256').update(id).digest('hex').slice(0, 20)}` });
+  const schema = `aqt_test_${crypto.createHash('sha256').update(id).digest('hex').slice(0, 20)}`;
+  // Een nieuw schema is een kopie van het sjabloon (snel); een schema op een vast pad kan al bestaan en migreert echt.
+  if (file === ':memory:' && process.env.TEST_DB_TEMPLATE !== '0') return require('./test-template').openFromTemplate(url, schema);
+  return require('./pgdb').openPg(url, { schema });
 }
 
 /**

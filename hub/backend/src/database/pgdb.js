@@ -386,13 +386,14 @@ function bridgeFor(url) {
  * app (standaard "aquatech"; niet "public", want dat stelt Supabase via de
  * REST-API open).
  * @param {string} url De database-URL.
- * @param {{ schema?: string }} [options] Naam van het schema.
+ * @param {{ schema?: string, build?: Function }} [options] Naam van het schema; `build` vervangt alleen in de testsuite
+ *   het migreren (test-template.js kopieert daar een al gemigreerd sjabloonschema).
  * @returns {PgDatabase} De database.
  */
-function openPg(url, { schema = process.env.DATABASE_SCHEMA || 'aquatech' } = {}) {
+function openPg(url, { schema = process.env.DATABASE_SCHEMA || 'aquatech', build = migratePg } = {}) {
   if (!SCHEMA_NAME.test(schema)) throw new Error(`DATABASE_SCHEMA "${schema}": alleen kleine letters, cijfers en _.`);
   const db = new PgDatabase(bridgeFor(url), schema);
-  migratePg(db);
+  build(db);
   db.tenantRls = TENANT_RLS && (tenantPolicies(db) || tenantPolicies(db));
   // Losse queries die de hoofdthread niet stilzetten (pg-pool.js); zonder pool (PG_POOL_SIZE=0) via deze verbinding.
   const { createPoolAsync, POOL_SIZE } = require('./pg-pool');
@@ -578,4 +579,4 @@ function dropSchemas(url, prefix) {
   }
 }
 
-module.exports = { isInvalidUuid, toleratesInvalidUuid, stripNul, openPg, openScratch, dropScratch, pgConfig, pgVersion, toPgParams, dropSchemas, DatabaseError, PgDatabase };
+module.exports = { bridgeFor, lockDown, isInvalidUuid, toleratesInvalidUuid, stripNul, openPg, openScratch, dropScratch, pgConfig, pgVersion, toPgParams, dropSchemas, DatabaseError, PgDatabase };

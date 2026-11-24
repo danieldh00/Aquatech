@@ -650,7 +650,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    * @param {string} [tenantId] Id van de omgeving.
    * @returns {boolean} true als herkennen kan.
    */
-  const aiAvailable = (tenantId = tenant.id) => settingsFor(tenantId).get('aiEnabled') && currentAnalyzer(tenantId).available;
+  const aiAvailable = (tenantId = tenant.id) => settingsFor(tenantId).get('aiEnabled') && ModuleTools.isOn(moduleFlagsOf(tenantId), 'plan-herkennen-ai') && currentAnalyzer(tenantId).available;
 
   const app = express();
   /** De webshop-router (op de hoofdmap, zie createStorefront); wordt verderop gevuld. */
@@ -877,6 +877,17 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // Een module die uit staat: schrijfacties op haar instellingen (etiketsjablonen, prijsfactor, sproeierbibliotheek,
   // uitbesteden) worden geweigerd; welke adressen dat zijn staat in het moduleregister (`configuration.routes`).
+  // Een onderdeel dat uit staat kan ook adressen helemaal dichtzetten, ook voor lezen (`configuration.blocked`, patronen
+  // met `*`): alleen voor adressen die in een van die patronen voorkomen wordt de gebruiker hier al opgezocht.
+  const everBlocked = [...MODULES, ...ModuleTools.FEATURES].flatMap((entry) => (entry.configuration && entry.configuration.blocked) || []);
+  app.use('/api', (req, res, next) => {
+    // Express routeert zonder hoofdlettergevoeligheid en met of zonder slash aan het eind: beide tellen hier mee.
+    const routePath = `/api${req.path}`.toLowerCase().replace(/\/+$/, '');
+    if (!everBlocked.some((pattern) => ModuleTools.matchesRoute(pattern, routePath, req.method))) return next();
+    if (!identify(req)) return next();
+    if (!ModuleTools.blockedRoutes(moduleFlagsOf(req.tenantId)).some((pattern) => ModuleTools.matchesRoute(pattern, routePath, req.method))) return next();
+    res.status(409).json({ error: 'module_off', message: 'Dit onderdeel staat uit. Zet het eerst aan in Beheer > Modules aan/uit.' });
+  });
   app.use('/api', (req, res, next) => {
     if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
     const user = identify(req);
@@ -2602,7 +2613,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Verstuurde seizoensherinneringen (season-reminders.js; de verzendronde staat onderaan).
   const seasonReminderStore = createSeasonReminderStore(database, { roles: store.roles });
   // Facturen online betalen door de klant (Mollie, zie invoice-payments.js); de webhook is openbaar en vraagt de uitkomst zelf bij Mollie op.
-  const invoicePayments = createInvoicePayments({ db: database, invoices: invoiceStore, mollie: createMollie(mollieFetch ? { fetchImpl: mollieFetch } : {}), settingsFor: (id) => settingsFor(id), linkKey: vault.derive('factuur-betaallink'), mainTenantId: tenant.id });
+  const invoicePayments = createInvoicePayments({ db: database, invoices: invoiceStore, mollie: createMollie(mollieFetch ? { fetchImpl: mollieFetch } : {}), settingsFor: (id) => settingsFor(id), linkKey: vault.derive('factuur-betaallink'), mainTenantId: tenant.id,
+    switchedOn: (tenantId) => ModuleTools.isOn(moduleFlagsOf(tenantId), 'factuur-online-betalen') });
   registerInvoicePayLinkRoutes(app, { invoicePayments, tenantId: tenant.id, scopeToTenant, limiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: (req) => `factuur-betaallink:${clientKey(req)}` }) });
   invoicePayments.onPaid((tenantId, invoice) => store.audit({ tenantId, userId: null, action: 'factuur_betaald_online', detail: { number: invoice.number, total: invoice.total } }));
   // Een betaling die binnenkomt op een factuur die intussen gecrediteerd is: het geld moet met de hand terug, dus een auditregel en een melding in Bewaking.

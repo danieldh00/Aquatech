@@ -348,7 +348,7 @@
     if (window.WorkOrderPhotos) window.WorkOrderPhotos.open(workOrder, { toast, statusOf: () => $('#e-status').value });
     if (window.WorkOrderStock) window.WorkOrderStock.open(workOrder, { toast, manage: (state.me.rights || []).includes('voorraad') });
     if (window.WorkLog) window.WorkLog.open(workOrder, { toast, staff: () => state.staff });
-    if (window.WorkOrderCosting) window.WorkOrderCosting.open(workOrder, { toast, allowed: (state.me.rights || []).includes('nacalculatie') });
+    if (window.WorkOrderCosting) window.WorkOrderCosting.open(workOrder, { toast, allowed: (state.me.rights || []).includes('nacalculatie') && window.AquatechModuleTools.isOn(state.moduleFlags, 'nacalculatie') });
     // ?id=…#fotos (startscherm): meteen naar de foto's.
     if (location.hash === '#fotos') $('#ph-card').scrollIntoView();
     else window.scrollTo(0, 0);
@@ -999,6 +999,8 @@
       state.prefetch = { [first[0]]: request };
     }
     state.me = await window.AquatechAccount.load('../');
+    // Onderdelen die in Beheer > Modules uit staan (nacalculatie, afspraaklink) verdwijnen van de werkorder.
+    state.moduleFlags = ((await window.AquatechCommon.getJson('api/config').catch(() => null)) || {}).modules || {};
     const rights = state.me.rights || [];
     state.admin = rights.includes('beheer');
     // Afspraak met de klant regelen hoort bij het recht planning.
