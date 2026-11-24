@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.39.3',
+      date: '2026-11-24',
+      title: 'Planner zonder account: prijs, bestellen en offerte-lead',
+      items: [
+        { text: 'Een tekening die iemand zonder account indient, levert nu meteen een concept-offerte op met materiaal en arbeid uit het plan. Je vindt hem in Offertes en verstuurt hem zelf.', for: ['offertes'] },
+        { text: 'Bezoekers van de planner zonder account zien nu een prijsindicatie van hun materiaal en kunnen het in één keer laten bezorgen via de webshop, of een offerte voor de aanleg aanvragen.' },
+      ],
+    },
+    {
       version: '1.39.2',
       date: '2026-11-24',
       title: 'Werkorder automatisch klaar bij akkoord',
