@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.39.0',
+      date: '2026-11-24',
+      title: 'Prijslijst van de leverancier inlezen',
+      items: [
+        { text: 'Een prijslijst van een leverancier lees je nu in één keer uit Excel in (Artikelen > Leveranciers > Prijslijst inlezen), met eerst een controle. De verkoopprijzen volgen daarna automatisch via de prijsfactor.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.38.0',
       date: '2026-11-24',
       title: 'Klanten en artikelen importeren uit Excel',

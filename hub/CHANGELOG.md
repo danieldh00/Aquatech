@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.39.0
+
+Prijslijst van de leverancier inlezen (V-30), gebouwd op het importvenster van V-05.
+- `POST /api/stock/price-lists/:supplierId` (+ `GET …/fields`, recht `voorraad`, `artikelen/supplier-price-list.js`): artikelen worden herkend op het artikelnummer van de leverancier, anders EAN, anders eigen code (tegenstrijdig = fout). Statussen nieuw (koppeling erbij), wijzigt, ongewijzigd, onbekend (overgeslagen) en fout; hoogstens 2000 regels.
+- Prijs, bestelhoeveelheid en levertijd komen op de koppeling. Alleen bij de voorkeursleverancier (of een artikel zonder leverancier) wordt het ook de inkoopprijs van het artikel (`stock.addCostPrice`, historie, `repriceItem` volgt de prijsfactor); een backup-leverancier verandert nooit de prijs van het artikel.
+- `suppliers.priceListContext` (twee queries) voor de koppelingen; `readTable` kent nu `maxRows`; audit `leverancier_prijslijst_ingelezen`.
+
 ## 1.38.0
 
 Import uit Excel (V-05) voor klanten en artikelen. Het bestand wordt in de browser gelezen (ExcelJS, `shared/excel-import.js`) en als kopregel + rijen naar de server gestuurd; de server controleert en schrijft niets bij de controle.
