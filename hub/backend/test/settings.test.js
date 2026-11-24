@@ -252,10 +252,14 @@ test('modules aan/uit via /api/config', async () => {
   const { server, base } = await start();
   try {
     const adminClient = await admin(base);
-    assert.deepStrictEqual((await adminClient.get('/app/api/config')).body.modules, { uitbesteden: false });
+    // api/config geeft de schakelaars zoals ze gelden: ook de onderdelen die een bestaande instelling volgen.
+    const before = (await adminClient.get('/app/api/config')).body.modules;
+    assert.strictEqual(before.uitbesteden, false);
+    assert.strictEqual(before.planning, undefined);
     await adminClient.put('/app/api/admin/settings', { modules: { planning: false } });
     await adminClient.put('/app/api/admin/settings', { modules: { voorraad: false } });
-    assert.deepStrictEqual((await adminClient.get('/app/api/config')).body.modules, { planning: false, voorraad: false, uitbesteden: false });
+    const after = (await adminClient.get('/app/api/config')).body.modules;
+    assert.deepStrictEqual({ planning: after.planning, voorraad: after.voorraad, uitbesteden: after.uitbesteden }, { planning: false, voorraad: false, uitbesteden: false });
     const bad = await adminClient.put('/app/api/admin/settings', { modules: ['x'] });
     assert.strictEqual(bad.status, 400);
   } finally {

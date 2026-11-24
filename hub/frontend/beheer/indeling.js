@@ -27,7 +27,7 @@
       { id: 'webshop', label: 'Webshop en WooCommerce', pane: 'webshop', words: 'woocommerce winkel sku prijzen voorraad synchroniseren koppeling kopje planner betalen mollie google analytics meten statistieken cookies cookiebanner toestemming ga4 meet-id microsoft clarity heatmap schermopnames project-id zoekmachines seo indexeren noindex robots sitemap vrijgeven live' },
     ] },
     { title: 'Modules', sections: [
-      { id: 'modules', label: 'Modules aan/uit', pane: 'settings', form: 's-modules', words: 'zijbalk dashboard uitzetten' },
+      { id: 'modules', label: 'Modules aan/uit', pane: 'modules', words: 'zijbalk dashboard uitzetten onderdelen schakelaar functies categorie altijd aan' },
       { id: 'sproeiers', label: 'Planner: sproeierbibliotheek', pane: 'sproeiers', words: 'behuizingen nozzles rotor sproeiers excel' },
       { id: 'outsourcing', label: 'Uitbesteden', pane: 'settings', form: 's-outsourcing', words: 'werkorders organisaties werkgebied ontvangen' },
       { id: 'season', label: 'Seizoensherinneringen', pane: 'settings', form: 's-season', words: 'mail herinnering winterklaar onderhoud klantportaal' },
@@ -68,7 +68,7 @@
   const ALIASES = { settings: 'modules' };
 
   /** Alle formulieren van het tabblad Instellingen: er is er telkens één zichtbaar. */
-  const SETTINGS_FORMS = ['s-modules', 's-outsourcing', 's-season', 's-payment-reminders', 's-quote-followup', 's-labels', 's-purchase-proposals', 's-kpis', 's-mail', 's-app-address', 's-ai', 's-ai-connector', 's-access', 's-captcha', 's-security', 's-backup', 's-backup-drive', 's-vps', 's-restore', 's-debug'];
+  const SETTINGS_FORMS = ['s-outsourcing', 's-season', 's-payment-reminders', 's-quote-followup', 's-labels', 's-purchase-proposals', 's-kpis', 's-mail', 's-app-address', 's-ai', 's-ai-connector', 's-access', 's-captcha', 's-security', 's-backup', 's-backup-drive', 's-vps', 's-restore', 's-debug'];
 
   const OPEN_KEY = 'aquatech_beheer_groups';
 
@@ -87,8 +87,8 @@
    * @returns {void}
    */
   function saveOpenGroup(title, open) {
-    const saved = readOpenGroups();
-    if (open) saved[title] = true; else delete saved[title];
+    // Hoogstens één groep open: een nieuwe keuze vervangt de vorige.
+    const saved = open ? { [title]: true } : {};
     try { localStorage.setItem(OPEN_KEY, JSON.stringify(saved)); } catch (error) { /* geen opslag */ }
   }
 
@@ -130,14 +130,23 @@
   function build(options) {
     const nav = document.getElementById('bh-nav');
     const groups = GROUPS.map((group) => ({ ...group, sections: group.sections.filter(options.allowed) })).filter((group) => group.sections.length);
-    const savedOpen = readOpenGroups();
     const startId = options.startId || '';
+    const startGroup = groups.find((group) => group.sections.some((section) => section.id === startId));
+    // Hoogstens één groep open: de groep met de startsectie, anders de eerste bewaarde (ook uit oudere bewaarde keuzes met meer groepen).
+    const savedTitle = startGroup ? startGroup.title : (groups.find((group) => readOpenGroups()[group.title]) || {}).title;
+
+    /**
+     * Bepaalt of een groep bij het tekenen openstaat.
+     * @param {object} group De menugroep.
+     * @returns {boolean} true als dit de open groep is.
+     */
+    const isOpen = (group) => group.title === savedTitle;
     nav.innerHTML = `
       <input type="search" id="bh-search" class="bh-search" placeholder="Zoek instelling…" aria-label="Zoek een instelling in Beheer" autocomplete="off">
       <button type="button" class="bh-toggle" id="bh-toggle" aria-expanded="false"><span id="bh-current"></span><span aria-hidden="true">▾</span></button>
       <div class="bh-list" id="bh-list">
-        ${groups.map((group) => `<div class="bh-group${savedOpen[group.title] || group.sections.some((section) => section.id === startId) ? ' open' : ''}" data-group="${escapeHtml(group.title)}">
-          <button type="button" class="bh-group-title" aria-expanded="${Boolean(savedOpen[group.title] || group.sections.some((section) => section.id === startId))}"><span>${escapeHtml(group.title)}</span><svg class="bh-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+        ${groups.map((group) => `<div class="bh-group${isOpen(group) ? ' open' : ''}" data-group="${escapeHtml(group.title)}">
+          <button type="button" class="bh-group-title" aria-expanded="${isOpen(group)}"><span>${escapeHtml(group.title)}</span><svg class="bh-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
           <div class="bh-group-body">${group.sections.map((section) => `<a class="bh-link" href="#${escapeHtml(section.id)}" data-section="${escapeHtml(section.id)}"
             data-search="${escapeHtml(`${section.label} ${section.words} ${group.title}`.toLowerCase())}">${escapeHtml(section.label)}</a>`).join('')}</div>
         </div>`).join('')}
@@ -162,7 +171,13 @@
       if (head) {
         if (nav.classList.contains('searching')) return;
         const group = head.closest('.bh-group');
-        const open = group.classList.toggle('open');
+        const open = !group.classList.contains('open');
+        // Hoogstens één groep open: de andere klappen dicht.
+        nav.querySelectorAll('.bh-group.open').forEach((other) => {
+          other.classList.remove('open');
+          other.querySelector('.bh-group-title').setAttribute('aria-expanded', 'false');
+        });
+        group.classList.toggle('open', open);
         head.setAttribute('aria-expanded', String(open));
         // De groep met de gekozen sectie staat bij elk bezoek weer open; alleen de andere keuzes blijven bewaard.
         if (!group.querySelector('.bh-link.active')) saveOpenGroup(group.dataset.group, open);

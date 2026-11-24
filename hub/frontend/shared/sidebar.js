@@ -464,6 +464,8 @@
   const getJson = (path) => (common ? common.getJson(path) : fetch(base + path, { cache: 'no-store' }).then((response) => (response.ok ? response.json() : null)).catch(() => null));
   Promise.all([getJson('api/me'), getJson('api/config')]).then(([me, config]) => {
     if (!me) return; // offline: laat de laatste stand staan
+    // Vaste stukken van de pagina die bij een uitgezet onderdeel horen (data-feature) verdwijnen.
+    if (config && tools.applyFeatures) tools.applyFeatures(config.modules || {});
     // Mijn profiel alleen met een eigen account (niet met de toegangscode).
     const data = { rights: me.rights || [], disabled: (config && config.modules) || {}, profile: Boolean(me.preferences), news: me.news || 0, shop: Boolean(config && config.shop) };
     if (tools.usesSidebar(data.rights)) {
@@ -482,6 +484,16 @@
     close: () => { setOpen(false); },
     /** Tekent de markering opnieuw, bijvoorbeeld nadat een pagina van tabblad (#-adres) is gewisseld. */
     refresh: () => { if (lastData) render(lastData); },
+    /**
+     * Neemt nieuwe modulevlaggen over (na Beheer > Modules) en tekent de zijbalk opnieuw.
+     * @param {object} flags De vlaggen uit api/config (`modules`).
+     */
+    setDisabled: (flags) => {
+      if (!lastData) return;
+      const data = { ...lastData, disabled: flags || {} };
+      store.set(CACHE, JSON.stringify(data));
+      render(data);
+    },
   };
   root.addEventListener('hashchange', () => { if (lastData) render(lastData); });
 })(window);

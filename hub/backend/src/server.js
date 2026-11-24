@@ -11,12 +11,14 @@ const { loadOrCreateSecret } = require('./beveiliging/session-secret');
 const { createPlanAnalyzer, AnalyzeError, PROMPT_VERSION } = require('./beregening/plan-analyzer');
 const { createRecognitionStore, sanitizeSamples, sanitizeFinalPlan, imageHash } = require('./beregening/recognitions');
 const { openDb, openDatabase } = require('./database/db');
+const { dropStaleScratch } = require('./database/pgdb');
 const { createSlowLog, timedFetch, normalizePath } = require('./platform/slow-log');
 const { createStore, withRequestCache, preferencesOf, fingerprintOf } = require('./platform/store');
 const { withScope, limitTo, bindStream, asSystem } = require('./database/tenant-scope');
 const { createSettings } = require('./platform/settings');
 const { registerAccountRoutes } = require('./platform/account-routes');
 const { registerSettingsRoutes } = require('./platform/settings-routes');
+const { createModuleSwitches, registerModuleRoutes } = require('./platform/module-switches');
 const { registerAiUsageRoutes } = require('./platform/ai-usage-routes');
 const { registerThemeRoutes } = require('./platform/theme-routes');
 const { createVault, loadOrCreateMasterKey } = require('./beveiliging/vault');
@@ -115,6 +117,7 @@ const { createAppLog } = require('./platform/app-log');
 const { createErrorReport, catchAsync, withCause, errorCounter } = require('./platform/error-report');
 const { createSystemUpdate } = require('./platform/system-update');
 const { registerBackupRestoreRoutes } = require('./platform/backup-restore-routes');
+const { createIdentityConfirm } = require('./platform/identity-confirm');
 const { createMonitor } = require('./platform/monitoring');
 const { registerMonitoringRoutes } = require('./platform/monitoring-routes');
 const { createGraphSetup, registerGraphSetupRoutes } = require('./platform/mail-graph-setup');
@@ -412,15 +415,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Koppeling met het updatescript op de host (deploy/apps01/update.sh): zonder de twee mappen niet ingericht.
   const systemUpdate = createSystemUpdate({ statusDir: env.UPDATE_STATUS_DIR || '', requestDir: env.UPDATE_REQUEST_DIR || '', currentVersion: version });
   /**
-   * De aan/uit-vlaggen van de modules in een omgeving, zoals ze echt gelden: uitbesteden werkt tussen organisaties en staat
-   * dus uit zonder multitenancy, ook als de beheerder het niet zelf uitzette.
-   * @param {string} tenantId Id van de omgeving.
-   * @returns {object} Module-id → false voor modules die uit staan.
+   * De aan/uit-vlaggen van de modules en onderdelen in een omgeving, zoals ze echt gelden (platform/module-switches.js):
+   * uitbesteden werkt tussen organisaties en staat dus uit zonder multitenancy, ook als de beheerder het niet zelf uitzette.
    */
-  const moduleFlagsOf = (tenantId) => {
-    const flags = settingsFor(tenantId).get('modules');
-    return multitenancyOn() ? flags : { ...flags, uitbesteden: false };
-  };
+  const moduleSwitches = createModuleSwitches({ ModuleTools, settingsFor, mainTenantId: tenant.id, multitenancyOn });
+  const moduleFlagsOf = moduleSwitches.flagsOf;
   /**
    * Of een omgeving meedoet. Met multitenancy uit zijn dat de hoofdtenant en zijn testomgevingen; de gegevens van
    * andere organisaties blijven staan maar zijn niet bereikbaar tot multitenancy weer aan gaat.
@@ -654,7 +653,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    * @param {string} [tenantId] Id van de omgeving.
    * @returns {boolean} true als herkennen kan.
    */
-  const aiAvailable = (tenantId = tenant.id) => settingsFor(tenantId).get('aiEnabled') && currentAnalyzer(tenantId).available;
+  const aiAvailable = (tenantId = tenant.id) => settingsFor(tenantId).get('aiEnabled') && ModuleTools.isOn(moduleFlagsOf(tenantId), 'plan-herkennen-ai') && currentAnalyzer(tenantId).available;
 
   const app = express();
   /** De webshop-router (op de hoofdmap, zie createStorefront); wordt verderop gevuld. */
@@ -881,6 +880,17 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // Een module die uit staat: schrijfacties op haar instellingen (etiketsjablonen, prijsfactor, sproeierbibliotheek,
   // uitbesteden) worden geweigerd; welke adressen dat zijn staat in het moduleregister (`configuration.routes`).
+  // Een onderdeel dat uit staat kan ook adressen helemaal dichtzetten, ook voor lezen (`configuration.blocked`, patronen
+  // met `*`): alleen voor adressen die in een van die patronen voorkomen wordt de gebruiker hier al opgezocht.
+  const everBlocked = [...MODULES, ...ModuleTools.FEATURES].flatMap((entry) => (entry.configuration && entry.configuration.blocked) || []);
+  app.use('/api', (req, res, next) => {
+    // Express routeert zonder hoofdlettergevoeligheid en met of zonder slash aan het eind: beide tellen hier mee.
+    const routePath = `/api${req.path}`.toLowerCase().replace(/\/+$/, '');
+    if (!everBlocked.some((pattern) => ModuleTools.matchesRoute(pattern, routePath, req.method))) return next();
+    if (!identify(req)) return next();
+    if (!ModuleTools.blockedRoutes(moduleFlagsOf(req.tenantId)).some((pattern) => ModuleTools.matchesRoute(pattern, routePath, req.method))) return next();
+    res.status(409).json({ error: 'module_off', message: 'Dit onderdeel staat uit. Zet het eerst aan in Beheer > Modules aan/uit.' });
+  });
   app.use('/api', (req, res, next) => {
     if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
     const user = identify(req);
@@ -1817,7 +1827,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   }));
 
   // ----- Back-ups naar Google Drive (platform/drive-backup-routes.js; vóór /:name) -----
-  registerDriveBackupRoutes(app, { driveBackup, settings, audit, requireJson, mainTenantId: tenant.id });
+  registerDriveBackupRoutes(app, { driveBackup, settings, audit, requireJson, mainTenantId: tenant.id, confirmIdentity: createIdentityConfirm({ store, loginGuard, twoFactor, audit, auditAction: 'backup_beheer_wachtwoord_fout' }) });
   // Hersteltest van de Google Drive-back-up: draait in de app zelf (platform/drive-restore-test.js), los van de lokale test.
   const driveRestoreTest = createDriveRestoreTest({ settings, driveBackup, backupDir, vault, database });
   registerDriveRestoreTestRoutes(app, { driveRestoreTest, audit, mainTenantId: tenant.id, canUpdate });
@@ -1835,16 +1845,26 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     res.download(path.join(backupDir, name), name);
   });
 
-  app.delete('/api/admin/backups/:name', (req, res) => {
+  // Een back-up verwijderen vraagt het wachtwoord (en de tweestapscode) opnieuw, net als terugzetten; de nieuwste blijft altijd staan
+  // en elke handmatige verwijdering komt in het auditlog en als waarschuwing in Bewaking (audit B-17).
+  const confirmBackupAction = createIdentityConfirm({ store, loginGuard, twoFactor, audit, auditAction: 'backup_beheer_wachtwoord_fout' });
+  const backupDeleteLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20, keyFn: (req) => `backup-delete:${req.user ? req.user.id : ''}` });
+  app.delete('/api/admin/backups/:name', requireJson, backupDeleteLimiter, wrap(async (req, res) => {
     const name = req.params.name;
     if (!backupDir || !backups.isBackupName(name) || !fs.existsSync(path.join(backupDir, name))) {
       return res.status(404).json({ error: 'not_found', message: 'Back-up niet gevonden.' });
     }
+    if (!(await confirmBackupAction(req, res))) return undefined;
+    const newest = backups.listBackups(backupDir)[0];
+    if (newest && newest.name === name) {
+      return res.status(409).json({ error: 'newest_backup', message: 'De nieuwste back-up kan niet handmatig worden verwijderd. Maak eerst een nieuwe back-up; oude worden vanzelf opgeruimd.' });
+    }
     fs.rmSync(path.join(backupDir, name), { force: true });
+    if (app.locals.backupOpenCache) app.locals.backupOpenCache.drop(`${name}`);
     console.log(`Back-up ${name} verwijderd door ${req.user.display_name}`);
     audit(req, 'backup_verwijderd', { name }, undefined, tenant.id);
-    res.json({ ok: true });
-  });
+    return res.json({ ok: true });
+  }));
 
   // Auditlog: beveiligingsgebeurtenissen.
   app.get('/api/admin/audit', (req, res) => {
@@ -1853,6 +1873,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
 
   registerSettingsRoutes(app, { tenant, auth, audit, requireJson, settingsFor, aiTenantOf, currentAnalyzer, moduleFlagsOf, ModuleTools });
+  registerModuleRoutes(app, { moduleSwitches, requireJson, audit });
 
   registerAiUsageRoutes(app, { store, aiUsage, settingsFor, aiTenantOf });
 
@@ -2134,7 +2155,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     db: database, settingsFor: (id) => settingsFor(id), vismaLog,
     debtors: debtorStore, invoices: invoiceStore, ...(vismaFetch ? { fetchImpl: vismaFetch } : {}),
   });
-  invoiceStore.onFinalized((tid) => visma.schedule(tid));
+  invoiceStore.onFinalized((tid) => { if (ModuleTools.isOn(moduleFlagsOf(tid), 'visma')) visma.schedule(tid); });
   // Materiaalverbruik op de werkorder boekt de voorraad af, in dezelfde
   // transactie als de verbruiksregel (zie stock.syncUsage).
   workLogStore.hook((tid, row, user) => stockStore.syncUsage(tid, {
@@ -2614,7 +2635,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Verstuurde seizoensherinneringen (season-reminders.js; de verzendronde staat onderaan).
   const seasonReminderStore = createSeasonReminderStore(database, { roles: store.roles });
   // Facturen online betalen door de klant (Mollie, zie invoice-payments.js); de webhook is openbaar en vraagt de uitkomst zelf bij Mollie op.
-  const invoicePayments = createInvoicePayments({ db: database, invoices: invoiceStore, mollie: createMollie(mollieFetch ? { fetchImpl: mollieFetch } : {}), settingsFor: (id) => settingsFor(id), linkKey: vault.derive('factuur-betaallink'), mainTenantId: tenant.id });
+  const invoicePayments = createInvoicePayments({ db: database, invoices: invoiceStore, mollie: createMollie(mollieFetch ? { fetchImpl: mollieFetch } : {}), settingsFor: (id) => settingsFor(id), linkKey: vault.derive('factuur-betaallink'), mainTenantId: tenant.id,
+    switchedOn: (tenantId) => ModuleTools.isOn(moduleFlagsOf(tenantId), 'factuur-online-betalen') });
   registerInvoicePayLinkRoutes(app, { invoicePayments, tenantId: tenant.id, scopeToTenant, limiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: (req) => `factuur-betaallink:${clientKey(req)}` }) });
   invoicePayments.onPaid((tenantId, invoice) => store.audit({ tenantId, userId: null, action: 'factuur_betaald_online', detail: { number: invoice.number, total: invoice.total } }));
   // Een betaling die binnenkomt op een factuur die intussen gecrediteerd is: het geld moet met de hand terug, dus een auditregel en een melding in Bewaking.
@@ -2756,7 +2778,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    */
   app.locals.stockAlertsRun = async () => {
     const result = { sent: 0, purged: 0 };
-    if (stockAlertsBusy) return result;
+    if (stockAlertsBusy || !ModuleTools.isOn(moduleFlagsOf(tenant.id), 'webshop-voorraadmelding')) return result;
     stockAlertsBusy = true;
     try {
       result.purged = stockAlerts.purgeOld(tenant.id);
@@ -2989,6 +3011,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   storefrontRouter = createStorefront({
     addressLookup, addressGuard, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore, data: storefrontData, itemImages: itemImageStore,
     orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, orderSlips, returns: webReturns, guestOrders, stockAlerts, searchMisses, funnel, quoteRequests, payments: webPayments,
+    featureOn: (id) => ModuleTools.isOn(moduleFlagsOf(tenant.id), id),
     vies, captcha, captchaGate,
     onOrder: (req, order) => audit(req, 'webshop_bestelling_geplaatst', { number: order.number, total: order.total, ...(order.guest ? { gast: true } : {}) }, order.userId, tenant.id),
     onQuoteRequest: (req, quote, viewer, mailed) => audit(req, 'webshop_offerte_aangevraagd', { number: quote.number, mailed: Boolean(mailed) }, viewer.id, tenant.id),
@@ -3147,7 +3170,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    * Visma: omgevingen met automatisch doorsturen aan (vangnet naast het doorsturen direct na definitief).
    * @returns {Promise<*>} Uitkomst per omgeving.
    */
-  app.locals.vismaAll = () => visma.runAll(allEnvironmentIds());
+  app.locals.vismaAll = () => visma.runAll(allEnvironmentIds().filter((id) => ModuleTools.isOn(moduleFlagsOf(id), 'visma')));
   app.locals.visma = visma;
   // Seizoensherinneringen (season-reminders.js). Alleen klanten die in de
   // omgeving zelf wonen: een testomgeving mailt dus alleen haar testaccounts,
@@ -3271,6 +3294,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     db: database, settingsFor: (id) => settingsFor(id), dataDir: env.DATA_DIR || (backupDir ? path.dirname(backupDir) : ''), backupDir,
     listBackups: backups.listBackups, systemUpdate, driveBackup, restoreTest, driveRestoreTest, errorCounter, mailerFor,
     mollie: createMollie(mollieFetch ? { fetchImpl: mollieFetch } : {}), visma, shop: shopStore,
+    tenantIsolation: { rlsOn: () => Boolean(database.tenantRls), multitenancyOn },
   }).forEach((check) => monitor.register(check));
   /**
    * Voert de controles van de bewaking uit die aan de beurt zijn (elke 5 minuten vanuit main) en ruimt oude incidenten op.
@@ -3326,6 +3350,14 @@ if (require.main === module) {
       if (total) console.log(`Bewaartermijnen toegepast: ${JSON.stringify(removed)}`);
     } catch (err) {
       console.error('Onderhoud mislukt:', err);
+    }
+    try {
+      // Resten van een afgebroken back-up, terugzetten of hersteltest (onversleutelde kopieën, tijdelijke schema's) opruimen (audit B-01).
+      const leftovers = backupDir ? backups.sweepLeftovers(backupDir) : [];
+      const schemas = slowLog.trackTask('tijdelijke schema\'s opruimen', () => dropStaleScratch(database));
+      if (leftovers.length || schemas.length) console.log(`Achtergebleven tijdelijke bestanden gewist: ${leftovers.length}, tijdelijke schema's verwijderd: ${schemas.length}`);
+    } catch (error) {
+      console.error('Tijdelijke resten opruimen mislukt:', error.message);
     }
     try {
       const freed = slowLog.trackTask('reserveringen vrijgeven', () => app.locals.webOrdersRelease());

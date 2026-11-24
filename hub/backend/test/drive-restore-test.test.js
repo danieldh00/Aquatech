@@ -59,7 +59,7 @@ async function start() {
      */
     async connect() {
       await baas.put(`${BACKUPS}/drive`, { clientId: 'client-123', clientSecret: 'geheim-van-google-app', redirectUri: REDIRECT });
-      const started = await baas.post(`${BACKUPS}/drive/connect`);
+      const started = await baas.post(`${BACKUPS}/drive/connect`, { password: PW });
       const state = new URL(started.body.url).searchParams.get('state');
       await baas.get(`${BACKUPS}/drive/callback?code=goede-code&state=${encodeURIComponent(state)}`);
       assert.strictEqual((await baas.put(`${BACKUPS}/drive`, { enabled: true })).status, 200);

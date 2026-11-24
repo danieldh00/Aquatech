@@ -12,12 +12,15 @@
   const escapeHtml = (text) => String(text).replace(/[&<>"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[character]));
 
   /**
-   * Haalt de etiketsjablonen één keer per pagina op.
+   * Haalt de etiketsjablonen één keer per pagina op (geen als het onderdeel Etiketten uit staat).
    * @returns {Promise<{ templates: object[], defaultKey: string }>} De sjablonen en het standaardsjabloon.
    */
   function templates() {
     if (!templatesPromise) {
-      templatesPromise = fetch('../api/stock/label-templates', { cache: 'no-store' }).then(async (response) => {
+      templatesPromise = window.AquatechModuleTools.featureOn('etiketten').then(async (on) => {
+        // Staat het onderdeel Etiketten uit, dan zijn er geen sjablonen en vraagt de pagina ze ook niet op.
+        if (!on) return { templates: [], defaultKey: '' };
+        const response = await fetch('../api/stock/label-templates', { cache: 'no-store' });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.message || AquatechCommon.statusMessage(response.status));
         return result;

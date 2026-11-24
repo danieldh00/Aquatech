@@ -132,6 +132,8 @@ Ingelogd wordt een plan op de server bewaard (met historie); zonder server wordt
    `modules.js` in (`sections`, `settings`, `routes`). Staat de module uit (Beheer > Modules aan/uit), dan
    verdwijnen die secties uit Beheer en weigert de server wijzigingen daarvan (409 `module_off`). Bewaarde waarden
    blijven staan.
+5. Is de functie niet essentieel? Geef haar een schakelaar in Beheer > Modules: `category` + `summary` op de module, of een regel
+   in `FEATURES` voor een onderdeel zonder eigen pagina (standaard aan). De server volgt hem met `ModuleTools.isOn`.
 
 ## Structuur
 

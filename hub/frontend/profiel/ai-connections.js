@@ -64,6 +64,9 @@
    * @returns {Promise<void>}
    */
   async function load() {
+    // Een klant mag de koppelingen niet opvragen (403): dan niet eens vragen (L-13).
+    const me = window.AquatechCommon ? await window.AquatechCommon.getJson('api/me').catch(() => null) : null;
+    if (me && (me.rights || []).includes('portaal')) return;
     let answer;
     try {
       answer = await api('account/connections');

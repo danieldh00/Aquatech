@@ -17,7 +17,8 @@ a.brand.home { color: inherit; text-decoration: none; }
 .btn.primary:hover { background: var(--primary-dark); }
 .btn.ghost { background: transparent; border-color: transparent; }
 .btn.small { padding: 3px 8px; font-size: 13px; }
-@media (max-width: 640px) { .btn.small { min-height: 36px; padding: 7px 12px; } }
+/* Smal scherm: ook een link-knop (a.btn.small) krijgt een tikdoel van 40 px (L-08/L-12). */
+@media (max-width: 640px) { .btn.small { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 7px 12px; box-sizing: border-box; } }
 .btn.danger { color: #b42318; border-color: #f1c4bf; }
 .btn.danger:hover { background: #fdecea; }
 .btn:disabled { opacity: 0.55; cursor: default; }
@@ -178,11 +179,14 @@ dl.kv dd { margin: 0; }
 .sc-badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; border: 1px solid var(--line); }
 .sc-badge.live { background: var(--at-green-soft); color: var(--at-green-dark); border-color: var(--at-green-light); }
 .sc-badge.draft { background: var(--panel); color: var(--at-navy); border-color: var(--at-teal); }
-.sc-block { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px 12px; margin: 0 0 14px; display: flex; flex-direction: column; gap: 8px; }
+.sc-block { min-width: 0; box-sizing: border-box; border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px 12px; margin: 0 0 14px; display: flex; flex-direction: column; gap: 8px; }
 .sc-block legend { font-weight: 600; padding: 0 6px; }
-.sc-block label { display: flex; flex-direction: column; gap: 4px; }
+.sc-block label { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .sc-block textarea, .sc-block input:not([type=checkbox]), .sc-block select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; max-width: 100%; }
-.sc-picker { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sc-picker { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+/* Een keuzelijst is standaard zo breed als de langste optie; op een smal scherm mag hij krimpen (L-02). */
+.sc-picker select { flex: 1 1 140px; min-width: 0; max-width: 100%; }
+.sc-block input:not([type=checkbox]), .sc-block textarea, .sc-block select { min-width: 0; box-sizing: border-box; }
 .sc-thumb { width: 64px; height: 40px; object-fit: cover; border-radius: 4px; border: 1px solid var(--line); background: var(--panel); }
 .sc-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; padding: 8px 0; border-top: 1px dashed var(--line); }
 .sc-row > label { flex: 1 1 200px; }
@@ -380,3 +384,70 @@ dl.kv dd { margin: 0; }
 .kpi-setting-move { display: flex; gap: 4px; flex: 0 0 auto; }
 .kpi-setting .badge { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 999px; background: var(--at-preview-bg); font-size: 11px; font-weight: 600; color: var(--at-muted); }
 #tab-aikosten select, #tab-aikosten input { max-width: 100%; }
+
+/* Beheer > Modules: kaarten per categorie met een schakelaar per module en per onderdeel (beheer/modules.js). */
+.md-lead { max-width: 760px; margin: 0 0 14px; }
+.md-bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 14px; position: sticky; top: 0; z-index: 2; }
+.md-bar input[type=search] { flex: 1 1 220px; min-width: 0; }
+.md-filter { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.md-filter button { font: inherit; font-family: var(--at-font); font-size: 13px; padding: 8px 13px; min-height: 40px; border: 0; background: var(--panel); color: var(--muted); cursor: pointer; }
+.md-filter button.active { background: var(--at-navy); color: var(--at-surface); font-weight: 600; }
+.md-filter button:focus-visible, .md-all:focus-visible, .md-jump a:focus-visible { outline: 2px solid var(--at-teal); outline-offset: -2px; }
+.md-count { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.md-count b { color: var(--text); }
+.md-bar .btn.primary { min-height: 40px; padding: 8px 18px; font-weight: 700; }
+.md-dirty { color: var(--at-warn); flex: 1 1 100%; }
+.md-dirty:empty { display: none; }
+.md-jump { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.md-jump a { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 600; color: var(--at-navy); text-decoration: none; }
+.md-jump i { font-style: normal; font-weight: 400; color: var(--muted); }
+.md-category { margin-bottom: 22px; scroll-margin-top: 84px; }
+.md-category-head { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
+.md-category-head h3 { margin: 0; font-size: 16px; color: var(--at-navy); text-transform: none; letter-spacing: 0; white-space: nowrap; }
+.md-category-head .small { white-space: nowrap; }
+.md-rule { flex: 1; height: 1px; background: var(--line); }
+.md-all { font: inherit; font-family: var(--at-font); font-size: 12px; font-weight: 600; color: var(--at-navy); background: none; border: 0; padding: 4px 0; text-decoration: underline; cursor: pointer; white-space: nowrap; }
+.md-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 14px; align-items: stretch; }
+.md-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); display: flex; flex-direction: column; min-width: 0; }
+.md-card.off { background: var(--at-preview-bg); }
+.md-card.off .md-head h4, .md-card.off .md-head p, .md-card.off .md-part { color: var(--muted); }
+.md-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 14px 16px; align-items: start; }
+.md-head h4 { margin: 0; font-size: 15px; grid-column: 1; }
+.md-head p { margin: 0; grid-column: 1; color: var(--muted); font-size: 12.5px; }
+.md-head .md-switch { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+.md-tags { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+.md-tags .md-tag { margin-left: 0; }
+.md-parts { border-top: 1px solid var(--line); padding: 6px 16px 10px; flex: 1; }
+.md-part { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 6px 0; font-size: 13px; min-height: 40px; box-sizing: border-box; }
+.md-part + .md-part { border-top: 1px dashed var(--line); }
+.md-part .md-switch { grid-column: 3; }
+.md-link { font-size: 12px; color: var(--at-navy); white-space: nowrap; }
+.md-tag { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 4px; padding: 1px 6px; margin-left: 6px; vertical-align: 1px; }
+.md-tag.needs { background: color-mix(in srgb, var(--at-warn) 14%, var(--at-surface)); color: color-mix(in srgb, var(--at-warn) 70%, var(--at-ink-strong)); }
+.md-tag.locked { background: var(--at-preview-bg); color: var(--at-muted); }
+/* De schakelaar: een echte checkbox (toetsenbord, schermlezer) met een getekende schuif erover. */
+.md-switch { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 40px; flex: none; cursor: pointer; }
+.md-switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; opacity: 0; cursor: pointer; }
+.md-switch span { width: 40px; height: 22px; border-radius: 999px; background: color-mix(in srgb, var(--at-muted) 40%, var(--at-surface)); position: relative; transition: background 0.15s; }
+.md-switch span::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--at-surface); box-shadow: 0 1px 2px var(--at-shadow); transition: left 0.15s; }
+.md-switch input:checked + span { background: var(--at-green); }
+.md-switch input:checked + span::after { left: 20px; }
+.md-switch.small span { width: 32px; height: 18px; }
+.md-switch.small span::after { width: 14px; height: 14px; }
+.md-switch.small input:checked + span::after { left: 16px; }
+.md-switch input:focus-visible + span { outline: 2px solid var(--at-teal); outline-offset: 2px; }
+.md-switch input:disabled { cursor: default; }
+.md-switch input:disabled + span { opacity: 0.45; }
+.md-fixed { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; font-size: 13px; }
+.md-fixed ul { margin: 10px 0 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: 8px 16px; }
+@media (max-width: 640px) {
+  .md-bar { position: static; }
+  .md-bar .btn.primary { flex: 1 1 100%; }
+  .md-filter { flex: 1 1 auto; }
+  .md-filter button { flex: 1; }
+  .md-all { display: none; }
+}
+
+/* Venster voor herbevestiging met wachtwoord (reauth.js). */
+.reauth-dialog { max-width: min(28rem, calc(100vw - 2rem)); width: 100%; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+.reauth-dialog::backdrop { background: var(--at-shadow); }

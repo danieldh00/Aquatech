@@ -22,6 +22,8 @@
 //   driveBackup                 platform/drive-backup.js: { status() } → check drive (platform: één koppeling per
 //                               installatie, met de instellingen van de hoofdtenant)
 //   errorCounter                platform/error-report.js errorCounter: { count(sinceMs) } → check serverfouten
+//   tenantIsolation             { rlsOn(), multitenancyOn() }: de databaseafscherming per organisatie (RLS) en de
+//                               multitenancy-schakelaar → check tenantafscherming
 //   mailerFor(settings)         zoals createApp: → { configured(), verify() } (platform/mailer.js) → check mail
 //   mollie                      webshop/mollie.js createMollie({ fetchImpl }): { checkKey(apiKey) } → check mollie
 //   visma                       verkoop/visma.js: { connected(tenantId) } (+ db voor visma_log) → check visma
@@ -177,7 +179,7 @@ function createRuntimeStats() {
 function createMonitoringChecks(deps = {}) {
   const {
     db, settingsFor, dataDir, backupDir, listBackups, systemUpdate, driveBackup, restoreTest, driveRestoreTest, errorCounter,
-    mailerFor, mollie, visma, shop, statfs = fs.statfsSync,
+    mailerFor, mollie, visma, shop, tenantIsolation, statfs = fs.statfsSync,
   } = deps;
   const runtimeStats = deps.runtimeStats === false ? null : (deps.runtimeStats || createRuntimeStats());
   const mailCache = createResultCache(EXTERNAL_CACHE_MS);
@@ -268,6 +270,25 @@ function createMonitoringChecks(deps = {}) {
         const age = hoursSince(ctx.now(), newest.createdAt);
         if (age > backupMaxHours) return problem('fout', `De nieuwste lokale back-up is ${formatHours(age)} oud (drempel ${backupMaxHours} uur). Controleer het serverlog.`);
         return OK;
+      },
+    });
+  }
+
+  if (db && backupDir) {
+    checks.push({
+      key: 'backup-verwijderd', scope: 'platform', title: 'Back-up handmatig verwijderd', intervalMinutes: 15,
+      /**
+       * Waarschuwt (24 uur lang) als een hoofdbeheerder een lokale back-up handmatig heeft verwijderd, zodat een gestolen
+       * sessie die back-ups wist niet ongemerkt blijft. Leest het auditlog; sluit vanzelf na een dag.
+       * @param {object} ctx De context van de monitor.
+       * @returns {Promise<object>} Het resultaat.
+       */
+      async run(ctx) {
+        const since = new Date(ctx.now() - DAY_MS).toISOString();
+        const row = db.prepare("SELECT COUNT(*) AS count FROM audit WHERE tenant_id = ? AND action = 'backup_verwijderd' AND created_at >= ?").get(ctx.tenantId, since);
+        const count = Number(row && row.count) || 0;
+        if (!count) return OK;
+        return problem('waarschuwing', `${count === 1 ? 'Er is' : `Er zijn ${count}`} de afgelopen 24 uur handmatig ${count === 1 ? 'een lokale back-up' : 'lokale back-ups'} verwijderd. Controleer in Beheer > Auditlog of dat klopt.`);
       },
     });
   }
@@ -380,6 +401,24 @@ function createMonitoringChecks(deps = {}) {
         const age = hoursSince(ctx.now(), latest.finishedAt || latest.startedAt);
         if (age > RESTORE_TEST_MAX_HOURS) return problem('waarschuwing', `De laatste hersteltest is ${formatHours(age)} geleden (verwacht: wekelijks). Controleer de timer op de server.`);
         return OK;
+      },
+    });
+  }
+
+  if (tenantIsolation && typeof tenantIsolation.rlsOn === 'function') {
+    checks.push({
+      key: 'tenantafscherming', scope: 'platform', title: 'Databaseafscherming per organisatie (RLS)', intervalMinutes: 15,
+      /**
+       * Controleert of de databaseafscherming per organisatie actief is: uit terwijl multitenancy aan staat = fout, uit
+       * zonder multitenancy = waarschuwing (de app filtert dan nog wel op organisatie, maar het laatste vangnet ontbreekt).
+       * @returns {Promise<object>} Het resultaat.
+       */
+      async run() {
+        if (tenantIsolation.rlsOn()) return OK;
+        const multi = typeof tenantIsolation.multitenancyOn === 'function' && tenantIsolation.multitenancyOn();
+        const reason = 'De rol aquatech_app of de policies zijn niet aangemaakt, of PG_TENANT_RLS=0 staat aan (zie het serverlog).';
+        if (multi) return problem('fout', `De databaseafscherming per organisatie staat uit terwijl multitenancy aan staat: een fout in de app kan gegevens van een andere organisatie tonen. ${reason}`);
+        return problem('waarschuwing', `De databaseafscherming per organisatie staat uit. Zonder multitenancy is er één organisatie, maar zet haar aan voordat er een tweede organisatie bijkomt. ${reason}`);
       },
     });
   }

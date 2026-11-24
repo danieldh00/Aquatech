@@ -1,5 +1,71 @@
 # Changelog
 
+## 1.36.5
+
+Audit 1.33.0, thema Back-up/herstel:
+- B-01: een back-up wordt in één stroom gecomprimeerd en versleuteld (geen onversleutelde `.tmp-*.db` meer); het ontsleutelde tussenbestand van terugzetten wordt direct na het inlezen gewist; het uurlijkse onderhoud (en de start) wist resten ouder dan een uur (`backup.js` `sweepLeftovers`) en tijdelijke schema's `aqt_scratch_*` (`pgdb.js` `dropStaleScratch`, aanmaaktijd in de schemanaam).
+- B-17: `platform/identity-confirm.js` (herbevestiging, gedeeld met terugzetten) voor back-up verwijderen, Drive verbreken/koppelen en de Drive-kopie uitzetten; de nieuwste back-up is niet handmatig te wissen; Bewaking-controle `backup-verwijderd` (24 uur, uit het auditlog); frontend `beheer/reauth.js`.
+- B-27: Bewaking-controle `tenantafscherming` (fout bij multitenancy, anders waarschuwing).
+- T-09: `platform/backup-open-cache.js` bewaart een geopende back-up vijf minuten (teller, verlooptijd, opruimen).
+
+## 1.36.4
+
+`beheer/indeling.js`: openklappen van een groep sluit de andere; alleen de laatst geopende groep wordt onthouden (oudere bewaarde keuzes met meerdere groepen tonen alleen de eerste).
+
+## 1.36.3
+
+- Schakelaars `visma` (heeft Facturen nodig; adressen `/api/visma/**` dicht, niet meer automatisch doorsturen), `dashboard-cijfers` (`/api/kpis`, instelling `dashboardKpis`), `dashboard-taken` (`/api/tasks`, blok en bel) en `webshop-voorraadmelding` (formulier op de productpagina en de mails).
+- De winkel krijgt `featureOn(id)` mee van de server.
+- Een bladwijzer naar een tabblad van Artikelen waarvan het onderdeel uit staat (zoals Telling) opent dat tabblad niet meer.
+
+## 1.36.2
+
+- Schakelaars `etiketten`, `voorraadtelling` en `inkoop-inlezen` (onderdelen van de module voorraad) en een eigen schakelaar voor `ontvangst`; de adressen van een uitgezet onderdeel geven 409 `module_off`.
+- `data-feature="<id>"` op een element verbergt het als de module of het onderdeel uit staat (`applyFeatures` in dashboard/modules.js, aangeroepen door de zijbalk).
+
+## 1.36.1
+
+Onderdelen met een eigen schakelaar voor Verkoop, Planner en werk en Klantcontact (geen migratie).
+- Register: `configuration.blocked` (patronen met `*` voor één deel van het pad): staat het onderdeel zelf uit, dan geeft de server op die adressen 409 `module_off`, ook bij lezen (staat alleen de module erboven uit, dan geldt haar bestaande regel: schrijven dicht, lezen blijft) (`blockedRoutes`, `matchesRoute`; middleware in server.js, hoofdletters en een slash aan het eind tellen mee). `configuration` geldt nu ook voor regels in `FEATURES`.
+- Nieuwe schakelaars: `nacalculatie` (kaart, nodig: werkorders), `offertesjablonen`, `factuur-online-betalen` (`invoicePayments.enabled` via `switchedOn`: geen knop Nu betalen, geen betaallink in de mail; lopende betalingen en de webhook blijven werken), `plan-herkennen-ai` (`aiAvailable`, de planner valt terug op lokale herkenning), `afspraaklink` (maken en versturen dicht; een al verstuurde link blijft voor de klant werken en is nog in te trekken) en `installatiedossier`.
+- Frontend: `AquatechModuleTools.featureOn(id)` (via het gedeelde `api/config`); de werkorder verbergt Nacalculatie en het blok Afspraak, de offerte de sjabloonkaart, het portaal de installaties per adres.
+- Testsuite: een nieuw testschema is een kopie van één gemigreerd sjabloonschema in plaats van elke keer alle migraties (`database/test-template.js`); de suite loopt daardoor ruim binnen de tijdslimiet van CI. `test/test-template.test.js` bewaakt dat de kopie exact gelijk is aan een echt gemigreerd schema. De app zelf migreert zoals altijd.
+
+## 1.36.0
+
+Scherm Beheer > Modules (`frontend/beheer/modules.js`, eigen paneel `tab-modules`, stijl `.md-*` in beheer.css; geen migratie).
+- Tekent de indeling uit `switchTree()` en leest en schrijft via `GET|PUT /api/admin/modules`; alleen gewijzigde schakelaars gaan mee. Zoekveld, filter Alles/Aan/Uit, teller, snelkeuze per categorie, Alles aan/uit per categorie, blok Altijd aan.
+- Schakelaars zijn echte checkboxen met `role="switch"` (toetsenbord en schermlezer), tikdoel 40 px; op slot (webshop buiten de hoofdorganisatie, uitbesteden zonder multitenancy) met de reden erbij.
+- Register: `section` (link Instellen naar de sectie van Beheer) en `switchTitle` (naam op de kaart).
+- `AquatechNav.setDisabled(flags)` in `shared/sidebar.js`: de zijbalk volgt direct na het opslaan.
+- Het oude formulier `s-modules` is weg.
+
+## 1.35.1
+
+Voorbereiding voor het nieuwe scherm Beheer > Modules (geen migratie).
+- `frontend/dashboard/modules.js`: categorieën (`CATEGORIES`), de lijst Altijd aan (`ALWAYS_ON`) en schakelaars zonder eigen pagina (`FEATURES`). Een module krijgt `category` + `summary`; een onderdeel met een eigen schakelaar is een module met `partOf` + `ownSwitch` of een regel in `FEATURES`. `needs` = werkt alleen als die module aan staat. Nieuwe hulpfuncties `switchTree`, `switchIds`, `entryOf`, `titleOf`; `isOn` volgt nu ook `needs` en onderdelen van onderdelen.
+- Een schakelaar met `setting` bedient een bestaande instelling (offerte-opvolging, betalingsherinneringen, tekening indienen, automatische bestelvoorstellen, de webshop met bestellen, gastbestellen, offerte aanvragen, planner, Google Analytics en Clarity, seizoensherinneringen, AI-koppeling): er blijft één waarheid.
+- `platform/module-switches.js`: `flagsOf` (de vlaggen zoals ze gelden, ook in `GET /api/config`), `lockedOf` (uitbesteden zonder multitenancy, de webshop buiten de hoofdtenant) en `apply`. Routes `GET|PUT /api/admin/modules` (recht `beheer`, alles of niets, audit `modules_gewijzigd`; onbekende id 400, op slot 409 `module_locked`, onderdeel van een uitgezette module 409 `module_off`).
+- Plannenoverzicht is een onderdeel van de Beregeningsplanner, Webshopbestellingen van de Webshop.
+
+- Planner op een telefoon: de menuknop van de zijbalk is in de kopbalk even hoog als de andere knoppen (layoutcheck).
+
+## 1.35.0
+
+Layoutpunten L-04 t/m L-07 uit de layoutcheck: het winkelwagenpictogram staat als eigen bestand `assets/icon-winkelwagen.svg` (CSP `img-src 'self'` blokkeerde de data-URI), `.svg` is toegevoegd aan de shop-assets, knoppen erven het lettertype (`button { font-family: inherit }`), voorraadlabel op productkaarten minimaal 12 px, zoekknop 44 px breed en hoog op smalle schermen, en het inline `style` van het honeypotveld op Registreren en Planner is vervangen door de klasse `.trap`.
+
+## 1.34.9
+
+Planner (L-09): op schermen tot 760 px krijgen `.tbtn`, de ongedaan-maken/opnieuw-knoppen in de kopbalk en `.step`/`.step-nav .btn` een minimale hoogte van 40 px (voorheen alleen bij `pointer: coarse`); legendatitel van 10 naar 12 px.
+
+## 1.34.8
+
+Layoutcheck-bevindingen L-02, L-03, L-10, L-12 en L-13 (thema Beheer + app-shell mobiel):
+- `beheer.css`: `.sc-block`, labels en keuzelijsten krimpen (min-width: 0), zodat de fieldsets op 375 px niet breder zijn dan het scherm; `.btn.small` (ook als `a`) is op smal scherm 40 px hoog.
+- `dashboard.css`: organisatiewisselaar mag krimpen, gebruikersmenu en belknop niet; belknop 40x40 px.
+- `brand.css`: scrollschaduw op `.tablewrap` onder 700 px; `sidebar.css`: nieuwsbadge 11 px.
+- `profiel/ai-connections.js`: een klant vraagt de AI-koppelingen niet meer op (voorkomt een 403 in de console).
+
 ## 1.34.7
 
 Audit 1.33.0, thema webshopbetalingen en facturen, deel 4 (bedrading in `server.js`). Geen migratie.

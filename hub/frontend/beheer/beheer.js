@@ -628,10 +628,6 @@
     outsourcingForm.send.checked = outsourcing.send;
     outsourcingForm.receive.checked = outsourcing.receive;
     outsourcingForm.region.value = outsourcing.region || '';
-    const visibleModules = (window.AquatechModules || []).filter((module) => module.id !== 'beheer' && module.id !== 'hoofdbeheer' && !module.partOf);
-    $('#s-module-list').innerHTML = visibleModules.map((module) => `
-      <label class="chk"><input type="checkbox" data-module="${esc(module.id)}"${module.status === 'gepland' ? ' disabled' : view.modules.value[module.id] === false ? '' : ' checked'}>
-        ${esc(module.title)}${module.status === 'gepland' ? ' <span class="muted small">(binnenkort: aan te zetten zodra de module klaar is)</span>' : ''}</label>`).join('');
   }
 
   /** Uitleg en prijs bij het gekozen model. */
@@ -671,8 +667,9 @@
          */
         button.onclick = async () => {
           const name = button.dataset.backupDel;
-          if (!confirm(`Back-up ${name} verwijderen?\n\nHet bestand wordt definitief gewist van de server.`)) return;
-          try { await api(`backups/${encodeURIComponent(name)}`, { method: 'DELETE' }); toast('Back-up verwijderd'); } catch (error) { toast(error.message, true); }
+          const credentials = await window.BeheerReauth.ask(`Back-up ${name} verwijderen?`, 'Het bestand wordt definitief gewist van de server. Bevestig met je wachtwoord. De nieuwste back-up kan niet worden verwijderd.');
+          if (!credentials) return;
+          try { await api(`backups/${encodeURIComponent(name)}`, { method: 'DELETE', body: credentials }); toast('Back-up verwijderd'); } catch (error) { toast(error.message, true); }
           loadBackups();
         };
       });
@@ -1171,17 +1168,6 @@
       event.preventDefault();
       saveSettings(outsourcingForm, { outsourcing: { send: outsourcingForm.send.checked, receive: outsourcingForm.receive.checked, region: outsourcingForm.region.value.trim() } }, 'Uitbesteden opgeslagen');
     };
-    const modulesForm = $('#s-modules');
-    /**
-     * Slaat op welke modules aan staan.
-     * @param {SubmitEvent} event het verzenden
-     */
-    modulesForm.onsubmit = (event) => {
-      event.preventDefault();
-      const modules = {};
-      modulesForm.querySelectorAll('[data-module]:not(:disabled)').forEach((checkbox) => { modules[checkbox.dataset.module] = checkbox.checked; });
-      saveSettings(modulesForm, { modules }, 'Modules opgeslagen');
-    };
   }
 
   // ---------- Auditlog ----------
@@ -1263,12 +1249,14 @@
   }
 
   /**
-   * Na het opslaan van Modules aan/uit: het menu opnieuw opbouwen, zodat secties van een net uitgezette module weg zijn
-   * (en die van een aangezette terug), met Modules aan/uit zelf als open sectie.
+   * Na het opslaan van Modules aan/uit: het menu van Beheer en de zijbalk opnieuw opbouwen, zodat secties en modules die
+   * net uit zijn gezet weg zijn (en aangezette terug), met Modules aan/uit zelf als open sectie.
    * @returns {Promise<void>}
    */
   async function refreshMenu() {
     await loadModuleFlags(true);
+    const config = await window.AquatechCommon.getJson('api/config').catch(() => null);
+    if (window.AquatechNav && window.AquatechNav.setDisabled && config) window.AquatechNav.setDisabled(config.modules || {});
     buildMenu('modules');
     window.BeheerIndeling.show(window.BeheerIndeling.find('modules'));
   }
@@ -1295,6 +1283,7 @@
     if (section.pane === 'webshop') { loadSettings(section.id); window.BeheerWebshop.load(); }
     // Opnieuw klikken op de al geopende sectie laadt niets opnieuw, zodat niet-opgeslagen menuwijzigingen blijven staan.
     if (section.pane === 'shopinhoud' && activePane !== 'shopinhoud') window.BeheerWebshopInhoud.load();
+    if (section.pane === 'modules') window.BeheerModules.load();
     if (section.pane === 'shopkortingen') window.BeheerKortingen.load();
     if (section.pane === 'shopleveren') window.BeheerLevermethodes.load();
     if (section.pane === 'sproeiers') window.BeheerSproeiers.load();
@@ -1364,6 +1353,7 @@
     window.BeheerWebshop.init({ toast });
     window.BeheerWebshopInhoud.init({ toast });
     window.BeheerKortingen.init({ toast });
+    window.BeheerModules.init({ toast, onSaved: refreshMenu });
     window.BeheerLevermethodes.init({ toast });
     window.BeheerSproeiers.init({ toast });
     window.BeheerRollen.init({ toast, onChange: setRoles });

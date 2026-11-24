@@ -460,6 +460,19 @@
   }
 
   /**
+   * Opent het tabblad uit het adres (bladwijzer of zijbalk), tenzij het bij een onderdeel hoort dat uit staat: dan
+   * blijft het huidige tabblad staan.
+   * @param {string} name Een van TABS.
+   * @returns {Promise<void>}
+   */
+  async function showTabFromAddress(name) {
+    const button = document.querySelector(`.tab[data-tab="${name}"]`);
+    const feature = button && button.dataset.feature;
+    if (feature && window.AquatechModuleTools && !(await window.AquatechModuleTools.featureOn(feature))) return;
+    showTab(name);
+  }
+
+  /**
    * Opent een inkooporder in het tabblad Inkooporders (Aanpassen bij een bestelvoorstel, of ?order= in het adres).
    * @param {string} orderId Het id van de order.
    * @returns {Promise<void>}
@@ -1029,7 +1042,7 @@
       button.onclick = () => { showTab(button.dataset.tab); };
     });
     /** Volgt een ander #-adres (terugknop) met het bijbehorende tabblad. */
-    window.addEventListener('hashchange', () => { const hash = location.hash.slice(1); if (TABS.includes(hash) && hash !== state.tab) showTab(hash); });
+    window.addEventListener('hashchange', () => { const hash = location.hash.slice(1); if (TABS.includes(hash) && hash !== state.tab) showTabFromAddress(hash); });
     $('#f-search').oninput = renderStock;
     $('#f-low').onchange = renderStock;
     /**
@@ -1126,7 +1139,7 @@
       if (hash !== 'reorder') window.ArtikelenProposals.loadCount();
       try { await load(); } catch (error) { toast(error.message, true); }
       if (orderId) await openPurchaseOrder(orderId);
-      else if (TABS.includes(hash)) showTab(hash);
+      else if (TABS.includes(hash)) await showTabFromAddress(hash);
       // Vanuit een werkorder: "Op voorraad nemen" met de ontbrekende codes.
       const codes = (params.get('codes') || '').split(',').map((code) => code.trim()).filter((code) => Catalog.articles[code.toUpperCase()]);
       if (codes.length) window.ArtikelenNew.openImport(codes);

@@ -44,6 +44,7 @@
     const container = document.getElementById('tasks');
     if (!container || !me || !me.user || location.protocol === 'file:') return;
     try {
+      if (!(await window.AquatechModuleTools.featureOn('dashboard-taken'))) return;
       const data = window.AquatechCommon ? await window.AquatechCommon.getJson('api/tasks') : await (await fetch('api/tasks', { cache: 'no-store' })).json();
       const tasks = (data && data.tasks) || [];
       if (tasks.length) render(container, tasks);

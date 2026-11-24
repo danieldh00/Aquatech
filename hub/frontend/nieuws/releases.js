@@ -13,6 +13,93 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.36.5',
+      date: '2026-11-24',
+      title: 'Back-up en herstel veiliger',
+      items: [
+        { text: 'Een back-up verwijderen en de koppeling met Google Drive verbreken of opnieuw koppelen vragen nu je wachtwoord, net als terugzetten. De nieuwste back-up kan niet meer handmatig worden verwijderd.', for: ['beheer'] },
+        { text: 'Bewaking meldt als de databaseafscherming per organisatie uitstaat en als een back-up handmatig is verwijderd.', for: ['beheer'] },
+        { text: 'Terugzetten uit een back-up is sneller: een geopende back-up blijft vijf minuten bewaard in plaats van bij elke stap opnieuw te worden ingelezen.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.36.4',
+      date: '2026-11-24',
+      title: 'Beheer-menu: één groep tegelijk open',
+      items: [
+        { text: 'In het Beheer-menu staat nog maar één groep tegelijk open, net als in de zijbalk.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.36.3',
+      date: '2026-11-24',
+      title: 'Visma, KPI\'s, openstaande taken en voorraadmelding apart aan of uit',
+      items: [
+        { text: 'In Beheer > Modules aan/uit staan nu ook de koppeling met Visma, de KPI\'s en de openstaande taken van het dashboard en de voorraadmelding van de webshop. Wat uit staat verdwijnt uit het scherm en doet niets meer op de achtergrond.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.36.2',
+      date: '2026-11-24',
+      title: 'Onderdelen van Magazijn en inkoop apart aan of uit',
+      items: [
+        { text: 'In Beheer > Modules aan/uit kun je bij Artikelen en voorraad nu ook Etiketten, Voorraadtelling, Goederenontvangst en Inkooporder inlezen met AI apart uitzetten. Wat uit staat verdwijnt uit het scherm.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.36.1',
+      date: '2026-11-24',
+      title: 'Modules: nacalculatie, offertesjablonen, afspraaklink en meer apart uit te zetten',
+      items: [
+        { text: 'In Beheer > Modules staan zes nieuwe schakelaars: Nacalculatie, Offertesjablonen, Online betalen van facturen (klantportaal en betaallink), Plan herkennen met AI, Afspraaklink voor de klant en Installatiedossier per adres. Alles staat aan, tot je het zelf uitzet.', for: ['beheer'] },
+        { text: 'Zet je zo\'n onderdeel uit, dan verdwijnt het van het scherm (bijvoorbeeld het blok Nacalculatie op de werkorder) en weigert de server het ook. Wat al bewaard is blijft staan.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.36.0',
+      date: '2026-11-24',
+      title: 'Nieuw scherm Modules: alles per categorie aan of uit',
+      items: [
+        { text: 'Beheer > Modules is vernieuwd: per categorie een kaart per module met een schakelaar, en daaronder de onderdelen met een eigen schakelaar (bijvoorbeeld offerte-opvolging, betalingsherinneringen, automatische bestelvoorstellen, bestellen als gast, Google Analytics en de AI-koppeling). Je kunt zoeken, filteren op aan of uit en ziet in één oogopslag hoeveel er aan staat.', for: ['beheer'] },
+        { text: 'Een onderdeel volgt zijn module: staat de module uit, dan zijn de onderdelen grijs. Gegevens en instellingen blijven bewaard. Bij een onderdeel met meer instellingen staat de link Instellen.', for: ['beheer'] },
+        { text: 'Na het opslaan past het menu links zich direct aan, zonder de pagina te verversen.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.35.1',
+      date: '2026-11-24',
+      title: 'Modules: onderdelen met een eigen schakelaar (voorbereiding nieuw scherm)',
+      items: [
+        { text: 'De Webshopbestellingen staan alleen nog in het menu als de eigen webshop aan staat, en Uitbesteden alleen als Werkorders aan staat.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.35.0',
+      date: '2026-11-24',
+      title: 'Webshop: knoppen en pictogram op mobiel hersteld',
+      items: [
+        { text: 'De winkelwagenknop op productkaarten toont op een smal scherm weer het winkelwagenpictogram, de voorraadtekst is beter leesbaar en de zoekknop is groter om aan te tikken.' },
+      ],
+    },
+    {
+      version: '1.34.9',
+      date: '2026-11-24',
+      title: 'Planner met grotere knoppen op mobiel',
+      items: [
+        { text: 'In de planner zijn de werkbalkknoppen, ongedaan maken/opnieuw en de stappen op een telefoon groter en makkelijker te raken.', for: ['plannen'] },
+      ],
+    },
+    {
+      version: '1.34.8',
+      date: '2026-11-24',
+      title: 'Beheer en kopbalk netter op de telefoon',
+      items: [
+        { text: 'Beheer > Webshop-inhoud scrolt op de telefoon niet meer zijwaarts.', for: ['beheer'] },
+        { text: 'De kopbalk past op een smal scherm ook met de organisatiewisselaar en de belknop is groter om te tikken.' },
+        { text: 'Brede tabellen (zoals Beheer > Gebruikers) tonen op de telefoon een schaduw aan de rand waar je nog kunt schuiven.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.34.7',
       date: '2026-11-24',
       title: 'Betalingen: opnieuw proberen, terugstorten gemeld en voorraad sneller vrij',
