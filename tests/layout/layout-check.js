@@ -143,7 +143,7 @@ async function checkPage(browser, { role, url, viewport, cookies, base }) {
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   const consoleErrors = [];
-  page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text().slice(0, 160)); });
+  page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text().slice(0, 600)); });
   page.on('response', (reply) => { if (reply.status() >= 400 && !/favicon/.test(reply.url())) consoleErrors.push(`HTTP ${reply.status()} ${reply.url().replace(/^https?:\/\/[^/]+/, '')}`.slice(0, 160)); });
   try {
     const response = await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
@@ -156,7 +156,7 @@ async function checkPage(browser, { role, url, viewport, cookies, base }) {
     const findings = await page.evaluate(detectLayoutProblems, { tolerance: 2 });
     const label = url.replace(base, '');
     const redirected = shown !== label && !label.includes('#') ? ` (doorgestuurd naar ${shown})` : '';
-    for (const message of [...new Set(consoleErrors)]) findings.push({ kind: 'console-fout', selector: consoleKey(message), detail: message });
+    for (const message of [...new Set(consoleErrors)]) findings.push({ kind: 'console-fout', selector: consoleKey(message), detail: message.slice(0, 160) });
     const result = findings.map((finding) => ({ role, page: label, viewport: viewport.name, ...finding }));
     if (response && response.status() >= 400) result.push({ role, page: label, viewport: viewport.name, kind: 'http-fout', selector: '', detail: `status ${response.status()}` });
     for (const message of errors) result.push({ role, page: label, viewport: viewport.name, kind: 'scriptfout', selector: '', detail: message.slice(0, 160) });
