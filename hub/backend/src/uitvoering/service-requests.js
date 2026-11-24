@@ -17,6 +17,7 @@ const { requireVerifiedAddress } = require('../platform/address-lookup');
 const { clientKey } = require('../beveiliging/auth');
 const { inspectImage, fromBase64, MAX_IMAGE_BYTES, MAX_THUMB_BYTES, MAX_SIDE, MAX_THUMB_SIDE } = require('./photos');
 const { mailBody } = require('../verkoop/quotes');
+const { requireAccount } = require('./portal-access');
 
 const KINDS = { storing: 'Storing', onderhoud: 'Onderhoud', overig: 'Vraag of verzoek' };
 const STATUSES = {
@@ -397,20 +398,6 @@ function createServiceRequestStore(db, { vault, workorders, photos }) {
 function forCustomer(item) {
   const { note, ...rest } = item;
   return rest;
-}
-
-/**
- * Middleware: schrijfacties in het klantportaal alleen voor echte accounts; een
- * gast (anonieme bezoeker met gasttoegang) mag het portaal alleen lezen, anders
- * zijn meldingen, mails en foto's goedkoop in massa te maken (audit B-08).
- * @param {object} req Het Express-verzoek.
- * @param {object} res Het Express-antwoord.
- * @param {Function} next Volgende stap.
- * @returns {void}
- */
-function requireAccount(req, res, next) {
-  if (req.user && req.user.kind === 'gast') return res.status(403).json({ error: 'account_required', message: 'Maak een account aan en log in om dit te doen.' });
-  return next();
 }
 
 /**

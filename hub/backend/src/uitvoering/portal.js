@@ -16,6 +16,7 @@
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const { forCustomer } = require('./service-requests');
+const { requireAccount } = require('./portal-access');
 const { portalReminders } = require('./season-reminders');
 const { preferencesOf } = require('../platform/store');
 const { locationKey } = require('./photos');
@@ -101,20 +102,6 @@ function customerWorkOrder(workOrder, { detail = false } = {}) {
 function contactOf(profile) {
   const company = profile || {};
   return { companyName: company.companyName || '', address: company.address || '', email: company.email || '', phone: company.phone || '', website: company.website || '' };
-}
-
-/**
- * Middleware: schrijfacties in het klantportaal alleen voor echte accounts; een
- * gast (anonieme bezoeker met gasttoegang) mag het portaal alleen lezen, anders
- * zijn meldingen, mails en foto's goedkoop in massa te maken (audit B-08).
- * @param {object} req Het Express-verzoek.
- * @param {object} res Het Express-antwoord.
- * @param {Function} next Volgende stap.
- * @returns {void}
- */
-function requireAccount(req, res, next) {
-  if (req.user && req.user.kind === 'gast') return res.status(403).json({ error: 'account_required', message: 'Maak een account aan en log in om dit te doen.' });
-  return next();
 }
 
 /**

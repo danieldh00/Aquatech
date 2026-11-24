@@ -1,6 +1,7 @@
 // Gasten: geen schrijfacties in het klantportaal (audit B-08) en opruimen van
 // gasten zonder activiteit (audit T-11).
 const test = require('node:test');
+const crypto = require('node:crypto');
 const assert = require('node:assert');
 const express = require('express');
 const { openDb } = require('../src/database/db');
@@ -19,7 +20,7 @@ const { createClient, listen } = require('./helpers/http-client');
 function buildApp(user, calls) {
   const app = express();
   app.use(express.json());
-  app.use((req, res, next) => { req.user = user; req.tenantId = 't1'; next(); });
+  app.use((req, res, next) => { req.user = user; req.tenantId = crypto.randomUUID(); next(); });
   /**
    * Rechtencontrole zoals in de echte app.
    * @param {string} right Het recht.
@@ -70,9 +71,9 @@ function buildApp(user, calls) {
 
 test('B-08: een gast mag het portaal niet schrijvend gebruiken, een account wel', async () => {
   const guestCalls = [];
-  const guest = await listen(buildApp({ id: 'g1', kind: 'gast', role: 'klant', display_name: 'Gast' }, guestCalls));
+  const guest = await listen(buildApp({ id: crypto.randomUUID(), kind: 'gast', role: 'klant', display_name: 'Gast' }, guestCalls));
   const accountCalls = [];
-  const account = await listen(buildApp({ id: 'a1', kind: 'account', role: 'klant', display_name: 'Klant' }, accountCalls));
+  const account = await listen(buildApp({ id: crypto.randomUUID(), kind: 'account', role: 'klant', display_name: 'Klant' }, accountCalls));
   try {
     const guestClient = createClient(guest.base);
     for (const [path, body] of [['/api/portal/requests', { title: 'x' }], ['/api/portal/requests/r1/photos', {}], ['/api/portal/workorders/w1/appointment', { answer: 'bevestigd' }], ['/api/portal/invoices/i1/pay', {}]]) {

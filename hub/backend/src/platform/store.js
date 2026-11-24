@@ -1299,9 +1299,10 @@ function createStore(db) {
     const stale = prepare(`SELECT u.id FROM users u
       WHERE u.tenant_id = ? AND u.kind = 'gast' AND u.created_at < ? AND (u.last_seen_at IS NULL OR u.last_seen_at < ?)
         AND NOT EXISTS (SELECT 1 FROM plans p WHERE p.tenant_id = u.tenant_id AND p.owner_id = u.id)
-      ORDER BY u.created_at LIMIT 200`).all(tenantId, cutoff, cutoff);
+      ORDER BY u.created_at LIMIT 2000`).all(tenantId, cutoff, cutoff);
     let removed = 0;
     for (const row of stale) {
+      if (removed >= 200) break;
       try {
         removed += transaction(db, () => {
           prepare('DELETE FROM sessions WHERE tenant_id = ? AND user_id = ?').run(tenantId, row.id);
