@@ -33,6 +33,7 @@ test('offertes en werkorders: pagina, totaal en ingekort', async () => {
   const db = openDb();
   const store = createStore(db);
   const main = store.ensureTenant().id;
+  await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { mustChangePassword: false });
   await store.createAccount(main, { username: 'monteur', displayName: 'Monteur', role: 'installateur', password: PW }, { mustChangePassword: false });
   const { server, base } = await listen(createApp({ env: { APP_PUBLIC_URL: 'https://aquatech.example/' }, secret: 'e'.repeat(64), db, addressFetch: createPdokFake().fetchImpl, loginDelayMs: 0 }));
   servers.push(server);
@@ -65,4 +66,17 @@ test('offertes en werkorders: pagina, totaal en ingekort', async () => {
   const rest = (await monteur.get('/app/api/workorders?limit=2&offset=2')).body;
   assert.deepStrictEqual([rest.items.length, rest.total, rest.truncated], [1, 3, false]);
   assert.strictEqual((await monteur.get(`/app/api/workorders?quote=${ids[0]}`)).body.total, 1, 'filter op offerte telt mee in het totaal');
+});
+
+test('facturen: het antwoord meldt het totaal en dat de lijst niet is ingekort', async () => {
+  const db = openDb();
+  const store = createStore(db);
+  const main = store.ensureTenant().id;
+  await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { mustChangePassword: false });
+  const { server, base } = await listen(createApp({ secret: 'e'.repeat(64), db, addressFetch: createPdokFake().fetchImpl, loginDelayMs: 0 }));
+  servers.push(server);
+  const baas = await createLogin(base, { password: PW })('baas');
+  assert.strictEqual((await baas.post('/app/api/invoices', { data: { lines: [] } })).status, 201);
+  const list = (await baas.get('/app/api/invoices')).body;
+  assert.deepStrictEqual([list.items.length, list.total, list.truncated], [1, 1, false]);
 });

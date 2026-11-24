@@ -296,16 +296,18 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
    */
   function listQuery({ tenantId, ownerId = null, planId = null, customerId = null, limit = LIST_LIMIT, offset = 0 }) {
     const args = [tenantId];
-    let sql = `SELECT q.id, q.number, q.status, q.title, q.customer, q.plan_id, q.total_excl, q.total_incl, q.created_at, q.updated_at,
+    // Het filter staat apart (alleen kolommen van q), zodat de lijst- en de telquery precies dezelfde voorwaarden hebben.
+    let filter = '';
+    if (ownerId) { filter += ' AND q.owner_id = ?'; args.push(ownerId); }
+    if (customerId) { filter += " AND q.customer_id = ? AND q.status <> 'concept'"; args.push(customerId); }
+    if (planId) { filter += ' AND q.plan_id = ?'; args.push(String(planId)); }
+    const sql = `SELECT q.id, q.number, q.status, q.title, q.customer, q.plan_id, q.total_excl, q.total_incl, q.created_at, q.updated_at,
         ${jsonField(db, 'q.data', 'validUntil')} AS valid_until, q.owner_id, u.username AS owner_username, u.display_name AS owner_name,
         q.customer_id, c.display_name AS customer_name, q.view_count, q.viewed_at, q.responded_at, q.order_id, q.converted_at, o.number AS order_number
       FROM quotes q JOIN users u ON u.id = q.owner_id LEFT JOIN users c ON c.id = q.customer_id LEFT JOIN web_orders o ON o.tenant_id = q.tenant_id AND o.id = q.order_id
-      WHERE q.tenant_id = ? AND q.deleted_at IS NULL`;
-    if (ownerId) { sql += ' AND q.owner_id = ?'; args.push(ownerId); }
-    if (customerId) { sql += " AND q.customer_id = ? AND q.status <> 'concept'"; args.push(customerId); }
-    if (planId) { sql += ' AND q.plan_id = ?'; args.push(String(planId)); }
-    const countSql = `SELECT COUNT(*) AS n FROM quotes q WHERE q.tenant_id = ? AND q.deleted_at IS NULL${sql.slice(sql.indexOf('q.deleted_at IS NULL') + 'q.deleted_at IS NULL'.length)}`;
-    return { sql: `${sql} ORDER BY q.updated_at DESC LIMIT ${pageSize(limit)} OFFSET ${pageOffset(offset)}`, countSql, args, customerId };
+      WHERE q.tenant_id = ? AND q.deleted_at IS NULL${filter}
+      ORDER BY q.updated_at DESC, q.id LIMIT ${pageSize(limit)} OFFSET ${pageOffset(offset)}`;
+    return { sql, countSql: `SELECT COUNT(*) AS n FROM quotes q WHERE q.tenant_id = ? AND q.deleted_at IS NULL${filter}`, args, customerId };
   }
 
   /**

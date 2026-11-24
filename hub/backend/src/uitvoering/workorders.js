@@ -177,7 +177,7 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
     if (quoteId) { extra += ' AND w.quote_id = ?'; args.push(String(quoteId)); }
     if (customerId) { extra += OF_CUSTOMER; args.push(String(customerId), String(customerId)); }
     return {
-      sql: `${LIST_SELECT} WHERE w.tenant_id = ? AND w.deleted_at IS NULL${extra} ORDER BY w.updated_at DESC LIMIT ${pageSize(limit)} OFFSET ${pageOffset(offset)}`,
+      sql: `${LIST_SELECT} WHERE w.tenant_id = ? AND w.deleted_at IS NULL${extra} ORDER BY w.updated_at DESC, w.id LIMIT ${pageSize(limit)} OFFSET ${pageOffset(offset)}`,
       countSql: `SELECT COUNT(*) AS n FROM work_orders w WHERE w.tenant_id = ? AND w.deleted_at IS NULL${extra}`, args, customerId,
     };
   }

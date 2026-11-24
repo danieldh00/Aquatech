@@ -110,15 +110,19 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
    */
   function listQuery(tenantId, { status = '', from = '', to = '', workOrderId = '', customerId = '', kinds = null, statuses = null } = {}) {
     const args = [tenantId];
-    let sql = `SELECT ${LIST_COLS} FROM invoices WHERE tenant_id = ?`;
-    if (Core.STATUSES[status]) { sql += ' AND status = ?'; args.push(status); }
-    if (Core.isDate(from)) { sql += ' AND invoice_date >= ?'; args.push(from); }
-    if (Core.isDate(to)) { sql += ' AND invoice_date <= ?'; args.push(to); }
-    if (workOrderId) { sql += ' AND work_order_id = ?'; args.push(String(workOrderId)); }
-    if (customerId) { sql += ' AND customer_id = ?'; args.push(String(customerId)); }
-    if (Array.isArray(kinds) && kinds.length) { sql += ` AND kind IN (${marks(kinds.length)})`; args.push(...kinds); }
-    if (Array.isArray(statuses) && statuses.length) { sql += ` AND status IN (${marks(statuses.length)})`; args.push(...statuses); }
-    return { sql: `${sql} ORDER BY invoice_date DESC, created_at DESC LIMIT ${LIST_LIMIT}`, countSql: `SELECT COUNT(*) AS n ${sql.slice(sql.indexOf('FROM invoices'))}`, args };
+    let filter = '';
+    if (Core.STATUSES[status]) { filter += ' AND status = ?'; args.push(status); }
+    if (Core.isDate(from)) { filter += ' AND invoice_date >= ?'; args.push(from); }
+    if (Core.isDate(to)) { filter += ' AND invoice_date <= ?'; args.push(to); }
+    if (workOrderId) { filter += ' AND work_order_id = ?'; args.push(String(workOrderId)); }
+    if (customerId) { filter += ' AND customer_id = ?'; args.push(String(customerId)); }
+    if (Array.isArray(kinds) && kinds.length) { filter += ` AND kind IN (${marks(kinds.length)})`; args.push(...kinds); }
+    if (Array.isArray(statuses) && statuses.length) { filter += ` AND status IN (${marks(statuses.length)})`; args.push(...statuses); }
+    // De filters staan apart, zodat de lijst- en de telquery dezelfde voorwaarden hebben; id als tiebreaker voor een stabiele volgorde.
+    return {
+      sql: `SELECT ${LIST_COLS} FROM invoices WHERE tenant_id = ?${filter} ORDER BY invoice_date DESC, created_at DESC, id LIMIT ${LIST_LIMIT}`,
+      countSql: `SELECT COUNT(*) AS n FROM invoices WHERE tenant_id = ?${filter}`, args,
+    };
   }
 
   /**
