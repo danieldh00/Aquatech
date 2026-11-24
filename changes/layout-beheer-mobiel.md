@@ -3,9 +3,9 @@ titel: Beheer en kopbalk netter op de telefoon
 ---
 
 ## Nieuws
-- Beheer > Webshop-inhoud scrolt op de telefoon niet meer zijwaarts.
+- [beheer] Beheer > Webshop-inhoud scrolt op de telefoon niet meer zijwaarts.
 - De kopbalk past op een smal scherm ook met de organisatiewisselaar en de belknop is groter om te tikken.
-- Brede tabellen (zoals Beheer > Gebruikers) tonen op de telefoon een schaduw aan de rand waar je nog kunt schuiven.
+- [beheer] Brede tabellen (zoals Beheer > Gebruikers) tonen op de telefoon een schaduw aan de rand waar je nog kunt schuiven.
 
 ## Changelog
 Layoutcheck-bevindingen L-02, L-03, L-10, L-12 en L-13 (thema Beheer + app-shell mobiel):
