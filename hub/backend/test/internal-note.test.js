@@ -30,7 +30,7 @@ async function setup() {
   const main = store.ensureTenant().id;
   await store.createAccount(main, { username: 'monteur', displayName: 'Monteur', role: 'installateur', password: PW }, { mustChangePassword: false });
   const customerAccount = await store.createAccount(main, { username: 'klaas', displayName: 'Klaas', role: 'klant', password: PW }, { mustChangePassword: false });
-  const { server, base } = await listen(createApp({ secret: 'e'.repeat(64), db, addressFetch: createPdokFake().fetchImpl, loginDelayMs: 0 }));
+  const { server, base } = await listen(createApp({ env: { APP_PUBLIC_URL: 'https://aquatech.example/' }, secret: 'e'.repeat(64), db, addressFetch: createPdokFake().fetchImpl, loginDelayMs: 0 }));
   servers.push(server);
   const as = createLogin(base, { password: PW });
   return { base, as, installer: await as('monteur'), customer: await as('klaas'), customerId: customerAccount.id || customerAccount.user.id };

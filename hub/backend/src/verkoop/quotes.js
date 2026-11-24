@@ -30,7 +30,7 @@ const Core = require(path.join(FRONTEND_DIR, 'offertes', 'quote-core.js'));
 const InvoiceCore = require(path.join(FRONTEND_DIR, 'facturen', 'invoice-core.js'));
 const DocText = require(path.join(FRONTEND_DIR, 'shared', 'doc-text.js'));
 const { normalizeVatNumber, validVatNumber } = require('../webshop/vat');
-const { cleanPublicUrl } = require('../webshop/mollie');
+const { appBaseOf, isLoopbackUrl } = require('../platform/app-address');
 const Roles = require(path.join(FRONTEND_DIR, 'shared', 'roles.js'));
 
 // Bedrijfsprofiel: tekstvelden met maximale lengte en getallen [min, max].
@@ -119,20 +119,20 @@ function validShareBase(url, page = 'offerte.html') {
 }
 
 /**
- * Zet de herkomst van een klantlink vast op het webadres uit Beheer (Webshop > Betalen). De browser van de
- * medewerker kan via localhost, een intern adres of een testdomein binnenkomen; zo'n link zou bij de klant niet werken.
- * Is er geen webadres ingevuld of is het adres ongeldig, dan blijft het adres zoals het is (validShareBase beslist dan).
+ * Zet de herkomst van een klantlink vast op het openbare adres van de app (Beheer > Instellingen > Openbaar adres van de
+ * app; terugval het webadres van de webshop). De browser van de medewerker kan via een intern adres of een testdomein
+ * binnenkomen, of een gemanipuleerde sessie kan een willekeurig adres opgeven: de herkomst komt daarom nooit uit de browser.
+ * Is er geen openbaar adres, dan wordt alleen een adres naar de eigen computer (localhost) aanvaard.
  * @param {{ get: Function }} settings De instellingen van de omgeving.
  * @param {string} url Het adres van de openbare pagina uit de browser.
  * @param {string} [page] De openbare pagina (offerte.html of afspraak.html).
- * @returns {string} Het adres met de openbare herkomst, of het oorspronkelijke adres.
+ * @returns {string|null} Het adres met de openbare herkomst; het oorspronkelijke adres als het ongeldig is (validShareBase beslist dan); null als er geen openbaar adres is ingesteld.
  */
 function pinShareBase(settings, url, page = 'offerte.html') {
   const base = validShareBase(url, page);
   if (!base) return url;
-  const payment = settings.get('shopPayment');
-  const publicUrl = cleanPublicUrl(payment && payment.publicUrl);
-  if (!publicUrl) return base;
+  const publicUrl = appBaseOf(settings);
+  if (!publicUrl) return isLoopbackUrl(base) ? base : null;
   // Een pad in het webadres (bijv. /winkel/) hoort voor het pad van de app, tenzij de browser al via dat pad binnenkwam.
   const prefix = new URL(publicUrl).pathname.replace(/\/$/, '');
   const pagePath = new URL(base).pathname;
@@ -1109,7 +1109,9 @@ function registerQuoteRoutes(app, ctx) {
   // ---------- Openbare link (digitale offerte) ----------
   // Link maken (of de bestaande houden): de offerte gaat naar Verzonden.
   app.post('/api/quotes/:id/share', requireJson, requireQuotes, (req, res) => {
-    const out = quotes.share(req.user, req.params.id, pinShareBase(settingsOf(req), req.body?.url));
+    const base = pinShareBase(settingsOf(req), req.body?.url);
+    if (base === null) return res.status(409).json(PUBLIC_URL_MISSING);
+    const out = quotes.share(req.user, req.params.id, base);
     if (out.error === 'invalid_url') return res.status(400).json({ error: 'invalid_url', message: 'Ongeldig adres voor de link.' });
     if (out.error) return notFound(res);
     audit(req, 'offertelink_gemaakt', { quoteId: out.quote.id, number: out.quote.number });
@@ -1137,7 +1139,9 @@ function registerQuoteRoutes(app, ctx) {
     const mailer = mailerFor(settings);
     if (!mailer.configured()) return res.status(409).json({ error: 'not_configured', message: 'Er is geen mailserver ingesteld (Beheer → Integraties → E-mail).' });
     if (!recipientLimit.take(req.user.tenant_id, list)) return res.status(429).json({ error: 'recipient_limited', message: 'Naar een van deze e-mailadressen is het afgelopen uur al vaak gemaild. Probeer het later opnieuw.' });
-    const shared = quotes.share(req.user, req.params.id, pinShareBase(settings, url));
+    const base = pinShareBase(settings, url);
+    if (base === null) { recipientLimit.release(req.user.tenant_id, list); return res.status(409).json(PUBLIC_URL_MISSING); }
+    const shared = quotes.share(req.user, req.params.id, base);
     if (shared.error) recipientLimit.release(req.user.tenant_id, list);
     if (shared.error === 'invalid_url') return res.status(400).json({ error: 'invalid_url', message: 'Ongeldig adres voor de link.' });
     if (shared.error) return notFound(res);
@@ -1178,6 +1182,7 @@ function registerQuoteRoutes(app, ctx) {
     if (!ids.length || ids.length > MAX_BULK_SEND) return res.status(400).json({ error: 'invalid_ids', message: `Kies 1 tot ${MAX_BULK_SEND} offertes.` });
     if (!validShareBase(req.body?.url)) return res.status(400).json({ error: 'invalid_url', message: 'Ongeldig adres voor de link.' });
     const settings = settingsOf(req);
+    if (pinShareBase(settings, req.body.url) === null) return res.status(409).json(PUBLIC_URL_MISSING);
     const mailer = mailerFor(settings);
     if (!mailer.configured()) return res.status(409).json({ error: 'not_configured', message: 'Er is geen mailserver ingesteld (Beheer → Integraties → E-mail).' });
     const profile = settings.get('quoteProfile');
@@ -1288,6 +1293,10 @@ function registerQuoteRoutes(app, ctx) {
     const settings = settingsOf(req);
     const patch = {};
     if (validData(req.body?.config)) patch.mailServer = { ...settings.get('mailServer'), ...req.body.config };
+    // De Exchange-connector vertrouwt het IP-adres van de server (geen inlog): alleen de hoofdtenant mag hem kiezen.
+    if (patch.mailServer && patch.mailServer.mode === 'connector' && settings.isMainTenant === false) {
+      return res.status(400).json({ error: 'invalid_setting', message: 'De Exchange-connector is alleen beschikbaar voor de hoofdorganisatie; kies SMTP of Microsoft Graph.' });
+    }
     if (typeof req.body?.password === 'string') patch.mailPassword = req.body.password;
     if (typeof req.body?.graphSecret === 'string') patch.mailGraphSecret = req.body.graphSecret;
     try {
@@ -1301,7 +1310,9 @@ function registerQuoteRoutes(app, ctx) {
     res.json(mailView(settings));
   });
 
-  app.post(['/api/quote-mail/test', '/api/admin/mail/test'], requireJson, requireAdmin, async (req, res) => {
+  // Testmail: 5 per 10 minuten per organisatie, anders kon een beheerder via de mailserver willekeurige adressen mailen.
+  const mailTestLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 5, keyFn: (req) => `mailtest:${req.user.tenant_id}` });
+  app.post(['/api/quote-mail/test', '/api/admin/mail/test'], requireJson, requireAdmin, mailTestLimiter, async (req, res) => {
     const settings = settingsOf(req);
     const to = req.body?.to;
     if (!validEmail(to)) return res.status(400).json({ error: 'invalid_to', message: 'Vul een geldig e-mailadres in.' });
@@ -1346,4 +1357,7 @@ function registerQuoteRoutes(app, ctx) {
   });
 }
 
-module.exports = { createQuoteStore, registerQuoteRoutes, sanitizeProfile, withoutInternal, PROFILE_DEFAULTS, Core, validShareBase, pinShareBase, validSignature, mailBody };
+/** Het antwoord als er geen openbaar adres van de app is ingesteld (409). */
+const PUBLIC_URL_MISSING = { error: 'public_url_missing', message: 'Stel eerst het openbare adres van de app in (Beheer > Instellingen > Openbaar adres van de app); klantlinks gebruiken dat adres.' };
+
+module.exports = { PUBLIC_URL_MISSING, createQuoteStore, registerQuoteRoutes, sanitizeProfile, withoutInternal, PROFILE_DEFAULTS, Core, validShareBase, pinShareBase, validSignature, mailBody };

@@ -16,12 +16,19 @@ test('klantlink krijgt de openbare herkomst, het pad blijft', () => {
   assert.strictEqual(pinShareBase(settings, 'http://192.168.1.5/app/openbaar/afspraak.html', 'afspraak.html'), 'https://aquatech.example/app/openbaar/afspraak.html');
 });
 
-test('zonder webadres of bij een ongeldig adres verandert er niets', () => {
-  const url = 'http://localhost:3300/app/openbaar/offerte.html';
-  assert.strictEqual(pinShareBase(fakeSettings({ shopPayment: { publicUrl: '' } }), url), url);
-  assert.strictEqual(pinShareBase(fakeSettings({}), url), url);
+test('zonder openbaar adres geldt alleen localhost; een ander adres uit de browser wordt geweigerd', () => {
+  const local = 'http://localhost:3300/app/openbaar/offerte.html';
+  assert.strictEqual(pinShareBase(fakeSettings({ shopPayment: { publicUrl: '' } }), local), local);
+  assert.strictEqual(pinShareBase(fakeSettings({}), local), local);
+  assert.strictEqual(pinShareBase(fakeSettings({}), 'https://evil.example/app/openbaar/offerte.html'), null);
+  assert.strictEqual(pinShareBase(fakeSettings({ appPublicUrl: { url: '' } }), 'https://intern.example/app/openbaar/offerte.html'), null);
   const settings = fakeSettings({ shopPayment: { publicUrl: 'https://aquatech.example/' } });
   assert.strictEqual(pinShareBase(settings, 'https://evil.example/elders.html'), 'https://evil.example/elders.html');
+});
+
+test('het eigen openbare adres van de app gaat voor het webadres van de webshop', () => {
+  const settings = fakeSettings({ appPublicUrl: { url: 'https://app.example/' }, shopPayment: { publicUrl: 'https://winkel.example/' } });
+  assert.strictEqual(pinShareBase(settings, 'https://evil.example/app/openbaar/offerte.html'), 'https://app.example/app/openbaar/offerte.html');
 });
 
 test('een pad in het webadres blijft voor het pad van de app, zonder dubbel voorvoegsel', () => {

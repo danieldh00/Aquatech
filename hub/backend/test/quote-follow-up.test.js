@@ -32,7 +32,7 @@ test('herinnering: alleen verzonden offertes zonder antwoord, niet dubbel, hoogs
    * @returns {{ configured: Function, send: Function }} De mailer.
    */
   const mailerFor = () => ({ configured: () => true, send: async (message) => { if (failNext) { failNext = false; throw new Error('mailserver weg'); } sent.push(message); } });
-  const app = createApp({ secret: SECRET, db, mailerFor });
+  const app = createApp({ env: { APP_PUBLIC_URL: 'https://app.voorbeeld.test/' }, secret: SECRET, db, mailerFor });
   const { server, base } = await listen(app);
   const as = createLogin(base, { password: PW, extraBody: { mustChangePassword: false } });
   try {
@@ -108,7 +108,7 @@ test('opvolging: opnieuw mailen start opnieuw, oude offertes blijven met rust, m
    * @returns {{ configured: Function, send: Function }} De mailer.
    */
   const mailerFor = () => ({ configured: () => true, send: async (message) => { sent.push(message); } });
-  const app = createApp({ secret: SECRET, db, mailerFor });
+  const app = createApp({ env: { APP_PUBLIC_URL: 'https://app.voorbeeld.test/' }, secret: SECRET, db, mailerFor });
   const { server, base } = await listen(app);
   const as = createLogin(base, { password: PW, extraBody: { mustChangePassword: false } });
   try {

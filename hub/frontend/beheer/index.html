@@ -432,6 +432,14 @@
           <p class="muted small">Klanten en medewerkers zonder beheerrechten zien nooit details. Wachtwoorden en sleutels worden altijd uit de details gehaald. Zet de modus weer uit als je klaar bent.</p>
           <div class="err" role="alert"></div>
         </form>
+        <form id="s-app-address" class="card-form settings" novalidate>
+          <h3>Openbaar adres van de app</h3>
+          <p class="muted small">Het adres waarop klanten en AI-apps de app bereiken, bijvoorbeeld <code>https://aquatech.den-hollander.com/</code>. Klantlinks in mails (digitale offerte, afspraak) en de AI-koppeling (Claude en ChatGPT) gebruiken dit adres, nooit het adres uit de browser. Zonder dit adres (en zonder webadres van de webshop) maakt de app geen klantlinks. Verander het niet meer na het koppelen van een AI-app: bestaande koppelingen moeten dan opnieuw gemaakt worden.</p>
+          <label>Adres <span class="src" data-origin="appPublicUrl"></span><input name="appPublicUrl" type="url" placeholder="https://aquatech.den-hollander.com/" spellcheck="false"></label>
+          <p class="muted small" id="s-app-address-info"></p>
+          <div class="row"><button class="btn primary" type="submit">Opslaan</button></div>
+          <div class="err" role="alert"></div>
+        </form>
         <form id="s-ai-connector" class="card-form settings">
           <h3>AI-koppeling (Claude en ChatGPT)</h3>
           <p class="muted small">Medewerkers met het recht Offertes koppelen Claude of ChatGPT aan hun eigen account (Mijn profiel). Na een klantgesprek spreken ze een samenvatting in en zet de AI een offerte als <strong>concept</strong> klaar, met klanten en artikelen uit AquaTech. De AI kan niets versturen, wijzigen of verwijderen; de AI-kosten vallen onder het eigen Claude- of ChatGPT-abonnement.</p>

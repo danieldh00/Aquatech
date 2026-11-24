@@ -2,6 +2,7 @@ const { transaction } = require('../database/db');
 const { createVault } = require('../beveiliging/vault');
 const { sanitizeProfile } = require('../verkoop/quotes');
 const { sanitizeMail } = require('./mailer');
+const { sanitizeAppAddress } = require('./app-address');
 const { sanitizeShop } = require('../webshop/woocommerce');
 const { sanitizeShipping } = require('../webshop/shipping');
 const { sanitizePayment } = require('../webshop/mollie');
@@ -139,6 +140,9 @@ const FIELDS = {
   mailPassword: { type: 'secret', default: '', min: 1, liveOnly: true },
   // Clientgeheim van de Entra-app voor mail via Microsoft Graph (mailServer.mode 'graph').
   mailGraphSecret: { type: 'secret', default: '', min: 8, max: 300, liveOnly: true },
+  // Openbaar adres van de app (platform/app-address.js): basis van klantlinks in mails (offerte, afspraak) en adres van de AI-koppeling.
+  // Zonder dit adres geldt het webadres van de webshop; zonder beide weigert de app klantlinks (behalve naar localhost).
+  appPublicUrl: { type: 'object', env: 'APP_PUBLIC_URL', default: {}, sanitize: sanitizeAppAddress },
   // Webshopkoppeling (shop.js): webadres, ophaalwijze, btw en handmatige
   // koppeling; de sleutels van de WooCommerce REST API staan apart en versleuteld.
   shopSource: { type: 'object', default: {}, sanitize: sanitizeShop, liveOnly: true },
@@ -263,10 +267,10 @@ function coerce(definition, raw) {
 /**
  * Maakt de instellingen van één tenant: leest ze uit de database (geheimen
  * ontsleuteld) en houdt ze in het geheugen (één proces per database).
- * @param {{ db: object, tenantId: string, env?: object, vault?: object }} options Database, tenant waarvan de instellingen zijn, omgevingsvariabelen als startwaarden en de kluis voor geheimen.
+ * @param {{ db: object, tenantId: string, mainTenantId?: string|null, env?: object, vault?: object }} options Database, tenant waarvan de instellingen zijn, de hoofdtenant (voor isMainTenant; null = niet bekend), omgevingsvariabelen als startwaarden en de kluis voor geheimen.
  * @returns {{ get: Function, update: Function, view: Function, FIELDS: object }} De instellingenfuncties.
  */
-function createSettings({ db, tenantId, env = {}, vault = createVault() }) {
+function createSettings({ db, tenantId, mainTenantId = null, env = {}, vault = createVault() }) {
   /**
    * Context voor de versleuteling van een geheim: tenant en veldnaam wegen mee,
    * zodat een versleutelde waarde niet naar een ander veld of een andere tenant
@@ -452,7 +456,7 @@ function createSettings({ db, tenantId, env = {}, vault = createVault() }) {
     return out;
   }
 
-  return { get, rejectedStart, update, view, FIELDS, tenantId };
+  return { get, rejectedStart, update, view, FIELDS, tenantId, isMainTenant: mainTenantId === null ? undefined : tenantId === mainTenantId };
 }
 
 module.exports = { createSettings, SettingsError, FIELDS, LIVE_ONLY_KEYS, valueForTest, sanitizePurchaseProposals, sanitizeMonitoring };

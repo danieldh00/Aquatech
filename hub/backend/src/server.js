@@ -63,7 +63,8 @@ const { createWebOrderInvoices } = require('./verkoop/web-order-invoices');
 const { createOrderMailer } = require('./webshop/web-orders-mail');
 const { createGuestOrders } = require('./webshop/guest-orders');
 const { createStockAlerts } = require('./webshop/stock-alerts');
-const { createMollie, cleanPublicUrl, validPaymentId } = require('./webshop/mollie');
+const { createMollie, validPaymentId } = require('./webshop/mollie');
+const { appBaseOf } = require('./platform/app-address');
 const { createWebPayments } = require('./webshop/web-payments');
 const { createWebReturnStore, registerWebReturnRoutes } = require('./webshop/web-returns');
 const { createWebSalesStore, registerWebSalesRoutes } = require('./webshop/web-sales');
@@ -397,7 +398,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (!tenantSettings) {
       const tenantRow = store.getTenant(tenantId);
       const own = tenantId === tenant.id || (tenantRow && tenantRow.parent_id === tenant.id);
-      tenantSettings = createSettings({ db: database, tenantId, env: own ? startEnv : {}, vault });
+      tenantSettings = createSettings({ db: database, tenantId, mainTenantId: tenant.id, env: own ? startEnv : {}, vault });
       settingsCache.set(tenantId, tenantSettings);
     }
     return tenantSettings;
@@ -1757,7 +1758,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
      * @returns {string} De link, of '' zonder ingesteld webadres.
      */
     publicUrl: (tenantId) => {
-      const base = String((settingsFor(tenantId).get('shopPayment') || {}).publicUrl || '').replace(/\/+$/, '');
+      const base = appBaseOf(settingsFor(tenantId)).replace(/\/+$/, '');
       return base ? `${base}/app/beheer/#bewaking` : '';
     },
   });
@@ -1895,18 +1896,26 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
    */
   const today = () => new Date().toISOString().slice(0, 10);
   /**
-   * De teller van AI-herkenningen van vandaag voor een omgeving.
-   * @param {string} tenantId Id van de omgeving.
+   * De teller van AI-herkenningen van vandaag. Hij hoort bij de omgeving die de AI-sleutel levert (aiTenantOf): een
+   * testomgeving zonder eigen sleutel deelt de teller en de limiet van haar live-omgeving, zodat ze geen extra tegoed verbruikt.
+   * @param {string} tenantId Id van de omgeving die het verzoek doet.
    * @returns {{ day: string, count: number }} De teller.
    */
   function dailyFor(tenantId) {
-    let counter = dailyCounts.get(tenantId);
+    const keyTenantId = aiTenantOf(tenantId);
+    let counter = dailyCounts.get(keyTenantId);
     if (!counter || counter.day !== today()) {
       counter = { day: today(), count: 0 };
-      dailyCounts.set(tenantId, counter);
+      dailyCounts.set(keyTenantId, counter);
     }
     return counter;
   }
+  /**
+   * Het dagmaximum voor AI-verzoeken: de instelling van de omgeving die de AI-sleutel levert (zie dailyFor).
+   * @param {string} tenantId Id van de omgeving die het verzoek doet.
+   * @returns {number} Het maximum per dag.
+   */
+  const dailyLimitOf = (tenantId) => settingsFor(aiTenantOf(tenantId)).get('aiDailyLimit');
   /**
    * Middleware: ingelogd, of gasten staan aan.
    * @param {object} req Het verzoek.
@@ -1924,7 +1933,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.get('/api/plan/status', requireAppAccess, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     const settings = settingsFor(req.tenantId);
-    res.json({ available: Boolean(aiAvailable(req.tenantId)), remainingToday: Math.max(0, settings.get('aiDailyLimit') - dailyFor(req.tenantId).count) });
+    res.json({ available: Boolean(aiAvailable(req.tenantId)), remainingToday: Math.max(0, dailyLimitOf(req.tenantId) - dailyFor(req.tenantId).count) });
   });
 
   app.post('/api/plan/analyze', requireAppAccess, analyzeLimiter, async (req, res, next) => {
@@ -1953,7 +1962,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       if (known) return res.json({ ...known.result, recognition: { id: known.id, cached: true, learned: known.learned } });
     }
     const daily = dailyFor(req.tenantId);
-    if (daily.count >= settings.get('aiDailyLimit')) {
+    if (daily.count >= dailyLimitOf(req.tenantId)) {
       return res.status(429).json({ error: 'daily_limit', message: 'Het dagelijkse maximum voor automatisch herkennen is bereikt. Probeer het morgen opnieuw of teken het plan zelf.' });
     }
     daily.count += 1;
@@ -2336,11 +2345,12 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     grants: oauthGrants, signValue: auth.signValue, identify, connectorOn, userForGrant, familyOf: familyOfUser, audit,
     isCustomer: (req, user) => isCustomer(req, user),
     /**
-     * Het vaste webadres uit Beheer > Webshop > Betalen (hoofdtenant), alleen de origin; leeg = de Host-kop van het verzoek.
+     * Het openbare adres van de app uit Beheer > Instellingen (hoofdtenant; terugval het webadres van de webshop), alleen de
+     * origin; leeg = de Host-kop van het verzoek.
      * @returns {string} Het adres, of een lege tekst.
      */
     publicOrigin: () => {
-      const publicUrl = cleanPublicUrl((settingsFor(tenant.id).get('shopPayment') || {}).publicUrl);
+      const publicUrl = appBaseOf(settingsFor(tenant.id));
       return publicUrl ? new URL(publicUrl).origin : '';
     },
     can: (user, right) => Roles.can(user, right),

@@ -25,7 +25,7 @@ test('bulk mailen: elke klant krijgt zijn bericht, de rest wordt overgeslagen', 
   await store.createAccount(tid, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PASSWORD });
   await store.createAccount(tid, { username: 'kees', displayName: 'Kees', role: 'installateur', password: PASSWORD });
   await store.createAccount(tid, { username: 'klaas', displayName: 'Klaas', role: 'klant', password: PASSWORD });
-  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, secret: 'z'.repeat(64), db, mailerFor }));
+  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1', APP_PUBLIC_URL: 'https://aquatech.example/' }, secret: 'z'.repeat(64), db, mailerFor }));
   const as = createLogin(base, { password: PASSWORD });
   try {
     const baas = await as('baas'), kees = await as('kees'), klaas = await as('klaas');

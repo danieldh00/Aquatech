@@ -297,7 +297,7 @@ function registerItemTextRoutes(app, ctx) {
     return {
       enabled: Boolean(settings.get('aiEnabled')),
       configured: currentItemTextWriter(tenantOf(req)).available,
-      remainingToday: Math.max(0, settings.get('aiDailyLimit') - dailyFor(tenantOf(req)).count),
+      remainingToday: Math.max(0, settingsFor(aiTenantOf(tenantOf(req))).get('aiDailyLimit') - dailyFor(tenantOf(req)).count),
       batchSize: GENERATE_BATCH,
     };
   };
@@ -331,7 +331,7 @@ function registerItemTextRoutes(app, ctx) {
     }
     const skipExisting = Boolean(req.body.skipExisting);
     const daily = dailyFor(tenantId);
-    const dailyLimit = settings.get('aiDailyLimit');
+    const dailyLimit = settingsFor(aiTenantOf(tenantId)).get('aiDailyLimit');
     if (daily.count >= dailyLimit) {
       return res.status(429).json({ error: 'daily_limit', message: 'Het dagelijkse maximum voor AI-verzoeken is bereikt. Probeer het morgen opnieuw of verhoog het maximum bij Beheer → Integraties → AI-herkenning.' });
     }
