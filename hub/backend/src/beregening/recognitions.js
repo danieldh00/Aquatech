@@ -17,6 +17,8 @@ const FEATURE_VERSION = 1;
 const FEATURE_BINS = 8 * 8 * 8 * 3; // zie localrecog.js (featureKey)
 const MAX_EXAMPLES = 300; // zoveel recente voorbeelden tellen mee
 const MAX_COUNT = 1000000;
+// De werkresolutie van de herkenning is hoogstens 1000 × 1000 pixels (WORK_MAX in localrecog.js): meer voorbeelden dan pixels kan één tekening niet leveren.
+const MAX_TOTAL = 1000000;
 const CACHE_MS = 60 * 1000;
 
 /**
@@ -36,11 +38,14 @@ function sanitizeSamples(raw) {
   if (!raw || typeof raw !== 'object' || raw.v !== FEATURE_VERSION || !raw.bins || typeof raw.bins !== 'object') return null;
   const bins = {};
   let binCount = 0;
+  let total = 0;
   for (const [key, counts] of Object.entries(raw.bins)) {
     const bin = Number(key);
     if (!Number.isInteger(bin) || bin < 0 || bin >= FEATURE_BINS || !Array.isArray(counts) || counts.length !== 6) return null;
     const rounded = counts.map((value) => Math.round(Number(value)));
     if (rounded.some((value) => !Number.isFinite(value) || value < 0 || value > MAX_COUNT)) return null;
+    total += rounded.reduce((sum, value) => sum + value, 0);
+    if (total > MAX_TOTAL) return null;
     if (rounded.some((value) => value > 0)) { bins[bin] = rounded; binCount++; }
   }
   return binCount ? { v: FEATURE_VERSION, bins } : null;
@@ -143,15 +148,17 @@ function createRecognitionStore(db) {
   }
 
   /**
-   * Slaat de tellingen bij een AI-herkenning van deze tenant op; alleen de eerste keer (niet overschrijven).
+   * Slaat de tellingen bij een AI-herkenning van deze tenant op; alleen de eerste keer (niet overschrijven) en alleen
+   * door de gebruiker die de herkenning liet doen (audit B-18).
    * @param {string} tenantId Id van de tenant.
    * @param {string} id Id van de herkenning.
    * @param {object} samples De gecontroleerde tellingen.
+   * @param {string|null} userId Wie de tellingen instuurt (moet de aanvrager van de herkenning zijn).
    * @returns {boolean} Of de tellingen zijn opgeslagen.
    */
-  function addSamples(tenantId, id, samples) {
-    const changes = prepare(`UPDATE plan_recognitions SET samples = ?, updated_at = ? WHERE tenant_id = ? AND id = ? AND source = 'ai' AND samples = ''`)
-      .run(JSON.stringify(samples), currentTimestamp(), tenantId, String(id || '')).changes;
+  function addSamples(tenantId, id, samples, userId = null) {
+    const changes = prepare(`UPDATE plan_recognitions SET samples = ?, updated_at = ? WHERE tenant_id = ? AND id = ? AND source = 'ai' AND samples = '' AND user_id IS NOT DISTINCT FROM ?`)
+      .run(JSON.stringify(samples), currentTimestamp(), tenantId, String(id || ''), userId || null).changes;
     if (changes) cache.delete(tenantId);
     return changes > 0;
   }

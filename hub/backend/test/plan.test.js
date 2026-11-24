@@ -133,16 +133,20 @@ test('zelfde tekening geeft altijd hetzelfde resultaat; opnieuw herkennen kan', 
 test('leren: kleurtellingen bij een AI-herkenning, opgeteld per omgeving, invoercontrole', async () => {
   const analyzer = { available: true, model: 'claude-opus-5-5', analyze: async () => ({ scale: {}, areas: [], elements: [], notes: '' }) };
   const { server, base } = await start({ analyzer });
+  let cookie = '';
   /**
-   * Stuurt geleerde tellingen naar /api/plan/learn.
+   * Stuurt tellingen naar /api/plan/learn met de cookie van de browser die de herkenning liet doen.
    * @param {object} body De tellingen.
-   * @returns {Promise<Response>} Het fetch-antwoord.
+   * @returns {Promise<Response>} Het antwoord.
    */
-  const learn = (body) => fetch(`${base}/app/api/plan/learn`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const learn = (body) => fetch(`${base}/app/api/plan/learn`, { method: 'POST', headers: { 'Content-Type': 'application/json', cookie }, body: JSON.stringify(body) });
   try {
     const empty = await (await fetch(`${base}/app/api/plan/learned`)).json();
     assert.strictEqual(empty.examples, 0);
-    const { recognition } = await (await post(base, { image: PNG, width: 10, height: 10 })).json();
+    const first = await post(base, { image: PNG, width: 10, height: 10 });
+    // dezelfde browser (gast) die de herkenning liet doen, stuurt de tellingen in (B-18)
+    cookie = first.headers.getSetCookie().map((header) => header.split(';')[0]).join('; ');
+    const { recognition } = await first.json();
     assert.strictEqual(recognition.learned, false);
     const samples = { v: 1, bins: { 100: [0, 50, 0, 0, 0, 0], 7: [5, 0, 0, 0, 0, 1] } };
     assert.strictEqual((await learn({ recognitionId: recognition.id, samples: { v: 1, bins: { 99999: [1, 0, 0, 0, 0, 0] } } })).status, 400);
@@ -157,7 +161,8 @@ test('leren: kleurtellingen bij een AI-herkenning, opgeteld per omgeving, invoer
     const again = await (await post(base, { image: PNG, width: 10, height: 10 })).json();
     assert.strictEqual(again.recognition.learned, true);
     // goedgekeurd plan: alleen ingelogd met recht plannen.goedkeuren (zie drawings.test.js)
-    assert.strictEqual((await learn({ planId: 'x', samples })).status, 401);
+    assert.strictEqual((await fetch(`${base}/app/api/plan/learn`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planId: 'x', samples }) })).status, 401);
+    assert.strictEqual((await learn({ planId: 'x', samples })).status, 403, 'een gast mag geen plan goedkeuren');
   } finally { server.close(); }
 });
 
@@ -239,4 +244,23 @@ test('tegoed op: duidelijke melding, geen tweede poging', async () => {
   await assert.rejects(createPlanAnalyzer({ client, log: () => {} }).analyze({ mediaType: 'image/png', data: 'x', width: 10, height: 10 }),
     (error) => error.code === 'no_credit' && error.status === 402 && /tegoed/.test(error.message));
   assert.strictEqual(plainCalls, 0);
+});
+
+test('B-18: tellingen zijn begrensd op het aantal pixels en alleen de aanvrager van de herkenning mag ze insturen', () => {
+  const { openDb } = require('../src/database/db');
+  const { createStore } = require('../src/platform/store');
+  const { createRecognitionStore, sanitizeSamples } = require('../src/beregening/recognitions');
+  assert.ok(sanitizeSamples({ v: 1, bins: { 1: [900000, 0, 0, 0, 0, 0] } }), 'binnen het aantal pixels');
+  assert.strictEqual(sanitizeSamples({ v: 1, bins: { 1: [900000, 0, 0, 0, 0, 0], 2: [200000, 0, 0, 0, 0, 0] } }), null, 'meer dan 1.000.000 voorbeelden is onmogelijk');
+  const db = openDb();
+  const store = createStore(db);
+  const tenantId = store.ensureTenant().id;
+  const first = store.createGuest(tenantId);
+  const second = store.createGuest(tenantId);
+  const recognitions = createRecognitionStore(db);
+  const id = recognitions.saveAi({ tenantId, userId: first.id, hash: 'h', model: 'm', version: 'v', result: {} });
+  const samples = { v: 1, bins: { 1: [5, 0, 0, 0, 0, 0] } };
+  assert.strictEqual(recognitions.addSamples(tenantId, id, samples, second.id), false, 'een andere gebruiker mag niet meetellen');
+  assert.strictEqual(recognitions.addSamples(tenantId, id, samples, null), false, 'anoniem ook niet');
+  assert.strictEqual(recognitions.addSamples(tenantId, id, samples, first.id), true);
 });
