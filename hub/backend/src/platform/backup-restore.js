@@ -135,7 +135,7 @@ function stable(value) {
 /**
  * Ontsleutelt een back-up en leest hem in een tijdelijk schema naast de actieve database, om alleen te lezen.
  * @param {{ dir: string, name: string, vault: object, current: object }} options De back-upmap, de bestandsnaam, de kluis en de actieve database (levert de verbinding).
- * @returns {Promise<{ db: object, close: Function }>} De ingelezen back-up; close() wist het tijdelijke schema.
+ * @returns {Promise<{ db: object, close: Function }>} De ingelezen back-up (het ontsleutelde tussenbestand is al gewist); close() wist het tijdelijke schema.
  * @throws {Error} Bij een ongeldige naam, een verkeerde sleutel, een beschadigd of oud bestand.
  */
 async function openBackup({ dir, name, vault, current }) {
@@ -147,11 +147,13 @@ async function openBackup({ dir, name, vault, current }) {
     db = openScratch(current);
     const lines = readline.createInterface({ input: fs.createReadStream(temp).pipe(zlib.createGunzip()), crlfDelay: Infinity });
     await importLines(db, lines);
+    // Het ontsleutelde bestand is na het inlezen niet meer nodig: meteen wissen, zodat het niet blijft staan terwijl de back-up bewaard wordt.
+    fs.rmSync(temp, { force: true });
     return {
       db,
-      /** Wist het tijdelijke schema en het tijdelijke bestand. */
+      /** Wist het tijdelijke schema. */
       close() {
-        try { dropScratch(db); } finally { fs.rmSync(temp, { force: true }); }
+        dropScratch(db);
       },
     };
   } catch (error) {

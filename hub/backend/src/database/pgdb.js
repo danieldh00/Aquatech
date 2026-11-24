@@ -533,23 +533,31 @@ END $$`);
  */
 const pgVersion = (db) => db.prepare('SELECT version FROM schema_version').get()?.version || 0;
 
+/** Tijdelijke schema's die dit proces zelf geopend heeft en nog niet heeft gesloten (die ruimt dropStaleScratch nooit op). */
+const activeScratch = new Set();
+/** Voorvoegsel van de namen van tijdelijke schema's: aqt_scratch_<aanmaaktijd in hex>_<willekeur>. */
+const SCRATCH_PREFIX = 'aqt_scratch_';
+
 /**
  * Maakt naast de database een tijdelijk schema met lege kopieën van alle tabellen (zelfde kolommen en standaardwaarden,
  * zonder sleutels, foreign keys en afscherming) op dezelfde verbinding. Gebruikt om een back-up in te lezen en alleen te
- * lezen; ruim op met dropScratch.
+ * lezen; ruim op met dropScratch. De naam bevat het aanmaakmoment, zodat dropStaleScratch resten van een afgebroken
+ * proces kan herkennen.
  * @param {PgDatabase} db De bestaande database (levert de verbinding en de tabelvorm).
  * @returns {PgDatabase} De tijdelijke database.
  */
 function openScratch(db) {
-  const schema = `aqt_scratch_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`;
+  const schema = `${SCRATCH_PREFIX}${Date.now().toString(16)}_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`;
   const scratch = new PgDatabase(db.bridge, schema);
   const tables = db.prepare("SELECT table_name AS name FROM information_schema.tables WHERE table_schema = current_schema() AND table_type = 'BASE TABLE'").all().map((row) => row.name);
+  activeScratch.add(schema);
   // De werkthread maakt het schema zelf aan bij de eerste query.
   try {
     for (const name of tables) scratch.exec(`CREATE TABLE "${schema}"."${name}" (LIKE "${db.schema}"."${name}" INCLUDING DEFAULTS)`);
     scratch.prepare('DELETE FROM schema_version').run();
     scratch.prepare('INSERT INTO schema_version (version) VALUES (?)').run(pgVersion(db));
   } catch (error) {
+    activeScratch.delete(schema);
     scratch.exec(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
     throw error;
   }
@@ -562,8 +570,31 @@ function openScratch(db) {
  * @returns {void}
  */
 function dropScratch(scratch) {
-  if (!/^aqt_scratch_[0-9a-f]+$/.test(scratch.schema)) throw new Error('Geen tijdelijk schema.');
+  if (!/^aqt_scratch_[0-9a-f_]+$/.test(scratch.schema)) throw new Error('Geen tijdelijk schema.');
+  activeScratch.delete(scratch.schema);
   scratch.exec(`DROP SCHEMA IF EXISTS "${scratch.schema}" CASCADE`);
+}
+
+/**
+ * Verwijdert tijdelijke schema's (aqt_scratch_*) die een afgebroken proces achterliet: ouder dan de gegeven tijd volgens
+ * de aanmaaktijd in de naam, of zonder aanmaaktijd (oudere naamvorm) en niet van dit proces. Schema's die dit proces
+ * nu gebruikt blijven altijd staan. Draait met de gewone verbinding, zonder de organisatie-afscherming.
+ * @param {PgDatabase} db De database (levert de verbinding).
+ * @param {{ maxAgeMs?: number, now?: number }} [options] De maximale leeftijd (standaard een uur) en het huidige moment (voor tests).
+ * @returns {string[]} De namen van de verwijderde schema's.
+ */
+function dropStaleScratch(db, { maxAgeMs = 3600 * 1000, now = Date.now() } = {}) {
+  const plain = new PgDatabase(db.bridge, db.schema);
+  const removed = [];
+  for (const row of plain.prepare('SELECT nspname FROM pg_namespace WHERE starts_with(nspname, ?)').all(SCRATCH_PREFIX)) {
+    const name = row.nspname;
+    if (activeScratch.has(name) || !/^aqt_scratch_[0-9a-f_]+$/.test(name)) continue;
+    const created = /^aqt_scratch_([0-9a-f]{8,})_[0-9a-f]+$/.exec(name);
+    if (created && now - parseInt(created[1], 16) < maxAgeMs) continue;
+    plain.exec(`DROP SCHEMA IF EXISTS "${name}" CASCADE`);
+    removed.push(name);
+  }
+  return removed;
 }
 
 /**
@@ -579,4 +610,4 @@ function dropSchemas(url, prefix) {
   }
 }
 
-module.exports = { bridgeFor, lockDown, isInvalidUuid, toleratesInvalidUuid, stripNul, openPg, openScratch, dropScratch, pgConfig, pgVersion, toPgParams, dropSchemas, DatabaseError, PgDatabase };
+module.exports = { bridgeFor, lockDown, isInvalidUuid, toleratesInvalidUuid, stripNul, openPg, openScratch, dropScratch, dropStaleScratch, pgConfig, pgVersion, toPgParams, dropSchemas, DatabaseError, PgDatabase };

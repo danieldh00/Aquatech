@@ -2,11 +2,12 @@
 // /api/admin/backups. De logica staat in backup-restore.js; hier staan de invoercontrole, het opnieuw invullen van het
 // eigen wachtwoord, de limieten, de back-up vooraf en het auditlog.
 const { createRateLimiter } = require('../beveiliging/rate-limit');
-const { verifyPassword } = require('./store');
+const { createIdentityConfirm } = require('./identity-confirm');
 const restore = require('./backup-restore');
 const lineRestore = require('./backup-restore-lines');
 const { DriveError } = require('./drive-backup');
 const { isDriveName } = require('./drive-restore-source');
+const { createBackupOpenCache } = require('./backup-open-cache');
 
 const BASE = '/api/admin/backups/restore';
 
@@ -20,35 +21,35 @@ function registerBackupRestoreRoutes(app, { backupDir, driveSource, vault, datab
   const openLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 30, keyFn: (req) => `restore-open:${req.user ? req.user.id : ''}` });
   const applyLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 5, keyFn: (req) => `restore-apply:${req.user ? req.user.id : ''}` });
   let applying = false;
+  // Een geopende back-up blijft kort bewaard (audit T-09): elke lijst, elk voorbeeld en elke toepassing hergebruikt hem.
+  const openCache = createBackupOpenCache();
+  app.locals.backupOpenCache = openCache;
 
   /**
-   * Opent de gekozen back-up, voert de functie uit en sluit hem altijd weer.
+   * De functie die de back-up opent (alleen aangeroepen als hij nog niet bewaard is; van Drive wordt het bestand dan pas opgehaald).
+   * @param {string} source De bron: een bestandsnaam of "drive:<bestandsnaam>".
+   * @returns {Function} Geeft een belofte van de geopende back-up.
+   */
+  function openerOf(source) {
+    if (!isDriveName(source)) return () => restore.openBackup({ dir: backupDir, name: source, vault, current: database });
+    if (!driveSource) throw Object.assign(new Error('Terugzetten vanaf Google Drive is niet beschikbaar.'), { status: 501 });
+    return () => driveSource.use(source, ({ dir, name: file }) => restore.openBackup({ dir, name: file, vault, current: database }));
+  }
+
+  /**
+   * Geeft de gekozen back-up (uit de cache of nieuw geopend) aan de functie. De back-up blijft daarna kort bewaard.
    * @param {object} req Het verzoek (req.tenantId = de actieve omgeving).
-   * @param {string} name De bestandsnaam van de back-up.
+   * @param {string} name De bron van de back-up: een bestandsnaam of "drive:<bestandsnaam>".
    * @param {Function} callback Krijgt { backup, current, context }.
    * @returns {Promise<*>} Wat de functie teruggeeft.
    */
   async function withBackup(req, name, callback) {
-    /**
-     * Opent de back-up uit de gegeven map en voert de functie uit.
-     * @param {string} dir De map met de back-up.
-     * @param {string} file De bestandsnaam.
-     * @returns {Promise<*>} Wat de functie teruggeeft.
-     */
-    const run = async (dir, file) => {
-      const opened = await restore.openBackup({ dir, name: file, vault, current: database });
-      try {
-        const customerRoleKeys = store.roles.keysOfKind(req.tenantId, 'klant');
-        return await callback({ backup: opened.db, current: database, context: { tenantId: req.tenantId, customerRoleKeys } });
-      } finally {
-        opened.close();
-      }
-    };
-    if (isDriveName(name)) {
-      if (!driveSource) throw Object.assign(new Error('Terugzetten vanaf Google Drive is niet beschikbaar.'), { status: 501 });
-      return driveSource.use(String(name), ({ dir, name: file }) => run(dir, file));
-    }
-    return run(backupDir, String(name || ''));
+    const source = String(name || '');
+    const open = openerOf(source);
+    return openCache.use(source, open, async (opened) => {
+      const customerRoleKeys = store.roles.keysOfKind(req.tenantId, 'klant');
+      return callback({ backup: opened.db, current: database, context: { tenantId: req.tenantId, customerRoleKeys } });
+    });
   }
   /**
    * Zet een fout om in een antwoord: bewust leesbare fouten (met status) tonen hun melding, de rest wordt een interne fout.
@@ -63,44 +64,7 @@ function registerBackupRestoreRoutes(app, { backupDir, driveSource, vault, datab
     return next(error);
   }
 
-  /**
-   * Vraagt het wachtwoord (en bij tweestapsverificatie de code) opnieuw, binnen dezelfde bewaking als inloggen: oplopende
-   * vertraging en blokkade. Zet bij een fout het antwoord al klaar.
-   * @param {object} req Het verzoek (body.password, body.totp).
-   * @param {object} res Het antwoord.
-   * @returns {Promise<boolean>} true als de identiteit klopt.
-   */
-  async function confirmIdentity(req, res) {
-    const guardKey = `terugzetten:${req.user.id}`;
-    const totpKey = `totp:${req.user.id}`;
-    if (loginGuard.blocked(req, guardKey, 10, 10) || loginGuard.blocked(req, totpKey, 10, 10)) {
-      res.status(429).json({ error: 'locked', message: 'Te veel verkeerde pogingen. Probeer het over een kwartier opnieuw.' });
-      return false;
-    }
-    await loginGuard.wait(req, guardKey);
-    const account = store.getUser(req.user.id);
-    const password = String(req.body?.password ?? '').slice(0, 200);
-    if (!account || !account.password_hash || !(await verifyPassword(password, account.password_hash))) {
-      loginGuard.fail(req, guardKey);
-      audit(req, 'backup_terugzetten_wachtwoord_fout', {});
-      res.status(401).json({ error: 'wrong_password', message: 'Je wachtwoord klopt niet.' });
-      return false;
-    }
-    const second = twoFactor.check(account, String(req.body?.totp ?? '').slice(0, 40));
-    if (!second.ok) {
-      if (second.missing) {
-        res.status(401).json({ error: 'totp_required', message: 'Vul de code uit je authenticator-app in.' });
-        return false;
-      }
-      loginGuard.fail(req, totpKey);
-      audit(req, 'backup_terugzetten_wachtwoord_fout', { via: 'tweestaps' });
-      res.status(401).json({ error: 'totp_wrong', message: 'De code klopt niet. Gebruik de nieuwste code uit de app of een herstelcode.' });
-      return false;
-    }
-    loginGuard.clear(req, guardKey);
-    if (second.required) loginGuard.clear(req, totpKey);
-    return true;
-  }
+  const confirmIdentity = createIdentityConfirm({ store, loginGuard, twoFactor, audit, auditAction: 'backup_terugzetten_wachtwoord_fout' });
 
   app.get(`${BASE}/kinds`, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');

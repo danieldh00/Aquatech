@@ -663,8 +663,9 @@
          */
         button.onclick = async () => {
           const name = button.dataset.backupDel;
-          if (!confirm(`Back-up ${name} verwijderen?\n\nHet bestand wordt definitief gewist van de server.`)) return;
-          try { await api(`backups/${encodeURIComponent(name)}`, { method: 'DELETE' }); toast('Back-up verwijderd'); } catch (error) { toast(error.message, true); }
+          const credentials = await window.BeheerReauth.ask(`Back-up ${name} verwijderen?`, 'Het bestand wordt definitief gewist van de server. Bevestig met je wachtwoord. De nieuwste back-up kan niet worden verwijderd.');
+          if (!credentials) return;
+          try { await api(`backups/${encodeURIComponent(name)}`, { method: 'DELETE', body: credentials }); toast('Back-up verwijderd'); } catch (error) { toast(error.message, true); }
           loadBackups();
         };
       });

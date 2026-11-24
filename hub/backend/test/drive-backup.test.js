@@ -76,7 +76,7 @@ function addBackup(dir, stamp, content) {
 async function connect(world, extra = {}) {
   const saved = await world.baas.put(`${BASE}/drive`, { clientId: 'client-123', clientSecret: 'geheim-van-google-app', redirectUri: REDIRECT, ...extra });
   assert.strictEqual(saved.status, 200);
-  const started = await world.baas.post(`${BASE}/drive/connect`);
+  const started = await world.baas.post(`${BASE}/drive/connect`, { password: PW });
   assert.strictEqual(started.status, 200);
   const url = new URL(started.body.url);
   assert.strictEqual(url.searchParams.get('scope'), 'https://www.googleapis.com/auth/drive.file');
@@ -105,7 +105,7 @@ test('rechten: alleen een hoofdbeheerder', async () => {
     await tweede.post('/app/api/auth/login', { username: 'tweede', password: PW });
     assert.strictEqual((await tweede.get(`${BASE}/drive`)).status, 403);
     assert.strictEqual((await tweede.put(`${BASE}/drive`, { clientId: 'x' })).status, 403);
-    assert.strictEqual((await tweede.post(`${BASE}/drive/connect`)).status, 403);
+    assert.strictEqual((await tweede.post(`${BASE}/drive/connect`, { password: PW })).status, 403);
     assert.strictEqual((await tweede.post(`${BASE}/drive/sync`)).status, 403);
   } finally { await world.cleanup(); }
 });
@@ -117,7 +117,7 @@ test('verbinden, uploaden als stroom, opruimen en verbreken', async () => {
     addBackup(world.dir, '20261112-030000', Buffer.alloc(300000, 7));
     const newest = addBackup(world.dir, '20261113-030000', 'nieuwste');
     // Aanzetten kan pas na verbinden; connect zonder gegevens kan ook niet.
-    assert.strictEqual((await world.baas.post(`${BASE}/drive/connect`)).status, 409);
+    assert.strictEqual((await world.baas.post(`${BASE}/drive/connect`, { password: PW })).status, 409);
     assert.strictEqual((await world.baas.put(`${BASE}/drive`, { enabled: true, clientId: 'c', clientSecret: 'geheim-van-google-app', redirectUri: REDIRECT })).status, 409);
     assert.strictEqual((await world.baas.put(`${BASE}/drive`, { clientId: 'c', redirectUri: 'http://onveilig/callback' })).status, 400);
 
@@ -151,7 +151,7 @@ test('verbinden, uploaden als stroom, opruimen en verbreken', async () => {
     // De Google-gegevens wijzigen kan pas na verbreken.
     assert.strictEqual((await world.baas.put(`${BASE}/drive`, { clientId: 'andere' })).status, 409);
     assert.strictEqual((await world.baas.put(`${BASE}/drive`, { keepCount: 5 })).status, 200);
-    const gone = (await world.baas.post(`${BASE}/drive/disconnect`)).body;
+    const gone = (await world.baas.post(`${BASE}/drive/disconnect`, { password: PW })).body;
     assert.strictEqual(gone.revoked, true);
     assert.deepStrictEqual(world.google.revoked, ['refresh-1']);
     assert.strictEqual(gone.connected, false);
@@ -210,7 +210,7 @@ test('terugkeer van Google: onbekende of herhaalde state, geweigerd en een ontbr
     await world.baas.put(`${BASE}/drive`, { clientId: 'c', clientSecret: 'geheim-van-google-app', redirectUri: REDIRECT });
     assert.match((await world.baas.get(`${BASE}/drive/callback?code=goede-code&state=verzonnen`)).location, /drive=fout&reden=invalid_state/);
     assert.match((await world.baas.get(`${BASE}/drive/callback?error=access_denied`)).location, /drive=geweigerd/);
-    const state = new URL((await world.baas.post(`${BASE}/drive/connect`)).body.url).searchParams.get('state');
+    const state = new URL((await world.baas.post(`${BASE}/drive/connect`, { password: PW })).body.url).searchParams.get('state');
     world.google.nextRefreshToken = '';
     assert.match((await world.baas.get(`${BASE}/drive/callback?code=goede-code&state=${state}`)).location, /reden=no_refresh_token/);
     // Een state is eenmalig.
@@ -221,7 +221,7 @@ test('terugkeer van Google: onbekende of herhaalde state, geweigerd en een ontbr
     const tweede = createClient(world.base, { followRedirects: false });
     await tweede.post('/app/api/auth/login', { username: 'tweede', password: PW });
     world.google.nextRefreshToken = 'refresh-1';
-    const other = new URL((await world.baas.post(`${BASE}/drive/connect`)).body.url).searchParams.get('state');
+    const other = new URL((await world.baas.post(`${BASE}/drive/connect`, { password: PW })).body.url).searchParams.get('state');
     assert.match((await tweede.get(`${BASE}/drive/callback?code=goede-code&state=${other}`)).location, /reden=invalid_state/);
   } finally { await world.cleanup(); }
 });
@@ -237,7 +237,7 @@ test('verbreken wacht op een lopende upload en laat geen stand van het oude acco
     world.google.holdUploads = new Promise((resolve) => { release = resolve; });
     const syncing = world.baas.post(`${BASE}/drive/sync`);
     await until(() => world.google.calls.some((call) => call.method === 'PUT'));
-    const disconnecting = world.baas.post(`${BASE}/drive/disconnect`);
+    const disconnecting = world.baas.post(`${BASE}/drive/disconnect`, { password: PW });
     await new Promise((resolve) => setTimeout(resolve, 100));
     release();
     const gone = (await disconnecting).body;

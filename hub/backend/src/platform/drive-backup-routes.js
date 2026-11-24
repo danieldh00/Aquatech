@@ -9,10 +9,10 @@ const { createRateLimiter } = require('../beveiliging/rate-limit');
 /**
  * Registreert de Drive-routes onder /api/admin/backups/drive.
  * @param {import('express').Express} app De app.
- * @param {object} ctx driveBackup (uit createDriveBackup), settings, audit (req, actie, detail, gebruiker, tenant), requireJson (middleware) en mainTenantId.
+ * @param {object} ctx driveBackup (uit createDriveBackup), settings, audit (req, actie, detail, gebruiker, tenant), requireJson (middleware), mainTenantId en confirmIdentity (herbevestiging met wachtwoord, identity-confirm.js; verbreken, opnieuw koppelen en de kopie uitzetten vragen die, audit B-17).
  * @returns {void}
  */
-function registerDriveBackupRoutes(app, { driveBackup, settings, audit, requireJson, mainTenantId }) {
+function registerDriveBackupRoutes(app, { driveBackup, settings, audit, requireJson, mainTenantId, confirmIdentity }) {
   // Een ruime limiet per gebruiker voor alle Drive-routes (het scherm doet er hooguit een paar per minuut).
   const driveLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 120, keyFn: (req) => `backup-drive:${req.user ? req.user.id : ''}` });
   app.use('/api/admin/backups/drive', driveLimiter);
@@ -57,6 +57,8 @@ function registerDriveBackupRoutes(app, { driveBackup, settings, audit, requireJ
     const changesApp = next.clientId !== current.clientId || next.redirectUri !== current.redirectUri || (typeof body.clientSecret === 'string' && body.clientSecret.trim() !== '') || body.clearSecret === true;
     if (changesApp && driveBackup.connected()) return res.status(409).json({ error: 'disconnect_first', message: 'Verbreek eerst de verbinding met Google Drive voordat je de Google-gegevens wijzigt; verbind daarna opnieuw.' });
     if (next.enabled && !driveBackup.connected() && body.enabled === true) return res.status(409).json({ error: 'not_connected', message: 'Verbind eerst met Google Drive voordat je de kopie aanzet.' });
+    // De kopie uitzetten zet de back-up buiten de server stil: dat vraagt dezelfde herbevestiging.
+    if (current.enabled && !next.enabled && !(await confirmIdentity(req, res))) return undefined;
     const patch = { backupDrive: next };
     if (typeof body.clientSecret === 'string' && body.clientSecret.trim()) patch.backupDriveClientSecret = body.clientSecret.trim();
     if (body.clearSecret === true) patch.backupDriveClientSecret = '';
@@ -68,10 +70,11 @@ function registerDriveBackupRoutes(app, { driveBackup, settings, audit, requireJ
     }
     audit(req, 'instellingen_gewijzigd', { fields: Object.keys(patch) }, undefined, mainTenantId);
     if (next.enabled && driveBackup.connected()) driveBackup.sync({ source: 'handmatig' }).catch((error) => console.warn(`Google Drive: ${error.message}`));
-    res.json({ ...driveBackup.status(), suggestedRedirect: driveSuggestedRedirect() });
+    return res.json({ ...driveBackup.status(), suggestedRedirect: driveSuggestedRedirect() });
   }));
   app.post('/api/admin/backups/drive/connect', requireJson, driveRoute(async (req, res) => {
-    res.json({ url: driveBackup.authorizeUrl(req.user.id) });
+    if (!(await confirmIdentity(req, res))) return undefined;
+    return res.json({ url: driveBackup.authorizeUrl(req.user.id) });
   }));
   app.get('/api/admin/backups/drive/callback', driveRoute(async (req, res) => {
     // Terug naar Beheer (relatief, werkt ook onder een padprefix): .../app/api/admin/backups/drive/ -> .../app/beheer/
@@ -94,9 +97,10 @@ function registerDriveBackupRoutes(app, { driveBackup, settings, audit, requireJ
     return back('drive=verbonden');
   }));
   app.post('/api/admin/backups/drive/disconnect', requireJson, driveRoute(async (req, res) => {
+    if (!(await confirmIdentity(req, res))) return undefined;
     const { revoked } = await driveBackup.disconnect();
     audit(req, 'backup_drive_verbroken', { revoked }, undefined, mainTenantId);
-    res.json({ ...driveBackup.status(), revoked, suggestedRedirect: driveSuggestedRedirect() });
+    return res.json({ ...driveBackup.status(), revoked, suggestedRedirect: driveSuggestedRedirect() });
   }));
   app.post('/api/admin/backups/drive/sync', requireJson, driveRoute(async (req, res) => {
     if (!driveBackup.connected()) return res.status(409).json({ error: 'not_connected', message: 'Er is geen verbinding met Google Drive.' });
