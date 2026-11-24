@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.39.1',
+      date: '2026-11-24',
+      title: 'Prijslijst inlezen: gearchiveerde leverancier en atomair verwerken',
+      items: [],
+    },
+    {
       version: '1.39.0',
       date: '2026-11-24',
       title: 'Prijslijst van de leverancier inlezen',
