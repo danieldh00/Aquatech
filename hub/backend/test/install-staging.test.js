@@ -23,6 +23,7 @@ case "$1" in
     if [[ "$2" != "-f" ]]; then [[ -f "$FAKE/no-tunnel" ]] && exit 1; exit 0; fi
     case "$3" in
       *Networks\\}\\}\\{\\{\\$name*) echo "tunnelnet " ;;
+      *compose.service*) cat "$FAKE/old-service" 2>/dev/null ;;
       *IPAddress*) cat "$FAKE/tunnel-ip" 2>/dev/null ;;
       *Health.Status*)
         if [[ "$4" == "aquatech-staging-postgres" ]]; then echo healthy
@@ -32,7 +33,7 @@ case "$1" in
   compose)
     case "$all" in
       *" build "*) grep -qx "$STAGING_COMMIT" "$FAKE/nobuild" 2>/dev/null && exit 1; echo "$STAGING_COMMIT" >> "$FAKE/images" ;;
-      *" up "*" aquatech"*) echo "$STAGING_COMMIT" > "$FAKE/running" ;;
+      *" up "*" aquatech-staging-app"*) echo "$STAGING_COMMIT" > "$FAKE/running" ;;
       *" stop "*) : > "$FAKE/running" ;;
     esac ;;
   exec) cat > "$FAKE/psql-input" ;;
@@ -285,7 +286,7 @@ test('een ander tunnel-IP: de opstelling gaat opnieuw omhoog met de nieuwe vertr
   const out = site.run(['--timer']);
   assert.strictEqual(out.status, 0, out.output);
   assert.match(site.env(), /^TRUSTED_PROXIES=172\.18\.0\.9\/32$/m);
-  assert.match(site.calls().slice(before.length), /compose .* up -d --force-recreate aquatech/);
+  assert.match(site.calls().slice(before.length), /compose .* up -d --force-recreate --remove-orphans aquatech-staging-app/);
 });
 
 test('geen tunnel-IP: gezond op de juiste commit = melden en code 0; anders een fout; een onzin-IP telt als geen', { skip: !bashAvailable }, () => {
@@ -326,6 +327,21 @@ test('ontbrekende tunnelgegevens: de eerste installatie stopt met een duidelijke
   assert.ok(!/compose/.test(site.calls()));
 });
 
+test('een container onder de oude servicenaam (aquatech, postgres) wordt opgeruimd en opnieuw aangemaakt', { skip: !bashAvailable }, () => {
+  const site = world();
+  site.commit('master');
+  assert.strictEqual(site.run().status, 0);
+  site.setFake('old-service', 'aquatech\n');
+  site.setFake('tunnel-ip', '172.18.0.5\n');
+  const before = site.calls();
+  const out = site.run();
+  assert.strictEqual(out.status, 0, out.output);
+  const calls = site.calls().slice(before.length);
+  assert.match(calls, /docker rm -f aquatech-staging\n/);
+  assert.match(calls, /docker rm -f aquatech-staging-postgres\n/);
+  assert.match(calls, /up -d --remove-orphans aquatech-staging-db/);
+});
+
 test('compose: eigen projectnaam en image, derde partijen op digest, alleen op 127.0.0.1, niets van de testomgeving', () => {
   const compose = fs.readFileSync(path.join(DEPLOY_DIR, 'compose.yml'), 'utf8');
   assert.match(compose, /^name: aquatech-staging$/m);
@@ -339,6 +355,11 @@ test('compose: eigen projectnaam en image, derde partijen op digest, alleen op 1
   assert.match(compose, /nl\.aquatech\.staging: "1"/);
   assert.match(compose, /- "127\.0\.0\.1:\$\{STAGING_PORT:-3310\}:3300"/);
   assert.match(compose, /- aquatech-staging$/m);
+  // De servicenaam is ook een netwerkalias in het gedeelde tunnelnetwerk: `aquatech` of `postgres` zou verkeer van de
+  // testomgeving naar staging sturen (zo ging het mis). Elke servicenaam moet dus uniek en met aquatech-staging beginnen.
+  const services = [...compose.split(/^services:\n/m)[1].split(/^networks:/m)[0].matchAll(/^  ([a-z0-9-]+):\s*$/gm)].map((match) => match[1]);
+  assert.ok(services.length >= 2);
+  for (const service of services) assert.match(service, /^aquatech-staging-/, `servicenaam ${service} botst mogelijk met de testomgeving`);
   assert.match(compose, /AQUATECH_STAGING=1/);
   assert.doesNotMatch(compose, /update\/(status|request)|\/var\/run\/docker\.sock/, 'geen koppeling met het updatemechanisme of de docker-socket');
   assert.doesNotMatch(compose, /container_name: aquatech(-postgres|-cloudflared)?$/m, 'geen containernaam van de testomgeving');
