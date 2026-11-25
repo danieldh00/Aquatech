@@ -612,8 +612,9 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
           hidden = results.filter((result) => result.ok).length;
           if (hidden < ids.length) warning = `${warning ? `${warning} ` : ''}${ids.length - hidden} oud webshopproduct staat nog zichtbaar in de webshop; zet het daar op concept.`;
         } catch (error) {
-          if (!(error instanceof SourceError)) throw error;
-          warning = `${warning ? `${warning} ` : ''}De oude webshopproducten zijn niet op concept gezet (${error.message}); doe dat in de webshop.`;
+          // Het hoofdartikel staat dan al in de webshop: nooit meer terugdraaien, alleen waarschuwen (welke fout ook).
+          log.warn(`Webshop (${tenantId}): oude producten op concept zetten mislukt: ${error.code || error.message}`);
+          warning = `${warning ? `${warning} ` : ''}De oude webshopproducten zijn niet op concept gezet${error instanceof SourceError ? ` (${error.message})` : ''}; doe dat in de webshop.`;
         }
       }
       return { productId: published.productId, variations: published.variations, hidden, warning };
