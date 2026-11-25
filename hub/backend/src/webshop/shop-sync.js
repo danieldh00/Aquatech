@@ -36,7 +36,7 @@
 // variaties van een gekoppeld hoofdartikel aan (createMissingVariations) en
 // zet publish() een nieuw artikel (met varianten) in de webshop.
 const { transaction } = require('../database/db');
-const { fetchProducts, fetchProductWithVariations, updateProducts, createProduct, updateAttributes, createVariations, SourceError } = require('./woocommerce');
+const { fetchProducts, fetchProductWithVariations, updateProducts, patchProducts, createProduct, updateAttributes, createVariations, SourceError } = require('./woocommerce');
 
 // Melding bij een gewoon artikel dat in de webshop een product met variaties is (zie stock.promoteToParent).
 const VARIABLE_ON_PLAIN = 'In de webshop is dit een product met variaties, maar dit artikel heeft voorraad of boekingen. Maak een nieuw hoofdartikel en zet de varianten daaronder.';
@@ -503,6 +503,26 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
   }
 
   /**
+   * Controleert of Aquatech in de webshop mag schrijven (webshop gekoppeld, REST API, "Aquatech is de bron").
+   * @param {object} shopConfig De koppelinstelling.
+   * @returns {object|null} { error, code, status } als het niet kan, anders null.
+   */
+  function publishProblem(shopConfig) {
+    if (!shopConfig.url) return { error: 'Er is geen webshop gekoppeld (Beheer → Integraties → Webshop).', code: 'not_configured', status: 409 };
+    if (shopConfig.mode !== 'rest' || !shopConfig.push) return { error: 'Zet in Beheer → Integraties → Webshop de REST API aan met "Aquatech is de bron" (prijzen en voorraad terugschrijven).', code: 'no_push', status: 409 };
+    return null;
+  }
+
+  /**
+   * Kan Aquatech nu producten in de webshop aanmaken en wijzigen?
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {boolean} true als de koppeling schrijven toestaat.
+   */
+  function canPublish(tenantId) {
+    try { return !publishProblem(configOf(tenantId)); } catch { return false; }
+  }
+
+  /**
    * Zet een artikel dat nog niet gekoppeld is als nieuw product in de webshop:
    * een gewoon artikel als enkelvoudig product met prijs en voorraad, een
    * hoofdartikel als variabel product met zijn kenmerken, daarna de varianten
@@ -513,8 +533,8 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
    */
   async function publishNow(tenantId, itemId) {
     const shopConfig = configOf(tenantId);
-    if (!shopConfig.url) return { error: 'Er is geen webshop gekoppeld (Beheer → Integraties → Webshop).', code: 'not_configured', status: 409 };
-    if (shopConfig.mode !== 'rest' || !shopConfig.push) return { error: 'Zet in Beheer → Integraties → Webshop de REST API aan met "Aquatech is de bron" (prijzen en voorraad terugschrijven).', code: 'no_push', status: 409 };
+    const problem = publishProblem(shopConfig);
+    if (problem) return problem;
     const item = prepare(`SELECT i.id, i.code, i.name, i.sale_price, i.vat_rate, i.on_hand, i.archived, i.shop_sync, i.shop_product_id, i.parent_id, i.has_variants, i.attributes,
         COALESCE((SELECT SUM(r.qty) FROM stock_reservations r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id), 0) AS reserved
       FROM stock_items i
@@ -543,6 +563,79 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
     prepare(`UPDATE stock_items SET shop_product_id = ?, shop_price_seen = ?, shop_stock_seen = ?, shop_dirty = 0, shop_error = '', shop_synced_at = ? WHERE tenant_id = ? AND id = ?`)
       .run(product.id, offer.price == null ? null : rawOf(offer.price, offer.vatRate, shopConfig), offer.stockQty, timestamp, tenantId, item.id);
     return { productId: product.id, variations: 0 };
+  }
+
+  /**
+   * Zet een net samengevoegd hoofdartikel in de webshop en haalt de oude losse producten weg uit de winkel.
+   * Volgorde: (1) de sku van de oude producten leeg zetten (anders is de sku van de nieuwe variatie dubbel),
+   * (2) het hoofdartikel als variabel product aanmaken, (3) de oude producten op concept zetten (verborgen,
+   * niet verwijderd). Mislukt (1) of (2), dan zet deze functie de sku's terug (ook bij een onverwachte fout, die daarna doorgegooid wordt) en geeft `revert: true`:
+   * de aanroeper draait de samenvoeging dan terug, zodat er niets half blijft staan. Mislukt alleen (3),
+   * dan komt dat als waarschuwing terug.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} parentId Id van het nieuwe hoofdartikel.
+   * @param {string[]} productIds Id's van de oude webshopproducten van de samengevoegde artikelen.
+   * @returns {Promise<object>} { productId, variations, hidden, warning }, of { error, revert: true, status }.
+   */
+  async function publishMergedNow(tenantId, parentId, productIds) {
+    const shopConfig = configOf(tenantId);
+    const problem = publishProblem(shopConfig);
+    if (problem) return { ...problem, revert: true };
+    const ids = [...new Set((productIds || []).map(String).filter((id) => /^\d{1,20}$/.test(id)))];
+    const skuOf = new Map();
+    /**
+     * Zet de sku's van de oude producten terug (zo goed als het lukt).
+     * @returns {Promise<void>}
+     */
+    const restoreSkus = async () => {
+      const back = [...skuOf].map(([id, sku]) => ({ id, sku }));
+      if (back.length) await patchProducts(shopConfig, back, { fetchImpl }).catch((error) => log.warn(`Webshop (${tenantId}): sku's terugzetten mislukt: ${error.code || error.message}`));
+    };
+    try {
+      if (ids.length) {
+        for (const product of await fetchProducts(shopConfig, { fetchImpl, ids })) if (product.sku) skuOf.set(String(product.id), product.sku);
+        const cleared = await patchProducts(shopConfig, [...skuOf.keys()].map((id) => ({ id, sku: '' })), { fetchImpl });
+        const failed = cleared.find((result) => !result.ok);
+        if (failed) {
+          for (const result of cleared) if (!result.ok) skuOf.delete(String(result.id));
+          await restoreSkus();
+          return { error: `Het oude webshopproduct ${failed.id} kon niet worden aangepast: ${failed.error}`, revert: true, status: 502 };
+        }
+      }
+      const published = await publishNow(tenantId, parentId);
+      if (published.error) { await restoreSkus(); return { ...published, revert: true }; }
+      let hidden = 0;
+      let warning = published.warning || null;
+      if (ids.length) {
+        try {
+          const results = await patchProducts(shopConfig, ids.map((id) => ({ id, status: 'draft' })), { fetchImpl });
+          hidden = results.filter((result) => result.ok).length;
+          if (hidden < ids.length) warning = `${warning ? `${warning} ` : ''}${ids.length - hidden} oud webshopproduct staat nog zichtbaar in de webshop; zet het daar op concept.`;
+        } catch (error) {
+          // Het hoofdartikel staat dan al in de webshop: nooit meer terugdraaien, alleen waarschuwen (welke fout ook).
+          log.warn(`Webshop (${tenantId}): oude producten op concept zetten mislukt: ${error.code || error.message}`);
+          warning = `${warning ? `${warning} ` : ''}De oude webshopproducten zijn niet op concept gezet${error instanceof SourceError ? ` (${error.message})` : ''}; doe dat in de webshop.`;
+        }
+      }
+      return { productId: published.productId, variations: published.variations, hidden, warning };
+    } catch (error) {
+      await restoreSkus();
+      if (!(error instanceof SourceError)) throw error;
+      return { error: error.message, revert: true, status: 502 };
+    }
+  }
+
+  /**
+   * Voert werk uit in de wachtrij van de omgeving, zodat er geen synchronisatie tussendoor loopt.
+   * Gebruikt voor het samenvoegen: de samenvoeging in de database en het zetten in de webshop zijn
+   * één taak, anders kan een synchronisatie de nieuwe varianten tussendoor archiveren of de oude producten opnieuw koppelen.
+   * Roep binnen het werk publishMergedNow aan; `exclusive` opnieuw aanroepen zou op dezelfde wachtrij wachten (deadlock).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {Function} work Het werk (async).
+   * @returns {Promise<*>} Wat het werk teruggeeft.
+   */
+  function exclusive(tenantId, work) {
+    return queue(tenantId, work);
   }
 
   /**
@@ -619,7 +712,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
     return out;
   }
 
-  return { sync, run, schedule, runAll, publish, exclOf, rawOf, matcher };
+  return { sync, run, schedule, runAll, publish, exclusive, publishMergedNow, canPublish, exclOf, rawOf, matcher };
 }
 
 module.exports = { createShopSync, exclOf, rawOf, fullSyncDue, SYNC_SCHEDULES };

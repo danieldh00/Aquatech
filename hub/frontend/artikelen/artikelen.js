@@ -1113,6 +1113,11 @@
        * @returns {Promise<void>}
        */
       onMerged: async (parent) => { state.open.add(parent.id); await load(); await openItem(parent.id, true); },
+      /**
+       * Na Alles samenvoegen: alleen de lijst verversen (het scherm toont het resultaat per groep).
+       * @returns {Promise<void>}
+       */
+      onMergedAll: async () => { await load(); },
     });
     window.ArtikelenSuppliers.setup({ api, toast, esc, nl, eur });
     window.ArtikelenPackagings.setup({ api, toast, esc });

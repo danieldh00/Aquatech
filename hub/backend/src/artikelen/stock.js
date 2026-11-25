@@ -744,7 +744,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @param {string} tenantId Id van de omgeving.
    * @param {{ ids?: string[], code?: string, name?: string, attributeName?: string, values?: Object<string, string> }} raw De invoer: de artikelen, code en omschrijving van het hoofdartikel, naam van het kenmerk en de waarde per artikel-id.
    * @param {{ refuseLinked?: boolean, shopMatchOf?: Function, user?: object }} [options] user: wie samenvoegt (voor het logboek); refuseLinked: weiger artikelen die aan een webshopproduct gekoppeld zijn (nodig als de webshop de artikellijst bepaalt: de volgende synchronisatie zou de varianten archiveren); shopMatchOf: functie artikelrij → webshopproduct of null, om ook artikelen te weigeren die via code of sku met een los webshopproduct samenvallen.
-   * @returns {object} { item, merged, unlinked } met het nieuwe hoofdartikel, het aantal samengevoegde artikelen en het aantal verbroken webshopkoppelingen; of { error, field?, status }.
+   * @returns {object} { parentId, merged, unlinked, shopProductIds } met het id van het nieuwe hoofdartikel, het aantal samengevoegde artikelen, het aantal verbroken webshopkoppelingen en de id's van hun webshopproducten; of { error, field?, status }.
    */
   function mergeIntoVariants(tenantId, raw, { refuseLinked = false, shopMatchOf = null, user = null } = {}) {
     const input = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
@@ -778,7 +778,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       }
       if (refuseLinked) {
         const linked = rows.find((row) => row.shop_product_id || (shopMatchOf && shopMatchOf(row)));
-        if (linked) return { error: `${linked.code} hangt aan (of komt overeen met) een webshopproduct en de webshop bepaalt de artikellijst (Beheer → Integraties → Webshop). Zet die instelling eerst uit, dan is Aquatech de bron en kun je samenvoegen.`, field: 'ids', status: 409 };
+        if (linked) return { error: `${linked.code} hangt aan (of komt overeen met) een webshopproduct en de webshop bepaalt de artikellijst. Zet in Beheer → Integraties → Webshop de REST API aan met "Aquatech is de bron" (dan zet Aquatech het hoofdartikel zelf in de webshop), of zet "webshop bepaalt de artikellijst" uit.`, field: 'ids', status: 409 };
       }
       const first = [...rows].sort((left, right) => (left.code < right.code ? -1 : left.code > right.code ? 1 : 0))[0];
       if (rows.some((row) => row.unit !== first.unit || Number(row.vat_rate) !== Number(first.vat_rate) || row.revenue_group !== first.revenue_group)) {
@@ -794,7 +794,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
           sale_price, business_price, vat_rate, revenue_group, shop_sync, has_variants, attributes, image_id)
         VALUES (?, ?, ?, ?, ?, '', 0, 0, ?, '', 0, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`)
         .run(parentId, tenantId, code, name, first.unit, first.cost_price, timestamp, timestamp, first.sale_price, first.business_price ?? null, first.vat_rate, first.revenue_group,
-          rows.some((row) => Number(row.shop_sync)) ? 1 : 0, JSON.stringify(checked.value), (rows.find((row) => row.image_id) || {}).image_id || null);
+          rows.some((row) => Number(row.shop_sync) || row.shop_product_id) ? 1 : 0, JSON.stringify(checked.value), (rows.find((row) => row.image_id) || {}).image_id || null);
       let unlinked = 0;
       for (const row of rows) {
         // Een apart webshopproduct past niet bij een variatie: de koppeling vervalt, het hoofdartikel wordt later als geheel aan de webshop gekoppeld.
@@ -810,7 +810,12 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       }));
       prepare('INSERT INTO stock_merges (id, tenant_id, parent_id, parent_code, parent_name, snapshot, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
         .run(crypto.randomUUID(), tenantId, parentId, code, name, JSON.stringify(snapshot), (user && user.id) || null, timestamp);
-      return { parentId, merged: rows.length, unlinked };
+      // De webshopproducten van deze artikelen (gekoppeld, of via code/sku herkend): die worden na het samenvoegen vervangen door het ene variabele product.
+      const shopProductIds = [...new Set(rows.map((row) => {
+        const product = row.shop_product_id ? { id: row.shop_product_id } : shopMatchOf ? shopMatchOf(row) : null;
+        return product && !product.parentId ? String(product.id) : '';
+      }).filter(Boolean))];
+      return { parentId, merged: rows.length, unlinked, shopProductIds };
     });
   }
 
