@@ -105,3 +105,10 @@ button { font-family: inherit; }
 
 /* Een stuk van een pagina dat bij een uitgezet onderdeel hoort (data-feature, zie dashboard/modules.js applyFeatures). */
 .feature-off { display: none !important; }
+
+/* Stagingomgeving (shared/common.js toont de balk bij de kop X-Aquatech-Staging): smalle balk onderaan, klikt niet in de weg. */
+.staging-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10000; padding: 3px 12px; text-align: center; pointer-events: none;
+  background: var(--at-warn); color: #fff; font-family: var(--at-font); font-size: 12px; font-weight: 600; letter-spacing: .04em;
+}
+@media print { .staging-bar { display: none; } }
