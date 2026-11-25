@@ -27,26 +27,35 @@ volledig los staat van productie. Plan en fasen: projectbestand `frontend-advies
 2. **Bypass alleen voor de sync**: de eigenaar van `RELEASE_PUSH_TOKEN` krijgt (net als op `master`) bypass op de ruleset van
    `develop`, zodat `develop-sync.yml` de mergecommit kan pushen.
 3. **Branch `develop` aanmaken** vanaf `master` (pas als dit is gemerged en de ruleset staat).
-4. Pakket `aquatech-staging` (verschijnt na de eerste staging-build) op **openbaar** zetten, of een pull-token op stg01
-   zetten (de servertaak vraagt erom). Het image bevat alleen de (openbare) code, geen geheimen.
+4. Het pakket `aquatech-staging` (verschijnt na de eerste staging-build) erft de zichtbaarheid van de repository; controleer
+   bij Packages dat het openbaar is. Het image bevat alleen de (openbare) code, geen geheimen.
 
-## stg01 aanmaken en inrichten
-1. **VM maken in Proxmox** (eenmalig, handmatig): Debian 12 of Ubuntu 24.04, naam `stg01`, 2 vCPU, 3 GB RAM (ballooning uit),
-   25 GB schijf, gebruiker `daniel` met je ssh-sleutel en `sudo` zonder wachtwoord (zoals op apps01), guest agent aan.
-   Proxmox-firewall voor deze VM: inkomend alleen ssh vanaf de Proxmox-host; uitgaand niet naar apps01, de
-   productiedatabase of andere interne netwerken (alleen internet: GHCR, Cloudflare, PDOK/VIES).
-2. **Cloudflare** (eenmalig, handmatig): een eigen tunnel `aquatech-staging` met hostnaam `aquatech-staging.den-hollander.com` (één niveau onder het domein,
-   dus gedekt door het gratis Cloudflare-certificaat) naar `http://aquatech-stg:3300`, en een Access-toepassing op die
-   hostnaam met een beleid dat alleen jouw e-mailadres toelaat. Servertaak 012 maakt dit straks zelf aan (zie onder).
-3. **Master mergen, workflow Staging draaien** (push naar `develop` met wijzigingen in `hub/`, of Actions > Staging > Run workflow): dit bouwt het eerste
-   image. Zet daarna het pakket `aquatech-staging` op openbaar.
-4. **Servertaak 012** (volgt in een aparte PR, na V-10) staat in Beheer > Systeem > Updates; je voert het ene vaste commando uit (zoals altijd, als root op de
-   Proxmox-host). De taak vraagt eenmalig om de tunnel-token (verborgen invoer) en richt stg01 in. Een andere naam of gebruiker:
-   `STG01_SSH=gebruiker@adres` voor het commando.
-5. **In de app op staging**: eerste beheerder aanmaken (installatiecode: `docker logs aquatech-stg`), E-mail naar `mailpit`
-   poort 1025 zetten (berichten bekijken op `127.0.0.1:8025` op de VM, via ssh-tunnel), geen koppelingen instellen (Mollie,
-   Visma, Drive, DPD), een eigen AI-sleutel met een lage daglimiet. Testdata: Hoofdbeheer > testomgeving aanmaken >
-   testdata vullen.
+## stg01 aanmaken en inrichten (één commando)
+Alles loopt via **servertaak 012** in Beheer > Systeem > Updates: je voert het ene vaste commando uit (als root op de
+Proxmox-host, zoals altijd). De taak doet zelf:
+1. **VM stg01 aanmaken** (`deploy/staging/pve/stg01-create.sh`): Debian 12 cloud-image (controlesom van Debian gecontroleerd),
+   2 vCPU, 3 GB RAM, 32 GB schijf, gebruiker `daniel` met de ssh-sleutel van de host, guest agent. Bestaat de VM al, dan
+   gebeurt er niets. VM-id 9101 (`VMID=` in de omgeving om af te wijken).
+2. **Cloudflare via de API** (`deploy/staging/pve/cloudflare-staging.py`): tunnel `aquatech-staging`, DNS en Access voor
+   `aquatech-staging.den-hollander.com` (de app) en `aquatech-staging-mail.den-hollander.com` (Mailpit). Access laat alleen
+   één e-mailadres toe: dat van de accounteigenaar (of `CF_ACCESS_EMAIL=...` in het commando). De hostnamen staan één niveau
+   onder het domein, dus het gratis Cloudflare-certificaat dekt ze.
+3. **Inrichten** (`deploy/staging/setup-staging.sh`): Docker, eigen PostgreSQL, Mailpit, de app uit
+   `ghcr.io/danieldh00/aquatech-staging` en de updatetimer.
+
+**Eenmalig vraagt de taak om een Cloudflare API-token** (onzichtbare invoer, wordt nergens opgeslagen; alleen het tunnel-token
+komt als bestand op stg01). Maak het in Cloudflare > Mijn profiel > API-tokens > Eigen token, met alleen deze rechten:
+Account: Cloudflare Tunnel Bewerken; Account: Toegang: Apps en beleid bewerken; Account: Accountinstellingen lezen;
+Zone (den-hollander.com): DNS bewerken en Zone lezen. Laat je het token leeg, dan staat staging er wel maar zonder tunnel
+en blijft de taak openstaan tot je het commando opnieuw draait. Het commando is veilig herhaalbaar.
+
+Voorwaarden: de workflow *Staging* heeft minstens één image gebouwd (Actions > Staging > Run workflow op `develop`) en het
+pakket `aquatech-staging` is leesbaar zonder inloggen (het erft de zichtbaarheid van de repository).
+
+**In de app op staging**: eerste beheerder aanmaken (installatiecode: `docker logs aquatech-stg` op de VM), E-mail naar
+`mailpit` poort 1025 zetten (berichten bekijken op https://aquatech-staging-mail.den-hollander.com), geen koppelingen instellen
+(Mollie, Visma, Drive, DPD), een eigen AI-sleutel met een lage daglimiet. Testdata: Hoofdbeheer > testomgeving aanmaken >
+testdata vullen.
 
 Wat er nooit gebeurt: gegevens, hoofdsleutel of geheimen uit productie op stg01. Een geanonimiseerde kopie van productie komt
 later (bij de migratie van Facturen) als aparte, geteste servertaak.
@@ -54,4 +63,4 @@ later (bij de migratie van Facturen) als aparte, geteste servertaak.
 ## Egress
 De VM mag alleen naar internet voor GHCR, Cloudflare en (voor de adreszoeker en btw-controle) PDOK en VIES. Er is geen
 koppeling met Mollie, Visma, Drive of DPD ingesteld en mail gaat alleen naar Mailpit. Het afsluiten van de rest regel je
-in de Proxmox-firewall van de VM (zie stap 1 bij *stg01 aanmaken*).
+in de Proxmox-firewall van de VM. Dat is niet geautomatiseerd (een fout regel kan de VM van DNS of updates afsluiten); er is ook niets ingesteld wat naar buiten kan sturen.

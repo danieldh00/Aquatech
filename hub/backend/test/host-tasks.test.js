@@ -20,6 +20,8 @@ const SETUP_SCRIPT = path.join(__dirname, '..', '..', '..', 'deploy', 'apps01', 
 const PW = 'Tuin-Plan-2026!';
 const REF = 'a'.repeat(40);
 const FIRST = HOST_TASKS[0].id;
+/** Taken die op de Proxmox-host draaien in plaats van op apps01 (HOST_SIDE_TASK_IDS in servertaken.sh). */
+const HOST_SIDE = ['012-staging-stg01-inrichten'];
 
 /**
  * Maakt een tijdelijke map.
@@ -69,10 +71,11 @@ function install(setupBody) {
    * Draait een opdracht van het script op de "server".
    * @param {string} command Bijv. openstaand-check.
    * @param {object} [extraEnv] Extra omgevingsvariabelen.
+   * @param {string[]} [commandArguments] Extra argumenten voor de opdracht (bijv. een taak-id).
    * @returns {{ status: number, stdout: string, stderr: string }} De uitkomst.
    */
-  const run = (command, extraEnv = {}) => {
-    const out = spawnSync('bash', [SCRIPT, command], {
+  const run = (command, extraEnv = {}, commandArguments = []) => {
+    const out = spawnSync('bash', [SCRIPT, command, ...commandArguments], {
       encoding: 'utf8',
       env: { PATH: `${bin}:${process.env.PATH}`, SERVERTAKEN_REMOTE: '1', APP_DIR: appDir, TASKS_BASE: `file://${path.join(root, 'repo')}`, SYSTEMD_DIR: systemdDir, FAKE_SYSTEMCTL_LOG: path.join(root, 'systemctl.log'), ...cosignEnv, ...extraEnv },
     });
@@ -111,7 +114,13 @@ test('hostscript: openstaand voert de taak uit, legt hem vast en doet daarna nie
   assert.strictEqual(done.status, 0, done.stderr + done.stdout);
   assert.ok(done.stdout.includes(`setup met ${REF}`), 'het script draait op de vaste commit');
   const ledger = JSON.parse(fs.readFileSync(path.join(appDir, 'update', 'status', 'host-tasks.json'), 'utf8'));
-  for (const task of HOST_TASKS) assert.ok(Date.parse(ledger.done[task.id]) > 0, `${task.id} is vastgelegd`);
+  for (const task of HOST_TASKS.filter((entry) => !HOST_SIDE.includes(entry.id))) assert.ok(Date.parse(ledger.done[task.id]) > 0, `${task.id} is vastgelegd`);
+  for (const id of HOST_SIDE) assert.strictEqual(ledger.done[id], undefined, `${id} draait op de Proxmox-host en wordt daar pas vastgelegd`);
+  assert.match(done.stdout, /wordt op de Proxmox-host uitgevoerd/);
+  assert.match(run('openstaand-lijst', { TASKS_REF: REF }).stdout, /012-staging-stg01-inrichten/, 'de host ziet dat taak 012 nog openstaat');
+  assert.notStrictEqual(run('taak-vastleggen', { TASKS_REF: REF }, [FIRST]).status, 0, 'alleen taken van de host mogen zo worden vastgelegd');
+  for (const id of HOST_SIDE) assert.strictEqual(run('taak-vastleggen', { TASKS_REF: REF }, [id]).status, 0);
+  assert.strictEqual(run('openstaand-lijst', { TASKS_REF: REF }).stdout.trim(), '', 'daarna staat er niets meer open');
   assert.ok(fs.existsSync(path.join(appDir, 'restore-test.sh')), 'taak 002 installeert restore-test.sh');
   assert.ok(fs.existsSync(path.join(appDir, 'restore-test-drive.sh')) && fs.existsSync(path.join(appDir, 'restore-app-check.sh')), 'taak 007 installeert de Drive-app-controle');
   assert.ok(fs.readFileSync(path.join(appDir, '.env'), 'utf8').split('\n').includes('TRUSTED_PROXIES=172.18.0.0/16'), 'taak 008 zet het subnet van het compose-netwerk in .env');
@@ -220,4 +229,75 @@ test('hostscript: taak 011 installeert cosign niet als de SHA-256 niet klopt', (
   assert.notStrictEqual(out.status, 0);
   assert.match(out.stderr, /SHA-256 van cosign klopt niet/);
   assert.ok(!fs.existsSync(path.join(root, 'cosign-geinstalleerd')), 'niets geïnstalleerd');
+});
+
+test('hostscript: de ids van de host-taken staan ook in de lijst van de app', () => {
+  const script = fs.readFileSync(SCRIPT, 'utf8');
+  const block = /HOST_SIDE_TASK_IDS=\(([^)]*)\)/.exec(script);
+  assert.ok(block, 'HOST_SIDE_TASK_IDS ontbreekt in servertaken.sh');
+  const hostSideIds = block[1].trim().split(/\s+/);
+  assert.deepStrictEqual(hostSideIds, HOST_SIDE);
+  for (const id of hostSideIds) assert.ok(HOST_TASKS.some((task) => task.id === id), `${id} staat niet in HOST_TASKS`);
+});
+
+test('staging: het updatescript rolt alleen het eigen staging-pakket uit, nooit het productie-image', () => {
+  const stagingDir = path.join(__dirname, '..', '..', '..', 'deploy', 'staging');
+  const update = fs.readFileSync(path.join(stagingDir, 'update-staging.sh'), 'utf8');
+  assert.match(update, /^IMAGE="ghcr\.io\/danieldh00\/aquatech-staging"$/m);
+  assert.ok(!/ghcr\.io\/danieldh00\/aquatech(?!-staging)[:"\s]/.test(update.replace(/#.*$/gm, '')), 'geen verwijzing naar het productie-image in de code');
+  const compose = fs.readFileSync(path.join(stagingDir, 'compose.yml'), 'utf8');
+  assert.match(compose, /image: ghcr\.io\/danieldh00\/aquatech-staging:/);
+  assert.ok(!/image: ghcr\.io\/danieldh00\/aquatech:/.test(compose));
+  for (const file of ['update-staging.sh', 'setup-staging.sh', path.join('pve', 'stg01-create.sh')]) {
+    const check = spawnSync('bash', ['-n', path.join(stagingDir, file)], { encoding: 'utf8' });
+    assert.strictEqual(check.status, 0, `${file}: ${check.stderr}`);
+  }
+});
+
+test('staging: cloudflare-staging.py maakt tunnel, DNS en Access aan en schrijft het tunnel-token (nagebootste API)', async (context) => {
+  const http = require('node:http');
+  const { spawn } = require('node:child_process');
+  const calls = [];
+  /**
+   * Antwoordt als de Cloudflare-API met een geslaagd resultaat.
+   * @param {object} res Het HTTP-antwoord.
+   * @param {*} result De inhoud van `result`.
+   */
+  const reply = (res, result) => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ success: true, result })); };
+  const server = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; });
+    req.on('end', () => {
+      const route = `${req.method} ${req.url.split('?')[0]}`;
+      calls.push({ route, body: body ? JSON.parse(body) : null, auth: req.headers.authorization });
+      if (route === 'GET /zones') return reply(res, [{ id: 'zone1', account: { id: 'acc1' } }]);
+      if (route === 'GET /accounts/acc1/cfd_tunnel') return reply(res, []);
+      if (route === 'POST /accounts/acc1/cfd_tunnel') return reply(res, { id: 'tun1' });
+      if (route === 'GET /zones/zone1/dns_records') return reply(res, []);
+      if (route === 'GET /accounts/acc1/access/apps') return reply(res, []);
+      if (route === 'GET /accounts/acc1/cfd_tunnel/tun1/token') return reply(res, 'T'.repeat(60));
+      return reply(res, {});
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  context.after(() => server.close());
+  const dir = tempDir();
+  const tokenFile = path.join(dir, 'tunnel-token');
+  const script = path.join(__dirname, '..', '..', '..', 'deploy', 'staging', 'pve', 'cloudflare-staging.py');
+  const python = spawnSync('python3', ['--version']);
+  if (python.status !== 0) return context.skip('python3 ontbreekt');
+  const code = await new Promise((resolve) => {
+    const child = spawn('python3', ['-I', script, tokenFile], { env: { PATH: process.env.PATH, CF_API_TOKEN: 'x'.repeat(40), CF_API_BASE: `http://127.0.0.1:${server.address().port}`, CF_ACCESS_EMAIL: 'beheer@example.test' } });
+    child.on('close', resolve);
+  });
+  assert.strictEqual(code, 0);
+  assert.strictEqual(fs.readFileSync(tokenFile, 'utf8'), 'T'.repeat(60));
+  assert.strictEqual(fs.statSync(tokenFile).mode & 0o777, 0o600);
+  const routes = calls.map((call) => call.route);
+  for (const expected of ['POST /accounts/acc1/cfd_tunnel', 'PUT /accounts/acc1/cfd_tunnel/tun1/configurations']) assert.ok(routes.includes(expected), expected);
+  assert.strictEqual(routes.filter((route) => route === 'POST /zones/zone1/dns_records').length, 2, 'DNS voor de app en voor Mailpit');
+  const apps = calls.filter((call) => call.route === 'POST /accounts/acc1/access/apps');
+  assert.strictEqual(apps.length, 2, 'Access voor de app en voor Mailpit');
+  for (const app of apps) assert.deepStrictEqual(app.body.policies[0].include, [{ email: { email: 'beheer@example.test' } }]);
+  assert.ok(calls.every((call) => call.auth === `Bearer ${'x'.repeat(40)}`));
 });
