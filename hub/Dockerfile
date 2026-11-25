@@ -7,6 +7,10 @@ RUN npm ci
 COPY backend/tools/minify-frontend.js ./tools/minify-frontend.js
 COPY frontend ../frontend
 RUN node tools/minify-frontend.js ../frontend ../frontend-min
+# Vue-modules (alleen staging): kommagescheiden lijst. Leeg (productie) = niets extra's, het image blijft gelijk.
+# De bouwstap voor de modules zelf komt met de eerste Vue-module (hub/frontend-vue/).
+ARG VUE_MODULES=""
+RUN if [ -n "$VUE_MODULES" ]; then echo "FOUT: VUE_MODULES=$VUE_MODULES, maar er is nog geen Vue-bouwstap." >&2; exit 1; fi
 
 FROM node:22-alpine@sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.39.7
+
+- Met `AQUATECH_STAGING=1` krijgt elk antwoord `X-Robots-Tag: noindex, nofollow, noarchive` en de kop `X-Aquatech-Staging`; `shared/common.js` toont dan een vaste balk "STAGING" (stijl in `brand.css`). Zonder de schakelaar verandert er niets.
+- Dockerfile: bouwargument `VUE_MODULES` (standaard leeg; het productie-image blijft gelijk). Gevuld faalt het nog duidelijk, tot de eerste Vue-module de bouwstap toevoegt.
+
 ## 1.39.6
 
 Servertaak `012-staging-stg01-inrichten`: maakt vanaf de Proxmox-host de aparte VM stg01 aan, regelt via de Cloudflare-API de tunnel `aquatech-staging`, DNS en Access (alleen één e-mailadres) voor `aquatech-staging.den-hollander.com` en richt Docker, eigen PostgreSQL, Mailpit en de update-timer in via `deploy/staging/`. Taken die op de Proxmox-host zelf draaien kennen nu een eigen lijst (`HOST_SIDE_TASK_IDS` in `servertaken.sh`, opdrachten `openstaand-lijst` en `taak-vastleggen` op apps01); zonder Cloudflare API-token blijft de taak openstaan. Het stagingscript rolt alleen `ghcr.io/danieldh00/aquatech-staging` uit, nooit het productie-image. Zie `docs/STAGING.md`.
