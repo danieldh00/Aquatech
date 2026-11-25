@@ -377,7 +377,7 @@ remote_disk_run() {
 }
 
 # ---------- servertaken (openstaand) ----------
-# Alle taken, oudste eerst. Zelfde id's als HOST_TASKS in hub/backend/src/platform/host-tasks.js (een test bewaakt dat).
+# Alle taken in uitvoeringsvolgorde (013 vóór 012: staging heeft veel vrije schijfruimte nodig). Zelfde id's als HOST_TASKS in hub/backend/src/platform/host-tasks.js (een test bewaakt dat).
 HOST_TASK_IDS=(
   001-app-update-opnieuw-inrichten
   002-hersteltest-back-up-inrichten
@@ -390,8 +390,8 @@ HOST_TASK_IDS=(
   009-update-script-stopt-bij-mislukte-back-up
   010-back-up-integriteitscontrole
   011-image-handtekening-controleren
-  012-staging-op-apps01-inrichten
   013-schijf-apps01-vergroten
+  012-staging-op-apps01-inrichten
 )
 HOST_TASKS_LEDGER="host-tasks.json"
 # Functienaam van een taak (streepjes worden underscores).
