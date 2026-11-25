@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
 import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vitest/config'
-import { shellHtmlPlugin } from './tools/shell-html'
+import { shellHtmlPlugin } from './tools/shell-html.ts'
 
 const modulesDir = fileURLToPath(new URL('./src/modules', import.meta.url))
 

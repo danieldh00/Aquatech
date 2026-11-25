@@ -1,4 +1,4 @@
-// Vite-plugin die de bestaande schil (CSS en gewone scripts van hub/frontend/shared, dashboard enz.) in elke
+// Vite-plugin die de bestaande schil (CSS, common.js en gewone scripts van hub/frontend/shared, dashboard enz.) in elke
 // modulepagina zet. De schil staat niet in dit project maar naast de module in het uiteindelijke image
 // (frontend/shared/…), dus Vite mag die adressen niet zelf proberen te bundelen: ze worden pas ná de
 // bundeling als vaste tekst ingevoegd, op de plaats van twee markeringen in de index.html van de module.
@@ -20,6 +20,9 @@ export const SHELL_STYLES = [
   '../shared/excel-import.css',
 ]
 
+/** Gewone scripts in de <head> (common.js geeft de pagina `AquatechCommon` en moet dus vóór de module klaar zijn). */
+export const SHELL_HEAD_SCRIPTS = ['../shared/common.js']
+
 /** Gewone scripts van de schil die vóór de module draaien (zijbalk, rekeningmenu, adreszoeker, Excel-import, teksten). */
 export const SHELL_SCRIPTS = [
   '../shared/env.js',
@@ -37,8 +40,11 @@ export const SHELL_SCRIPTS = [
  * @returns De HTML met de stijlbladen en scripts van de schil.
  */
 export function injectShell(html: string): string {
-  const styles = SHELL_STYLES.map((href) => `  <link rel="stylesheet" href="${href}">`).join('\n')
-  const scripts = SHELL_SCRIPTS.map((src) => `  <script src="${src}"></script>`).join('\n')
+  const styles = [
+    ...SHELL_STYLES.map((href) => `<link rel="stylesheet" href="${href}">`),
+    ...SHELL_HEAD_SCRIPTS.map((src) => `<script src="${src}"></script>`),
+  ].join('\n  ')
+  const scripts = SHELL_SCRIPTS.map((src) => `<script src="${src}"></script>`).join('\n  ')
   return html.replace(HEAD_MARKER, styles).replace(SCRIPT_MARKER, scripts)
 }
 
