@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.40.8',
+      date: '2026-11-25',
+      title: 'Retour per regel goedkeuren of afwijzen',
+      items: [
+        { text: 'Bij een webshopretour kun je nu per regel kiezen: goedkeuren, afwijzen of een deel van het aantal goedkeuren. De creditfactuur, de voorraad en de mail aan de klant gaan alleen over wat is goedgekeurd. De klant ziet per regel wat is goedgekeurd of afgewezen.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.40.7',
       date: '2026-11-25',
       title: 'Artikelen samenvoegen zonder handmatige webshopkoppelingen',

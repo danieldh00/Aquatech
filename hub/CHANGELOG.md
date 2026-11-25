@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.40.8
+
+`returns.decide(…, lines)` en `POST /api/admin/web-returns/:id/decision` accepteren `lines: [{ code, qty }]` (goedgekeurd aantal per artikel; niet genoemd = helemaal goedgekeurd). Minder goedgekeurd dan gevraagd vraagt een toelichting: `data.requested` bewaart het gevraagde, `data.lines` bevat daarna alleen het goedgekeurde, dus creditnota, voorraadboeking, mails en rapportage rekenen er vanzelf mee. Niets goedgekeurd = afgewezen. Het afgewezen deel telt als gebruikt en kan niet opnieuw worden ingediend (`returnableLines`, `rejectedCodes`). Shape: `partial`, `requested`, `declined`; statuslabel *Deels goedgekeurd*. Geen migratie. Beheer toont een melding als de creditfactuur bij goedkeuren niet gemaakt kon worden. Test in `test/web-returns.test.js`.
+
 ## 1.40.7
 
 - `POST /api/stock/merge`: staat Aquatech in de webshop mag schrijven (REST + "Aquatech is de bron", `shopSync.canPublish`), dan vervalt de blokkade van `refuseLinked`. De route draait `mergeIntoVariants` en de webshopstappen als één taak in de wachtrij van de omgeving (`shopSync.exclusive` + `publishMergedNow`, dus geen synchronisatie ertussen): (1) sku van de oude producten leeg zetten (anders is de variatie-sku dubbel), (2) hoofdartikel als variabel product + variaties aanmaken (`publishNow`), (3) oude producten op concept (`patchProducts` in woocommerce.js). Mislukt (1) of (2), dan worden de sku's teruggezet en draait de route de samenvoeging terug met `unmergeVariants` (antwoord 502/409 `shop_failed`); mislukt alleen (3), dan staat er een waarschuwing in het antwoord (`shop.warning`). Zonder schrijfrechten en met "webshop bepaalt de artikellijst" blijft de blokkade, met een duidelijkere melding.
