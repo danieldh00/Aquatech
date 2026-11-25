@@ -45,6 +45,16 @@ function sanitizeAutoWorkOrder(raw) {
 }
 
 /**
+ * Maakt de instelling voor de automatische aanbetalingsfactuur schoon: alleen `enabled` (ja/nee); een omgevingsvariabele is tekst.
+ * @param {*} raw De ingevoerde of opgeslagen waarde.
+ * @returns {{ enabled: boolean }} De schone instelling (standaard aan).
+ */
+function sanitizeDepositInvoice(raw) {
+  if (typeof raw === 'string') return { enabled: !['0', 'false', 'nee', 'uit'].includes(raw.trim().toLowerCase()) };
+  return { enabled: raw && typeof raw === 'object' && typeof raw.enabled === 'boolean' ? raw.enabled : true };
+}
+
+/**
  * Maakt de instelling voor automatische bestelvoorstellen schoon: alleen `enabled` (ja/nee), al het andere valt weg.
  * Ontbreekt de waarde of is hij geen ja/nee, dan geldt de standaard (aan).
  * @param {*} raw De ingevoerde of opgeslagen waarde.
@@ -195,6 +205,9 @@ const FIELDS = {
   // (In te plannen), materiaal gereserveerd. Per omgeving, standaard aan (Beheer > Modules > Werkorders). Bewust geen liveOnly:
   // er gaat niets naar buiten, het maakt alleen een werkorder in de eigen omgeving.
   autoWorkOrder: { type: 'object', env: 'AUTO_WORK_ORDER', default: { enabled: true }, sanitize: sanitizeAutoWorkOrder },
+  // Aanbetalingsfactuur automatisch bij akkoord op een offerte met aanbetaling: definitief en per e-mail met betaallink. Per omgeving,
+  // standaard aan (Beheer > Modules > Facturen). Zonder deze schakelaar kan de factuur nog met de hand worden gemaakt vanaf de offerte.
+  depositInvoice: { type: 'object', env: 'AUTO_DEPOSIT_INVOICE', default: { enabled: true }, sanitize: sanitizeDepositInvoice },
   // Prijsfactor op de inkoopprijs (Artikelen > Prijsfactor; alleen via /api/stock/price-factors).
   priceFactors: { type: 'object', default: {}, sanitize: sanitizePriceFactors, internal: true },
   // Kleurthema (shared/theme.js): per organisatie te kiezen in Beheer > Kleuren (eigen

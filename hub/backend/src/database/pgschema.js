@@ -1809,6 +1809,10 @@ const PG_MIGRATIONS = [
   `,
   // 97: alle id's en verwijzingen naar id's worden uuid (zie UUID_COLUMNS), met echte foreign keys die weer terugkomen.
   uuidMigrationSql(),
+  // 98: één aanbetalingsfactuur per offerte (de factuur draagt `data.deposit`; een gecrediteerde telt niet meer mee, dus een nieuwe kan dan weer).
+  `
+  CREATE UNIQUE INDEX invoices_deposit_once ON invoices (tenant_id, quote_id) WHERE kind = 'factuur' AND credited_at IS NULL AND (data -> 'deposit') IS NOT NULL;
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS, UUID_COLUMNS, legacyUuid };

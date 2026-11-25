@@ -21,7 +21,9 @@ function derived(value) {
 
 test('migratie 97: bestaande gegevens blijven kloppen, verwijzingen blijven werken en ongeldige verwijzingen worden geweigerd', needPg, () => {
   const schema = `aqt_test_${crypto.randomBytes(8).toString('hex')}`;
-  const last = PG_MIGRATIONS.pop();
+  // Migratie 97 en alles erna (latere migraties horen niet in dit scenario): eerst met het oude schema vullen, daarna alles in één keer toepassen.
+  const total = PG_MIGRATIONS.length;
+  const removed = PG_MIGRATIONS.splice(-2);
   let db;
   try {
     db = openPg(URL_, { schema });
@@ -33,7 +35,7 @@ test('migratie 97: bestaande gegevens blijven kloppen, verwijzingen blijven werk
       db.prepare("INSERT INTO users (id, tenant_id, username, display_name, role, kind, created_at) VALUES (?, ?, ?, 'X', 'klant', 'gast', ?)").run(id, tenant, `u-${id.slice(0, 6)}`, new Date().toISOString());
     }
     db.prepare("INSERT INTO plans (id, tenant_id, owner_id, title, data, created_at, updated_at) VALUES ('oud-plan', 'oude-tenant', 'oude-gebruiker', 'T', '{}', ?, ?)").run(new Date().toISOString(), new Date().toISOString());
-    PG_MIGRATIONS.push(last);
+    PG_MIGRATIONS.push(...removed);
     db.close?.();
     db = openPg(URL_, { schema });
 
@@ -52,7 +54,7 @@ test('migratie 97: bestaande gegevens blijven kloppen, verwijzingen blijven werk
     assert.strictEqual(db.prepare('SELECT id FROM plans WHERE id = ?').get('geen-uuid'), undefined, 'een tekst die geen UUID is, vindt nooit een rij');
     assert.strictEqual(db.prepare('SELECT count(*) AS n FROM pg_constraint WHERE contype = ? AND connamespace = current_schema()::regnamespace').get('f').n > 50, true);
   } finally {
-    if (PG_MIGRATIONS[PG_MIGRATIONS.length - 1] !== last) PG_MIGRATIONS.push(last);
+    if (removed.length && PG_MIGRATIONS.length === total - removed.length) PG_MIGRATIONS.push(...removed);
   }
 });
 

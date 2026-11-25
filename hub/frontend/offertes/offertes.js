@@ -444,6 +444,7 @@
     renderDiscountFields(data);
     renderVatShift(quote);
     renderDelivery(quote);
+    renderDeposit(quote);
     $('#e-plan').innerHTML = data.planId
       ? `Opgebouwd uit plan <a href="../beregening/?plan=${encodeURIComponent(data.planId)}">${esc(data.planTitle || 'beregeningsplan')}</a>${data.planSummary ? ` · ${data.planSummary.sprinklers} sproeiers, ${data.planSummary.zones} zones, ${nl(data.planSummary.lawnM2, 0)} m² gazon` : ''}`
       : 'Niet gekoppeld aan een plan.';
@@ -536,7 +537,7 @@
     box.className = `notice ok${isLocked && quote.acceptance && quote.acceptance.answer !== 'akkoord' ? ' rejected' : ''}`;
     box.innerHTML = isLocked ? `${quote.acceptance ? acceptanceHtml(quote.acceptance) : ''}${orderNoticeHtml(quote)}` : '';
     $('#edit-view').classList.toggle('locked', isLocked);
-    document.querySelectorAll('#edit-view .cols input, #edit-view .cols textarea, #edit-view .cols select, #edit-view [data-f], #e-lines input, #e-lines select, #e-lines button, #e-status, #e-cust-clear, #e-cust-new, #e-vs-on, #e-del-same')
+    document.querySelectorAll('#edit-view .cols input, #edit-view .cols textarea, #edit-view .cols select, #edit-view [data-f], #e-lines input, #e-lines select, #e-lines button, #e-status, #e-cust-clear, #e-cust-new, #e-vs-on, #e-dep-on, #e-del-same')
       .forEach((field) => { if (field.id !== 'e-number') field.disabled = isLocked; });
   }
 
@@ -688,6 +689,7 @@
       ${totals.discount ? `<tr><td>${esc(QuoteCore.discountCaption(totals, 'Korting', nl(totals.discountPct)))}</td><td class="num">− ${eur(totals.discount)}</td></tr><tr><td>Totaal excl. btw</td><td class="num">${eur(totals.net)}</td></tr>` : ''}
       ${totals.shifted ? '' : totals.vat.filter((vatRow) => vatRow.base).map((vatRow) => `<tr><td>Btw ${vatRow.rate}% over ${eur(vatRow.base)}</td><td class="num">${eur(vatRow.amount)}</td></tr>`).join('')}
       <tr class="grand"><td>${totals.shifted ? 'Totaal (btw verlegd)' : 'Totaal incl. btw'}</td><td class="num">${eur(totals.total)}</td></tr>`;
+    renderDepositSum();
     if (marginPart) marginPart.updateMargin();
   }
 
@@ -763,6 +765,66 @@
   }
 
   /**
+   * Toont de aanbetaling bij de offerte: het vinkje, het veld dat bij het gekozen type hoort en (met recht op facturen) de stand van de aanbetalingsfactuur.
+   * @param {object} quote De offerte.
+   * @returns {void}
+   */
+  function renderDeposit(quote) {
+    const deposit = QuoteCore.sanitizeDeposit(quote.data.deposit);
+    $('#e-dep-on').checked = deposit.on;
+    $('#e-dep-fields').hidden = !deposit.on;
+    $('#e-dep-pct').hidden = deposit.type === 'amount';
+    $('#e-dep-amount').hidden = deposit.type !== 'amount';
+    renderDepositSum();
+    renderDepositStatus(quote);
+  }
+
+  /** Toont wat er bij akkoord wordt gefactureerd en wat de klant daarna nog betaalt. */
+  function renderDepositSum() {
+    const element = $('#e-dep-sum');
+    if (!element || !state.quote) return;
+    const total = QuoteCore.totals(state.quote.data).total;
+    const deposit = QuoteCore.depositOf(state.quote.data, total);
+    element.innerHTML = deposit.on
+      ? `Bij akkoord gaat automatisch een aanbetalingsfactuur van <b>${eur(deposit.amount)}</b> (incl. btw) met betaallink naar de klant. De eindfactuur trekt dit bedrag af: de klant betaalt dan nog <b>${eur(deposit.rest)}</b>.`
+      : (state.quote.data.deposit && state.quote.data.deposit.on ? 'Vul een percentage of bedrag in om de aanbetaling te berekenen.' : '');
+  }
+
+  /**
+   * Toont bij een geaccordeerde offerte met aanbetaling de factuur ervan, of de knop om hem te maken (alleen met recht op facturen).
+   * @param {object} quote De offerte.
+   * @returns {Promise<void>} Klaar zodra de stand is opgehaald.
+   */
+  async function renderDepositStatus(quote) {
+    const box = $('#e-dep-status');
+    box.hidden = true;
+    box.innerHTML = '';
+    if (!state.invoices || quote.status !== 'akkoord' || !QuoteCore.sanitizeDeposit(quote.data.deposit).on) return;
+    let status;
+    try { status = await api(`quotes/${encodeURIComponent(quote.id)}/deposit-invoice`); } catch { return; }
+    if (state.quote !== quote) return;
+    box.hidden = false;
+    if (status.invoice) {
+      const sent = status.invoice.paid ? 'betaald' : status.invoice.sentAt ? `verstuurd naar ${esc(status.invoice.sentTo || '')}` : `nog niet verstuurd${status.invoice.sendError ? ` (${esc(status.invoice.sendError)})` : ''}`;
+      box.innerHTML = `Aanbetalingsfactuur <a href="../facturen/?id=${encodeURIComponent(status.invoice.id)}">${esc(status.invoice.number || 'concept')}</a>: ${sent}.`;
+      return;
+    }
+    box.innerHTML = '<button type="button" class="btn small" id="e-dep-make">Aanbetalingsfactuur maken en versturen</button> <span class="muted small" id="e-dep-msg"></span>';
+    /** Maakt de aanbetalingsfactuur met de hand en ververst de stand. */
+    $('#e-dep-make').onclick = async () => {
+      $('#e-dep-make').disabled = true;
+      try {
+        const out = await api(`quotes/${encodeURIComponent(quote.id)}/deposit-invoice`, { method: 'POST', body: {} });
+        $('#e-dep-msg').textContent = out.sent ? 'Verstuurd.' : 'Aangemaakt, niet verstuurd.';
+        renderDepositStatus(quote);
+      } catch (error) {
+        $('#e-dep-make').disabled = false;
+        $('#e-dep-msg').textContent = error.message || 'Mislukt.';
+      }
+    };
+  }
+
+  /**
    * Toont bij de korting alleen het veld dat bij het gekozen type hoort (percentage of bedrag).
    * @param {object} data De offertegegevens.
    */
@@ -783,8 +845,11 @@
         let value = event.target.value;
         if (field === 'discountPct') value = Math.min(100, Math.max(0, Number(value) || 0));
         if (field === 'discountAmount') value = Math.max(0, Number(value) || 0);
+        if (field === 'deposit.pct') value = Math.min(90, Math.max(1, Number(value) || 0));
+        if (field === 'deposit.amount') value = Math.max(0, Number(value) || 0);
         setPath(quote.data, field, value);
         if (['discountType', 'discountPct', 'discountAmount', 'discountNote'].includes(field)) { renderDiscountFields(quote.data); renderTotals(); }
+        if (field.startsWith('deposit.')) { quote.data.deposit = QuoteCore.sanitizeDeposit({ ...quote.data.deposit, [field.slice(8)]: value }); renderDeposit(quote); }
         if (field === 'vatShift.number') { quote.data.vatShift.status = ''; renderVatShift(quote); renderTotals(); }
         return changed();
       }
@@ -942,6 +1007,19 @@
     $('#e-newcust').onsubmit = saveNewCustomer;
     $('#e-newcust').customerGroup.onchange = syncNewCustomerBusiness;
     $('#e-vs-on').onchange = toggleVatShift;
+    /**
+     * Zet de aanbetaling aan of uit; aan met het standaardpercentage.
+     * @param {Event} event Het change-event van het vinkje.
+     * @returns {void}
+     */
+    $('#e-dep-on').onchange = (event) => {
+      const quote = state.quote;
+      if (!quote || locked()) return;
+      quote.data.deposit = QuoteCore.sanitizeDeposit({ ...quote.data.deposit, on: event.target.checked });
+      renderDeposit(quote);
+      for (const field of document.querySelectorAll('#e-dep-fields [data-f]')) { const value = getPath(quote.data, field.dataset.f); field.value = value == null ? '' : value; }
+      changed();
+    };
     $('#e-del-same').onchange = toggleDelivery;
     /**
      * Ontkoppelt de klant van de offerte; de ingevulde gegevens blijven staan.
@@ -1110,6 +1188,7 @@
     state.all = rights.includes('offertes.alle');
     state.klant = !rights.includes('offertes') && rights.includes('offertes.klant');
     state.werkorders = rights.includes('werkorders');
+    state.invoices = rights.includes('facturen');
     if (!state.me.user && !state.me.guest) {
       $('#list-view').hidden = false;
       $('#l-table').innerHTML = '<tr><td class="empty">Log eerst in om offertes te maken. <a href="../login">Inloggen</a></td></tr>';

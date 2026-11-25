@@ -34,6 +34,7 @@ const { withoutInternal } = require('./quotes');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
 
 const Core = require(path.join(FRONTEND_DIR, 'facturen', 'invoice-core.js'));
+const DocText = require(path.join(FRONTEND_DIR, 'shared', 'doc-text.js'));
 
 const LIST_COLS = `id, number, status, kind, credit_of, customer_id, customer_name, work_order_id, quote_id, invoice_date, due_date,
   subtotal, vat_total, total, stock_booked, finalized_at, paid_at, credited_at, exported_at, created_at, updated_at,
@@ -64,7 +65,7 @@ const marks = (count) => Array.from({ length: count }, () => '?').join(',');
  * Maakt de opslag voor facturen.
  * @param {object} db De database.
  * @param {{ stock?: object, debtors?: object }} [stores] Voorraad (afboeken bij een losse verkoop) en debiteuren (koppelen bij definitief).
- * @returns {object} list, get, create, update, finalize, onFinalized, setPaid, credit, remove, exportList, markExported, nextNumber, workOrder, quote, byShopOrders en markSent.
+ * @returns {object} list, get, create, update, finalize, onFinalized, setPaid, credit, remove, exportList, markExported, nextNumber, workOrder, quote, depositsOf, unsentDeposits, byShopOrders en markSent.
  */
 function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
   /**
@@ -558,11 +559,42 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
    * @returns {object|null} id, number, status, customerId en data, of null.
    */
   function quote(tenantId, id) {
-    const row = prepare("SELECT id, number, status, customer_id, data FROM quotes WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL").get(tenantId, String(id));
-    return row ? { id: row.id, number: row.number, status: row.status, customerId: row.customer_id || null, data: JSON.parse(row.data) } : null;
+    const row = prepare("SELECT id, number, status, customer_id, owner_id, data FROM quotes WHERE tenant_id = ? AND id = ? AND deleted_at IS NULL").get(tenantId, String(id));
+    return row ? { id: row.id, number: row.number, status: row.status, customerId: row.customer_id || null, ownerId: row.owner_id || null, data: JSON.parse(row.data) } : null;
   }
 
-  return { list, listAsync, countList, get, create, update, finalize, onFinalized, setPaid, credit, remove, exportList, markExported, nextNumber, workOrder, quote, byShopOrders, markSent };
+  /**
+   * De aanbetalingsfacturen van een offerte die nog gelden (niet gecrediteerd), oudste eerst: nummer, status, bedrag incl. btw en per btw-tarief het bedrag excl. btw.
+   * @param {string} tenantId Id van de tenant.
+   * @param {string} quoteId Id van de offerte.
+   * @returns {{ id: string, number: string, status: string, paid: boolean, amount: number, lines: { rate: number, net: number }[] }[]} De aanbetalingen.
+   */
+  function depositsOf(tenantId, quoteId) {
+    const rows = prepare(`SELECT id, number, status, paid_at, total, data FROM invoices
+      WHERE tenant_id = ? AND quote_id = ? AND kind = 'factuur' AND credited_at IS NULL AND (data -> 'deposit') IS NOT NULL ORDER BY created_at, id`).all(tenantId, String(quoteId));
+    return rows.map((row) => {
+      const byRate = new Map();
+      for (const line of JSON.parse(row.data).lines || []) byRate.set(Number(line.vat) || 0, Core.round2((byRate.get(Number(line.vat) || 0) || 0) + Core.lineTotal(line)));
+      return { id: row.id, number: row.number || '', status: row.status, paid: Boolean(row.paid_at), amount: Number(row.total), lines: [...byRate.entries()].map(([rate, net]) => ({ rate, net })) };
+    });
+  }
+
+  /**
+   * Definitieve aanbetalingsfacturen die nog niet naar de klant zijn gegaan (geen mailserver, geen adres of een fout), voor de openstaande taken.
+   * @param {string} tenantId Id van de tenant.
+   * @param {number} [limit] Hoeveel er in de lijst komen (het totaal telt altijd alles).
+   * @returns {{ total: number, items: { id: string, number: string, customer: string, total: number, error: string }[] }} Het aantal en de eerste facturen.
+   */
+  function unsentDeposits(tenantId, limit = 5) {
+    const total = Number(prepare(`SELECT COUNT(*) AS found FROM invoices WHERE tenant_id = ? AND kind = 'factuur' AND status = 'definitief' AND sent_at IS NULL
+      AND paid_at IS NULL AND credited_at IS NULL AND (data -> 'deposit') IS NOT NULL`).get(tenantId).found);
+    const items = prepare(`SELECT id, number, customer_name, total, send_error FROM invoices WHERE tenant_id = ? AND kind = 'factuur' AND status = 'definitief'
+      AND sent_at IS NULL AND paid_at IS NULL AND credited_at IS NULL AND (data -> 'deposit') IS NOT NULL ORDER BY finalized_at, id LIMIT ?`).all(tenantId, limit)
+      .map((row) => ({ id: row.id, number: row.number, customer: row.customer_name, total: Number(row.total), error: row.send_error || '' }));
+    return { total, items };
+  }
+
+  return { list, listAsync, countList, get, create, update, finalize, onFinalized, setPaid, credit, remove, exportList, markExported, nextNumber, workOrder, quote, depositsOf, unsentDeposits, byShopOrders, markSent };
 }
 
 /**
@@ -704,10 +736,18 @@ function registerInvoiceRoutes(app, ctx) {
     const tenantId = tenantOf(req);
     const settings = invoicingOf(req);
     const quote = workOrder.quoteId ? invoices.quote(tenantId, workOrder.quoteId) : null;
+    // Aanbetalingen van de offerte: de definitieve gaan van de factuur af, een concept krijgt een waarschuwing (anders zou de klant dubbel betalen).
+    const deposits = quote ? invoices.depositsOf(tenantId, quote.id) : [];
+    const language = quote && quote.data && quote.data.language;
     const built = Core.fromWorkOrder(workOrder, {
       quote, logged: ctx.loggedOf(tenantId, workOrder.id), articles: ctx.articlesOf(tenantId), catalog: ctx.catalog(),
       hourlyRate: settingsOf(req).get('quoteProfile').hourlyRate, settings,
+      deposits: deposits.filter((deposit) => deposit.status !== 'concept'),
+      text: (key, values) => DocText.text(language, key, values),
     });
+    if (deposits.some((candidate) => candidate.status === 'concept')) {
+      built.warnings.push('De aanbetalingsfactuur van de offerte is nog een concept: maak die eerst definitief, anders wordt hij niet van deze factuur afgetrokken.');
+    }
     if (skipEmpty && !(built.data.lines || []).length) return { created: null, built };
     const created = invoices.create(tenantId, req.user, built.data, settings, { workOrderId: workOrder.id, quoteId: quote ? quote.id : null, customerId: (quote && quote.customerId) || workOrder.customerId || null });
     return { created, built };
