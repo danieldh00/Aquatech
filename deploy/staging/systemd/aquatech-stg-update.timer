@@ -1,0 +1,11 @@
+# Elke 10 minuten kijken of er een nieuwe staging-build is.
+[Unit]
+Description=Aquatech staging: periodiek updaten
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,10 @@
+# Update van de staging-omgeving (update-staging.sh), gestart door aquatech-stg-update.timer.
+[Unit]
+Description=Aquatech staging: nieuwste staging-image uitrollen
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/apps/aquatech-stg/update-staging.sh
+TimeoutStartSec=15min
