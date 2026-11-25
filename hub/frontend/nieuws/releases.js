@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.40.4',
+      date: '2026-11-25',
+      title: 'Stagingomgeving verwijderd',
+      items: [],
+    },
+    {
       version: '1.40.3',
       date: '2026-11-25',
       title: 'Staging probeert bij een handmatige run altijd opnieuw',
