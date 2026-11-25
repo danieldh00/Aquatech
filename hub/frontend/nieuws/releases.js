@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.40.1',
+      date: '2026-11-25',
+      title: 'Servertaken: schijf vergroten vóór staging',
+      items: [],
+    },
+    {
       version: '1.40.0',
       date: '2026-11-25',
       title: 'Servertaak: schijf van apps01 vergroten',
