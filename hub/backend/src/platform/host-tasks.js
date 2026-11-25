@@ -99,20 +99,26 @@ const HOST_TASKS = [
   },
   {
     id: '012-staging-op-apps01-inrichten',
-    title: 'Stagingomgeving op apps01 inrichten (Vue-migratie)',
-    description: 'Richt een tweede, aparte opstelling in naast de testomgeving (eigen map, database, geheimen en image; alleen de server en de bestaande tunnel worden gedeeld) die de branch develop volgt en zichzelf elke 15 minuten bijwerkt. Het image wordt op de server gebouwd; de database wordt gevuld met verzonnen testdata; er zijn geen koppelingen of mail. Daarna moet je zelf in de bestaande Cloudflare-tunnel de hostnaam aquatech-staging.den-hollander.com naar http://aquatech-staging:3300 laten wijzen en een Access-toepassing maken die alleen jou toelaat; het script drukt dat aan het eind af. De testomgeving blijft gewoon draaien.',
+    title: 'Stagingomgeving op apps01 inrichten (vervallen)',
+    description: 'Vervallen: de stagingomgeving is verwijderd (taak 016). Deze taak doet niets meer.',
     addedAt: '2026-11-25',
   },
   {
     id: '014-staging-alias-botsing-herstellen',
-    title: 'Staging herstellen: naamsbotsing met de testomgeving oplossen',
-    description: 'De stagingcontainer droeg in het gedeelde tunnelnetwerk ook de naam aquatech, waardoor een deel van het verkeer naar de testomgeving bij staging uitkwam (stagingbalk, opnieuw inloggen). Deze taak ruimt de oude stagingcontainers op en maakt ze opnieuw aan onder eigen servicenamen (aquatech-staging-app en aquatech-staging-db). De gegevens van staging blijven staan; de testomgeving wordt niet aangeraakt. Draai dit zo snel mogelijk.',
+    title: 'Staging herstellen: naamsbotsing (vervallen)',
+    description: 'Vervallen: de stagingomgeving is verwijderd (taak 016). Deze taak doet niets meer.',
     addedAt: '2026-11-25',
   },
   {
     id: '015-staging-opnieuw-proberen',
-    title: 'Staging opnieuw inrichten (oude containers opruimen)',
-    description: 'Taak 014 deed niets, omdat de huidige stagingcommit als mislukt stond gemarkeerd en het script die oversloeg. Het script probeert nu bij een handmatige run altijd opnieuw. Deze taak ruimt de oude stagingcontainers op en maakt ze opnieuw aan onder eigen servicenamen, zodat het verkeer naar de testomgeving niet meer bij staging uitkomt. De gegevens van staging blijven staan; de testomgeving wordt niet aangeraakt. Draai dit zo snel mogelijk.',
+    title: 'Staging opnieuw inrichten (vervallen)',
+    description: 'Vervallen: de stagingomgeving is verwijderd (taak 016). Deze taak doet niets meer.',
+    addedAt: '2026-11-25',
+  },
+  {
+    id: '016-staging-verwijderen',
+    title: 'Stagingomgeving van apps01 verwijderen',
+    description: 'Verwijdert de stagingomgeving volledig: de timer en units, de twee stagingcontainers (aquatech-staging en aquatech-staging-postgres), hun netwerk, de lokaal gebouwde stagingimages en de map /opt/apps/aquatech-staging met de stagingdatabase. De testomgeving, de tunnel en de gegevens van de testomgeving worden niet aangeraakt. Daarna kun je in Cloudflare de hostnaam aquatech-staging.den-hollander.com en de bijbehorende Access-toepassing zelf verwijderen.',
     addedAt: '2026-11-25',
   },
 ];
