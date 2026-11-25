@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.41.0
+
+- Migratie 99: `item_related` (koppelingen met bron en bewijs), `item_specs` (opgezochte specificaties per artikel) en `item_together` (berekende partners uit `web_sale_lines`).
+- `artikelen/related-compat.js`: vaste regels voor passen (draad binnen/buiten gelijke maat, buis/slang gelijke maat, overlappende werkdruk, verschillende functie); de AI leest alleen specificaties met bronadres en letterlijke zin, de code controleert beide.
+- `artikelen/related-research.js`: opzoeken met het zoekgereedschap van de AI-dienst (instelling `relatedAiModel`, feature `past_bij`); `related-items.js` en `related-routes.js`: opslag, berekening vaak samen besteld (verzonden bestellingen, zonder retouren en bulk), uurlijkse verversing en routes.
+- Webshop: blokken op de productpagina uit een cache (warme pagina kost 0 queries), `POST /winkelwagen/samen`. Module-schakelaar `gerelateerde-artikelen`. Beheer: tabblad Gerelateerd bij Artikelen.
+
 ## 1.40.8
 
 `returns.decide(…, lines)` en `POST /api/admin/web-returns/:id/decision` accepteren `lines: [{ code, qty }]` (goedgekeurd aantal per artikel; niet genoemd = helemaal goedgekeurd). Minder goedgekeurd dan gevraagd vraagt een toelichting: `data.requested` bewaart het gevraagde, `data.lines` bevat daarna alleen het goedgekeurde, dus creditnota, voorraadboeking, mails en rapportage rekenen er vanzelf mee. Niets goedgekeurd = afgewezen. Het afgewezen deel telt als gebruikt en kan niet opnieuw worden ingediend (`returnableLines`, `rejectedCodes`). Shape: `partial`, `requested`, `declined`; statuslabel *Deels goedgekeurd*. Geen migratie. Beheer toont een melding als de creditfactuur bij goedkeuren niet gemaakt kon worden. Test in `test/web-returns.test.js`.

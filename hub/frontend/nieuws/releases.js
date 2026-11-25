@@ -13,6 +13,16 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.41.0',
+      date: '2026-11-25',
+      title: 'Gerelateerde artikelen op de productpagina',
+      items: [
+        { text: 'Bij elk artikel kun je instellen welke artikelen erbij passen ("Past bij"). De webshop toont ze op de productpagina, alleen als ze leverbaar zijn, met de gewone prijzen.', for: ['voorraad'] },
+        { text: 'Onder "Vaak samen besteld" toont de webshop automatisch wat klanten echt samen bestellen, op relevantie en niet alleen op populariteit, met de knop *Alles in winkelwagen*.', for: ['voorraad'] },
+        { text: 'Met één knop laat de AI "Past bij" voor alle artikelen invullen op basis van echte specificaties van internet. Bij elke koppeling staat de bron met de letterlijke zin; zonder gevonden specificatie wordt er niets gekoppeld.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.40.8',
       date: '2026-11-25',
       title: 'Retour per regel goedkeuren of afwijzen',
