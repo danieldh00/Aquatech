@@ -51,6 +51,16 @@ Eén script (root, veilig herhaalbaar, met lockbestand) dat inricht én bijwerkt
 - Het script op de server is de kopie die servertaak 012 op een vaste commit ophaalt; wijzigingen aan het script zelf komen dus alleen
   op de server via die taak (opnieuw draaien). De rest (compose, Dockerfile, app) komt mee met `develop`.
 
+## Vertrouwen en grenzen
+- De timer draait als root op apps01 en bouwt elke 15 minuten code van `develop` met `docker compose build` op dezelfde Docker-daemon als de
+  testomgeving. Een gemergede PR naar `develop` kan dus buildcode uitvoeren op die server. Dat is bewust: `develop` heeft dezelfde ruleset en
+  dezelfde verplichte Claude-reviews als `master`, en niets wordt zonder review gemerged. Het script zelf komt niet van `develop` maar van
+  de vaste commit van servertaak 012.
+- Een zware build is niet in geheugen of CPU begrensd (de bouwer draait in de Docker-daemon); de enige grenzen zijn de 6 GB vrije schijf bij
+  de eerste installatie en `TimeoutStartSec=45min` op de service. Een staging die de server hindert: `systemctl stop aquatech-staging-update.timer`.
+- De app zit ook in het netwerk van de tunnelcontainer (zie hierboven); staging heeft geen eigen uitgaande beperking behalve dat er niets
+  gekoppeld is.
+
 ## Inrichten: servertaak 012
 Draai het vaste commando uit Beheer > Systeem > Updates (zoals altijd, als root op de Proxmox-host); taak
 `012-staging-op-apps01-inrichten` haalt het script op de vaste commit op en voert het uit, zonder invoer. Daarna twee handelingen in

@@ -180,7 +180,11 @@ export STAGING_COMMIT="$SHORT"
 env_set STAGING_COMMIT "$SHORT"
 fail_commit() { # <melding>: markeert de commit als mislukt (overslaan tot er een nieuwere is)
   printf '%s' "$TARGET" > "$STATE_SKIPPED"
-  [[ -z "$PREVIOUS" ]] || env_set STAGING_COMMIT "${PREVIOUS:0:12}"
+  if [[ -n "$PREVIOUS" ]]; then
+    env_set STAGING_COMMIT "${PREVIOUS:0:12}"
+    # Ook de bron in repo/ terug naar wat draait, zodat een handmatige build of up niet de mislukte commit pakt.
+    git -C repo checkout --quiet --force --detach "$PREVIOUS" 2>/dev/null || true
+  fi
   echo "FOUT: $1" >&2
 }
 if ! dc build --quiet aquatech; then
