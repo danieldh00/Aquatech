@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.39.6',
+      date: '2026-11-25',
+      title: 'Servertaak voor de stagingomgeving',
+      items: [],
+    },
+    {
       version: '1.39.5',
       date: '2026-11-25',
       title: 'Aanbetaling op de offerte',
