@@ -14,7 +14,8 @@ De Node-backend en alle API's blijven zoals ze zijn; een gemigreerde module verv
 | `src/shared/` | gedeelde code: `api.ts` (getypte API-client), `shell.ts` (brug naar de oude schil), `router.ts`, `toast.ts` + `ToastHost.vue`, `AddressField.vue`, `format.ts`, `bootstrap.ts` |
 | `tools/shell-html.ts` | Vite-plugin die de schil (CSS en gewone scripts van `hub/frontend/shared`, zijbalk, rekeningmenu) in elke modulepagina zet |
 | `tools/check-stijl.mjs` | stijlcontrole voor `.ts` en `.vue` (zelfde regels als de oude codestijl, plus geen `v-html`) |
-| `test/` | Vitest + `@vue/test-utils` (jsdom) |
+| `test/` | Vitest + `@vue/test-utils` (jsdom); `test/<module>/` per module |
+| `e2e/` | Playwright-scripts tegen de echte backend: `seed.mjs`, `auth.cjs`, `vergelijk-<module>.cjs` (oud tegen nieuw: structuur en afmetingen op 1440 en 375) en `<module>.e2e.cjs` (gedrag) |
 
 ## Commando's
 
@@ -30,6 +31,12 @@ BACKEND_URL=http://localhost:3300 npm run dev   # http://localhost:5173/<module>
 De ontwikkelserver geeft alles wat niet van een gemigreerde module is (API, schil, nog niet gemigreerde modules) door aan de gewone
 backend (standaard poort 3300, pad `/app/`). Draai de backend dus gewoon zoals altijd (`DATABASE_URL=… node src/server.js`) en log in op
 `http://localhost:5173/klanten/`.
+
+## Gemigreerde modules
+
+| Module | Branch | Pariteitslijst |
+|---|---|---|
+| Klanten (pilot) | `vue/klanten` | `src/modules/klanten/PARITEIT-klanten.xlsx` |
 
 ## Regels
 
