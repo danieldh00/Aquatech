@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.40.6',
+      date: '2026-11-25',
+      title: 'Creditfactuur van een retour direct bij goedkeuren',
+      items: [
+        { text: 'Nieuwe instelling in Facturen > Instellingen: de creditfactuur van een webshopretour kan nu al bij het goedkeuren worden gemaakt, in plaats van pas bij Afronden. Standaard staat dit uit.', for: ['facturen', 'beheer'] },
+      ],
+    },
+    {
       version: '1.40.5',
       date: '2026-11-25',
       title: 'Develop-branch en stagingcode opgeruimd',

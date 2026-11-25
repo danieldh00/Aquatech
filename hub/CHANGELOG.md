@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.40.6
+
+Instelling `invoicing.webOrders.creditOnApproval` (standaard uit, geen migratie). Staat hij aan, dan roept `POST /api/admin/web-returns/:id/decision` bij goedkeuren `webOrderInvoices.creditReturn` aan (idempotent: Afronden maakt geen tweede creditnota; een mislukking staat als `creditError` bij de retour en blokkeert het goedkeuren niet). Voorraad komt nog bij Afronden terug. Test in `test/web-returns.test.js`.
+
 ## 1.40.5
 
 Stagingbalk, noindex-modus voor staging en het Dockerfile-argument voor Vue-modules verwijderd; de stagingomgeving bestaat niet meer.
