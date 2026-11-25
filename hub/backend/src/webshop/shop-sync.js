@@ -569,7 +569,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
    * Zet een net samengevoegd hoofdartikel in de webshop en haalt de oude losse producten weg uit de winkel.
    * Volgorde: (1) de sku van de oude producten leeg zetten (anders is de sku van de nieuwe variatie dubbel),
    * (2) het hoofdartikel als variabel product aanmaken, (3) de oude producten op concept zetten (verborgen,
-   * niet verwijderd). Mislukt (1) of (2), dan zet deze functie de sku's terug en geeft `revert: true`:
+   * niet verwijderd). Mislukt (1) of (2), dan zet deze functie de sku's terug (ook bij een onverwachte fout, die daarna doorgegooid wordt) en geeft `revert: true`:
    * de aanroeper draait de samenvoeging dan terug, zodat er niets half blijft staan. Mislukt alleen (3),
    * dan komt dat als waarschuwing terug.
    * @param {string} tenantId Id van de omgeving.
@@ -618,8 +618,8 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
       }
       return { productId: published.productId, variations: published.variations, hidden, warning };
     } catch (error) {
-      if (!(error instanceof SourceError)) throw error;
       await restoreSkus();
+      if (!(error instanceof SourceError)) throw error;
       return { error: error.message, revert: true, status: 502 };
     }
   }
@@ -628,7 +628,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
    * Voert werk uit in de wachtrij van de omgeving, zodat er geen synchronisatie tussendoor loopt.
    * Gebruikt voor het samenvoegen: de samenvoeging in de database en het zetten in de webshop zijn
    * één taak, anders kan een synchronisatie de nieuwe varianten tussendoor archiveren of de oude producten opnieuw koppelen.
-   * Binnen het werk roep je publishMergedNow aan, nooit publishMerged (dat wacht op dezelfde wachtrij).
+   * Roep binnen het werk publishMergedNow aan; `exclusive` opnieuw aanroepen zou op dezelfde wachtrij wachten (deadlock).
    * @param {string} tenantId Id van de omgeving.
    * @param {Function} work Het werk (async).
    * @returns {Promise<*>} Wat het werk teruggeeft.
