@@ -391,6 +391,7 @@ HOST_TASK_IDS=(
   010-back-up-integriteitscontrole
   011-image-handtekening-controleren
   012-staging-op-apps01-inrichten
+  013-schijf-apps01-vergroten
 )
 HOST_TASKS_LEDGER="host-tasks.json"
 # Functienaam van een taak (streepjes worden underscores).
@@ -444,6 +445,17 @@ hosttask_001_app_update_opnieuw_inrichten() {
   dir="$(mktemp -d)"
   fetch_task_file "$dir/setup-app-update.sh" deploy/apps01/setup-app-update.sh || { rm -rf "$dir"; return 1; }
   SETUP_REF="$TASKS_REF" APP_DIR="$APP_DIR" bash "$dir/setup-app-update.sh" || rc=$?
+  rm -rf "$dir"
+  return "$rc"
+}
+
+# Taak 013: de schijf van apps01 vergroten nadat de virtuele schijf in Proxmox groter is gemaakt (deploy/apps01/grow-disk.sh op de
+# vaste commit): rescan, growpart, pvresize/lvextend bij LVM en het bestandssysteem. Veilig herhaalbaar; vraagt geen invoer.
+hosttask_013_schijf_apps01_vergroten() {
+  local dir rc=0
+  dir="$(mktemp -d)"
+  fetch_task_file "$dir/grow-disk.sh" deploy/apps01/grow-disk.sh || { rm -rf "$dir"; return 1; }
+  bash "$dir/grow-disk.sh" || rc=$?
   rm -rf "$dir"
   return "$rc"
 }

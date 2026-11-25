@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.40.0',
+      date: '2026-11-25',
+      title: 'Servertaak: schijf van apps01 vergroten',
+      items: [],
+    },
+    {
       version: '1.39.9',
       date: '2026-11-25',
       title: 'Staging verbindt met een unieke databasehost',
