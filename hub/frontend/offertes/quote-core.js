@@ -152,6 +152,8 @@
       discountAmount: fields.discountType === 'amount' ? round2(clampNumber(fields.discountAmount, 0, MAX_DISCOUNT_AMOUNT)) : 0,
       discountNote: limitText(fields.discountNote, 120),
       paymentDays: sanitizePaymentDays(fields.paymentDays),
+      // Aanbetaling bij akkoord (incl. btw): percentage of vast bedrag; bij akkoord volgt een aanbetalingsfactuur.
+      deposit: sanitizeDeposit(fields.deposit),
       // Taal van het document ('nl' of 'en'), uit de documenttaal van de klant.
       language: fields.language === 'en' ? 'en' : 'nl',
       vatShift: sanitizeVatShift(fields.vatShift),
@@ -179,6 +181,56 @@
     if (raw === null || raw === undefined || raw === '') return null;
     const days = Number(raw);
     return Number.isFinite(days) ? Math.min(365, Math.max(0, Math.round(days))) : null;
+  }
+
+  /**
+   * Schoont de aanbetaling op: aan/uit, percentage (1-90) óf een vast bedrag incl. btw. Staat hij uit, dan blijft er alleen `on: false` over.
+   * @param {*} raw De ruwe invoer.
+   * @returns {{ on: boolean, type: string, pct: number, amount: number }} De opgeschoonde aanbetaling.
+   */
+  function sanitizeDeposit(raw) {
+    const fields = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    const type = fields.type === 'amount' ? 'amount' : 'pct';
+    return {
+      on: fields.on === true,
+      type,
+      pct: type === 'pct' && fields.pct !== '' && Number.isFinite(Number(fields.pct)) ? round2(clampNumber(fields.pct, 1, 90)) : 30,
+      amount: type === 'amount' ? round2(clampNumber(fields.amount, 0, MAX_DISCOUNT_AMOUNT)) : 0,
+    };
+  }
+
+  /**
+   * Aanbetaling in euro's (incl. btw) bij een totaalbedrag. Een vast bedrag is nooit hoger dan het totaal; zonder bedrag of totaal geldt er geen aanbetaling.
+   * @param {object} quote De offertegegevens (met `deposit`).
+   * @param {number} total Het totaal incl. btw van de offerte.
+   * @returns {{ on: boolean, type: string, pct: number|null, amount: number, rest: number }} Of er een aanbetaling is, het bedrag incl. btw en het restant.
+   */
+  function depositOf(quote, total) {
+    const deposit = sanitizeDeposit(quote && quote.deposit);
+    const whole = round2(Number(total) || 0);
+    const amount = deposit.type === 'pct' ? round2((whole * deposit.pct) / 100) : Math.min(deposit.amount, whole);
+    const on = deposit.on && whole > 0 && amount > 0;
+    return { on, type: deposit.type, pct: deposit.type === 'pct' ? deposit.pct : null, amount: on ? amount : 0, rest: on ? round2(whole - amount) : whole };
+  }
+
+  /**
+   * Verdeelt de aanbetaling (incl. btw) over de btw-tarieven van de offerte naar rato van hun deel in het totaal, zodat de aanbetalingsfactuur per tarief klopt.
+   * De laatste groep krijgt het restant, dus de bedragen incl. btw tellen precies op tot de aanbetaling.
+   * @param {object} quote De offertegegevens.
+   * @returns {{ amount: number, rest: number, groups: { rate: number, net: number, gross: number }[] }|null} De verdeling, of null zonder aanbetaling.
+   */
+  function depositSplit(quote) {
+    const all = totals(quote);
+    const deposit = depositOf(quote, all.total);
+    if (!deposit.on) return null;
+    const shares = all.vat.filter((entry) => entry.base + entry.amount > 0);
+    let left = deposit.amount;
+    const groups = shares.map((entry, index) => {
+      const gross = index === shares.length - 1 ? left : round2((deposit.amount * (entry.base + entry.amount)) / all.total);
+      left = round2(left - gross);
+      return { rate: entry.rate, net: round2(gross / (1 + entry.rate / 100)), gross };
+    });
+    return { amount: deposit.amount, rest: deposit.rest, groups };
   }
 
   /** Uitkomsten van de btw-controle bij VIES die op een offerte kunnen staan. */
@@ -459,7 +511,7 @@
     return { lines, summary, warnings };
   }
 
-  const api = { SECTIONS, VAT_RATES, vatShifted, discountOf, discountCaption, sanitizePaymentDays, STATUSES, LABOR, MAX_LINES, sanitize, sanitizeLine, totals, margin, lineTotal, included, chooseOptions, fromPlan, today, addDays, round2 };
+  const api = { SECTIONS, VAT_RATES, vatShifted, discountOf, discountCaption, sanitizePaymentDays, sanitizeDeposit, depositOf, depositSplit, STATUSES, LABOR, MAX_LINES, sanitize, sanitizeLine, totals, margin, lineTotal, included, chooseOptions, fromPlan, today, addDays, round2 };
   root.QuoteCore = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
