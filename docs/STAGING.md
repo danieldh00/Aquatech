@@ -52,6 +52,7 @@ Eén script (root, veilig herhaalbaar, met lockbestand) dat inricht én bijwerkt
   op de server via die taak (opnieuw draaien). De rest (compose, Dockerfile, app) komt mee met `develop`.
 
 ## Vertrouwen en grenzen
+- **Servicenamen**: in het gedeelde tunnelnetwerk is elke servicenaam ook een netwerkalias. Daarom heten alle stagingservices `aquatech-staging-…`; een service `aquatech` of `postgres` zou verkeer van de testomgeving naar staging sturen (zo ging het fout; hersteld met servertaak 014). Een test bewaakt dit.
 - De timer draait als root op apps01 en bouwt elke 15 minuten code van `develop` met `docker compose build` op dezelfde Docker-daemon als de
   testomgeving. Een gemergede PR naar `develop` kan dus buildcode uitvoeren op die server. Dat is bewust: `develop` heeft dezelfde ruleset en
   dezelfde verplichte Claude-reviews als `master`, en niets wordt zonder review gemerged. Het script zelf komt niet van `develop` maar van

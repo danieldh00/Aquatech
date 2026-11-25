@@ -18,6 +18,8 @@ MIN_FREE_KB="${STAGING_MIN_FREE_KB:-$((6 * 1024 * 1024))}"
 HEALTH_WAIT="${STAGING_HEALTH_WAIT:-180}"
 SYSTEMD_DIR="${SYSTEMD_DIR:-/etc/systemd/system}"
 APP_CONTAINER="aquatech-staging"
+APP_SERVICE="aquatech-staging-app"
+DB_SERVICE="aquatech-staging-db"
 DB_CONTAINER="aquatech-staging-postgres"
 IMAGE_LABEL="nl.aquatech.staging=1"
 HOSTNAME_PUBLIC="${STAGING_HOSTNAME:-aquatech-staging.den-hollander.com}"
@@ -64,6 +66,18 @@ env_set() { # <sleutel> <waarde>
   mv -f "$tmp" .env; chmod 600 .env
 }
 health_of() { docker inspect -f '{{.State.Health.Status}}' "$1" 2>/dev/null || true; }
+# Ruimt een container op die nog onder de oude servicenaam draait (`aquatech` of `postgres`): die servicenaam was ook een
+# netwerkalias in het gedeelde tunnelnetwerk en botste met de testomgeving. Data staat in mappen op de host, dus niets gaat
+# verloren; de container wordt daarna onder de nieuwe servicenaam opnieuw aangemaakt.
+service_of() { docker inspect -f '{{index .Config.Labels "com.docker.compose.service"}}' "$1" 2>/dev/null || true; }
+retire_old_service() { # <container> <verwachte service>
+  local service
+  service="$(service_of "$1")"
+  [[ -z "$service" || "$service" == "$2" ]] && return 0
+  log "Oude servicenaam '$service' van $1 opruimen (wordt '$2')."
+  docker stop -t 60 "$1" >/dev/null 2>&1 || true
+  docker rm -f "$1" >/dev/null 2>&1 || true
+}
 wait_healthy() { # <container> <seconden>
   local waited=0
   while (( waited < $2 )); do
@@ -122,7 +136,8 @@ valid_ipv4() {
   [[ "$ip" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || return 1
   for part in ${ip//./ }; do (( 10#$part <= 255 )) || return 1; done
 }
-healthy_on_deployed() { [[ -n "$DEPLOYED" && "$DEPLOYED" == "$TARGET" && "$(health_of "$APP_CONTAINER")" == "healthy" ]]; }
+# Een draaiende app onder de oude servicenaam telt niet als klaar, ook niet op dezelfde commit (zie retire_old_service).
+healthy_on_deployed() { [[ -n "$DEPLOYED" && "$DEPLOYED" == "$TARGET" && "$(health_of "$APP_CONTAINER")" == "healthy" && "$(service_of "$APP_CONTAINER")" != "aquatech" && "$(service_of "$APP_CONTAINER")" != "postgres" ]]; }
 if ! valid_ipv4 "$TUNNEL_IP"; then
   if healthy_on_deployed; then
     log "Geen (geldig) IP van de tunnelcontainer $TUNNEL_CONTAINER; staging draait gezond op ${SHORT}, niets te doen."
@@ -187,14 +202,15 @@ fail_commit() { # <melding>: markeert de commit als mislukt (overslaan tot er ee
   fi
   echo "FOUT: $1" >&2
 }
-if ! dc build --quiet aquatech; then
+if ! dc build --quiet "$APP_SERVICE"; then
   fail_commit "Het image van commit $SHORT bouwde niet; de draaiende staging blijft zoals hij was en deze commit wordt overgeslagen tot er een nieuwere is."
   exit 1
 fi
 
 # ---------- 7. Database starten en de app-rol zetten ----------
-dc up -d postgres
-wait_healthy "$DB_CONTAINER" 180 || { dc logs --tail 20 postgres >&2 || true; die "De staging-database werd niet gezond."; }
+retire_old_service "$DB_CONTAINER" "$DB_SERVICE"
+dc up -d --remove-orphans "$DB_SERVICE"
+wait_healthy "$DB_CONTAINER" 180 || { dc logs --tail 20 "$DB_SERVICE" >&2 || true; die "De staging-database werd niet gezond."; }
 # Het wachtwoord gaat via stdin (hex) en staat nergens in een argument of log.
 {
   cat <<SQL
@@ -211,21 +227,22 @@ SQL
 } | docker exec -i -e PGOPTIONS="-c client_min_messages=warning" "$DB_CONTAINER" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d aquatech >/dev/null
 
 # ---------- 8. App starten; bij een ongezonde start terug naar de vorige commit ----------
-dc up -d --force-recreate aquatech
+retire_old_service "$APP_CONTAINER" "$APP_SERVICE"
+dc up -d --force-recreate --remove-orphans "$APP_SERVICE"
 if ! wait_healthy "$APP_CONTAINER" "$HEALTH_WAIT"; then
-  dc logs --tail 20 aquatech >&2 || true
+  dc logs --tail 20 "$APP_SERVICE" >&2 || true
   fail_commit "Commit $SHORT startte niet gezond."
   if [[ -n "$PREVIOUS" && "$PREVIOUS" != "$TARGET" ]]; then
     log "Terug naar de vorige commit ${PREVIOUS:0:12}"
     git -C repo checkout --quiet --force --detach "$PREVIOUS" 2>/dev/null || true
     export STAGING_COMMIT="${PREVIOUS:0:12}"
-    if dc up -d --force-recreate aquatech && wait_healthy "$APP_CONTAINER" "$HEALTH_WAIT"; then
+    if dc up -d --force-recreate "$APP_SERVICE" && wait_healthy "$APP_CONTAINER" "$HEALTH_WAIT"; then
       log "Vorige commit draait weer; $SHORT wordt overgeslagen tot er een nieuwere is."
     else
       echo "FOUT: ook de vorige commit startte niet gezond; kijk met 'docker logs $APP_CONTAINER'." >&2
     fi
   else
-    dc stop aquatech >/dev/null 2>&1 || true
+    dc stop "$APP_SERVICE" >/dev/null 2>&1 || true
   fi
   exit 1
 fi

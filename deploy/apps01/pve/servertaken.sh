@@ -392,6 +392,7 @@ HOST_TASK_IDS=(
   011-image-handtekening-controleren
   013-schijf-apps01-vergroten
   012-staging-op-apps01-inrichten
+  014-staging-alias-botsing-herstellen
 )
 HOST_TASKS_LEDGER="host-tasks.json"
 # Functienaam van een taak (streepjes worden underscores).
@@ -470,6 +471,13 @@ hosttask_012_staging_op_apps01_inrichten() {
   bash "$dir/install-staging.sh" || rc=$?
   rm -rf "$dir"
   return "$rc"
+}
+
+# Taak 014: de stagingopstelling herstellen na een naamsbotsing in het tunnelnetwerk: de service `aquatech` van staging gaf de
+# container ook de netwerkalias `aquatech`, dus een deel van het verkeer naar de testomgeving kwam bij staging uit. Zelfde
+# handeling als taak 012 (het script ruimt de oude containers op en maakt ze onder de nieuwe servicenamen opnieuw aan).
+hosttask_014_staging_alias_botsing_herstellen() {
+  hosttask_012_staging_op_apps01_inrichten
 }
 
 # Taak 009: update.sh vernieuwen (stopt bij een mislukte back-up vooraf); zelfde handeling als taak 001. Veilig herhaalbaar.
