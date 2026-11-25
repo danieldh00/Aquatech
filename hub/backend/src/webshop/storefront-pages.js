@@ -888,7 +888,7 @@ function detailsSection(details) {
  * @param {{ packagingsFor?: Function, packCode?: string, leadTextFor?: Function, deliveryNoteFor?: Function, trust?: { freeFrom?: number, online?: boolean }, stockAlert?: ?{ status: string } }} [packaging] `stockAlert` zet het formulier voor de voorraadmelding bij een artikel dat niet op voorraad is (met de uitkomst van een eerdere aanmelding in `status`) packagingsFor(artikelcode) = de verpakkingen die de bezoeker mag kiezen (zie storefront.js) en packCode = de gekozen verpakking (leeg = per stuk).
  * @returns {string} De HTML-pagina.
  */
-function productPage(product, groups, chosenCode = '', details = new Map(), { packagingsFor = () => [], packCode = '', leadTextFor = () => '', deliveryNoteFor = () => '', trust = {}, stockAlert = null } = {}) {
+function productPage(product, groups, chosenCode = '', details = new Map(), { packagingsFor = () => [], packCode = '', leadTextFor = () => '', deliveryNoteFor = () => '', trust = {}, stockAlert = null, related = null } = {}) {
   const root = '../../';
   const variants = product.variants || [];
   const chosen = variants.length ? (variants.find((variant) => variant.code === chosenCode) || variants.find((variant) => variant.inStock) || variants[0]) : null;
@@ -929,13 +929,70 @@ function productPage(product, groups, chosenCode = '', details = new Map(), { pa
     ${trustStrip(root, { freeFrom: trust.freeFrom || 0, online: Boolean(trust.online), business: activeShop.business })}
   </div>
 </article>
-${detailsSection(shownDetails)}`;
+${detailsSection(shownDetails)}
+${related ? relatedSections(related, root, shown, product) : ''}`;
   const productPath = `product/${product.slug}/`;
   // Een variantpagina heeft één aanbieding (de eigen prijs en voorraad); een hoofdartikel een prijsbereik over de varianten.
   const jsonProduct = product.parentSlug ? { ...product, variants: [] } : product;
   const productDescription = shownDetails.description ? shortText(shownDetails.description, 500) : `${product.name}, artikelnummer ${product.code}${product.categoryName ? `, uit de categorie ${product.categoryName}` : ''} bij ${SHOP_NAME}.`;
   const breadcrumbSteps = [{ name: 'Shop', path: '' }, ...(group ? [{ name: group.name, path: `groep/${group.slug}/` }] : []), { name: product.categoryName, path: `categorie/${product.categorySlug}/` }, { name: product.name, path: productPath }];
   return layout({ root, events: viewedItem ? Analytics.viewItemEvents(viewedItem, { inStock: pack ? pack.inStock : shown.inStock }) : [], canonicalPath: productPath, ogType: 'product', ogImage: Seo.imageUrlOf(activeShop.baseUrl, imageUrl), variantScript: Boolean(chosen || packagings.length), jsonLd: [Seo.productJsonLd({ product: jsonProduct, baseUrl: activeShop.baseUrl, canonicalPath: productPath, shopName: SHOP_NAME, description: productDescription, brand: shownDetails.brand, ean: shownDetails.ean }), Seo.breadcrumbJsonLd(breadcrumbSteps, activeShop.baseUrl)], title: Seo.pageTitleOf(shownDetails.seoTitle, `${product.name} – ${SHOP_NAME}`), description: shownDetails.seoDescription || (shownDetails.description ? shortText(shownDetails.description, 155) : `${product.name} (${formatPrice(shownPrice(shown))} ${activeShop.business ? 'excl.' : 'incl.'} btw) bij AquaTech Service.`), body, groups });
+}
+
+/**
+ * Of een product (of minstens één variant) leverbaar is.
+ * @param {object} product Een product uit de catalogus.
+ * @returns {boolean} true als het op voorraad is.
+ */
+const productAvailable = (product) => ((product.variants || []).length ? product.variants.some((variant) => variant.inStock) : Boolean(product.inStock));
+
+/**
+ * De blokken "Past bij" en "Vaak samen besteld" onder een productpagina, met bij vaak samen besteld een knop om het artikel met de partners in één keer in de
+ * winkelwagen te zetten. Alleen artikelen die in de catalogus staan en leverbaar zijn; prijzen volgens de gewone regels voor deze bezoeker (shownPrice).
+ * @param {{ catalog: object, fits: string[], together: string[], mainCode: string }} related De catalogus en de codes uit item_related en item_together.
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @param {object} shown Het getoonde artikel of de gekozen variant (voor de bundelknop).
+ * @param {object} product Het product van de pagina.
+ * @returns {string} HTML, of leeg zonder gerelateerde artikelen.
+ */
+function relatedSections(related, root, shown, product) {
+  const { byCode } = lookupsOf(related.catalog);
+  const seen = new Set([related.mainCode, product.code]);
+  /**
+   * Zoekt de leverbare producten bij een lijst codes, zonder dubbelen en zonder het artikel zelf.
+   * @param {string[]} codes De codes.
+   * @param {number} limit Maximum aantal.
+   * @returns {object[]} De producten.
+   */
+  const pick = (codes, limit) => {
+    const picked = [];
+    for (const code of codes) {
+      const candidate = byCode.get(code);
+      if (!candidate || seen.has(candidate.code) || !productAvailable(candidate)) continue;
+      seen.add(candidate.code);
+      picked.push(candidate);
+      if (picked.length >= limit) break;
+    }
+    return picked;
+  };
+  const fits = pick(related.fits, 8);
+  const together = pick(related.together, 4);
+  /**
+   * Het rooster met productkaarten.
+   * @param {object[]} list De producten.
+   * @returns {string} HTML.
+   */
+  const grid = (list) => `<div class="product-grid">\n${list.map((entry) => productCard(entry, root)).join('\n')}\n</div>`;
+  const partners = together.filter((entry) => !(entry.variants || []).length).slice(0, 2);
+  const bundle = activeShop.ordering && shown.inStock && partners.length ? [shown, ...partners] : [];
+  const bundleHtml = bundle.length ? `<form class="related-bundle" method="post" action="${root}winkelwagen/samen/">
+    ${bundle.map((entry) => `<input type="hidden" name="code" value="${escapeHtml(entry.code)}">`).join('')}
+    <p class="related-bundle-names">${bundle.map((entry, index) => `${index ? '<span aria-hidden="true"> + </span>' : ''}${escapeHtml(index ? entry.name : product.name)}`).join('')}</p>
+    <p class="related-bundle-total">Samen <strong>${escapeHtml(formatPrice(bundle.reduce((total, entry) => total + shownPrice(entry), 0)))}</strong> <small>${activeShop.business ? 'excl.' : 'incl.'} btw</small></p>
+    <button class="button" type="submit">Alles in winkelwagen</button>
+  </form>` : '';
+  return `${fits.length ? `<section class="related" aria-labelledby="related-fits"><h2 id="related-fits">Past bij</h2><p class="related-sub">Aanvullend bij dit artikel</p>${grid(fits)}</section>` : ''}
+${together.length ? `<section class="related" aria-labelledby="related-together"><h2 id="related-together">Vaak samen besteld</h2><p class="related-sub">Klanten die dit artikel bestelden, bestelden ook</p>${grid(together)}${bundleHtml}</section>` : ''}`;
 }
 
 /**

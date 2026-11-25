@@ -205,3 +205,12 @@ body.has-nav .tab[data-purchasing] { display: none; }
 
 /* Melding bij leveranciers per artikel: de voorkeur is niet leverbaar, het bestelvoorstel kiest een backup. */
 .sup-notice { margin: 8px 0; padding: 8px 12px; border-left: 4px solid var(--at-warn); background: var(--primary-soft); font-size: 14px; }
+
+/* Tabblad Past bij (gerelateerde artikelen) */
+.rl-actions { margin: 10px 0; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+.rl-actions label.inline { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; }
+#rl-detail { margin-top: 16px; }
+.rl-list { list-style: none; margin: 8px 0 16px; padding: 0; display: grid; gap: 8px; }
+.rl-list li { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; padding: 8px 12px; border: 1px solid var(--at-line); border-radius: var(--radius); }
+.rl-evidence { margin: 4px 0 0; padding-left: 18px; font-size: 13px; color: var(--at-muted); }
+@media (max-width: 600px) { .rl-list li { flex-direction: column; } }

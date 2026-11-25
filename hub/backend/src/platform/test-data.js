@@ -605,7 +605,7 @@ function sitePhotoPng(kind = 'oplevering', seed = 1, imageWidth = 480, imageHeig
  * @returns {object} Aantallen per soort aangemaakte gegevens.
  */
 function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
-  const { db, quotes, quoteOrders, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, stockCounts, suppliers, packagings, purchaseOrders, itemImages, requests, invoices, sprinklers, seasonReminders, paymentReminders } = stores;
+  const { db, quotes, quoteOrders, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, stockCounts, suppliers, packagings, purchaseOrders, itemImages, requests, invoices, sprinklers, seasonReminders, paymentReminders, related } = stores;
   /**
    * Bereidt een SQL-opdracht voor.
    * @param {string} sql De SQL.
@@ -936,6 +936,11 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
       stock.update(tenantId, variant.id, { costPrice: [9.5, 14, 26][variantIndex], salePrice: [17.95, 24.95, 44.95][variantIndex], minQty: 2, reorderQty: 6 });
       stock.move(tenantId, admin, variant.id, { kind: 'ontvangst', qty: [6, 4, 1][variantIndex], note: 'Pakbon slangen' });
     });
+    // Gerelateerde artikelen: de tuinslang past bij (handmatig ingesteld) het eerste andere hoofdartikel zonder varianten.
+    if (related) {
+      const partner = stock.list(tenantId).find((item) => item.code !== 'TUINSLANG' && !item.parentId && !item.hasVariants);
+      if (partner) related.setManual(tenantId, hose.item.id, [partner.id]);
+    }
     // Samengevoegde artikelen: drie losse verloopstukken zijn samengevoegd tot één hoofdartikel (met logboek, dus terug te draaien).
     const reducerIds = [['VERLOOP-16', '16 mm', 1.4], ['VERLOOP-20', '20 mm', 1.8], ['VERLOOP-25', '25 mm', 2.3]].map(([code, size, price]) => {
       const reducer = stock.create(tenantId, admin, { code, name: `Verloopstuk ${size}`, unit: 'st', costPrice: price, salePrice: Math.round(price * 2.2 * 100) / 100, minQty: 0, onHand: 10 }, { resync: false });

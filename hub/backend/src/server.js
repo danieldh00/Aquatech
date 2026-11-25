@@ -101,6 +101,9 @@ const { createOrderReader: createDefaultOrderReader } = require('./artikelen/ord
 const { registerOrderReadRoute } = require('./artikelen/order-read-route');
 const { createItemTextWriter: createDefaultItemTextWriter } = require('./artikelen/item-text-writer');
 const { createItemTextDraftStore, registerItemTextRoutes } = require('./artikelen/item-text-drafts');
+const { createRelatedStore } = require('./artikelen/related-items');
+const { registerRelatedRoutes } = require('./artikelen/related-routes');
+const { createSpecResearcher: createDefaultSpecResearcher } = require('./artikelen/related-research');
 const { createPackagingStore, registerPackagingRoutes } = require('./artikelen/packagings');
 const { createPurchaseOrderStore, registerPurchaseOrderRoutes } = require('./artikelen/purchase-orders');
 const { registerOpenTaskRoutes } = require('./platform/open-tasks');
@@ -380,7 +383,7 @@ function staticHeaders(version) {
  * @param {object} options accessCode, anthropicApiKey en aiDailyLimit (alleen startwaarden, net als env; de actuele waarden komen uit de instellingen), secret, analyzer, db, env, createAnalyzer, vault, setupCode, backupDir, graphFetch (Microsoft Graph, ook de automatische inrichting), graphSetup, mailerFor, shopFetch, vismaFetch, mollieFetch, addressFetch, viesFetch, captchaFetch (reCAPTCHA), googleFetch (Google Drive), shippingLabelProviders (koppelingen voor verzendlabels per vervoerder) en wanIp (tests vervangen hiermee de buitenwereld).
  * @returns {object} De app; app.locals bevat settings, onderhoud en synchronisatie.
  */
-function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, createOrderReader = createDefaultOrderReader, createItemTextWriter = createDefaultItemTextWriter, vault = createVault(), setupCode, backupDir = null, graphFetch, graphSetup = createGraphSetup(graphFetch ? { fetchImpl: graphFetch } : {}), mailerFor = (settings) => createMailer(settings, graphFetch ? { fetchImpl: graphFetch } : {}), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, captchaFetch, googleFetch, shippingLabelProviders = {}, wanIp = createWanIp(), loginDelayMs = 1000, backupInChild = false }) {
+function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit, analyzer, db, env = {}, createAnalyzer = createPlanAnalyzer, createOrderReader = createDefaultOrderReader, createItemTextWriter = createDefaultItemTextWriter, createSpecResearcher = createDefaultSpecResearcher, vault = createVault(), setupCode, backupDir = null, graphFetch, graphSetup = createGraphSetup(graphFetch ? { fetchImpl: graphFetch } : {}), mailerFor = (settings) => createMailer(settings, graphFetch ? { fetchImpl: graphFetch } : {}), shopFetch, vismaFetch, mollieFetch, addressFetch, imageFetch, viesFetch, captchaFetch, googleFetch, shippingLabelProviders = {}, wanIp = createWanIp(), loginDelayMs = 1000, backupInChild = false }) {
   const version = readVersion();
   const database = db || openDb();
   const store = createStore(database);
@@ -646,6 +649,24 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (!cached) {
       cached = createItemTextWriter({ apiKey: key, model });
       itemTextWriters.set(cacheKey, cached);
+    }
+    return cached;
+  }
+  const specResearchers = new Map();
+  /**
+   * De AI-zoeker voor specificaties (Past bij) van een omgeving, met de sleutel van de organisatie en het model uit de instelling relatedAiModel.
+   * @param {string} [tenantId] Id van de omgeving.
+   * @returns {object} De zoeker (related-research.js).
+   */
+  function currentSpecResearcher(tenantId = tenant.id) {
+    const aiSettings = settingsFor(aiTenantOf(tenantId));
+    const key = aiSettings.get('anthropicApiKey');
+    const model = settingsFor(tenantId).get('relatedAiModel');
+    const cacheKey = `${model}|${key}`;
+    let cached = specResearchers.get(cacheKey);
+    if (!cached) {
+      cached = createSpecResearcher({ apiKey: key, model });
+      specResearchers.set(cacheKey, cached);
     }
     return cached;
   }
@@ -2138,6 +2159,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const newsStore = createNewsStore(database);
   const sprinklerStore = createSprinklerStore(database);
   const stockStore = createStockStore(database);
+  const relatedStore = createRelatedStore(database);
   const itemImageStore = createItemImageStore(database, { vault, fetchImpl: imageFetch });
   const supplierStore = createSupplierStore(database);
   const packagingStore = createPackagingStore(database);
@@ -2659,6 +2681,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   registerPriceFactorRoutes(app, { priceFactors: priceFactorStore, suppliers: supplierStore, settingsOf: (tenantId) => settingsFor(tenantId), treeOf: (tenantId) => shopContentStore.publicContent(tenantId).tree, requireRight, requireJson, audit });
   // Producttekst door de AI: de browser vraagt per portie van 5 artikelen, dus ruimer dan de limiet voor plannen (de dagelijkse limiet telt per artikel).
   const itemTextLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 120, keyFn: (req) => `${req.tenantId || tenant.id}|${clientKey(req)}` });
+  registerRelatedRoutes(app, { related: relatedStore, requireRight, requireJson, audit, settingsFor, aiTenantOf, currentSpecResearcher, limiter: itemTextLimiter, aiUsage });
   registerItemTextRoutes(app, { drafts: createItemTextDraftStore(database), stock: stockStore, requireRight, requireJson, audit, settingsFor, aiTenantOf, currentItemTextWriter, dailyFor, limiter: itemTextLimiter, aiUsage });
   registerOrderReadRoute(app, { stock: stockStore, suppliers: supplierStore, requireRight, audit, settingsFor, aiTenantOf, currentOrderReader, dailyFor, limiter: analyzeLimiter, aiUsage });
   // Verpakkingseenheden per artikel (zie packagings.js).
@@ -2783,7 +2806,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   const shopContentStore = createShopContentStore(database, { vault });
   // De catalogus van de shop (ook voor Beheer: welke categorieën staan nog niet in de menuboom) met de boom uit Beheer.
-  const storefrontData = createStorefrontData(database, { treeOf: (tenantId, preview) => shopContentStore.publicContent(tenantId, { preview }).tree, discountsOf: (tenantId) => settingsFor(tenantId).get('categoryDiscounts') });
+  const storefrontData = createStorefrontData(database, { treeOf: (tenantId, preview) => shopContentStore.publicContent(tenantId, { preview }).tree, discountsOf: (tenantId) => settingsFor(tenantId).get('categoryDiscounts'), relatedOf: (tenantId) => relatedStore.forShop(tenantId), relatedWarmOf: (tenantId) => relatedStore.forShopAsync(tenantId) });
   /**
    * De categoriekorting voor zakelijke klanten per artikelcode; die komt uit de catalogus (die houdt de boom en de kortingen bij). Zonder kortingen is geen catalogus nodig.
    * @param {string} tenantId De omgeving.
@@ -3080,7 +3103,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     inScope, inScopeOnly, multitenancyOn, itemImageStore, shopContentStore, database, quoteStore, quoteOrders,
     workOrderStore, shopStore, photoStore, workLogStore, outsourcingStore, newsStore, aiUsage, recognitions,
     stockStore, stockCounts, supplierStore, packagingStore, purchaseOrderStore, serviceRequestStore, invoiceStore, sprinklerStore,
-    seasonReminderStore, paymentReminderStore, impersonation, withMustChange, auditUserChange, deleteUser,
+    seasonReminderStore, paymentReminderStore, relatedStore, impersonation, withMustChange, auditUserChange, deleteUser,
   });
 
   impersonation.register(app, { identify, requireJson, clearEnvironment, wrap });
@@ -3375,6 +3398,25 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     return summary;
   });
   /**
+   * Berekent "vaak samen besteld" opnieuw voor elke actieve omgeving waar de module Artikelen en het onderdeel gerelateerde artikelen aan staan.
+   * @returns {Promise<object>} Per omgeving het aantal artikelen en paren.
+   */
+  app.locals.relatedTogetherAll = () => asSystem(async () => {
+    const activeIds = inScopeOnly(store.listTenants()).filter((live) => !live.disabled)
+      .flatMap((live) => [live, ...live.environments.filter((environment) => !environment.disabled)])
+      .map((environment) => environment.id);
+    const summary = {};
+    for (const tenantId of activeIds) {
+      if (!ModuleTools.isOn(moduleFlagsOf(tenantId), 'gerelateerde-artikelen')) continue;
+      try {
+        summary[tenantId] = relatedStore.refreshTogether(tenantId);
+      } catch (error) {
+        console.error(`Vaak samen besteld voor omgeving ${tenantId} mislukt:`, error.message);
+      }
+    }
+    return summary;
+  });
+  /**
    * Automatische back-up als de nieuwste ouder is dan een dag.
    * @returns {Promise<object|null>} De back-up, of null als het niet nodig was.
    */
@@ -3490,6 +3532,8 @@ if (require.main === module) {
     slowLog.trackTask('verkoopprijzen volgens factor', () => app.locals.pricesRefreshAll())
       .then((changed) => { if (changed && Object.keys(changed).length) console.log(`Verkoopprijzen automatisch bijgewerkt: ${JSON.stringify(changed)}`); })
       .catch((error) => console.error('Verkoopprijzen bijwerken mislukt:', error.message));
+    slowLog.trackTask('vaak samen besteld', () => app.locals.relatedTogetherAll())
+      .catch((error) => console.error('Vaak samen besteld berekenen mislukt:', error.message));
     // Een halve minuut later, zodat de server bij het opstarten eerst luistert (niet blokkerend).
     setTimeout(runPurchaseProposals, 30 * 1000).unref();
     slowLog.trackTask('back-up', () => app.locals.backupIfDue())

@@ -441,7 +441,7 @@ const soldSince = () => new Date(Date.now() - 180 * 24 * 3600 * 1000).toISOStrin
  * @param {{ treeOf?: Function, discountsOf?: Function }} [options] treeOf(tenantId, preview) = de categorieboom van een omgeving (uit Beheer; zonder de standaardboom); discountsOf(tenantId) = de instelling categoryDiscounts (korting per categorie voor zakelijke klanten).
  * @returns {{ catalogOf: Function, warm: Function, detailsOf: Function, packagingsOf: Function, clearCache: Function }} catalogOf(tenantId, { preview }), warm(tenantId), detailsOf, packagingsOf en clearCache().
  */
-function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = () => ({}) } = {}) {
+function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = () => ({}), relatedOf = null, relatedWarmOf = null } = {}) {
   const cache = new Map();
   // Omschrijvingen per productpagina (en de hele feed) met dezelfde bewaartijd als de catalogus, zodat een
   // productpagina met een warme cache geen query kost (1 uit de audit van 1.7.3). Begrensd in aantal.
@@ -450,6 +450,8 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
   const packagingCache = new Map();
   // Levertijdgegevens per productpagina (zelfde bewaartijd en begrenzing).
   const leadCache = new Map();
+  // Gerelateerde artikelen per omgeving (zelfde bewaartijd): code → { fits, together } (artikelcodes), zie relatedFor.
+  const relatedCache = new Map();
   // Lopende opvragingen van warm per omgeving (één tegelijk).
   const warming = new Map();
   // Telt elke clearCache: een opvraging die begon vóór het wissen, vult de cache daarna niet met oude gegevens.
@@ -497,9 +499,10 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
       const usable = allowStale && cached && cached.until + STALE_MS > Date.now() && cached.tree === tree && cached.discountKey === discountKey;
       if (running) return usable ? Promise.resolve() : running;
       const started = generation;
-      const job = Promise.all([db.async.all(CATALOG_SQL, tenantId, tenantId), db.async.all(SOLD_SQL, tenantId, soldSince())])
-        .then(([rows, sold]) => {
+      const job = Promise.all([db.async.all(CATALOG_SQL, tenantId, tenantId), db.async.all(SOLD_SQL, tenantId, soldSince()), relatedWarmOf ? relatedWarmOf(tenantId).catch(() => null) : null])
+        .then(([rows, sold, related]) => {
           if (started !== generation) return;
+          if (related) relatedCache.set(tenantId, { related, until: Date.now() + CACHE_MS });
           const catalog = buildCatalog(rows, new Map(sold.map((row) => [String(row.code), Number(row.qty)])), tree, discounts);
           cache.set(tenantId, { catalog, tree, discountKey, until: Date.now() + CACHE_MS });
         })
@@ -581,10 +584,21 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
       return info;
     },
     /**
+     * De gerelateerde artikelen (Past bij en Vaak samen besteld) van een omgeving als artikelcodes, uit het geheugen (gevuld door warm; zonder stand een lege lijst). Wat zichtbaar en leverbaar is bepaalt de aanroeper met de catalogus.
+     * @param {string} tenantId De omgeving.
+     * @returns {Map<string, { fits: string[], together: string[] }>} Per hoofdartikelcode; leeg zonder deze functie.
+     */
+    relatedFor(tenantId) {
+      if (!relatedOf) return new Map();
+      // Alleen het geheugen: de async warm-taak ververst het, zodat de productpagina nooit zelf queries doet (ook niet bij een verlopen of ontbrekende stand).
+      const hit = relatedCache.get(tenantId);
+      return hit ? hit.related : new Map();
+    },
+    /**
      * Wist de cache (tests).
      * @returns {void}
      */
-    clearCache() { generation++; cache.clear(); detailsCache.clear(); packagingCache.clear(); leadCache.clear(); },
+    clearCache() { generation++; cache.clear(); detailsCache.clear(); packagingCache.clear(); leadCache.clear(); relatedCache.clear(); },
   };
 
   /**

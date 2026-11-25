@@ -1813,6 +1813,47 @@ const PG_MIGRATIONS = [
   `
   CREATE UNIQUE INDEX invoices_deposit_once ON invoices (tenant_id, quote_id) WHERE kind = 'factuur' AND credited_at IS NULL AND (data -> 'deposit') IS NOT NULL;
   `,
+  // 99: gerelateerde artikelen. item_related = "Past bij" (handmatig of door de AI, met reden en bronnen); item_specs = de opgezochte specificaties per hoofdartikel
+  // (alleen de AI-koppeling gebruikt ze); item_together = "Vaak samen besteld", berekend uit verzonden bestellingen (web_sale_lines).
+  `
+  CREATE TABLE item_related (
+    id              UUID PRIMARY KEY,
+    tenant_id       UUID NOT NULL ${references('tenants(id)')},
+    item_id         UUID NOT NULL ${references('stock_items(id)', ' ON DELETE CASCADE')},
+    related_item_id UUID NOT NULL ${references('stock_items(id)', ' ON DELETE CASCADE')},
+    position        INTEGER NOT NULL DEFAULT 0,
+    source          ${TEXT_TYPE} NOT NULL CHECK (source IN ('handmatig', 'ai')),
+    reason          ${TEXT_TYPE} NOT NULL DEFAULT '',
+    evidence        ${TEXT_TYPE} NOT NULL DEFAULT '[]',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK (item_id <> related_item_id)
+  );
+  CREATE UNIQUE INDEX item_related_pair ON item_related (tenant_id, item_id, related_item_id);
+  CREATE INDEX item_related_item ON item_related (tenant_id, item_id, position);
+  CREATE INDEX item_related_target ON item_related (tenant_id, related_item_id);
+  CREATE TABLE item_specs (
+    tenant_id  UUID NOT NULL ${references('tenants(id)')},
+    item_id    UUID NOT NULL ${references('stock_items(id)', ' ON DELETE CASCADE')},
+    status     ${TEXT_TYPE} NOT NULL CHECK (status IN ('gevonden', 'niet_gevonden')),
+    specs      ${TEXT_TYPE} NOT NULL DEFAULT '{}',
+    model      ${TEXT_TYPE} NOT NULL DEFAULT '',
+    checked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, item_id)
+  );
+  CREATE TABLE item_together (
+    tenant_id    UUID NOT NULL ${references('tenants(id)')},
+    item_id      UUID NOT NULL ${references('stock_items(id)', ' ON DELETE CASCADE')},
+    other_id     UUID NOT NULL ${references('stock_items(id)', ' ON DELETE CASCADE')},
+    orders_both  INTEGER NOT NULL,
+    orders_item  INTEGER NOT NULL,
+    orders_other INTEGER NOT NULL,
+    lift         DOUBLE PRECISION NOT NULL,
+    score        DOUBLE PRECISION NOT NULL,
+    computed_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, item_id, other_id)
+  );
+  CREATE INDEX item_together_item ON item_together (tenant_id, item_id, score DESC);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS, UUID_COLUMNS, legacyUuid };
