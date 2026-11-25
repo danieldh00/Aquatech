@@ -180,7 +180,7 @@ function readableReason(error, log, where) {
 /**
  * Maakt het factureren van webshopbestellingen.
  * @param {{ orders: object, invoices: object, returns?: object, debtors?: object, stock?: object, sender?: object, settingsFor: Function, log?: object }} ctx De opslagen en hulpfuncties van de server (settingsFor(tenantId) geeft de instellingen van een omgeving).
- * @returns {{ invoiceFor: Function, ensureInvoice: Function, mailIfFinalized: Function, pdfFor: Function, onShipped: Function, creditCancelled: Function, creditReturn: Function, refundAmountOf: Function }} De functies.
+ * @returns {{ invoiceFor: Function, ensureInvoice: Function, mailIfFinalized: Function, pdfFor: Function, onShipped: Function, creditCancelled: Function, creditReturn: Function, creditOnApprovalOf: Function, refundAmountOf: Function }} De functies.
  */
 function createWebOrderInvoices({ orders, invoices, returns = null, debtors = null, stock = null, sender = null, settingsFor, log = console }) {
   // Facturen waarvan de mail nu onderweg is (tenant:factuur), tegen dubbel mailen bij gelijktijdige verzoeken.
@@ -459,7 +459,16 @@ function createWebOrderInvoices({ orders, invoices, returns = null, debtors = nu
     return Math.abs(Number(credit.total) || 0);
   }
 
-  return { invoiceFor, ensureInvoice, mailIfFinalized, pdfFor, onShipped, creditCancelled, creditReturn, refundAmountOf };
+  /**
+   * Of de creditnota van een retour al bij het goedkeuren wordt gemaakt (Facturen → Instellingen).
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {boolean} true als de instelling aan staat.
+   */
+  function creditOnApprovalOf(tenantId) {
+    return settingsOf(tenantId).webOrders.creditOnApproval === true;
+  }
+
+  return { invoiceFor, ensureInvoice, mailIfFinalized, pdfFor, onShipped, creditCancelled, creditReturn, creditOnApprovalOf, refundAmountOf };
 }
 
 module.exports = { createWebOrderInvoices, InvoiceStepError, fromWebOrder, creditLinesFor, fullyReturned, invoiceKey };

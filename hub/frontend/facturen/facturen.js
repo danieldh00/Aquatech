@@ -467,6 +467,7 @@
     formElement.ordersFinalize.checked = settings.shopOrders.finalize;
     formElement.webEnabled.checked = settings.webOrders.enabled;
     formElement.webFinalize.checked = settings.webOrders.finalize;
+    formElement.webCreditOnApproval.checked = settings.webOrders.creditOnApproval === true;
     const noShop = !shop.url || !shop.rest;
     formElement.ordersEnabled.disabled = noShop && !settings.shopOrders.enabled;
     $('#s-shopinfo').innerHTML = !shop.url ? 'Er is nog geen webshop gekoppeld (Beheer → Integraties → Webshop).'
@@ -504,7 +505,7 @@
           prefix: formElement.prefix.value.trim(), paymentDays: Number(formElement.paymentDays.value), paymentText: formElement.paymentText.value, footer: formElement.footer.value, categories,
           debtorStart: Number(formElement.debtorStart.value) || undefined, autoSend: formElement.autoSend.checked, draftOnDone: formElement.draftOnDone.checked, mailSubject: formElement.mailSubject.value, mailText: formElement.mailText.value,
           shopOrders: { enabled: formElement.ordersEnabled.checked, status: formElement.ordersStatus.value, since: formElement.ordersSince.value, finalize: formElement.ordersFinalize.checked },
-          webOrders: { enabled: formElement.webEnabled.checked, finalize: formElement.webFinalize.checked },
+          webOrders: { enabled: formElement.webEnabled.checked, finalize: formElement.webFinalize.checked, creditOnApproval: formElement.webCreditOnApproval.checked },
         } })).settings;
         renderSettings();
         renderOrders();
