@@ -393,6 +393,7 @@ HOST_TASK_IDS=(
   013-schijf-apps01-vergroten
   012-staging-op-apps01-inrichten
   014-staging-alias-botsing-herstellen
+  015-staging-opnieuw-proberen
 )
 HOST_TASKS_LEDGER="host-tasks.json"
 # Functienaam van een taak (streepjes worden underscores).
@@ -477,6 +478,12 @@ hosttask_012_staging_op_apps01_inrichten() {
 # container ook de netwerkalias `aquatech`, dus een deel van het verkeer naar de testomgeving kwam bij staging uit. Zelfde
 # handeling als taak 012 (het script ruimt de oude containers op en maakt ze onder de nieuwe servicenamen opnieuw aan).
 hosttask_014_staging_alias_botsing_herstellen() {
+  hosttask_012_staging_op_apps01_inrichten
+}
+
+# Taak 015: taak 014 deed niets omdat de stagingcommit als overgeslagen stond; het script probeert nu bij een handmatige run
+# altijd opnieuw. Zelfde handeling als taak 012.
+hosttask_015_staging_opnieuw_proberen() {
   hosttask_012_staging_op_apps01_inrichten
 }
 
