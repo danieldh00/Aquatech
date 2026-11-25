@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.39.5
+
+- `data.deposit` {on, type pct|amount, pct, amount} op de offerte (`QuoteCore.sanitizeDeposit/depositOf/depositSplit`: het bedrag is incl. btw en wordt over de btw-tarieven verdeeld). Op het klantdocument staat één kader *Betaling* (`quote.deposit*` in `doc-text.js`, nl en en).
+- Aanbetalingsfactuur (`verkoop/deposit-invoices.js`): een gewone factuur met `data.deposit` {quoteId, quoteNumber, amount}; per offerte één (migratie 98: unieke index op `(tenant_id, quote_id)` voor niet-gecrediteerde facturen met dat kenmerk). Bij akkoord (`onAccepted` in server.js, naast de automatische werkorder) definitief maken en versturen met de betaallink; routes `GET|POST /api/quotes/:id/deposit-invoice` (recht `facturen`). Instelling `depositInvoice` {enabled} (standaard aan), module `aanbetaling-automatisch`.
+- Eindfactuur: `InvoiceCore.fromWorkOrder` krijgt `deposits` en trekt per btw-tarief een negatieve regel (`deposit: true`, buiten de korting; `InvoiceCore.totals` rekent de korting alleen over de gewone regels) af; een nog niet definitieve aanbetaling geeft een waarschuwing.
+- Openstaande taak *Aanbetalingsfacturen versturen* (`invoices.unsentDeposits`).
+
 ## 1.39.4
 
 V-04 beschikbaarheid: `plan-runner.js` kent twee rijen (`main`: 2 tegelijk, 20 wachtend voor de AI-koppeling; `lead`: 1 tegelijk, 5 wachtend voor openbare tekeningen), `runPlanTask(methode, args, rij)`. `planWithinLimits` (plan-builder.js) weigert vóór het rekenen een plan met te veel vlakken, hoekpunten, elementen of vreemde coördinaten (de tekening komt wel binnen, zonder concept-offerte). Tests: `plan-builder.test.js`.
