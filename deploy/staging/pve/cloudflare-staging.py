@@ -99,7 +99,9 @@ def main():
     if not email:
         members = call(token, "GET", f"/accounts/{account_id}/members") or []
         owners = [m for m in members if any(r.get("name") in ("Super Administrator - All Privileges", "Administrator") for r in m.get("roles", []))]
-        email = (owners or members or [{}])[0].get("user", {}).get("email", "")
+        if len(owners) != 1:
+            fail("Geen eenduidige accounteigenaar gevonden voor Access; zet CF_ACCESS_EMAIL op het toegestane adres.")
+        email = owners[0].get("user", {}).get("email", "")
     if not email:
         fail("Geen e-mailadres voor Access gevonden; zet CF_ACCESS_EMAIL.")
     apps = call(token, "GET", f"/accounts/{account_id}/access/apps") or []

@@ -38,7 +38,7 @@ Proxmox-host, zoals altijd). De taak doet zelf:
    gebeurt er niets. VM-id 9101 (`VMID=` in de omgeving om af te wijken).
 2. **Cloudflare via de API** (`deploy/staging/pve/cloudflare-staging.py`): tunnel `aquatech-staging`, DNS en Access voor
    `aquatech-staging.den-hollander.com` (de app) en `aquatech-staging-mail.den-hollander.com` (Mailpit). Access laat alleen
-   één e-mailadres toe: dat van de accounteigenaar (of `CF_ACCESS_EMAIL=...` in het commando). De hostnamen staan één niveau
+   één e-mailadres toe: dat van de accounteigenaar (alleen als er precies één eigenaar is; anders stopt het script en geef je `CF_ACCESS_EMAIL=...` mee in het commando). De hostnamen staan één niveau
    onder het domein, dus het gratis Cloudflare-certificaat dekt ze.
 3. **Inrichten** (`deploy/staging/setup-staging.sh`): Docker, eigen PostgreSQL, Mailpit, de app uit
    `ghcr.io/danieldh00/aquatech-staging` en de updatetimer.
