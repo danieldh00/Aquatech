@@ -12,6 +12,7 @@ const { LEGAL_SLUGS, LEGAL_TITLES } = require('./legal-pages');
 const Seo = require('./seo');
 const { blocksOf, faqEntriesOfBlocks } = require('./page-blocks');
 const Analytics = require('./shop-analytics');
+const VueShell = require('./vue-shell');
 
 const SHOP_NAME = 'Aquatechshop.nl';
 /** Maximaal aantal resultaten op de zoekpagina. */
@@ -43,6 +44,8 @@ function formatPrice(amount) {
 let activeContent = { site: DEFAULT_SITE, pages: [] };
 /** Of bestellen aan staat, hoeveel regels er in de winkelwagen van de bezoeker zitten en of hij een groothandelsklant is, met het kopje Groothandel (voor de pagina's die nu worden opgebouwd). */
 let activeShop = { indexing: false, ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '', analytics: '', clarity: '', captcha: '' };
+/** De schilopdrachten van de pagina die nu wordt opgebouwd (alleen als de schil in Vue wordt getekend, anders null). */
+let activeJobs = null;
 
 /**
  * De velden die een formulier nodig heeft voor de onzichtbare captcha: het verborgen veld waar het script een token in zet en de
@@ -62,14 +65,21 @@ function captchaFields(action) {
  * @param {{ site: object, pages: object[] }} content De inhoud (zie shop-content.js, publicContent).
  * @param {Function} render Functie die de pagina('s) opbouwt en iets teruggeeft.
  * @param {{ ordering: boolean, cartCount: number, business?: boolean, wholesale?: boolean, baseUrl?: string }} [shop] Het volledige webadres van de shop (met slash achteraan; leeg = geen canonical-link en OpenGraph), of bestellen aan staat, het aantal regels in de winkelwagen, of de bezoeker een zakelijke klant is (prijzen excl. btw) en of hij groothandelsklant is (kopje Groothandel).
- * @returns {*} Wat `render` teruggeeft.
+ * @returns {*} Wat `render` teruggeeft; een belofte van de HTML als de schil in Vue wordt getekend (SHOP_VUE_SHELL=1, zie vue-shell.js).
  */
 function renderWith(content, render, shop = { indexing: false, ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '', analytics: '', clarity: '', captcha: '' }) {
   const previous = activeContent;
   const previousShop = activeShop;
+  const previousJobs = activeJobs;
+  const jobs = [];
   activeContent = content;
   activeShop = shop;
-  try { return render(); } finally { activeContent = previous; activeShop = previousShop; }
+  activeJobs = VueShell.ready() ? jobs : null;
+  let result;
+  try { result = render(); } finally { activeContent = previous; activeShop = previousShop; activeJobs = previousJobs; }
+  if (!jobs.length) return result;
+  // De schil van de pagina is in Vue getekend (asynchroon): de pagina bevat een markering die hier door de schil, met de inhoud erin, vervangen wordt.
+  return Promise.all(jobs.map((job) => VueShell.render(job.shell))).then((shells) => result.replace(/<!--vue-shell:(\d+)-->/g, (_, index) => shells[Number(index)].replace('<!--shop-body-->', () => jobs[Number(index)].body)));
 }
 
 /**
@@ -296,19 +306,67 @@ function analyticsAttributes(root, events, privatePage = false) {
 }
 
 /**
- * Het kader om elke pagina: kop met logo, zoeken, winkelwagen en account,
- * menu van productgroepen, inhoud en voet.
- * @param {{ root: string, title: string, description: string, body: string, groups: object[], query?: string, wide?: boolean, variantScript?: boolean, script?: string|string[], refresh?: string, canonicalPath?: ?string, ogImage?: string, ogType?: string, jsonLd?: object[], events?: object[] }} options root = relatief pad naar de shop-startpagina, title, description (meta), body (HTML), groups = hoofdcategorieën voor menu en voet en query = ingevulde zoekterm en wide = de inhoud over de volle breedte (startpagina) en variantScript = of de pagina het script voor de keuzelijsten van varianten laadt en script = de naam (of namen) van andere scripts uit de assets die de pagina laadt (leeg = geen) en refresh = een adres waar de pagina de bezoeker meteen heen stuurt (leeg = niet) en canonicalPath = het pad van de pagina vanaf de startpagina ('' = startpagina) voor de canonical-link, OpenGraph en zoekmachines (null = geen: de pagina is dan voor zoekmachines niet bedoeld en krijgt noindex) en ogImage = volledig adres van de afbeelding voor delen (leeg = het logo) en ogType = het OpenGraph-type ('website' of 'product') en jsonLd = Schema.org-objecten voor in de pagina en events = de koopfunnel-gebeurtenissen van de pagina (alleen gebruikt als Google Analytics aan staat, zie shop-analytics.js).
- * @returns {string} De volledige HTML-pagina.
+ * De gegevens van de schil (kop, menu, voet) voor de Vue-tekenlaag: gewone waarden, zonder HTML. Dezelfde bron en dezelfde keuzes als
+ * `navigation()` en het sjabloon in `layout()`; verborgen categorieën vallen hier al weg.
+ * @param {{ root: string, groups: object[], query: string, wide: boolean }} page De pagina: root, de hoofdcategorieën, de zoekterm en of de inhoud over de volle breedte staat.
+ * @returns {object} De gegevens volgens ShellProps (hub/frontend-vue/src/shop/types.ts).
  */
-function layout({ root, title, description, body, groups, query = '', wide = false, variantScript = false, script = '', refresh = '', canonicalPath = null, ogImage = '', ogType = 'website', jsonLd = [], events = [] }) {
-  const home = root || './';
+function shellPropsOf({ root, groups, query, wide }) {
   const { site, pages } = activeContent;
-  const phone = site.contact.phone;
-  const phoneHref = phoneLink(phone);
-  const nav = navigation(groups, root);
-  const footerPages = pages.filter((page) => page.footer && page.slug !== 'over-ons' && !LEGAL_SLUGS.includes(page.slug));
-  const legalLinks = LEGAL_SLUGS.map((slug) => { const own = pages.find((page) => page.slug === slug); return `<a href="${root}pagina/${slug}/">${escapeHtml(own ? own.title : LEGAL_TITLES[slug])}</a>`; }).join('');
+  /**
+   * De zichtbare categorieën met hun zichtbare subcategorieën, alleen de velden die het menu nodig heeft.
+   * @param {object[]} categories De categorieën van één niveau.
+   * @returns {object[]} De categorieën als { slug, name, children }.
+   */
+  const visibleTree = (categories) => categories.filter((category) => !category.hidden).map((category) => ({ slug: category.slug, name: category.name, children: visibleTree(category.children || []) }));
+  /**
+   * De link naar een pagina uit Beheer.
+   * @param {{ slug: string, title: string }} page De pagina.
+   * @returns {{ href: string, title: string }} Adres en titel.
+   */
+  const pageLink = (page) => ({ href: `${root}pagina/${page.slug}/`, title: page.title });
+  const extraPages = pages.filter((page) => page.menu && page.slug !== 'over-ons').map(pageLink);
+  const aboutLinks = [{ href: `${root}over-ons/`, title: 'Over ons' }, ...(activeShop.wholesale ? [{ href: `${root}groothandel/`, title: 'Groothandel' }] : []), ...extraPages];
+  return {
+    root,
+    wide,
+    query,
+    assetVersion: SHOP_VERSION,
+    notice: { enabled: Boolean(site.notice.enabled), text: site.notice.text || '', color: site.notice.color || '' },
+    contact: { phone: site.contact.phone || '', phoneHref: phoneLink(site.contact.phone || ''), email: site.contact.email || '', kvk: site.contact.kvk || '', address: site.contact.address || '' },
+    visitor: { ordering: Boolean(activeShop.ordering), cartCount: activeShop.cartCount || 0, business: Boolean(activeShop.business), staff: Boolean(activeShop.staff), wholesale: Boolean(activeShop.wholesale), measuring: Boolean(activeShop.analytics || activeShop.clarity) },
+    menu: { aboutLinks, groups: groups.map((group) => ({ name: group.name, categories: visibleTree(group.categories) })), extraPages },
+    footer: {
+      about: site.footer.about || '',
+      pages: pages.filter((page) => page.footer && page.slug !== 'over-ons' && !LEGAL_SLUGS.includes(page.slug)).map(pageLink),
+      legal: LEGAL_SLUGS.map((slug) => { const own = pages.find((page) => page.slug === slug); return { href: `${root}pagina/${slug}/`, title: own ? own.title : LEGAL_TITLES[slug] }; }),
+    },
+  };
+}
+
+/**
+ * Zoals `layout()`, maar met de schil (kop, menu, voet) door Vue getekend: de pagina bevat een markering die `renderWith` vervangt.
+ * De kop van het document (titel, SEO, scripts) en de attributen van `<body>` blijven hier opgebouwd.
+ * @param {object} options Dezelfde opties als `layout`.
+ * @returns {string} De HTML-pagina met de markering `<!--vue-shell:N-->` op de plek van de schil.
+ */
+function layoutWithVueShell({ root, title, description, body, groups, query, wide, variantScript, script, refresh, canonicalPath, ogImage, ogType, jsonLd, events }) {
+  const shell = shellPropsOf({ root, groups, query, wide });
+  const hasFlyMenu = shell.menu.groups.some((group) => group.categories.some((category) => category.children.length));
+  activeJobs.push({ shell, body });
+  return `${documentHead({ root, title, description, body, refresh, canonicalPath, ogImage, ogType, jsonLd, hasFlyMenu, variantScript, script })}<body${analyticsAttributes(root, events, canonicalPath == null)}>
+<!--vue-shell:${activeJobs.length - 1}-->
+</body>
+</html>
+`;
+}
+
+/**
+ * Het begin van elke pagina tot en met `</head>`: titel, SEO, stijlbladen en scripts. Eén plek voor de oude en de Vue-schil.
+ * @param {{ root: string, title: string, description: string, body: string, refresh: string, canonicalPath: ?string, ogImage: string, ogType: string, jsonLd: object[], hasFlyMenu: boolean, variantScript: boolean, script: string|string[] }} options De gegevens van de pagina (zie layout); hasFlyMenu = of het menu uitklappers heeft (dan laadt menu.js).
+ * @returns {string} De HTML tot en met `</head>` en een regeleinde.
+ */
+function documentHead({ root, title, description, body, refresh, canonicalPath, ogImage, ogType, jsonLd, hasFlyMenu, variantScript, script }) {
   return `<!doctype html>
 <html lang="nl">
 <head>
@@ -320,8 +378,26 @@ function layout({ root, title, description, body, groups, query = '', wide = fal
 ${seoHead({ title, description, canonicalPath, ogImage, ogType, jsonLd, root })}${refresh ? `<meta http-equiv="refresh" content="0;url=${escapeHtml(refresh)}">\n` : ''}<link rel="icon" type="image/png" href="${assetUrl(root, 'favicon.png')}">
 <link rel="stylesheet" href="${assetUrl(root, 'brand.css')}">
 <link rel="stylesheet" href="${assetUrl(root, 'winkel.css')}">
-${nav.includes('nav-fly') ? `<script src="${assetUrl(root, 'menu.js')}" defer></script>\n` : ''}${variantScript ? `<script src="${assetUrl(root, 'varianten.js')}" defer></script>\n` : ''}${[].concat(script || [], 'zoeksuggesties.js', body.includes('class="product-card"') ? 'kaartaantal.js' : [], activeShop.analytics || activeShop.clarity ? 'analytiek.js' : [], activeShop.captcha ? 'captcha.js' : []).map((name) => `<script src="${assetUrl(root, name)}" defer></script>\n`).join('')}</head>
-<body${analyticsAttributes(root, events, canonicalPath == null)}>
+${hasFlyMenu ? `<script src="${assetUrl(root, 'menu.js')}" defer></script>\n` : ''}${variantScript ? `<script src="${assetUrl(root, 'varianten.js')}" defer></script>\n` : ''}${[].concat(script || [], 'zoeksuggesties.js', body.includes('class="product-card"') ? 'kaartaantal.js' : [], activeShop.analytics || activeShop.clarity ? 'analytiek.js' : [], activeShop.captcha ? 'captcha.js' : []).map((name) => `<script src="${assetUrl(root, name)}" defer></script>\n`).join('')}</head>
+`;
+}
+
+/**
+ * Het kader om elke pagina: kop met logo, zoeken, winkelwagen en account,
+ * menu van productgroepen, inhoud en voet.
+ * @param {{ root: string, title: string, description: string, body: string, groups: object[], query?: string, wide?: boolean, variantScript?: boolean, script?: string|string[], refresh?: string, canonicalPath?: ?string, ogImage?: string, ogType?: string, jsonLd?: object[], events?: object[] }} options root = relatief pad naar de shop-startpagina, title, description (meta), body (HTML), groups = hoofdcategorieën voor menu en voet en query = ingevulde zoekterm en wide = de inhoud over de volle breedte (startpagina) en variantScript = of de pagina het script voor de keuzelijsten van varianten laadt en script = de naam (of namen) van andere scripts uit de assets die de pagina laadt (leeg = geen) en refresh = een adres waar de pagina de bezoeker meteen heen stuurt (leeg = niet) en canonicalPath = het pad van de pagina vanaf de startpagina ('' = startpagina) voor de canonical-link, OpenGraph en zoekmachines (null = geen: de pagina is dan voor zoekmachines niet bedoeld en krijgt noindex) en ogImage = volledig adres van de afbeelding voor delen (leeg = het logo) en ogType = het OpenGraph-type ('website' of 'product') en jsonLd = Schema.org-objecten voor in de pagina en events = de koopfunnel-gebeurtenissen van de pagina (alleen gebruikt als Google Analytics aan staat, zie shop-analytics.js).
+ * @returns {string} De volledige HTML-pagina.
+ */
+function layout({ root, title, description, body, groups, query = '', wide = false, variantScript = false, script = '', refresh = '', canonicalPath = null, ogImage = '', ogType = 'website', jsonLd = [], events = [] }) {
+  if (activeJobs && VueShell.ready()) return layoutWithVueShell({ root, title, description, body, groups, query, wide, variantScript, script, refresh, canonicalPath, ogImage, ogType, jsonLd, events });
+  const home = root || './';
+  const { site, pages } = activeContent;
+  const phone = site.contact.phone;
+  const phoneHref = phoneLink(phone);
+  const nav = navigation(groups, root);
+  const footerPages = pages.filter((page) => page.footer && page.slug !== 'over-ons' && !LEGAL_SLUGS.includes(page.slug));
+  const legalLinks = LEGAL_SLUGS.map((slug) => { const own = pages.find((page) => page.slug === slug); return `<a href="${root}pagina/${slug}/">${escapeHtml(own ? own.title : LEGAL_TITLES[slug])}</a>`; }).join('');
+  return `${documentHead({ root, title, description, body, refresh, canonicalPath, ogImage, ogType, jsonLd, hasFlyMenu: nav.includes('nav-fly'), variantScript, script })}<body${analyticsAttributes(root, events, canonicalPath == null)}>
 ${site.notice.enabled && site.notice.text ? `<div class="shop-notice kleur-${escapeHtml(site.notice.color || 'purple')}">${escapeHtml(site.notice.text)}</div>` : ''}
 <header class="shop-head">
   <div class="shop-bar">

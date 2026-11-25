@@ -2,3 +2,4 @@ backend/node_modules
 backend/test
 frontend-vue/node_modules
 frontend-vue/dist
+frontend-vue/dist-shop-ssr

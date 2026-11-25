@@ -16,6 +16,7 @@ const { registerAddressRoute, normalizePostcode } = require('../platform/address
 const { clientKey } = require('../beveiliging/auth');
 const { catchAsync } = require('../platform/error-report');
 const { createStorefrontData } = require('./storefront-data');
+const VueShell = require('./vue-shell');
 const { homePage, aboutPage, contentPage, renderWith, groupPage, categoryPage, searchPage, productPage, notFoundPage } = require('./storefront-pages');
 const { DEFAULT_SITE } = require('./shop-content');
 const { wantsBusiness } = require('./business-profile');
@@ -95,6 +96,8 @@ const FONT_FILE = /^montserrat-latin-(400|600|700|800)-normal\.woff2$/;
  * @returns {Function} Express-router, te monteren met app.use('/', router) (zie server.js).
  */
 function createStorefront({ addressLookup = null, addressGuard = null, db, tenantId, settingsFor, accounts = null, content = null, data = createStorefrontData(db), itemImages = null, previewAllowed = () => false, orders = null, orderMail = null, orderInvoices = null, orderSlips = null, returns = null, guestOrders = null, stockAlerts = null, searchMisses = null, funnel = null, quoteRequests = null, featureOn = () => true, payments = null, vies = null, captcha = null, captchaGate = null, onOrder = () => {}, onQuoteRequest = () => {}, onReturn = () => {}, onSlip = () => {}, onGuestAccount = () => {} }) {
+  // Laadt de Vue-tekenlaag voor de schil als die aan staat (SHOP_VUE_SHELL=1); tot dat gelukt is blijft de oude schil in gebruik.
+  VueShell.preload();
   // Een async route die een fout gooit gaat naar de foutafhandeling in plaats van te blijven hangen.
   const router = catchAsync(express.Router());
   const limiter = createRateLimiter({ windowMs: 60 * 1000, max: 240, keyFn: clientKey });
@@ -180,16 +183,26 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     // Een medewerker of beheerder krijgt de knop naar het beheer; die pagina's zijn persoonlijk en worden niet gedeeld.
     const staff = Boolean(viewer) && viewer.isStaff;
     if (business || (staff && !preview)) res.setHeader('Cache-Control', 'private, no-store');
-    const html = renderWith(contentOf(req), render, { indexing, baseUrl: preview ? '' : publicBaseUrl(req), analytics: preview ? '' : analyticsIdOf(), clarity: preview ? '' : clarityIdOf(), captcha: preview ? '' : captchaKeyOf(), ordering, cartCount: ordering ? (req.pendingCart || readCart(req)).reduce((total, line) => total + line.qty, 0) : 0, business, staff, wholesale: ordering && business && viewer.wholesale, businessForm: Boolean(orderMail && orderMail.businessRequestReady && orderMail.businessRequestReady(tenantId)), businessSent: ['ja', 'fout'].includes(req.query.aanvraag) ? req.query.aanvraag : '' });
-    const plannerWith = html.replace(/<!--planner:([^>]*)-->/g, (_, root) => (plannerOn() ? `<li class="nav-planner"><a href="${root}planner/">Planner</a></li>` : ''));
-    // De plannerpromotie (startpagina en beregeningscategorieën) verschijnt alleen als de planner aan staat.
-    const withPlanner = plannerWith.replace(/<!--planner-promo:([^>]*)-->/g, (_, root) => (plannerOn() ? `<section class="planner-promo"><div class="wrap planner-promo-inner"><div><h2>Ontwerp je beregening gratis</h2><p>Teken je tuin in onze planner en bestel de complete materiaallijst in één keer.</p></div><a class="button" href="${root}planner/">Naar de planner</a></div></section>` : ''));
-    // In een voorbeeld blijven de menu- en categorielinks in het concept, ook voor categorieën die er alleen in staan.
-    // Ook het zoekformulier houdt de voorbeeldstatus vast (verborgen veld), anders valt een zoekopdracht terug op de gepubliceerde boom.
-    const inPreview = withPlanner
-      .replace(/href="((?:\.\.?\/)*(?:categorie|groep)\/[^"?#]*)"/g, 'href="$1?voorbeeld=1"')
-      .replace(/(<form class="shop-search"[^>]*>)/, '$1<input type="hidden" name="voorbeeld" value="1">');
-    res.type('html').send(preview ? inPreview : withPlanner);
+    const rendered = renderWith(contentOf(req), render, { indexing, baseUrl: preview ? '' : publicBaseUrl(req), analytics: preview ? '' : analyticsIdOf(), clarity: preview ? '' : clarityIdOf(), captcha: preview ? '' : captchaKeyOf(), ordering, cartCount: ordering ? (req.pendingCart || readCart(req)).reduce((total, line) => total + line.qty, 0) : 0, business, staff, wholesale: ordering && business && viewer.wholesale, businessForm: Boolean(orderMail && orderMail.businessRequestReady && orderMail.businessRequestReady(tenantId)), businessSent: ['ja', 'fout'].includes(req.query.aanvraag) ? req.query.aanvraag : '' });
+    /**
+     * Zet de planner-, promotie- en voorbeeldmarkeringen om en verstuurt de pagina.
+     * @param {string} html De opgebouwde pagina.
+     * @returns {void}
+     */
+    const finish = (html) => {
+      const plannerWith = html.replace(/<!--planner:([^>]*)-->/g, (_, root) => (plannerOn() ? `<li class="nav-planner"><a href="${root}planner/">Planner</a></li>` : ''));
+      // De plannerpromotie (startpagina en beregeningscategorieën) verschijnt alleen als de planner aan staat.
+      const withPlanner = plannerWith.replace(/<!--planner-promo:([^>]*)-->/g, (_, root) => (plannerOn() ? `<section class="planner-promo"><div class="wrap planner-promo-inner"><div><h2>Ontwerp je beregening gratis</h2><p>Teken je tuin in onze planner en bestel de complete materiaallijst in één keer.</p></div><a class="button" href="${root}planner/">Naar de planner</a></div></section>` : ''));
+      // In een voorbeeld blijven de menu- en categorielinks in het concept, ook voor categorieën die er alleen in staan.
+      // Ook het zoekformulier houdt de voorbeeldstatus vast (verborgen veld), anders valt een zoekopdracht terug op de gepubliceerde boom.
+      const inPreview = withPlanner
+        .replace(/href="((?:\.\.?\/)*(?:categorie|groep)\/[^"?#]*)"/g, 'href="$1?voorbeeld=1"')
+        .replace(/(<form class="shop-search"[^>]*>)/, '$1<input type="hidden" name="voorbeeld" value="1">');
+      res.type('html').send(preview ? inPreview : withPlanner);
+    };
+    // Met de Vue-schil (vue-shell.js) geeft renderWith een belofte; anders meteen de HTML.
+    if (rendered && typeof rendered.then === 'function') rendered.then(finish, (error) => { console.error('[webshop] pagina tekenen mislukt:', error); if (!res.headersSent) res.status(500).type('text').send('Er ging iets mis bij het opbouwen van de pagina.'); });
+    else finish(rendered);
   };
   /**
    * Het actieve GA4-meet-ID van de shop (instelling shopAnalytics: aan en een geldig ID).

@@ -32,6 +32,25 @@ De ontwikkelserver geeft alles wat niet van een gemigreerde module is (API, schi
 backend (standaard poort 3300, pad `/app/`). Draai de backend dus gewoon zoals altijd (`DATABASE_URL=… node src/server.js`) en log in op
 `http://localhost:5173/klanten/`.
 
+## Webshop-schil (W1, `src/shop/`)
+
+De webshop blijft server-side getekend door de Node-backend (fasen W0–W5 in het advies). W1 legt de gedeelde laag: de **schil** van elke
+shoppagina (mededeling, kop met zoeken en winkelwagen, menu, voet) is een Vue-component (`ShopShell.vue`) die de backend per verzoek tekent.
+
+| Onderdeel | Inhoud |
+|---|---|
+| `src/shop/ShopShell.vue`, `MenuFly.vue`, `MenuFold.vue`, `ShopIcon.ts`, `Marker.ts` | dezelfde markup en klassen als `layout()` in `backend/src/webshop/storefront-pages.js` |
+| `src/shop/types.ts` | `ShellProps`: gewone gegevens (geen HTML) die de backend opbouwt (`shellPropsOf`) |
+| `src/shop/ssr-entry.ts` + `vite.shop-ssr.config.ts` | `npm run build:shop` bouwt één bestand `dist-shop-ssr/shop-ssr.mjs` (Vue zit erin) |
+| `backend/src/webshop/vue-shell.js` | laadt dat bestand, tekent de schil, onthoudt tot 300 schillen; uit tenzij `SHOP_VUE_SHELL=1` én het bestand er is |
+| `test/shop/shell-parity.test.ts` | HTML van oude `layout()` tegen de Vue-schil, 8 scenario's (klantgroepen, winkelwagen, meting, mededeling, menu met verborgen en diepe categorieën) |
+
+- De inhoud van de pagina (`body`) blijft voorlopig de bestaande HTML-opbouw: de schil zet daar een markering (`<!--shop-body-->`) en `renderWith` vult hem. Pagina's gaan in W2–W4 één voor één over naar Vue-componenten.
+- `renderWith` geeft een belofte als de Vue-schil actief is, anders een tekst; `sendPage` (storefront.js) handelt beide af. Mislukt het tekenen, dan komt er een 500 met melding.
+- Productie: `VUE_SHOP` leeg en `SHOP_VUE_SHELL` niet gezet, dus de oude schil. Staging bouwt en gebruikt de Vue-schil standaard (`deploy/staging/compose.yml`).
+- Geen hydratie in W1: de schil heeft geen eigen script nodig (menu en zoeksuggesties blijven `menu.js` en `zoeksuggesties.js`), dus de Vue-runtime gaat nog niet naar de browser.
+- Meting (sandbox, één kern, menu van 4 groepen met ca. 500 categorieën, 87 kB HTML): oude `layout()` 0,5 ms, Vue-schil 2,4 ms koud en 0,2 ms uit de schilcache. Ruim binnen wat één kern aankan.
+
 ## Gemigreerde modules
 
 | Module | Branch | Pariteitslijst |

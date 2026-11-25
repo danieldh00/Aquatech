@@ -9,7 +9,8 @@
     "build": "vue-tsc --noEmit && vite build",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run",
-    "stijl": "node tools/check-stijl.mjs"
+    "stijl": "node tools/check-stijl.mjs",
+    "build:shop": "vite build --config vite.shop-ssr.config.ts"
   },
   "dependencies": {
     "vue": "3.5.46",

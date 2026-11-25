@@ -18,6 +18,8 @@ services:
       args:
         # Staging bouwt standaard elke Vue-module die in develop staat (hub/frontend-vue); een waarde in .env gaat voor.
         VUE_MODULES: ${VUE_MODULES:-alle}
+        # De Vue-schil van de webshop (hub/frontend-vue/src/shop) wordt op staging standaard gebouwd en gebruikt; productie niet.
+        VUE_SHOP: ${VUE_SHOP:-1}
       labels:
         nl.aquatech.staging: "1"
     labels:
@@ -35,6 +37,7 @@ services:
       - AQUATECH_MASTER_KEY_FILE=/run/secrets/master-key
       - DATABASE_URL_FILE=/run/secrets/database-url
       - SETUP_CODE=${SETUP_CODE:-}
+      - SHOP_VUE_SHELL=${SHOP_VUE_SHELL:-1}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       # Stagingmodus: noindex en een stagingbalk (server.js, shared/common.js). Migraties zijn alleen toevoegingen, dus een
       # terugval naar de vorige commit mag een nieuwere database zien.

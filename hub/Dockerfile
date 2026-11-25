@@ -24,6 +24,14 @@ RUN if [ -n "$VUE_MODULES" ]; then \
       done; \
       cp -r dist/assets ../frontend-min/assets; \
     fi
+# Vue-schil van de webshop (alleen staging, zie hub/frontend-vue/src/shop): bouwargument VUE_SHOP=1 bouwt de server-side tekenlaag tot één
+# bestand (shop-ssr.mjs, Vue zit erin). Leeg (productie) = alleen een lege map; de backend gebruikt de Vue-schil pas met SHOP_VUE_SHELL=1.
+ARG VUE_SHOP=""
+RUN mkdir -p /build/shop-ssr && if [ -n "$VUE_SHOP" ]; then \
+      set -e; \
+      cd ../frontend-vue && { [ -d node_modules ] || npm ci; } && npm run build:shop; \
+      cp dist-shop-ssr/shop-ssr.mjs /build/shop-ssr/shop-ssr.mjs; \
+    fi
 
 FROM node:22-alpine@sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a
 
@@ -35,6 +43,7 @@ RUN npm ci --omit=dev
 COPY backend/src ./src
 COPY backend/tools/release-info.js ./tools/release-info.js
 COPY --from=frontend-build /build/frontend-min ../frontend
+COPY --from=frontend-build /build/shop-ssr ../shop-ssr
 
 ENV PORT=3300
 ENV NODE_ENV=production
