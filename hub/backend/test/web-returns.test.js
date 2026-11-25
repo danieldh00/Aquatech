@@ -111,6 +111,34 @@ test('retour van aanvraag tot creditnota: mails, voorraad terug en creditregel',
   assert.strictEqual((await world.admin.post(`/app/api/admin/web-returns/${record.id}/credit`, {})).body.credit.existing, true, 'opnieuw vragen maakt geen tweede creditnota');
 });
 
+test('met de instelling komt de creditnota al bij het goedkeuren en Afronden maakt er geen tweede', async () => {
+  const world = await setup();
+  const id = await shippedOrder(world);
+  assert.strictEqual((await requestReturn(world, id, { 'qty:BUS': '1', reason: 'defect' })).status, 303);
+  const record = await latestReturn(world.admin);
+  assert.strictEqual((await world.admin.get('/app/api/invoices/settings')).body.settings.webOrders.creditOnApproval, false, 'standaard uit');
+  assert.strictEqual((await world.admin.put('/app/api/invoices/settings', { webOrders: { enabled: true, finalize: true, creditOnApproval: true } })).status, 200);
+  const approved = await world.admin.post(`/app/api/admin/web-returns/${record.id}/decision`, { approve: true });
+  assert.strictEqual(approved.status, 200);
+  assert.strictEqual(approved.body.return.status, 'goedgekeurd');
+  assert.ok(approved.body.credit.credit, JSON.stringify(approved.body.credit));
+  const credit = (await world.admin.get(`/app/api/invoices/${approved.body.credit.credit.invoiceId}`)).body;
+  assert.strictEqual(credit.kind, 'credit');
+  assert.strictEqual(credit.status, 'definitief');
+  assert.strictEqual(credit.total, -12.1);
+  assert.strictEqual((await stockOf(world.admin)).onHand, 48, 'voorraad komt pas terug bij Afronden');
+  const done = await world.admin.post(`/app/api/admin/web-returns/${record.id}/complete`, { restock: true });
+  assert.strictEqual(done.status, 200);
+  assert.strictEqual(done.body.credit.existing, true, 'geen tweede creditnota');
+  assert.strictEqual(done.body.return.credit.invoiceId, credit.id);
+  assert.strictEqual((await stockOf(world.admin)).onHand, 49);
+  const rejectedWorld = await requestReturn(world, id, { 'qty:BUS': '1', reason: 'anders' });
+  assert.strictEqual(rejectedWorld.status, 303);
+  const second = (await world.admin.get('/app/api/admin/web-returns')).body.items[0];
+  const rejected = await world.admin.post(`/app/api/admin/web-returns/${second.id}/decision`, { approve: false, note: 'Nee.' });
+  assert.strictEqual(rejected.body.credit, undefined, 'afwijzen maakt nooit een creditnota');
+});
+
 test('afwijzen met reden en intrekken door de klant', async () => {
   const world = await setup();
   const customer = world.shoppers[0];

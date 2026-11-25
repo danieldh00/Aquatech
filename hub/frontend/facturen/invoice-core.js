@@ -165,11 +165,11 @@
    * Bestellingen van de eigen webshop: of er bij Verzonden een factuur komt
    * (standaard aan) en of die meteen definitief wordt (standaard aan).
    * @param {object} raw De ingevulde instellingen.
-   * @returns {{enabled: boolean, finalize: boolean}} De opgeschoonde instellingen.
+   * @returns {{enabled: boolean, finalize: boolean, creditOnApproval: boolean}} De opgeschoonde instellingen (creditOnApproval: de creditnota van een retour direct bij goedkeuren, standaard uit).
    */
   function sanitizeWebOrders(raw) {
     const fields = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
-    return { enabled: fields.enabled !== false, finalize: fields.finalize !== false };
+    return { enabled: fields.enabled !== false, finalize: fields.finalize !== false, creditOnApproval: fields.creditOnApproval === true };
   }
 
   /**

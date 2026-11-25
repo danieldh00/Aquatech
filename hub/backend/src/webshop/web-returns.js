@@ -410,13 +410,18 @@ function registerWebReturnRoutes(app, { returns, requireJson, audit, credits = n
     res.json({ return: found, refund: refundOf ? refundOf(req.tenantId, found) : null });
   });
 
-  app.post('/api/admin/web-returns/:id/decision', requireJson, (req, res) => {
+  app.post('/api/admin/web-returns/:id/decision', requireJson, wrap(async (req, res) => {
     const approve = req.body?.approve === true;
     const out = returns.decide(req.tenantId, req.params.id, approve, String(req.body?.note || ''), req.user);
     if (out.error) return res.status(out.status || 400).json({ error: 'invalid_decision', message: out.error });
     audit(req, approve ? 'webshop_retour_goedgekeurd' : 'webshop_retour_afgewezen', { number: out.return.number });
+    // Met de instelling "creditfactuur direct bij goedkeuren" komt de creditnota nu al; een mislukking staat als creditError bij de retour en blokkeert het goedkeuren niet (Afronden probeert het opnieuw).
+    if (approve && credits && credits.creditOnApprovalOf(req.tenantId)) {
+      const credited = await credits.creditReturn(req.tenantId, out.return.id, req.user);
+      return res.json({ return: returns.get(req.tenantId, out.return.id), credit: credited });
+    }
     res.json({ return: out.return });
-  });
+  }));
 
   app.post('/api/admin/web-returns/:id/complete', requireJson, wrap(async (req, res) => {
     const out = returns.complete(req.tenantId, req.params.id, req.body?.restock !== false, req.user);
