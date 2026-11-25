@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.40.3
+
+`install-staging.sh` slaat een eerder mislukte commit alleen nog over bij `--timer`; een handmatige run (servertaak) probeert hem opnieuw. Taak 014 deed daardoor niets. Nieuwe servertaak 015 voert de herinrichting alsnog uit.
+
 ## 1.40.2
 
 De stagingservice heette `aquatech`; Docker zet de servicenaam ook als netwerkalias in het gedeelde tunnelnetwerk, waardoor verkeer naar `http://aquatech:3300` (testomgeving) deels bij de stagingcontainer uitkwam. De services heten nu `aquatech-staging-app` en `aquatech-staging-db`; `install-staging.sh` ruimt containers onder de oude servicenaam op (`retire_old_service`) en een test bewaakt dat elke servicenaam met `aquatech-staging-` begint. Nieuwe servertaak 014 past dit op apps01 toe.

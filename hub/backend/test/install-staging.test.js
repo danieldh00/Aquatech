@@ -253,6 +253,9 @@ test('een commit die niet bouwt: de draaiende staging blijft, de commit wordt ov
   assert.strictEqual(again.status, 0);
   assert.match(again.stdout, /wordt overgeslagen/);
   assert.ok(!/compose .* build/.test(site.calls().slice(before.length)), 'geen nieuwe bouwpoging');
+  site.setFake('nobuild', '');
+  assert.strictEqual(site.run().status, 0, 'een handmatige run probeert een overgeslagen commit opnieuw');
+  assert.strictEqual(site.state('deployed'), broken);
   const fixed = site.commit('develop');
   assert.strictEqual(site.run(['--timer']).status, 0);
   assert.strictEqual(site.state('deployed'), fixed);
