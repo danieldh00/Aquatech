@@ -5,7 +5,7 @@ name: Security scans
 # Secret scanning en push protection van GitHub zelf staan in de repo-instellingen (Settings > Code security), niet hier.
 on:
   push:
-    branches: [master, develop]
+    branches: [master]
   pull_request:
   schedule:
     - cron: "17 4 * * 1"

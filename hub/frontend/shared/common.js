@@ -253,20 +253,6 @@
     maintenanceBar.textContent = 'Er wordt een update geïnstalleerd. Bekijken kan, opslaan even niet. Over een minuut werkt alles weer.';
     root.document.body.appendChild(maintenanceBar);
   }
-  // ---------- Stagingbalk ----------
-  let stagingBar = null;
-  /**
-   * Toont een vaste balk "Stagingomgeving" (één keer per pagina) zodra een antwoord de kop X-Aquatech-Staging heeft.
-   * @returns {void}
-   */
-  function showStaging() {
-    if (stagingBar || !root.document || !root.document.body) return;
-    stagingBar = root.document.createElement('div');
-    stagingBar.className = 'staging-bar';
-    stagingBar.setAttribute('role', 'note');
-    stagingBar.textContent = 'STAGING: testomgeving, geen echte gegevens';
-    root.document.body.appendChild(stagingBar);
-  }
   // ---------- Ingekorte lijsten ----------
   /**
    * Meldt kort bovenin dat een lijst is ingekort (de server geeft hooguit een vast aantal rijen; zie platform/list-paging.js).
@@ -295,7 +281,6 @@
         // Een serverfout zonder de kop (bijv. de proxy terwijl de container herstart) haalt de balk niet weg.
         const maintenance = Boolean(response.headers && response.headers.get('X-Aquatech-Maintenance') === '1');
         if (maintenance || response.status < 500) showMaintenance(maintenance);
-        if (response.headers && response.headers.get('X-Aquatech-Staging') === '1') showStaging();
         return response;
       }, (error) => {
         // Geen verbinding (fetch gooit dan een TypeError met een technische tekst als "Failed to fetch"): een

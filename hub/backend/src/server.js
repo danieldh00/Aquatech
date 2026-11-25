@@ -843,13 +843,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const owner = store.getTenantBySlug(slug || 'default');
     return Boolean(owner) && !auth.isAuthenticated(req) && Boolean(captcha.publicOf(owner.id));
   };
-  // Stagingomgeving (AQUATECH_STAGING=1): nooit indexeren, en de kop laat de pagina's een stagingbalk tonen (shared/common.js).
-  const stagingMode = env.AQUATECH_STAGING === '1';
   app.use((req, res, next) => {
-    if (stagingMode) {
-      res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
-      res.setHeader('X-Aquatech-Staging', '1');
-    }
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'same-origin');
     res.setHeader('Content-Security-Policy', publicPlannerCaptcha(req) ? captchaCspWith(CSP) : CSP);

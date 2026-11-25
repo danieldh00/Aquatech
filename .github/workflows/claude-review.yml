@@ -1,6 +1,6 @@
 name: Claude-review
 
-# Eerste, verplichte controle op elke pull request naar master en develop: een code review en een securityreview door Claude.
+# Eerste, verplichte controle op elke pull request naar master: een code review en een securityreview door Claude.
 # De jobnamen "Claude code review" en "Claude security review" zijn de required status checks in de ruleset.
 # Draait op het Claude-abonnement: vereist het repository-secret CLAUDE_CODE_OAUTH_TOKEN (aan te maken met
 # `claude setup-token`; zonder dat falen de jobs met een duidelijke melding, zodat een
@@ -21,7 +21,7 @@ name: Claude-review
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    branches: [master, develop]
+    branches: [master]
 
 # Een nieuwe push vervangt de lopende review.
 concurrency:

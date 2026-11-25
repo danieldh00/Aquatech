@@ -195,7 +195,6 @@ TEST_DATABASE_URL=postgres://… npm test         # node --test tegen PostgreSQL
 - Een PR merget pas als de tests (tegen PostgreSQL), de releasenotes-controle en de verplichte controles **Claude code
   review** en **Claude security review** (`.github/workflows/claude-review.yml`) groen zijn. CodeRabbit is uitgeschakeld;
   vóór go-live volgt eenmalig een handmatige deep scan met CodeRabbit.
-- **Develop** (`develop` heeft dezelfde bescherming en verplichte controles als `master`; de stagingomgeving op apps01 is op 2026-11-25 verwijderd, servertaak `016-staging-verwijderen`). Er draait dus geen aparte testomgeving voor de Vue-migratie meer.
 - **Beveiligingsscans** (`.github/workflows/security.yml`): gitleaks (geheimen in de historie) en een Trivy-scan van het image (hoog/kritiek met beschikbare oplossing); bij code-wijzigingen in een PR, op master en wekelijks. CodeQL is verwijderd (besluit Daniël 2026-11-20): de Claude security review vervangt de codeanalyse. Secret scanning en push protection staan in de GitHub-repo-instellingen (Settings > Code security).
 - **Rooktests na elke uitrol** (`tests/smoke`, workflow `rooktests.yml`): Playwright tegen de live omgeving, alleen lezen; secrets en werking in `tests/smoke/README.md`.
 - Na het mergen verhoogt `release.yml` de versie (+1 patch) en bouwt het image `ghcr.io/danieldh00/aquatech:<versie>`; de server
