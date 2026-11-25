@@ -30,7 +30,7 @@ Een tweede opstelling op apps01, naast de testomgeving. Gedeeld zijn alleen de s
 - Images van derden staan op een vaste digest (Renovate werkt ze bij); het app-image wordt nooit uit een registry gehaald.
 - **Geen koppelingen**: geen mail, geen back-up naar buiten, geen betalingen, geen andere externe diensten. `.env.example` laat die leeg.
   Een AI-sleutel alleen met een lage daglimiet (liever in de app zelf).
-- De enige proxy die de app gelooft (`TRUSTED_PROXIES`) is het IP-adres van de tunnelcontainer; het script leest dat bij elke run.
+- De app zit naast het eigen netwerk ook in het netwerk van de tunnelcontainer (dat is de enige manier om via de bestaande tunnel bereikbaar te zijn). Dat netwerk wordt dus gedeeld met de testomgeving: staging verbindt met de database via de unieke naam `aquatech-staging-postgres`, nooit via `postgres` (die naam heeft ook de database van de testomgeving). De enige proxy die de app gelooft (`TRUSTED_PROXIES`) is het IP-adres van de tunnelcontainer; het script leest dat bij elke run.
 
 ## `deploy/staging/install-staging.sh`
 Eén script (root, veilig herhaalbaar, met lockbestand) dat inricht én bijwerkt:
@@ -55,8 +55,8 @@ Eén script (root, veilig herhaalbaar, met lockbestand) dat inricht én bijwerkt
 Draai het vaste commando uit Beheer > Systeem > Updates (zoals altijd, als root op de Proxmox-host); taak
 `012-staging-op-apps01-inrichten` haalt het script op de vaste commit op en voert het uit, zonder invoer. Daarna twee handelingen in
 Cloudflare (het script drukt ze aan het eind af):
-1. Zero Trust > Netwerken > Tunnels > de bestaande tunnel > Gepubliceerde toepassing: `aquatech-staging.den-hollander.com` naar `http://aquatech-staging:3300`.
-2. Zero Trust > Toegang > Toepassingen: een zelf gehoste toepassing voor die hostnaam met een beleid dat alleen jouw e-mailadres toelaat.
+1. **Eerst toegang dichtzetten**: Zero Trust > Toegang > Toepassingen: een zelf gehoste toepassing voor `aquatech-staging.den-hollander.com` met een beleid dat alleen jouw e-mailadres toelaat.
+2. **Dan pas publiceren**: Zero Trust > Netwerken > Tunnels > de bestaande tunnel > Gepubliceerde toepassing: dezelfde hostnaam naar `http://aquatech-staging:3300`. Zonder stap 1 zou staging tijdelijk openbaar zijn.
 
 Controleren op de server: `docker ps --filter name=aquatech-staging`, `journalctl -u aquatech-staging-update.service`.
 
