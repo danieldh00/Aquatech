@@ -453,6 +453,34 @@ async function updateProducts(shop, updates, { fetchImpl = null, allowInsecure =
 }
 
 /**
+ * Wijzigt de status (concept of gepubliceerd) en/of de sku van losse producten (REST v3, batch van hooguit 100).
+ * Wordt gebruikt als producten samengevoegd worden tot één variabel product: de oude producten krijgen
+ * een lege sku (anders is de sku van de nieuwe variatie dubbel) en gaan op concept.
+ * @param {object} shop De koppelinstelling.
+ * @param {{ id: string, status?: 'draft'|'publish', sku?: string }[]} changes Wijzigingen per product; een veld dat ontbreekt blijft zoals het is.
+ * @param {object} [options] fetchImpl, allowInsecure en resolveHost.
+ * @returns {Promise<{ id: string, ok: boolean, error?: string }[]>} Uitkomst per product.
+ */
+async function patchProducts(shop, changes, { fetchImpl = null, allowInsecure = insecureAllowed(), resolveHost = publicAddress } = {}) {
+  if (shop.mode !== 'rest') throw new SourceError('rest_required', 'Wijzigen in de webshop kan alleen via de REST API.', 400);
+  const { base, send } = await connectionFor(shop, { allowInsecure, resolveHost, fetchImpl });
+  const headers = restAuth(shop);
+  const wanted = changes.filter((change) => /^\d{1,20}$/.test(String(change.id)));
+  const out = [];
+  for (let i = 0; i < wanted.length; i += PER_PAGE) {
+    const part = wanted.slice(i, i + PER_PAGE).map((change) => {
+      const patch = { id: Number(change.id) };
+      if (change.status === 'draft' || change.status === 'publish') patch.status = change.status;
+      if (change.sku !== undefined) patch.sku = String(change.sku).slice(0, 100);
+      return patch;
+    });
+    const { body } = await getJson(`${base}/wp-json/wc/v3/products/batch`, headers, send, { method: 'POST', body: { update: part } });
+    out.push(...batchResults(part, body && body.update));
+  }
+  return out;
+}
+
+/**
  * Uitkomst per regel van een batchverzoek (op volgorde, of op id als de webshop dat teruggeeft).
  * @param {object[]} part De verstuurde regels (met id bij wijzigen).
  * @param {*} results Wat de webshop teruggaf (lijst).
@@ -605,4 +633,4 @@ function respondShopError(res, error, next) {
   return withCause(res, error).status(error.status).json({ error: error.code, message: error.message });
 }
 
-module.exports = { respondShopError, fetchProducts, fetchProductWithVariations, fetchOrders, updateProducts, createProduct, updateAttributes, createVariations, shopPrice, normalizeBaseUrl, sanitizeShop, SourceError };
+module.exports = { respondShopError, fetchProducts, fetchProductWithVariations, fetchOrders, updateProducts, patchProducts, createProduct, updateAttributes, createVariations, shopPrice, normalizeBaseUrl, sanitizeShop, SourceError };

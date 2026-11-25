@@ -156,6 +156,10 @@
           <div id="mg-step1">
             <p class="muted small">Losse artikelen die eigenlijk maten of kleuren van één product zijn (bijv. PE-buis 16, 20 en 25 mm) worden de varianten van één hoofdartikel. Voorraad, prijzen en alle verwijzingen blijven bestaan. Je controleert alles eerst nog.</p>
             <h4>Voorstellen</h4>
+            <div class="row actions" id="mg-all-bar" hidden>
+              <button class="btn primary" type="button" id="mg-all">Alles samenvoegen…</button>
+              <span class="muted small">Eén overzicht ter bevestiging voor alle voorstellen hieronder.</span>
+            </div>
             <div id="mg-groups" class="merge-groups"></div>
             <h4>Of kies zelf artikelen</h4>
             <div class="filters"><input id="mg-search" type="search" placeholder="Zoek op code of omschrijving"></div>
@@ -181,6 +185,20 @@
               <button class="btn primary" type="submit" id="mg-submit">Samenvoegen</button>
               <button class="btn" type="button" id="mg-back">Terug</button>
               <button class="btn" type="button" data-cancel>Annuleren</button>
+            </div>
+          </div>
+          <div id="mg-step3" hidden>
+            <p class="muted small" id="mga-intro"></p>
+            <div class="tablewrap"><table class="grid" id="mga-table">
+              <thead><tr><th><input type="checkbox" id="mga-toggle" checked aria-label="Alle voorstellen aan of uit"></th><th>Hoofdartikel</th><th>Code</th><th>Kenmerk en waarden</th><th>Webshop</th><th>Uitkomst</th></tr></thead>
+              <tbody id="mga-rows"></tbody>
+            </table></div>
+            <h4>Wat verandert er</h4>
+            <ul id="mga-notes" class="merge-notes"></ul>
+            <div class="row actions">
+              <button class="btn primary" type="button" id="mga-submit">Samenvoegen</button>
+              <button class="btn" type="button" id="mga-back">Terug</button>
+              <button class="btn" type="button" id="mga-cancel" data-cancel>Annuleren</button>
             </div>
           </div>
           <div class="err" role="alert"></div>
