@@ -64,6 +64,30 @@ jobs:
       - run: npm ci
       - run: npm audit --omit=dev --audit-level=high
 
+  # De Vue-frontend (hub/frontend-vue): typecontrole, tests, stijlcontrole, bouwen en afhankelijkhedencontrole.
+  # Draait alleen als de PR code raakt, zoals de andere jobs.
+  frontend-vue:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: hub/frontend-vue
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: hub/frontend-vue/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run stijl
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=high
+
   # De testsuite tegen PostgreSQL (de enige database), inclusief de tests van het schema en de back-ups.
   test-postgres:
     needs: changes
