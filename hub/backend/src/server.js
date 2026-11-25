@@ -2417,6 +2417,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     syncShop: (tid, user) => shopSync.run(tid, { full: true, user }),
     publishToShop: (tid, itemId) => shopSync.publish(tid, itemId),
     shopMatchOf: (tid) => shopSync.matcher(shopStore.products(tid), (settingsFor(tid).get('shopSource') || {}).mapping),
+    shopCanPublish: (tid) => shopSync.canPublish(tid),
+    publishMergedToShop: (tid, parentId, productIds) => shopSync.publishMerged(tid, parentId, productIds),
     shopMirrorOn: (tid) => { const source = settingsFor(tid).get('shopSource'); return Boolean(source && source.url && source.mirror !== false); },
     importLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, keyFn: (req) => req.tenantId || tenant.id }) });
   // ---------- AI-koppeling: Claude of ChatGPT maakt een concept-offerte (zie mcp/) ----------

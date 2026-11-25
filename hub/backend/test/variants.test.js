@@ -247,8 +247,11 @@ function fakeShop(products, variations) {
     if (path === '/products/batch') {
       return json({ update: body.update.map((update) => {
         const product = products.get(String(update.id));
+        if (!product) return { id: update.id, error: { message: 'Onbekend product' } };
         if (update.regular_price !== undefined) product.regular_price = update.regular_price;
         if (update.stock_quantity !== undefined) { product.stock_quantity = update.stock_quantity; product.manage_stock = true; }
+        if (update.status !== undefined) product.status = update.status;
+        if (update.sku !== undefined) product.sku = update.sku;
         return product;
       }) });
     }
@@ -461,4 +464,121 @@ test('varianten: een hoofdartikel zonder mutaties wordt met zijn varianten echt 
   stock.setVariants(tenantId, parent.id, [{ name: 'Maat', values: ['16 mm', '20 mm'] }]);
   assert.deepStrictEqual(stock.remove(tenantId, parent.id), { deleted: true, code: 'LOSBUIS' });
   assert.strictEqual(db.prepare("SELECT COUNT(*) AS n FROM stock_items WHERE tenant_id = ? AND code LIKE 'LOSBUIS%'").get(tenantId).n, 0);
+});
+
+test('samenvoegen en WooCommerce: oude producten krijgen een lege sku en gaan op concept, het hoofdartikel wordt één variabel product', async () => {
+  const products = new Map([
+    ['11', { id: 11, type: 'simple', sku: 'BUS-32', name: 'Steunbus 32 mm', status: 'publish', regular_price: '1.21', meta_data: [], attributes: [] }],
+    ['12', { id: 12, type: 'simple', sku: 'BUS-40', name: 'Steunbus 40 mm', status: 'publish', regular_price: '1.21', meta_data: [], attributes: [] }],
+  ]);
+  const variations = new Map();
+  const { tenantId, stock, sync, calls } = setupShop(products, variations, { url: 'http://shop.test', mode: 'rest', push: true, pricesIncludeTax: true, vatRate: 21 });
+  assert.strictEqual(sync.canPublish(tenantId), true);
+  const first = stock.create(tenantId, USER, { code: 'BUS-32', name: 'Steunbus 32 mm', salePrice: 1, onHand: 3 }).item;
+  const second = stock.create(tenantId, USER, { code: 'BUS-40', name: 'Steunbus 40 mm', salePrice: 1, onHand: 2 }).item;
+  stock.update(tenantId, first.id, { shopSync: true });
+  stock.update(tenantId, second.id, { shopSync: true });
+  const merged = stock.mergeIntoVariants(tenantId, { ids: [first.id, second.id], code: 'BUS', name: 'Steunbus', attributeName: 'Maat', values: { [first.id]: '32 mm', [second.id]: '40 mm' } }, {
+    shopMatchOf: sync.matcher([{ id: '11', sku: 'BUS-32' }, { id: '12', sku: 'BUS-40' }]),
+  });
+  assert.ok(!merged.error, JSON.stringify(merged));
+  assert.deepStrictEqual(merged.shopProductIds.sort(), ['11', '12']);
+
+  const result = await sync.publishMerged(tenantId, merged.parentId, merged.shopProductIds);
+  assert.ok(!result.error, JSON.stringify(result));
+  assert.strictEqual(result.hidden, 2);
+  assert.strictEqual(result.variations, 2);
+  assert.strictEqual(result.warning, null);
+  assert.strictEqual(products.get('11').status, 'draft');
+  assert.strictEqual(products.get('11').sku, '');
+  assert.strictEqual(products.get('12').status, 'draft');
+  const created = [...products.values()].find((product) => product.type === 'variable');
+  assert.strictEqual(created.status, 'publish');
+  assert.deepStrictEqual(variations.get(String(created.id)).map((entry) => entry.sku).sort(), ['BUS-32', 'BUS-40']);
+  assert.ok(calls.some((call) => call.path.endsWith('/products/batch')));
+});
+
+test('samenvoegen en WooCommerce: lukt het hoofdartikel niet, dan komen de sku\'s terug en meldt de functie revert', async () => {
+  const products = new Map([
+    ['21', { id: 21, type: 'simple', sku: 'KAP-1', name: 'Kap 1', status: 'publish', regular_price: '1.21', meta_data: [], attributes: [] }],
+  ]);
+  const { tenantId, stock, sync } = setupShop(products, new Map(), { url: 'http://shop.test', mode: 'rest', push: true, pricesIncludeTax: true, vatRate: 21 });
+  // Een hoofdartikel dat niet naar de webshop mag (shop_sync uit) laat publishNow een fout geven.
+  const parent = stock.create(tenantId, USER, { code: 'KAP', name: 'Kap' }).item;
+  stock.update(tenantId, parent.id, { shopSync: false });
+  const result = await sync.publishMerged(tenantId, parent.id, ['21']);
+  assert.strictEqual(result.revert, true);
+  assert.ok(result.error);
+  assert.strictEqual(products.get('21').sku, 'KAP-1', 'de sku is teruggezet');
+  assert.strictEqual(products.get('21').status, 'publish');
+});
+
+test('samenvoegen en WooCommerce: zonder schrijfrechten kan Aquatech de webshop niet bijwerken', async () => {
+  const { tenantId, sync } = setupShop(new Map(), new Map(), { url: 'http://shop.test', mode: 'rest', push: false, vatRate: 21 });
+  assert.strictEqual(sync.canPublish(tenantId), false);
+  const result = await sync.publishMerged(tenantId, 'x', ['1']);
+  assert.strictEqual(result.revert, true);
+  assert.strictEqual(result.code, 'no_push');
+});
+
+test('samenvoegen via de API: gekoppelde artikelen worden één variabel webshopproduct, zonder schrijfrechten wordt dat geweigerd en bij een webshopfout draait alles terug', async () => {
+  const db = openDb();
+  const store = createStore(db);
+  const main = store.ensureTenant().id;
+  await store.createAccount(main, { username: 'baas', displayName: 'Baas', role: 'beheerder', password: PW }, { platformAdmin: true });
+  const products = new Map([
+    ['11', { id: 11, type: 'simple', sku: 'BUS-32', name: 'Steunbus 32 mm', status: 'publish', regular_price: '1.21', meta_data: [], attributes: [] }],
+    ['12', { id: 12, type: 'simple', sku: 'BUS-40', name: 'Steunbus 40 mm', status: 'publish', regular_price: '1.21', meta_data: [], attributes: [] }],
+  ]);
+  const variations = new Map();
+  const fake = fakeShop(products, variations);
+  let failBatch = false;
+  const { server, base } = await listen(createApp({ env: { AUTO_WORK_ORDER: '0' }, secret: SECRET, db, shopFetch: async (url, options) => {
+    if (failBatch && String(url).endsWith('/products/batch')) return { ok: false, status: 500, headers: new Headers(), text: async () => 'kapot' };
+    return fake.fetchImpl(url, options);
+  } }));
+  try {
+    const baas = await createLogin(base, { password: PW })('baas');
+    /**
+     * Zet de webshopkoppeling met de nagebootste webshop.
+     * @param {object} extra Wat afwijkt (bijv. push).
+     * @returns {Promise<object>} Het antwoord.
+     */
+    const shopSettings = (extra) => baas.put('/app/api/admin/shop', { url: 'http://shop.test', mode: 'rest', consumerKey: 'ck_test_1234567890', consumerSecret: 'cs_test_1234567890', pricesIncludeTax: true, vatRate: 21, mirror: true, ...extra });
+    const first = (await baas.post('/app/api/stock/items', { code: 'BUS-32', name: 'Steunbus 32 mm', unit: 'st', salePrice: 1, onHand: 3 })).body;
+    const second = (await baas.post('/app/api/stock/items', { code: 'BUS-40', name: 'Steunbus 40 mm', unit: 'st', salePrice: 1, onHand: 2 })).body;
+    db.prepare('UPDATE stock_items SET shop_product_id = ?, shop_sync = 1 WHERE id = ?').run('11', first.id);
+    db.prepare('UPDATE stock_items SET shop_product_id = ?, shop_sync = 1 WHERE id = ?').run('12', second.id);
+    const body = { ids: [first.id, second.id], code: 'BUS', name: 'Steunbus', attributeName: 'Maat', values: { [first.id]: '32 mm', [second.id]: '40 mm' } };
+
+    // De webshop bepaalt de lijst, maar Aquatech mag niet schrijven: geweigerd en het voorstel meldt dat.
+    assert.strictEqual((await shopSettings({ push: false })).status, 200);
+    assert.deepStrictEqual((await baas.get('/app/api/stock/merge-suggestions')).body.shop, { publishes: false, blocked: true });
+    const refused = await baas.post('/app/api/stock/merge', body);
+    assert.strictEqual(refused.status, 409);
+    assert.match(refused.body.message, /Aquatech is de bron/);
+
+    // Met schrijfrechten: een webshopfout draait de samenvoeging terug en laat de sku's staan.
+    assert.strictEqual((await shopSettings({ push: true })).status, 200);
+    assert.deepStrictEqual((await baas.get('/app/api/stock/merge-suggestions')).body.shop, { publishes: true, blocked: false });
+    failBatch = true;
+    const failed = await baas.post('/app/api/stock/merge', body);
+    assert.strictEqual(failed.status, 502, JSON.stringify(failed.body));
+    assert.match(failed.body.message, /^Niet samengevoegd/);
+    failBatch = false;
+    assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_items WHERE has_variants = 1').get().n, 0, 'geen hoofdartikel achtergebleven');
+    assert.strictEqual(db.prepare('SELECT shop_product_id FROM stock_items WHERE id = ?').get(first.id).shop_product_id, '11', 'de koppeling is terug');
+    assert.strictEqual(products.get('11').sku, 'BUS-32');
+
+    const merged = await baas.post('/app/api/stock/merge', body);
+    assert.strictEqual(merged.status, 201, JSON.stringify(merged.body));
+    assert.strictEqual(merged.body.shop.hidden, 2);
+    assert.strictEqual(merged.body.shop.warning, null);
+    assert.strictEqual(products.get('11').status, 'draft');
+    assert.strictEqual(products.get('12').sku, '');
+    const variable = [...products.values()].find((product) => product.type === 'variable');
+    assert.strictEqual(variable.status, 'publish');
+    assert.strictEqual(variations.get(String(variable.id)).length, 2);
+    assert.strictEqual(db.prepare('SELECT shop_product_id FROM stock_items WHERE id = ?').get(merged.body.item.id).shop_product_id, String(variable.id));
+  } finally { server.close(); }
 });

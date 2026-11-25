@@ -10,7 +10,7 @@ const { KINDS, GROUPS, EXPORT_LIMIT, shopCodeOf, isDate } = require('./stock-hel
  * de voorraad van een werkorder bekijken en afboeken onder 'werkorders'.
  * Gegevens per omgeving via req.tenantId.
  * @param {object} app De Express-app.
- * @param {object} ctx { stock, requireRight, requireAnyRight?, requireJson, audit, shopProductsOf?, shopMatchOf?, shopMirrorOn?, syncShop?, publishToShop? }.
+ * @param {object} ctx { stock, requireRight, requireAnyRight?, requireJson, audit, shopProductsOf?, shopMatchOf?, shopMirrorOn?, shopCanPublish?, publishMergedToShop?, syncShop?, publishToShop? }.
  * @returns {void}
  */
 function registerStockRoutes(app, ctx) {
@@ -180,20 +180,54 @@ function registerStockRoutes(app, ctx) {
     res.json(out.item);
   });
 
-  // Voorstellen: losse artikelen die samen één variabel artikel kunnen worden.
+  // Voorstellen: losse artikelen die samen één variabel artikel kunnen worden, plus wat er met de webshop gebeurt.
   app.get('/api/stock/merge-suggestions', requireStock, (req, res) => {
     noStore(res);
-    res.json({ groups: stock.mergeSuggestions(tenantOf(req)) });
+    const tenantId = tenantOf(req);
+    const mirror = Boolean(ctx.shopMirrorOn && ctx.shopMirrorOn(tenantId));
+    const publishes = Boolean(ctx.shopCanPublish && ctx.shopCanPublish(tenantId));
+    // publishes: Aquatech zet het hoofdartikel zelf in de webshop; blocked: de webshop bepaalt de lijst maar Aquatech mag niet schrijven.
+    res.json({ groups: stock.mergeSuggestions(tenantId), shop: { publishes, blocked: mirror && !publishes } });
   });
 
-  // Losse artikelen samenvoegen tot de varianten van een nieuw hoofdartikel.
-  app.post('/api/stock/merge', requireJson, requireStock, (req, res) => {
-    const out = stock.mergeIntoVariants(tenantOf(req), req.body, { refuseLinked: Boolean(ctx.shopMirrorOn && ctx.shopMirrorOn(tenantOf(req))), shopMatchOf: ctx.shopMatchOf ? ctx.shopMatchOf(tenantOf(req)) : null, user: req.user });
+  // Losse artikelen samenvoegen tot de varianten van een nieuw hoofdartikel; gekoppelde webshopproducten worden vervangen door één variabel product.
+  app.post('/api/stock/merge', requireJson, requireStock, async (req, res) => {
+    const tenantId = tenantOf(req);
+    const publishes = Boolean(ctx.shopCanPublish && ctx.shopCanPublish(tenantId));
+    const mirror = Boolean(ctx.shopMirrorOn && ctx.shopMirrorOn(tenantId));
+    const out = stock.mergeIntoVariants(tenantId, req.body, { refuseLinked: mirror && !publishes, shopMatchOf: ctx.shopMatchOf ? ctx.shopMatchOf(tenantId) : null, user: req.user });
     if (out.error) return fail(res, out);
-    const item = stock.get(tenantOf(req), out.parentId);
     // De samenvoeging staat al in de database: een fout in het auditlogboek mag die niet als mislukt melden.
-    try { audit(req, 'voorraad_samengevoegd', { itemId: out.parentId, code: item.code, merged: out.merged, unlinked: out.unlinked }); } catch (error) { console.error('Audit voorraad_samengevoegd mislukt:', error.message); }
-    res.status(201).json({ item, merged: out.merged, unlinked: out.unlinked });
+    /**
+     * Legt de samenvoeging vast in het auditlogboek.
+     * @param {object} item Het nieuwe hoofdartikel.
+     * @param {object} [extra] Extra gegevens (bijv. aantal op concept gezette webshopproducten).
+     * @returns {void}
+     */
+    const writeAudit = (item, extra = {}) => {
+      try { audit(req, 'voorraad_samengevoegd', { itemId: out.parentId, code: item.code, merged: out.merged, unlinked: out.unlinked, ...extra }); } catch (error) { console.error('Audit voorraad_samengevoegd mislukt:', error.message); }
+    };
+    let shop = null;
+    if (publishes && out.unlinked + out.shopProductIds.length > 0 && ctx.publishMergedToShop) {
+      let published;
+      try {
+        published = await ctx.publishMergedToShop(tenantId, out.parentId, out.shopProductIds);
+      } catch (error) {
+        console.error('Samengevoegd hoofdartikel in de webshop zetten mislukt:', error.message);
+        published = { error: 'De webshop gaf een onverwachte fout (zie het log).', revert: true, status: 502 };
+      }
+      if (published.revert) {
+        // Niets half laten staan: de samenvoeging terugdraaien, de artikelen zijn dan weer los en gekoppeld.
+        const undone = stock.unmergeVariants(tenantId, out.parentId);
+        if (ctx.pruneImages) { try { ctx.pruneImages(tenantId); } catch (error) { console.error('Afbeeldingen opruimen mislukt:', error.message); } }
+        const note = undone.error ? ` Het terugdraaien lukte niet (${undone.error}); draai de samenvoeging met de hand terug.` : '';
+        return res.status(published.status === 409 ? 409 : 502).json({ error: 'shop_failed', message: `Niet samengevoegd: de webshop kon niet worden bijgewerkt. ${published.error}${note}` });
+      }
+      shop = { productId: published.productId, variations: published.variations, hidden: published.hidden, warning: published.warning };
+    }
+    const item = stock.get(tenantId, out.parentId);
+    writeAudit(item, shop ? { shopHidden: shop.hidden } : {});
+    res.status(201).json({ item, merged: out.merged, unlinked: out.unlinked, shop });
   });
 
   // Wat terugdraaien van een samenvoeging doet (voor de bevestiging).
