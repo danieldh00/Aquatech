@@ -377,7 +377,7 @@ remote_disk_run() {
 }
 
 # ---------- servertaken (openstaand) ----------
-# Alle taken in uitvoeringsvolgorde (013 vóór 012: staging heeft veel vrije schijfruimte nodig). Zelfde id's als HOST_TASKS in hub/backend/src/platform/host-tasks.js (een test bewaakt dat).
+# Alle taken in uitvoeringsvolgorde (013 vóór 012: staging had veel vrije schijfruimte nodig). Zelfde id's als HOST_TASKS in hub/backend/src/platform/host-tasks.js (een test bewaakt dat).
 HOST_TASK_IDS=(
   001-app-update-opnieuw-inrichten
   002-hersteltest-back-up-inrichten
@@ -394,6 +394,7 @@ HOST_TASK_IDS=(
   012-staging-op-apps01-inrichten
   014-staging-alias-botsing-herstellen
   015-staging-opnieuw-proberen
+  016-staging-verwijderen
 )
 HOST_TASKS_LEDGER="host-tasks.json"
 # Functienaam van een taak (streepjes worden underscores).
@@ -462,29 +463,22 @@ hosttask_013_schijf_apps01_vergroten() {
   return "$rc"
 }
 
-# Taak 012: de stagingomgeving inrichten (deploy/staging/install-staging.sh op de vaste commit). Een eigen opstelling naast
-# de testomgeving: eigen map, database, geheimen en image; de testomgeving wordt niet herstart of aangepast. Het script
-# installeert zichzelf met een timer die het elke 15 minuten bijwerkt. Veilig herhaalbaar; vraagt geen invoer.
-hosttask_012_staging_op_apps01_inrichten() {
+# Taken 012, 014 en 015 richtten de stagingomgeving in of herstelden haar. Staging is verwijderd (taak 016), dus deze drie doen
+# niets meer; de id's blijven staan omdat het hostscript een id als gedaan onthoudt en een bestaande id nooit verandert.
+hosttask_012_staging_op_apps01_inrichten() { echo "Taak vervallen: de stagingomgeving bestaat niet meer (zie taak 016)."; }
+hosttask_014_staging_alias_botsing_herstellen() { hosttask_012_staging_op_apps01_inrichten; }
+hosttask_015_staging_opnieuw_proberen() { hosttask_012_staging_op_apps01_inrichten; }
+
+# Taak 016: de stagingomgeving volledig verwijderen (deploy/apps01/remove-staging.sh op de vaste commit): timer, units, de twee
+# stagingcontainers, hun netwerk, de lokaal gebouwde images en /opt/apps/aquatech-staging. De testomgeving blijft ongemoeid.
+# Veilig herhaalbaar; vraagt geen invoer.
+hosttask_016_staging_verwijderen() {
   local dir rc=0
   dir="$(mktemp -d)"
-  fetch_task_file "$dir/install-staging.sh" deploy/staging/install-staging.sh || { rm -rf "$dir"; return 1; }
-  bash "$dir/install-staging.sh" || rc=$?
+  fetch_task_file "$dir/remove-staging.sh" deploy/apps01/remove-staging.sh || { rm -rf "$dir"; return 1; }
+  bash "$dir/remove-staging.sh" || rc=$?
   rm -rf "$dir"
   return "$rc"
-}
-
-# Taak 014: de stagingopstelling herstellen na een naamsbotsing in het tunnelnetwerk: de service `aquatech` van staging gaf de
-# container ook de netwerkalias `aquatech`, dus een deel van het verkeer naar de testomgeving kwam bij staging uit. Zelfde
-# handeling als taak 012 (het script ruimt de oude containers op en maakt ze onder de nieuwe servicenamen opnieuw aan).
-hosttask_014_staging_alias_botsing_herstellen() {
-  hosttask_012_staging_op_apps01_inrichten
-}
-
-# Taak 015: taak 014 deed niets omdat de stagingcommit als overgeslagen stond; het script probeert nu bij een handmatige run
-# altijd opnieuw. Zelfde handeling als taak 012.
-hosttask_015_staging_opnieuw_proberen() {
-  hosttask_012_staging_op_apps01_inrichten
 }
 
 # Taak 009: update.sh vernieuwen (stopt bij een mislukte back-up vooraf); zelfde handeling als taak 001. Veilig herhaalbaar.

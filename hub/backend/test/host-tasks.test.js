@@ -60,9 +60,10 @@ function install(setupBody) {
   for (const script of ['restore-test.sh', 'restore-app-check.sh', 'restore-test-drive.sh']) fs.writeFileSync(path.join(repo, script), '#!/usr/bin/env bash\necho hersteltest\n', { mode: 0o755 });
   for (const unit of ['aquatech-restore-test.service', 'aquatech-restore-test.timer', 'aquatech-restore-test.path', 'aquatech-restore-test-drive.service', 'aquatech-restore-test-drive.path']) fs.writeFileSync(path.join(repo, 'systemd', unit), `[Unit]\nDescription=${unit}\n`);
   fs.mkdirSync(path.join(appDir, 'update', 'request'), { recursive: true });
-  // Taak 012 haalt install-staging.sh op de vaste commit op en draait hem zonder invoer.
-  fs.mkdirSync(path.join(repo, '..', 'staging'), { recursive: true });
-  fs.writeFileSync(path.join(repo, '..', 'staging', 'install-staging.sh'), `#!/usr/bin/env bash\necho "staging ingericht" > "${path.join(root, 'staging-gedaan')}"\n`, { mode: 0o755 });
+  // Taak 016 haalt remove-staging.sh op de vaste commit op en draait hem zonder invoer.
+  fs.writeFileSync(path.join(repo, 'remove-staging.sh'), `#!/usr/bin/env bash
+echo "staging verwijderd" > "${path.join(root, 'staging-gedaan')}"
+`, { mode: 0o755 });
   fs.writeFileSync(path.join(repo, 'grow-disk.sh'), `#!/usr/bin/env bash\necho "schijf vergroot" > "${path.join(root, 'schijf-gedaan')}"\n`, { mode: 0o755 });
   fs.writeFileSync(path.join(repo, 'setup-app-update.sh'), `#!/usr/bin/env bash\necho "setup met \$SETUP_REF"\n${setupBody}\n`, { mode: 0o755 });
   // Een nep-cosign: de installatietaak haalt hem van een bestand en controleert de SHA-256 zoals bij het echte bestand.
@@ -124,7 +125,7 @@ test('hostscript: openstaand voert de taak uit, legt hem vast en doet daarna nie
   assert.deepStrictEqual(fs.readdirSync(systemdDir).sort(), ['aquatech-restore-test-drive.path', 'aquatech-restore-test-drive.service', 'aquatech-restore-test.path', 'aquatech-restore-test.service', 'aquatech-restore-test.timer']);
   assert.match(fs.readFileSync(path.join(root, 'systemctl.log'), 'utf8'), /enable --now aquatech-restore-test\.timer aquatech-restore-test\.path aquatech-restore-test-drive\.path/);
   assert.ok(fs.existsSync(path.join(root, 'cosign-geinstalleerd')), 'taak 011 installeert cosign');
-  assert.ok(fs.existsSync(path.join(root, 'staging-gedaan')), 'taak 012 draait install-staging.sh van de vaste commit');
+  assert.ok(fs.existsSync(path.join(root, 'staging-gedaan')), 'taak 016 draait remove-staging.sh van de vaste commit');
   assert.ok(fs.existsSync(path.join(root, 'schijf-gedaan')), 'taak 013 draait grow-disk.sh van de vaste commit');
   assert.ok(Date.parse(ledger.checkedAt) > 0);
   const again = run('openstaand-check', { TASKS_REF: REF });
