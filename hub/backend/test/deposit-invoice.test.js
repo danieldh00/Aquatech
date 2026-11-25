@@ -131,6 +131,12 @@ test('zonder mailserver blijft de factuur definitief en onverstuurd, met een taa
     assert.ok(Math.abs(final.body.total - 923.3) <= 0.02, `eindfactuur ${final.body.total}`);
     assert.ok(final.body.data.lines.some((line) => line.deposit === true && line.price < 0), 'negatieve regel');
     assert.match(final.body.data.notes, /aanbetaling/i);
+    // Het kenmerk kan niet via de gewone factuur-API gezet worden, en blijft bij opslaan staan.
+    const forged = await baas.post('/app/api/invoices', { data: { customer: { name: 'X' }, deposit: { quoteId: quote.id, quoteNumber: 'Q', amount: 5 }, lines: [] } });
+    assert.strictEqual(forged.status, 201);
+    assert.strictEqual(forged.body.data.deposit, undefined, 'create negeert het kenmerk');
+    const stored = (await baas.get(`/app/api/invoices/${status.invoice.id}`)).body;
+    assert.ok(stored.data.deposit, 'de aanbetalingsfactuur heeft het kenmerk');
     // Een aanbetaling die al verstuurd is geeft geen taak meer.
     assert.strictEqual(typeof task.items[0].href, 'string');
   } finally { server.close(); }

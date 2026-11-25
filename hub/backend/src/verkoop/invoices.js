@@ -212,11 +212,14 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
    * @param {object|null} user Wie hem maakt.
    * @param {object} rawData De inhoud (wordt opgeschoond).
    * @param {object} settings De factuurinstellingen.
-   * @param {object} [links] workOrderId, quoteId, customerId, kind ('factuur'|'credit'), creditOf, shopOrderId en debtorId.
+   * @param {object} [links] deposit (het kenmerk van een aanbetalingsfactuur), workOrderId, quoteId, customerId, kind ('factuur'|'credit'), creditOf, shopOrderId en debtorId.
    * @returns {object} De nieuwe factuur.
    */
-  function create(tenantId, user, rawData, settings, { workOrderId = null, quoteId = null, customerId = null, kind = 'factuur', creditOf = null, shopOrderId = null, debtorId = null } = {}) {
+  function create(tenantId, user, rawData, settings, { workOrderId = null, quoteId = null, customerId = null, kind = 'factuur', creditOf = null, shopOrderId = null, debtorId = null, deposit = null } = {}) {
     const data = Core.sanitize(rawData, settings);
+    // Het aanbetalingskenmerk zet alleen de aanbetalingsfactuur zelf (via `deposit`), nooit de invoer van een gebruiker.
+    delete data.deposit;
+    if (deposit) data.deposit = deposit;
     const totals = Core.totals(data, settings);
     const id = crypto.randomUUID();
     const timestamp = currentTimestamp();
@@ -238,10 +241,14 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
    * @returns {object|null} De factuur, { locked: true } als hij definitief is, of null.
    */
   function update(tenantId, id, rawData, settings) {
-    const row = find(tenantId, id);
+    const row = find(tenantId, id, `${LIST_COLS}, data`);
     if (!row) return null;
     if (row.status !== 'concept') return { locked: true };
     const data = Core.sanitize(rawData, settings);
+    // Het aanbetalingskenmerk blijft zoals opgeslagen: de invoer kan hem niet zetten of weghalen.
+    delete data.deposit;
+    const stored = typeof row.data === 'string' ? JSON.parse(row.data || '{}') : (row.data || {});
+    if (stored.deposit) data.deposit = stored.deposit;
     const totals = Core.totals(data, settings);
     prepare(`UPDATE invoices SET customer_name = ?, invoice_date = ?, due_date = ?, subtotal = ?, vat_total = ?, total = ?, data = ?, updated_at = ?
        WHERE tenant_id = ? AND id = ? AND status = 'concept'`)

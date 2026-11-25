@@ -57,7 +57,7 @@ function createDepositInvoices(ctx) {
     const settings = invoicingOf(tenantId);
     const language = quote.data.language;
     const built = Core.fromQuoteDeposit(quote, split, { settings, text: (key, values) => DocText.text(language, key, values) });
-    const draft = invoices.create(tenantId, actor, built.data, settings, { quoteId: quote.id, customerId: quote.customerId });
+    const draft = invoices.create(tenantId, actor, built.data, settings, { quoteId: quote.id, customerId: quote.customerId, deposit: built.data.deposit });
     const finalized = invoices.finalize(tenantId, actor, draft.id, settings);
     if (!finalized || finalized.error) {
       // Zonder klantnaam kan hij niet definitief; het concept blijft staan voor een medewerker.
