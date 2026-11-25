@@ -52,7 +52,7 @@ backend (standaard poort 3300, pad `/app/`). Draai de backend dus gewoon zoals a
 
 ## Nog aan te sluiten (wacht op de coördinator; raakt gedeelde bestanden)
 
-1. ~~`hub/Dockerfile`~~ **gedaan**: bouwargument `VUE_MODULES` (kommagescheiden, bijvoorbeeld `klanten`) laat de stap `frontend-build` `npm ci` + `npm run build` draaien en legt `dist/<module>/` over de oude pagina en `dist/assets/` ernaast. Leeg (productie) = niets extra's. Op staging: `VUE_MODULES=klanten` in `/opt/apps/aquatech-staging/.env`, daarna bouwt de timer bij de volgende ronde (of draai `install-staging.sh`).
+1. ~~`hub/Dockerfile`~~ **gedaan**: bouwargument `VUE_MODULES` (kommagescheiden, bijvoorbeeld `klanten`) laat de stap `frontend-build` `npm ci` + `npm run build` draaien en legt `dist/<module>/` over de oude pagina en `dist/assets/` ernaast. Leeg (productie) = niets extra's. Staging bouwt standaard elke Vue-module in develop (`VUE_MODULES:-alle` in `deploy/staging/compose.yml`), dus een gemergde module verschijnt bij de volgende timerronde zonder handwerk; productie blijft leeg.
 2. `frontend/sw.js`: de gehashte bestanden in `assets/` en de gemigreerde modulepagina's in de precache (lijst uit `dist/.vite/manifest.json`); offline-test per module.
 3. `ci.yml`: stap `npm ci && npm run typecheck && npm test && npm run stijl && npm run build` in `hub/frontend-vue`; `layout.yml` bouwt vóór de run.
 4. `server.js` serveert modulemappen generiek, dus een gemigreerde module hoeft daar niets te veranderen; de CSP (`script-src 'self'`) past bij de externe modules van Vite.

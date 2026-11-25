@@ -14,7 +14,8 @@ services:
     build:
       context: ./repo/hub
       args:
-        VUE_MODULES: ${VUE_MODULES:-}
+        # Staging bouwt standaard elke Vue-module die in develop staat (hub/frontend-vue); een waarde in .env gaat voor.
+        VUE_MODULES: ${VUE_MODULES:-alle}
       labels:
         nl.aquatech.staging: "1"
     labels:
