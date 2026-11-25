@@ -151,6 +151,12 @@
       : `<th colspan="4">${esc(translate('col.description'))}</th><th class="num">${esc(translate('col.qty'))}</th><th class="num"></th>`;
     const logoBlock = docLayout ? docLayout.logoHtml(layout, { defaultSrc: logo, name: companyProfile.companyName }) : `<img src="${esc(logo)}" alt="${esc(companyProfile.companyName)}">`;
     const footBlock = docLayout ? docLayout.footerHtml(layout, foot) : esc(foot);
+    // Aanbetaling: één kader onder de totalen met het bedrag en het restant.
+    const depositInfo = QuoteCore.depositOf(data, totals.total);
+    const depositText = depositInfo.on
+      ? translate(depositInfo.type === 'pct' ? 'quote.depositPct' : 'quote.depositAmount', { pct: number(depositInfo.pct || 0), amount: money(depositInfo.amount), rest: money(depositInfo.rest), vat: totals.shifted ? translate('quote.vatShifted').replace(/[()]/g, '') : translate('quote.inclVat') })
+      : '';
+    const depositBlock = depositText ? `<div class="p-deposit"><b>${esc(translate('quote.depositTitle'))}</b><br>${esc(depositText)}</div>` : '';
     const documentBody = `
       <header class="p-head">
         ${logoBlock}
@@ -181,6 +187,7 @@
         ${totals.shifted ? '' : totals.vat.filter((vat) => vat.base).map((vat) => `<tr><td>${esc(translate('quote.vat'))} ${vat.rate}%</td><td class="num">${money(vat.amount)}</td></tr>`).join('')}
         <tr class="grand"><td>${esc(totals.shifted ? translate('quote.totalShifted') : translate('quote.totalIncl'))}</td><td class="num">${money(totals.total)}</td></tr>
       </table>
+      ${depositBlock}
       ${totals.shifted ? `<p class="p-text">${esc(translate('quote.shiftNote', { number: data.vatShift.number ? ` (${translate('quote.vatNumber')} ${data.vatShift.number})` : '' }))}</p>` : ''}
       ${data.terms ? `<h2 id="p-terms">${esc(translate('quote.terms'))}</h2><p class="p-text">${esc(data.terms)}</p>` : ''}
       <div class="p-end">

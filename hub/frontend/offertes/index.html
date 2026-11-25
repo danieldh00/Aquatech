@@ -218,6 +218,24 @@
       <div id="e-margin" class="margin-card" hidden></div>
     </section>
 
+    <section id="e-deposit" class="card-form">
+      <h3>Betaling in termijnen</h3>
+      <label class="chk"><input type="checkbox" id="e-dep-on"> Aanbetaling vragen bij akkoord</label>
+      <div id="e-dep-fields" class="form-grid" hidden>
+        <label class="field">Aanbetaling
+          <select data-f="deposit.type">
+            <option value="pct">percentage (%)</option>
+            <option value="amount">vast bedrag (incl. btw)</option>
+          </select>
+        </label>
+        <label class="field" id="e-dep-pct">Percentage<input data-f="deposit.pct" type="number" min="1" max="90" step="1"></label>
+        <label class="field" id="e-dep-amount" hidden>Bedrag (€, incl. btw)<input data-f="deposit.amount" type="number" min="0" step="0.01"></label>
+        <div class="field full"><span id="e-dep-sum" class="muted small"></span></div>
+        <div class="field full"><span class="muted small">Zonder mailserver of e-mailadres blijft de aanbetalingsfactuur definitief maar onverstuurd en komt er een taak in Openstaande taken.</span></div>
+        <div id="e-dep-status" class="field full" hidden></div>
+      </div>
+    </section>
+
     <section class="card-form">
       <h3>Voorwaarden</h3>
       <textarea data-f="terms" rows="4" maxlength="6000"></textarea>

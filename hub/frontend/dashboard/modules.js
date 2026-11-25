@@ -91,6 +91,7 @@
     { id: 'voorraadtelling', partOf: 'voorraad', title: 'Voorraadtelling', configuration: { blocked: ['/api/stock-counts/**', '/api/orderpick/counts/**'] } },
     { id: 'inkoop-inlezen', partOf: 'voorraad', title: 'Leveranciersdocument inlezen met AI', section: 'ai', configuration: { blocked: ['/api/purchase-orders/read'] } },
     { id: 'werkorder-automatisch', partOf: 'werkorders', title: 'Werkorder automatisch klaarzetten bij akkoord', setting: { key: 'autoWorkOrder', field: 'enabled' } },
+    { id: 'aanbetaling-automatisch', partOf: 'facturen', title: 'Aanbetalingsfactuur automatisch versturen bij akkoord', setting: { key: 'depositInvoice', field: 'enabled' } },
     { id: 'bestelvoorstellen-automatisch', partOf: 'voorraad', title: 'Automatische bestelvoorstellen', setting: { key: 'purchaseProposals', field: 'enabled' } },
     { id: 'webshop', category: 'webshop', title: 'Webshop', summary: 'De eigen winkel op het hoofdadres, met de bestellingen.', section: 'webshop', setting: { key: 'storefront' }, mainOnly: true },
     { id: 'webshop-bestellen', partOf: 'webshop', title: 'Bestellen en afrekenen', setting: { key: 'shopOrdering' }, mainOnly: true },
