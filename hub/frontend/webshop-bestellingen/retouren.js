@@ -150,6 +150,7 @@
       for (const row of rows) {
         const qty = decisionLines().find((entry) => entry.code === row.dataset.line).qty;
         const input = row.querySelector('.wr-qty');
+        // Het veld gaat alleen uit bij Afwijzen (niet bij een aantal van 0, anders valt de focus weg tijdens het typen).
         input.disabled = row.querySelector('.wr-decision').value === 'nee';
         if (input.disabled) input.value = 0;
         row.querySelector('.wr-credit-excl').textContent = euro(qty * Number(row.dataset.unit));
@@ -169,7 +170,13 @@
        * @returns {void}
        */
       control.oninput = () => {
-        if (control.classList.contains('wr-qty')) control.closest('tr').querySelector('.wr-decision').value = Number(control.value) > 0 ? 'ja' : 'nee';
+        const row = control.closest('tr');
+        if (control.classList.contains('wr-qty')) {
+          if (Number(control.value) > 0) row.querySelector('.wr-decision').value = 'ja';
+        } else if (control.value === 'ja' && !(Number(row.querySelector('.wr-qty').value) > 0)) {
+          // Terug naar Goedkeuren: het gevraagde aantal komt terug in plaats van 0.
+          row.querySelector('.wr-qty').value = row.dataset.asked;
+        }
         refreshDecision();
       };
     }

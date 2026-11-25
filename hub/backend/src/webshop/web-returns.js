@@ -366,7 +366,8 @@ function createWebReturnStore(db, { orders, stock }) {
         }
         approved = found.lines.map((line) => ({ ...line, qty: Math.min(wanted.has(line.code) ? wanted.get(line.code) : line.qty, line.qty) }));
         const total = approved.reduce((sum, line) => sum + line.qty, 0);
-        if (total === 0) approveAll = false;
+        // Niets goedgekeurd = gewone afwijzing: de retour houdt zijn regels zoals gevraagd.
+        if (total === 0) { approveAll = false; approved = null; }
         else if (approved.every((line, index) => line.qty === found.lines[index].qty)) approved = null;
         else if (!text) return { error: 'Geef een toelichting als je niet alles goedkeurt.', status: 400 };
       }

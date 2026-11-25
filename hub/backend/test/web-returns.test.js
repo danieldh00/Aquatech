@@ -177,6 +177,19 @@ test('per regel goedkeuren: een deel van het aantal, creditnota en voorraad alle
   assert.strictEqual(credit.total, -12.1);
 });
 
+test('per regel alles op 0 zetten is een gewone afwijzing met de regels zoals gevraagd', async () => {
+  const world = await setup();
+  const id = await shippedOrder(world);
+  assert.strictEqual((await requestReturn(world, id, { 'qty:BUS': '2', reason: 'defect' })).status, 303);
+  const record = await latestReturn(world.admin);
+  const zero = await world.admin.post(`/app/api/admin/web-returns/${record.id}/decision`, { approve: true, note: 'Niet terug te nemen.', lines: [{ code: 'BUS', qty: 0 }] });
+  assert.strictEqual(zero.status, 200);
+  assert.strictEqual(zero.body.return.status, 'afgewezen', 'niets goedgekeurd is een afwijzing');
+  assert.strictEqual(zero.body.return.partial, false);
+  assert.deepStrictEqual(zero.body.return.lines.map((line) => [line.code, line.qty]), [['BUS', 2]], 'een afwijzing houdt de regels zoals gevraagd');
+  assert.match((await requestReturn(world, id, { 'qty:BUS': '1', reason: 'defect' })).text, /al in een retour afgewezen/, 'niet opnieuw in te dienen');
+});
+
 test('afwijzen met reden en intrekken door de klant', async () => {
   const world = await setup();
   const customer = world.shoppers[0];
