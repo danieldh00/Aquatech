@@ -96,6 +96,12 @@ const HOST_TASKS = [
     description: 'Richt een tweede, aparte opstelling in naast de testomgeving (eigen map, database, geheimen en image; alleen de server en de bestaande tunnel worden gedeeld) die de branch develop volgt en zichzelf elke 15 minuten bijwerkt. Het image wordt op de server gebouwd; de database wordt gevuld met verzonnen testdata; er zijn geen koppelingen of mail. Daarna moet je zelf in de bestaande Cloudflare-tunnel de hostnaam aquatech-staging.den-hollander.com naar http://aquatech-staging:3300 laten wijzen en een Access-toepassing maken die alleen jou toelaat; het script drukt dat aan het eind af. De testomgeving blijft gewoon draaien.',
     addedAt: '2026-11-25',
   },
+  {
+    id: '013-schijf-apps01-vergroten',
+    title: 'Schijf van apps01 vergroten (na vergroten in Proxmox)',
+    description: 'De virtuele schijf is in Proxmox groter gemaakt, maar de VM gebruikt nog de oude grootte. Deze taak laat de VM de nieuwe grootte inlezen en vergroot de partitie, eventueel de LVM-volume en het bestandssysteem tot de hele schijf (ext4, xfs of btrfs worden herkend). Zonder herstart en zonder stilstand van de app; is alles al vergroot, dan verandert er niets. De bewakingscontrole Vrije schijfruimte gebruikt de nieuwe grootte daarna vanzelf.',
+    addedAt: '2026-11-25',
+  },
 ];
 
 const MAX_FILE_BYTES = 64 * 1024;
