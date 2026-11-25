@@ -98,6 +98,8 @@ function world() {
   fs.writeFileSync(path.join(bin, 'curl'), FAKE_CURL, { mode: 0o755 });
   fs.writeFileSync(path.join(bin, 'systemctl'), '#!/usr/bin/env bash\necho "systemctl $*" >> "$FAKE/calls"\nexit 0\n', { mode: 0o755 });
   fs.writeFileSync(path.join(bin, 'sudo'), '#!/usr/bin/env bash\n[[ "$1" == "-E" ]] && shift\nexec "$@"\n', { mode: 0o755 });
+  // De CI draait niet als root: de nep-id doet alsof het script al root is (anders start sudo zichzelf eindeloos opnieuw).
+  fs.writeFileSync(path.join(bin, 'id'), '#!/usr/bin/env bash\n[[ "$1" == "-u" ]] && { echo 0; exit 0; }\nexec /usr/bin/id "$@"\n', { mode: 0o755 });
   fs.writeFileSync(path.join(bin, 'df'), '#!/usr/bin/env bash\necho "Filesystem 1024-blocks Used Available Capacity Mounted"\necho "/dev/x 100 1 ${FAKE_FREE_KB:-20000000} 1% /"\n', { mode: 0o755 });
   fs.writeFileSync(path.join(fake, 'tunnel-ip'), '172.18.0.5\n');
   for (const name of ['calls', 'images', 'bad', 'nobuild']) fs.writeFileSync(path.join(fake, name), '');
@@ -186,7 +188,8 @@ test('eerste installatie: eigen geheimen en .env, build, testdata, timer en wat 
   const secrets = ['master-key', 'postgres-password', 'app-db-password', 'admin-password', 'database-url'].map((name) => fs.readFileSync(path.join(site.stagingDir, 'secrets', name), 'utf8'));
   assert.strictEqual(new Set(secrets).size, secrets.length, 'elk geheim is anders');
   assert.match(secrets[0], /^[0-9a-f]{64}$/);
-  assert.match(secrets[4], /^postgresql:\/\/aquatech:[0-9a-f]{64}@postgres:5432\/aquatech\?sslmode=disable$/);
+  assert.match(secrets[4], /^postgresql:\/\/aquatech:[0-9a-f]{64}@aquatech-staging-postgres:5432\/aquatech\?sslmode=disable$/, 'unieke databasehost, nooit `postgres` (naam van de database van de testomgeving in het tunnelnetwerk)');
+  assert.ok(!secrets[4].includes('@postgres:'));
   const appPassword = secrets[2];
   const psqlInput = fs.readFileSync(path.join(site.fake, 'psql-input'), 'utf8');
   assert.ok(psqlInput.includes(`PASSWORD '${appPassword}'`), 'het wachtwoord gaat via stdin naar psql');

@@ -161,7 +161,9 @@ env_set TUNNEL_CONTAINER "$TUNNEL_CONTAINER"
 env_set TUNNEL_NETWORK "$TUNNEL_NETWORK"
 env_set TRUSTED_PROXIES "$PROXY_VALUE"
 # De app-verbinding: de wachtwoorden zijn hex, dus veilig in een URL; het bestand is alleen voor de app (uid 1000).
-( umask 077; printf 'postgresql://aquatech:%s@postgres:5432/aquatech?sslmode=disable' "$(cat secrets/app-db-password)" > secrets/database-url.tmp )
+# De host is de unieke containernaam van staging, nooit `postgres`: de app zit ook in het tunnelnetwerk, waar de database van
+# de testomgeving die naam heeft (Docker-DNS zou dan afwisselend naar productie kunnen wijzen).
+( umask 077; printf 'postgresql://aquatech:%s@%s:5432/aquatech?sslmode=disable' "$(cat secrets/app-db-password)" "$DB_CONTAINER" > secrets/database-url.tmp )
 mv -f secrets/database-url.tmp secrets/database-url
 chown 1000:1000 secrets/database-url secrets/master-key data 2>/dev/null || true
 chmod 400 secrets/database-url
@@ -178,7 +180,11 @@ export STAGING_COMMIT="$SHORT"
 env_set STAGING_COMMIT "$SHORT"
 fail_commit() { # <melding>: markeert de commit als mislukt (overslaan tot er een nieuwere is)
   printf '%s' "$TARGET" > "$STATE_SKIPPED"
-  [[ -z "$PREVIOUS" ]] || env_set STAGING_COMMIT "${PREVIOUS:0:12}"
+  if [[ -n "$PREVIOUS" ]]; then
+    env_set STAGING_COMMIT "${PREVIOUS:0:12}"
+    # Ook de bron in repo/ terug naar wat draait, zodat een handmatige build of up niet de mislukte commit pakt.
+    git -C repo checkout --quiet --force --detach "$PREVIOUS" 2>/dev/null || true
+  fi
   echo "FOUT: $1" >&2
 }
 if ! dc build --quiet aquatech; then
@@ -309,10 +315,11 @@ if [[ "$TIMER" != "1" ]]; then
   cat <<TEXT
 
 Staging staat klaar. Nog met de hand te doen (eenmalig):
-  1. Cloudflare Zero Trust > Netwerken > Tunnels > de bestaande tunnel > Gepubliceerde toepassingen > Toevoegen:
-     hostnaam $HOSTNAME_PUBLIC, service http://$ALIAS:3300
-  2. Cloudflare Zero Trust > Toegang > Toepassingen > Toevoegen (zelf gehost): domein $HOSTNAME_PUBLIC,
-     beleid "Toestaan" alleen voor jouw e-mailadres.
+  1. EERST toegang dichtzetten: Cloudflare Zero Trust > Toegang > Toepassingen > Toevoegen (zelf gehost): domein
+     $HOSTNAME_PUBLIC, beleid "Toestaan" alleen voor jouw e-mailadres.
+  2. Dan pas publiceren: Cloudflare Zero Trust > Netwerken > Tunnels > de bestaande tunnel > Gepubliceerde toepassingen >
+     Toevoegen: hostnaam $HOSTNAME_PUBLIC, service http://$ALIAS:3300
+     (zonder stap 1 zou de installatie en het inloggen tijdelijk openbaar bereikbaar zijn).
 Inloggen in de app: gebruiker beheer, wachtwoord in $STAGING_DIR/secrets/admin-password (root: cat). Het gedeelde wachtwoord
 van de testaccounts staat in $STAGING_DIR/secrets/testdata-password. Er zijn geen koppelingen en geen mail.
 TEXT
