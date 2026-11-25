@@ -238,7 +238,6 @@ test('grow-disk.sh: gewone ext4-partitie wordt vergroot, daarna is een herhaling
   const log = path.join(root, 'calls.log');
   const fake = (name, body) => fs.writeFileSync(path.join(bin, name), `#!/usr/bin/env bash\n${body}\n`, { mode: 0o755 });
   fake('id', 'echo 0');
-  fake('findmnt', '[[ "$2" == SOURCE ]] && echo /dev/sda1 || echo ext4');
   fake('findmnt', 'case "$*" in *SOURCE*) echo /dev/sda1;; *) echo ext4;; esac');
   fake('lsblk', 'case "$*" in *PKNAME*) echo sda;; *) echo part;; esac');
   fake('readlink', 'echo /dev/sda1');
@@ -246,7 +245,7 @@ test('grow-disk.sh: gewone ext4-partitie wordt vergroot, daarna is een herhaling
   fake('growpart', `echo "growpart $*" >> "${log}"; [[ -e "${root}/gegroeid" ]] && { echo "NOCHANGE: partition 1 is size 1 it cannot be grown"; exit 1; }; touch "${root}/gegroeid"; echo CHANGED`);
   fake('resize2fs', `echo "resize2fs $*" >> "${log}"`);
   const run = () => spawnSync('bash', [path.join(__dirname, '..', '..', '..', 'deploy', 'apps01', 'grow-disk.sh')], {
-    encoding: 'utf8', env: { PATH: `${bin}:${process.env.PATH}`, SYS_BLOCK: path.join(root, 'sys'), EUID: '0' },
+    encoding: 'utf8', env: { PATH: `${bin}:${process.env.PATH}`, SYS_BLOCK: path.join(root, 'sys') },
   });
   const first = run();
   assert.strictEqual(first.status, 0, first.stderr + first.stdout);

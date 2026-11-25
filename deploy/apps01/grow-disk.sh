@@ -10,7 +10,7 @@ SYS_BLOCK="${SYS_BLOCK:-/sys/class/block}"
 log() { echo "[schijf] $*"; }
 fail() { echo "FOUT: $*" >&2; exit 1; }
 
-[[ $EUID -eq 0 ]] || fail "dit script moet als root draaien."
+[[ "$(id -u)" -eq 0 ]] || fail "dit script moet als root draaien."
 
 # Laat de kernel de nieuwe grootte van de virtuele schijven opnieuw inlezen (nodig zonder herstart van de VM).
 rescan_disks() {
