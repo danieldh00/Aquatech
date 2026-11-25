@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.40.5',
+      date: '2026-11-25',
+      title: 'Develop-branch en stagingcode opgeruimd',
+      items: [],
+    },
+    {
       version: '1.40.4',
       date: '2026-11-25',
       title: 'Stagingomgeving verwijderd',
