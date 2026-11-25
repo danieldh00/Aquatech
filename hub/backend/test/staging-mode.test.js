@@ -31,3 +31,8 @@ test('zonder stagingmodus geen extra koppen', async () => {
   assert.strictEqual(response.headers.get('X-Aquatech-Staging'), null);
   assert.strictEqual(response.headers.get('X-Robots-Tag'), null);
 });
+
+test('de staging-compose zet de stagingschakelaar voor de app', () => {
+  const compose = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', '..', '..', 'deploy', 'staging', 'compose.yml'), 'utf8');
+  assert.match(compose, /^\s*- AQUATECH_STAGING=1\s*$/m);
+});

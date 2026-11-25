@@ -22,6 +22,8 @@ services:
       - DATABASE_URL_FILE=/run/secrets/database-url
       # Terugzetten naar het vorige image na een gemigreerde database (migraties zijn alleen toevoegingen); zie update-staging.sh.
       - AQUATECH_ALLOW_NEWER_SCHEMA=1
+      # Stagingmodus: noindex-koppen en een stagingbalk in elke pagina (server.js, shared/common.js).
+      - AQUATECH_STAGING=1
     volumes:
       - ./data:/data
     secrets:
