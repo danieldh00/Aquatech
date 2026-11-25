@@ -625,14 +625,16 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
   }
 
   /**
-   * Zet een samengevoegd hoofdartikel in de webshop, in de wachtrij van de omgeving (zie publishMergedNow).
+   * Voert werk uit in de wachtrij van de omgeving, zodat er geen synchronisatie tussendoor loopt.
+   * Gebruikt voor het samenvoegen: de samenvoeging in de database en het zetten in de webshop zijn
+   * één taak, anders kan een synchronisatie de nieuwe varianten tussendoor archiveren of de oude producten opnieuw koppelen.
+   * Binnen het werk roep je publishMergedNow aan, nooit publishMerged (dat wacht op dezelfde wachtrij).
    * @param {string} tenantId Id van de omgeving.
-   * @param {string} parentId Id van het hoofdartikel.
-   * @param {string[]} productIds Oude webshopproducten die op concept moeten.
-   * @returns {Promise<object>} Zie publishMergedNow.
+   * @param {Function} work Het werk (async).
+   * @returns {Promise<*>} Wat het werk teruggeeft.
    */
-  function publishMerged(tenantId, parentId, productIds) {
-    return queue(tenantId, () => publishMergedNow(tenantId, parentId, productIds));
+  function exclusive(tenantId, work) {
+    return queue(tenantId, work);
   }
 
   /**
@@ -709,7 +711,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
     return out;
   }
 
-  return { sync, run, schedule, runAll, publish, publishMerged, canPublish, exclOf, rawOf, matcher };
+  return { sync, run, schedule, runAll, publish, exclusive, publishMergedNow, canPublish, exclOf, rawOf, matcher };
 }
 
 module.exports = { createShopSync, exclOf, rawOf, fullSyncDue, SYNC_SCHEDULES };

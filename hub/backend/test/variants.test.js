@@ -484,7 +484,7 @@ test('samenvoegen en WooCommerce: oude producten krijgen een lege sku en gaan op
   assert.ok(!merged.error, JSON.stringify(merged));
   assert.deepStrictEqual(merged.shopProductIds.sort(), ['11', '12']);
 
-  const result = await sync.publishMerged(tenantId, merged.parentId, merged.shopProductIds);
+  const result = await sync.exclusive(tenantId, () => sync.publishMergedNow(tenantId, merged.parentId, merged.shopProductIds));
   assert.ok(!result.error, JSON.stringify(result));
   assert.strictEqual(result.hidden, 2);
   assert.strictEqual(result.variations, 2);
@@ -506,7 +506,7 @@ test('samenvoegen en WooCommerce: lukt het hoofdartikel niet, dan komen de sku\'
   // Een hoofdartikel dat niet naar de webshop mag (shop_sync uit) laat publishNow een fout geven.
   const parent = stock.create(tenantId, USER, { code: 'KAP', name: 'Kap' }).item;
   stock.update(tenantId, parent.id, { shopSync: false });
-  const result = await sync.publishMerged(tenantId, parent.id, ['21']);
+  const result = await sync.exclusive(tenantId, () => sync.publishMergedNow(tenantId, parent.id, ['21']));
   assert.strictEqual(result.revert, true);
   assert.ok(result.error);
   assert.strictEqual(products.get('21').sku, 'KAP-1', 'de sku is teruggezet');
@@ -516,7 +516,7 @@ test('samenvoegen en WooCommerce: lukt het hoofdartikel niet, dan komen de sku\'
 test('samenvoegen en WooCommerce: zonder schrijfrechten kan Aquatech de webshop niet bijwerken', async () => {
   const { tenantId, sync } = setupShop(new Map(), new Map(), { url: 'http://shop.test', mode: 'rest', push: false, vatRate: 21 });
   assert.strictEqual(sync.canPublish(tenantId), false);
-  const result = await sync.publishMerged(tenantId, 'x', ['1']);
+  const result = await sync.exclusive(tenantId, () => sync.publishMergedNow(tenantId, 'x', ['1']));
   assert.strictEqual(result.revert, true);
   assert.strictEqual(result.code, 'no_push');
 });
