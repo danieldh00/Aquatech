@@ -49,3 +49,8 @@
   .hbars li { grid-template-columns: minmax(0, 1fr) auto; }
   .hbars li .hbar-track { grid-column: 1 / -1; grid-row: 2; }
 }
+
+/* Retour per regel beoordelen (Beheer > Webshopretouren). */
+#wr-detail .sum { background: var(--at-green-soft); border-radius: 6px; padding: 8px 12px; margin: 12px 0; }
+#wr-detail .wr-qty { width: 4.5rem; }
+#wr-detail .wr-decision { max-width: 100%; }

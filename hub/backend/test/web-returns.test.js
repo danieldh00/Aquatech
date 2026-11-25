@@ -139,6 +139,57 @@ test('met de instelling komt de creditnota al bij het goedkeuren en Afronden maa
   assert.strictEqual(rejected.body.credit, undefined, 'afwijzen maakt nooit een creditnota');
 });
 
+test('per regel goedkeuren: een deel van het aantal, creditnota en voorraad alleen voor het goedgekeurde', async () => {
+  const world = await setup();
+  const customer = world.shoppers[0];
+  const id = await shippedOrder(world);
+  assert.strictEqual((await requestReturn(world, id, { 'qty:BUS': '2', reason: 'defect' })).status, 303);
+  const record = await latestReturn(world.admin);
+  const url = `/app/api/admin/web-returns/${record.id}/decision`;
+  assert.strictEqual((await world.admin.post(url, { approve: true, lines: [{ code: 'ONBEKEND', qty: 1 }] })).status, 400, 'onbekend artikel');
+  assert.strictEqual((await world.admin.post(url, { approve: true, lines: [{ code: 'BUS', qty: -1 }] })).status, 400, 'ongeldig aantal');
+  assert.strictEqual((await world.admin.post(url, { approve: true, lines: [{ code: 'BUS', qty: 1 }] })).status, 400, 'deels goedkeuren vraagt een toelichting');
+  assert.strictEqual((await world.admin.post(url, { approve: true, lines: [{ code: 'BUS', qty: 0 }] })).status, 400, 'niets goedkeuren is afwijzen en vraagt een reden');
+  assert.strictEqual((await world.admin.get(`/app/api/admin/web-returns/${record.id}`)).body.return.status, 'aangevraagd', 'status ongewijzigd na een fout');
+
+  const decided = await world.admin.post(url, { approve: true, note: 'Eén is beschadigd door gebruik.', lines: [{ code: 'BUS', qty: 1 }] });
+  assert.strictEqual(decided.status, 200);
+  const found = decided.body.return;
+  assert.strictEqual(found.status, 'goedgekeurd');
+  assert.strictEqual(found.statusLabel, 'Deels goedgekeurd');
+  assert.strictEqual(found.partial, true);
+  assert.deepStrictEqual(found.lines.map((line) => [line.code, line.qty]), [['BUS', 1]]);
+  assert.deepStrictEqual(found.requested.map((line) => [line.code, line.qty]), [['BUS', 2]]);
+  assert.deepStrictEqual(found.declined.map((line) => [line.code, line.qty]), [['BUS', 1]]);
+  const [mail] = await until(() => { const list = mailsWith(world.sent, /is goedgekeurd/); return list.length ? list : null; });
+  assert.match(mail.text, /Niet goedgekeurd:\n1 × Sproeier \(BUS\)/);
+  const page = (await customer.client.get(`/bestelling/${id}/`)).text;
+  assert.match(page, /Deels goedgekeurd/);
+  assert.match(page, /Afgewezen:<\/span> 1 × Sproeier/);
+  assert.doesNotMatch(page, /name="qty:BUS"/, 'het afgewezen stuk kan niet opnieuw worden ingediend');
+  assert.match((await requestReturn(world, id, { 'qty:BUS': '1', reason: 'defect' })).text, /al in een retour afgewezen/);
+
+  const done = await world.admin.post(`/app/api/admin/web-returns/${record.id}/complete`, { restock: true });
+  assert.strictEqual(done.status, 200);
+  assert.strictEqual((await stockOf(world.admin)).onHand, 49, 'alleen het goedgekeurde stuk gaat terug op voorraad');
+  const credit = (await world.admin.get(`/app/api/invoices/${done.body.credit.credit.invoiceId}`)).body;
+  assert.deepStrictEqual(credit.data.lines.map((line) => [line.code, line.qty]), [['BUS', -1]], 'creditnota alleen voor het goedgekeurde aantal');
+  assert.strictEqual(credit.total, -12.1);
+});
+
+test('per regel alles op 0 zetten is een gewone afwijzing met de regels zoals gevraagd', async () => {
+  const world = await setup();
+  const id = await shippedOrder(world);
+  assert.strictEqual((await requestReturn(world, id, { 'qty:BUS': '2', reason: 'defect' })).status, 303);
+  const record = await latestReturn(world.admin);
+  const zero = await world.admin.post(`/app/api/admin/web-returns/${record.id}/decision`, { approve: true, note: 'Niet terug te nemen.', lines: [{ code: 'BUS', qty: 0 }] });
+  assert.strictEqual(zero.status, 200);
+  assert.strictEqual(zero.body.return.status, 'afgewezen', 'niets goedgekeurd is een afwijzing');
+  assert.strictEqual(zero.body.return.partial, false);
+  assert.deepStrictEqual(zero.body.return.lines.map((line) => [line.code, line.qty]), [['BUS', 2]], 'een afwijzing houdt de regels zoals gevraagd');
+  assert.match((await requestReturn(world, id, { 'qty:BUS': '1', reason: 'defect' })).text, /al in een retour afgewezen/, 'niet opnieuw in te dienen');
+});
+
 test('afwijzen met reden en intrekken door de klant', async () => {
   const world = await setup();
   const customer = world.shoppers[0];

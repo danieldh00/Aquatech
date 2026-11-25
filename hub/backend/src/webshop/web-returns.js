@@ -15,6 +15,8 @@ const STATUSES = { aangevraagd: 'Aangevraagd', goedgekeurd: 'Goedgekeurd', afgew
 const TRANSITIONS = { aangevraagd: ['goedgekeurd', 'afgewezen', 'ingetrokken'], goedgekeurd: ['afgerond'], afgewezen: [], ingetrokken: [], afgerond: [] };
 /** De redenen die de klant kan kiezen. */
 const REASONS = { niet_nodig: 'Niet meer nodig', verkeerd: 'Verkeerd besteld', defect: 'Defect of beschadigd', anders: 'Anders' };
+/** Het statuslabel van een deels goedgekeurde retour (een of meer regels of aantallen zijn afgewezen). */
+const PARTIAL_LABEL = 'Deels goedgekeurd';
 /** Het aantal dagen na verzending waarbinnen een retour kan worden aangevraagd (herroepingstermijn). */
 const RETURN_DAYS = 14;
 /** Retouren die meetellen voor wat er van een bestelling terug kan: lopende, afgewezen (definitief) en afgeronde; een ingetrokken retour telt niet. */
@@ -48,6 +50,20 @@ function restockLinesOf(lines) {
 }
 
 /**
+ * Wat bij een deels goedgekeurde retour is afgewezen: per artikel het gevraagde aantal min het goedgekeurde.
+ * Bij een retour die volledig is goedgekeurd of afgewezen is er geen verschil (een afgewezen retour houdt zijn regels als gevraagd).
+ * @param {{ lines: object[], requested?: object[] }} data De data van de retour (lines = goedgekeurd, requested = oorspronkelijk gevraagd).
+ * @returns {{ code: string, name: string, qty: number }[]} De afgewezen regels met hun aantal.
+ */
+function declinedOf(data) {
+  if (!data.requested) return [];
+  const approved = new Map(data.lines.map((line) => [line.code, line.qty]));
+  return data.requested
+    .map((line) => ({ code: line.code, name: line.name, qty: line.qty - (approved.get(line.code) || 0) }))
+    .filter((line) => line.qty > 0);
+}
+
+/**
  * Maakt de opslag voor retouren van webshopbestellingen.
  * @param {object} db De database.
  * @param {{ orders: object, stock: object }} deps De bestelopslag en de voorraadopslag (artikelen terugboeken).
@@ -71,9 +87,10 @@ function createWebReturnStore(db, { orders, stock }) {
   const shape = (row) => {
     const data = JSON.parse(row.data);
     return {
-      id: row.id, orderId: row.order_id, userId: row.user_id || null, number: row.number, status: row.status, statusLabel: STATUSES[row.status] || row.status,
+      id: row.id, orderId: row.order_id, userId: row.user_id || null, number: row.number, status: row.status, statusLabel: row.status === 'goedgekeurd' && data.requested ? PARTIAL_LABEL : STATUSES[row.status] || row.status,
       createdAt: row.created_at, updatedAt: row.updated_at, orderNumber: data.orderNumber, customerName: data.customerName, email: data.email,
       lines: data.lines, reason: data.reason, reasonLabel: REASONS[data.reason] || '', note: data.note || '', decisionNote: data.decisionNote || '',
+      requested: data.requested || null, declined: declinedOf(data), partial: Boolean(data.requested),
       restock: Boolean(data.restock), history: data.history, credit: data.credit || null, creditError: data.creditError || '', mail: data.mail || null,
     };
   };
@@ -102,7 +119,9 @@ function createWebReturnStore(db, { orders, stock }) {
     const used = new Map();
     for (const row of prepare('SELECT status, data FROM web_returns WHERE tenant_id = ? AND order_id = ?').all(tenantId, order.id)) {
       if (!COUNTING.includes(row.status)) continue;
-      for (const line of JSON.parse(row.data).lines) used.set(line.code, (used.get(line.code) || 0) + line.qty);
+      const data = JSON.parse(row.data);
+      // Bij een deels goedgekeurde retour telt het gevraagde aantal mee: wat is afgewezen kan niet opnieuw worden ingediend.
+      for (const line of data.requested || data.lines) used.set(line.code, (used.get(line.code) || 0) + line.qty);
     }
     return order.lines
       .map((line) => ({ itemId: line.itemId, code: line.code, name: line.name, unit: line.unit, qty: line.qty - (used.get(line.code) || 0), unitExcl: line.unitExcl, vatRate: line.vatRate, ...(line.stockPer ? { stockPer: line.stockPer, baseCode: line.baseCode, itemName: line.itemName } : {}) }))
@@ -110,15 +129,17 @@ function createWebReturnStore(db, { orders, stock }) {
   }
 
   /**
-   * De artikelcodes van een bestelling die in een afgewezen retour zaten.
+   * De artikelcodes van een bestelling die in een afgewezen retour zaten, of waarvan een deel is afgewezen.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} orderId Id van de bestelling.
    * @returns {Set<string>} De artikelcodes.
    */
   function rejectedCodes(tenantId, orderId) {
     const codes = new Set();
-    for (const row of prepare('SELECT data FROM web_returns WHERE tenant_id = ? AND order_id = ? AND status = ?').all(tenantId, orderId, 'afgewezen')) {
-      for (const line of JSON.parse(row.data).lines) codes.add(line.code);
+    for (const row of prepare('SELECT status, data FROM web_returns WHERE tenant_id = ? AND order_id = ? AND status IN (?, ?, ?)').all(tenantId, orderId, 'afgewezen', 'goedgekeurd', 'afgerond')) {
+      const data = JSON.parse(row.data);
+      if (row.status === 'afgewezen') for (const line of data.lines) codes.add(line.code);
+      else for (const line of declinedOf(data)) codes.add(line.code);
     }
     return codes;
   }
@@ -316,18 +337,48 @@ function createWebReturnStore(db, { orders, stock }) {
   }
 
   /**
-   * Een beheerder keurt een aangevraagde retour goed of wijst hem af.
+   * Een beheerder keurt een aangevraagde retour goed of wijst hem af, eventueel per regel: met `lines` bepaalt hij per
+   * artikel hoeveel er wordt goedgekeurd (een artikel dat niet genoemd wordt blijft helemaal goedgekeurd). Wordt
+   * minder goedgekeurd dan gevraagd, dan staat het gevraagde bij `requested` en bevat `lines` alleen nog het goedgekeurde
+   * (creditnota, voorraad en mails rekenen dus vanzelf met het goedgekeurde). Wordt niets goedgekeurd, dan is de retour afgewezen.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van de retour.
    * @param {boolean} approve Goedkeuren (true) of afwijzen (false).
-   * @param {string} note Toelichting voor de klant (verplicht bij afwijzen).
+   * @param {string} note Toelichting voor de klant (verplicht bij afwijzen en bij een deels goedgekeurde retour).
    * @param {object|null} user De beheerder.
+   * @param {{ code: string, qty: * }[]|null} [lines] Per artikel het goedgekeurde aantal (alleen bij goedkeuren).
    * @returns {{ return?: object, error?: string, status?: number }} De bijgewerkte retour of een foutmelding.
    */
-  function decide(tenantId, id, approve, note, user) {
+  function decide(tenantId, id, approve, note, user, lines = null) {
     const text = clean(note, 1000);
-    if (!approve && !text) return { error: 'Geef een reden voor de afwijzing.', status: 400 };
-    const out = move(tenantId, id, approve ? 'goedgekeurd' : 'afgewezen', user, (row, data) => { data.decisionNote = text; });
+    let approveAll = Boolean(approve);
+    let approved = null;
+    if (approve && Array.isArray(lines)) {
+      const found = get(tenantId, id);
+      if (found && found.status === 'aangevraagd') {
+        const wanted = new Map();
+        for (const entry of lines) {
+          const code = String(entry && entry.code || '');
+          const qty = Math.floor(Number(entry && entry.qty));
+          if (!found.lines.some((line) => line.code === code)) return { error: `Artikel ${code} zit niet in deze retour.`, status: 400 };
+          if (!(qty >= 0)) return { error: `Ongeldig aantal voor artikel ${code}.`, status: 400 };
+          wanted.set(code, qty);
+        }
+        approved = found.lines.map((line) => ({ ...line, qty: Math.min(wanted.has(line.code) ? wanted.get(line.code) : line.qty, line.qty) }));
+        const total = approved.reduce((sum, line) => sum + line.qty, 0);
+        // Niets goedgekeurd = gewone afwijzing: de retour houdt zijn regels zoals gevraagd.
+        if (total === 0) { approveAll = false; approved = null; }
+        else if (approved.every((line, index) => line.qty === found.lines[index].qty)) approved = null;
+        else if (!text) return { error: 'Geef een toelichting als je niet alles goedkeurt.', status: 400 };
+      }
+    }
+    if (!approveAll && !text) return { error: 'Geef een reden voor de afwijzing.', status: 400 };
+    const out = move(tenantId, id, approveAll ? 'goedgekeurd' : 'afgewezen', user, (row, data) => {
+      data.decisionNote = text;
+      if (!approved) return;
+      data.requested = data.lines;
+      data.lines = approved.filter((line) => line.qty > 0);
+    });
     if (out.return) runHooks(decidedHooks, tenantId, out.return);
     return out;
   }
@@ -412,11 +463,12 @@ function registerWebReturnRoutes(app, { returns, requireJson, audit, credits = n
 
   app.post('/api/admin/web-returns/:id/decision', requireJson, wrap(async (req, res) => {
     const approve = req.body?.approve === true;
-    const out = returns.decide(req.tenantId, req.params.id, approve, String(req.body?.note || ''), req.user);
+    const out = returns.decide(req.tenantId, req.params.id, approve, String(req.body?.note || ''), req.user, Array.isArray(req.body?.lines) ? req.body.lines : null);
     if (out.error) return res.status(out.status || 400).json({ error: 'invalid_decision', message: out.error });
-    audit(req, approve ? 'webshop_retour_goedgekeurd' : 'webshop_retour_afgewezen', { number: out.return.number });
+    const approvedNow = out.return.status === 'goedgekeurd';
+    audit(req, approvedNow ? 'webshop_retour_goedgekeurd' : 'webshop_retour_afgewezen', { number: out.return.number, ...(out.return.partial ? { deels: true } : {}) });
     // Met de instelling "creditfactuur direct bij goedkeuren" komt de creditnota nu al; een mislukking staat als creditError bij de retour en blokkeert het goedkeuren niet (Afronden probeert het opnieuw).
-    if (approve && credits && credits.creditOnApprovalOf(req.tenantId)) {
+    if (approvedNow && credits && credits.creditOnApprovalOf(req.tenantId)) {
       const credited = await credits.creditReturn(req.tenantId, out.return.id, req.user);
       return res.json({ return: returns.get(req.tenantId, out.return.id), credit: credited });
     }
@@ -460,4 +512,4 @@ function registerWebReturnRoutes(app, { returns, requireJson, audit, credits = n
   }));
 }
 
-module.exports = { restockLinesOf, createWebReturnStore, registerWebReturnRoutes, STATUSES, TRANSITIONS, REASONS, RETURN_DAYS };
+module.exports = { restockLinesOf, declinedOf, createWebReturnStore, registerWebReturnRoutes, STATUSES, TRANSITIONS, REASONS, RETURN_DAYS };

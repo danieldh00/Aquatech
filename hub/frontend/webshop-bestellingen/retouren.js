@@ -62,7 +62,9 @@
     button.disabled = true;
     try {
       const out = await api(`/${encodeURIComponent(record.id)}/${action}`, { method: 'POST', body });
-      toast(done);
+      // Met de instelling "creditfactuur direct bij goedkeuren" kan de creditnota mislukken of overgeslagen zijn: dat mag de beheerder niet ontgaan.
+      const creditProblem = out.credit && (out.credit.error || out.credit.skipped);
+      if (creditProblem) toast(`${done}, maar de creditfactuur is niet gemaakt: ${creditProblem}`, true); else toast(done);
       await open(out.return.id);
       load();
     } catch (error) { toast(error.message, true); button.disabled = false; }
@@ -76,7 +78,26 @@
    */
   function renderDetail(record, refund = null) {
     const box = $('#wr-detail');
-    const lines = record.lines.map((line) => `<tr><td>${esc(line.name)}<span class="sub">${esc(line.code)}</span></td><td class="num">${line.qty}</td></tr>`).join('');
+    const asked = record.status === 'aangevraagd';
+    const approvedOf = new Map(record.lines.map((line) => [line.code, line.qty]));
+    const sources = record.requested || record.lines;
+    /**
+     * De stukprijs van een regel excl. btw.
+     * @param {object} line De regel van de retour.
+     * @returns {number} De prijs, 0 als die ontbreekt.
+     */
+    const unit = (line) => Number(line.unitExcl) || 0;
+    const lines = asked
+      ? record.lines.map((line) => `<tr data-line="${esc(line.code)}" data-asked="${line.qty}" data-unit="${unit(line)}"><td>${esc(line.name)}<span class="sub">${esc(line.code)}</span></td><td class="num">${line.qty}</td>
+          <td><select class="wr-decision" aria-label="Besluit voor ${esc(line.name)}"><option value="ja">Goedkeuren</option><option value="nee">Afwijzen</option></select></td>
+          <td class="num"><input type="number" class="wr-qty" min="0" max="${line.qty}" step="1" value="${line.qty}" aria-label="Goedgekeurd aantal van ${esc(line.name)}"></td>
+          <td class="num wr-credit-excl">${euro(line.qty * unit(line))}</td></tr>`).join('')
+      : sources.map((line) => {
+        const approved = approvedOf.get(line.code) || 0;
+        return `<tr><td>${esc(line.name)}<span class="sub">${esc(line.code)}</span></td><td class="num">${line.qty}</td>${record.partial ? `<td class="num">${approved}</td>` : ''}</tr>`;
+      }).join('');
+    const head = asked ? '<tr><th>Artikel</th><th class="num">Gevraagd</th><th>Besluit</th><th class="num">Goedgekeurd aantal</th><th class="num">Credit (excl.)</th></tr>'
+      : `<tr><th>Artikel</th><th class="num">${record.partial ? 'Gevraagd' : 'Terug'}</th>${record.partial ? '<th class="num">Goedgekeurd</th>' : ''}</tr>`;
     const credit = record.credit ? `<p>Creditnota: <a href="../facturen/?id=${encodeURIComponent(record.credit.invoiceId)}">${esc(record.credit.number || 'concept')}</a> (${esc(record.credit.status)})</p>`
       : record.status === 'afgerond' ? `<p>${record.creditError ? `${esc(record.creditError)} ` : 'Er is nog geen creditnota. '}<button class="btn" id="wr-credit">Creditnota maken</button></p>` : '';
     // Online betaald: het bedrag van de definitieve creditnota via Mollie terugbetalen (één keer per retour).
@@ -86,15 +107,16 @@
     const mail = (record.mail ? (record.mail.sent ? `Laatste mail (${esc(record.mail.kind)}) verstuurd ${when(record.mail.at)}` : `Laatste mail (${esc(record.mail.kind)}) niet verstuurd: ${esc(record.mail.error)}`) : 'Nog geen mail verstuurd') + resend;
     let actions = '';
     if (record.status === 'aangevraagd') {
-      actions = `<label>Toelichting voor de klant (verplicht bij afwijzen)<textarea id="wr-note" rows="3" maxlength="1000"></textarea></label>
-        <div class="row actions"><button class="btn primary" id="wr-approve">Goedkeuren</button><button class="btn danger" id="wr-reject">Afwijzen</button></div>`;
+      actions = `<label>Toelichting voor de klant (verplicht zodra je iets niet volledig goedkeurt)<textarea id="wr-note" rows="3" maxlength="1000"></textarea></label>
+        <div class="row actions"><button class="btn primary" id="wr-approve">Goedkeuren</button><button class="btn danger" id="wr-reject">Alles afwijzen</button></div>`;
     } else if (record.status === 'goedgekeurd') {
       actions = `<p><label><input type="checkbox" id="wr-restock" checked> Artikelen terug op voorraad (niet aanvinken bij beschadigde artikelen)</label></p>
         <div class="row actions"><button class="btn primary" id="wr-complete">Retour ontvangen en afronden</button></div>`;
     }
     box.innerHTML = `<h3>${esc(record.number)} <span class="pill ${esc(record.status)}">${esc(record.statusLabel)}</span></h3>
       <p>Bestelling ${esc(record.orderNumber)} · ${esc(record.customerName)} · <a href="mailto:${esc(record.email)}">${esc(record.email)}</a></p>
-      <div class="tablewrap"><table class="grid"><thead><tr><th>Artikel</th><th class="num">Terug</th></tr></thead><tbody>${lines}</tbody></table></div>
+      <div class="tablewrap"><table class="grid"><thead>${head}</thead><tbody>${lines}</tbody></table></div>
+      ${asked ? '<p class="sum" id="wr-sum"></p>' : ''}
       <p><b>Reden:</b> ${esc(record.reasonLabel)}${record.note ? `<br><b>Toelichting klant:</b> ${esc(record.note)}` : ''}${record.decisionNote ? `<br><b>Jouw toelichting:</b> ${esc(record.decisionNote)}` : ''}</p>
       ${record.status === 'afgerond' ? `<p>${record.restock ? 'De artikelen zijn teruggeboekt op voorraad.' : 'De artikelen zijn niet teruggeboekt op voorraad.'}</p>` : ''}
       ${credit}
@@ -106,12 +128,65 @@
     /** Sluit het detail. */
     $('#wr-close').onclick = () => { box.hidden = true; };
     const approve = $('#wr-approve');
+    /**
+     * De goedgekeurde aantallen uit het formulier (afwijzen of een leeg aantal telt als 0).
+     * @returns {{ code: string, qty: number }[]} Per regel het goedgekeurde aantal.
+     */
+    const decisionLines = () => [...box.querySelectorAll('tr[data-line]')].map((row) => ({
+      code: row.dataset.line,
+      qty: row.querySelector('.wr-decision').value === 'nee' ? 0 : Math.max(0, Math.min(Number(row.dataset.asked), Math.floor(Number(row.querySelector('.wr-qty').value) || 0))),
+    }));
+    /**
+     * Werkt het goedgekeurde aantal, het credit-bedrag, de samenvatting en de knoptekst bij.
+     * @returns {void}
+     */
+    const refreshDecision = () => {
+      const rows = [...box.querySelectorAll('tr[data-line]')];
+      if (!rows.length) return;
+      let credit = 0;
+      let approvedLines = 0;
+      let declinedLines = 0;
+      let anyShort = false;
+      for (const row of rows) {
+        const qty = decisionLines().find((entry) => entry.code === row.dataset.line).qty;
+        const input = row.querySelector('.wr-qty');
+        // Het veld gaat alleen uit bij Afwijzen (niet bij een aantal van 0, anders valt de focus weg tijdens het typen).
+        input.disabled = row.querySelector('.wr-decision').value === 'nee';
+        if (input.disabled) input.value = 0;
+        row.querySelector('.wr-credit-excl').textContent = euro(qty * Number(row.dataset.unit));
+        credit += qty * Number(row.dataset.unit);
+        if (qty > 0) approvedLines += 1; else declinedLines += 1;
+        if (qty < Number(row.dataset.asked)) anyShort = true;
+      }
+      const label = approvedLines === 0 ? 'Alles afwijzen' : anyShort ? 'Deels goedkeuren' : 'Alles goedkeuren';
+      $('#wr-sum').innerHTML = approvedLines === 0 ? 'Er is niets goedgekeurd: de retour wordt afgewezen en er komt geen creditfactuur.'
+        : `<b>${approvedLines} van ${rows.length} regels</b> goedgekeurd${declinedLines ? `, ${declinedLines} afgewezen` : ''}. Creditfactuur: <b>${euro(credit)} excl. btw</b>, alleen voor de goedgekeurde aantallen.`;
+      approve.textContent = label;
+      approve.disabled = approvedLines === 0;
+    };
+    for (const control of box.querySelectorAll('.wr-decision, .wr-qty')) {
+      /**
+       * Past het besluit en het aantal van de regel op elkaar aan en werkt de samenvatting bij.
+       * @returns {void}
+       */
+      control.oninput = () => {
+        const row = control.closest('tr');
+        if (control.classList.contains('wr-qty')) {
+          if (Number(control.value) > 0) row.querySelector('.wr-decision').value = 'ja';
+        } else if (control.value === 'ja' && !(Number(row.querySelector('.wr-qty').value) > 0)) {
+          // Terug naar Goedkeuren: het gevraagde aantal komt terug in plaats van 0.
+          row.querySelector('.wr-qty').value = row.dataset.asked;
+        }
+        refreshDecision();
+      };
+    }
+    if (approve) refreshDecision();
     if (approve) {
       /**
        * Keurt de retour goed.
        * @returns {Promise<void>}
        */
-      approve.onclick = () => act(record, 'decision', { approve: true, note: $('#wr-note').value }, 'Retour goedgekeurd', approve);
+      approve.onclick = () => act(record, 'decision', { approve: true, note: $('#wr-note').value, lines: decisionLines() }, 'Besluit vastgelegd', approve);
       const reject = $('#wr-reject');
       /**
        * Wijst de retour af (de toelichting is verplicht).

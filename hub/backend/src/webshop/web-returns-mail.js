@@ -24,7 +24,7 @@ function createReturnMailer({ returns, settingsFor, mailerFor, mailBody }) {
    * @param {object} record De retour.
    * @returns {string} De tekst.
    */
-  const detailsText = (record) => `Retour ${record.number} bij bestelling ${record.orderNumber}\n\n${linesText(record)}\n\nReden: ${record.reasonLabel}${record.note ? `\nToelichting: ${record.note}` : ''}`;
+  const detailsText = (record) => `Retour ${record.number} bij bestelling ${record.orderNumber}\n\n${record.declined && record.declined.length ? 'Goedgekeurd:\n' : ''}${linesText(record)}${record.declined && record.declined.length ? `\n\nNiet goedgekeurd:\n${record.declined.map((line) => `${line.qty} × ${line.name} (${line.code})`).join('\n')}` : ''}\n\nReden: ${record.reasonLabel}${record.note ? `\nToelichting: ${record.note}` : ''}`;
 
   /**
    * Verstuurt een mail en legt vast hoe dat is gegaan.
