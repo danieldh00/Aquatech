@@ -236,6 +236,12 @@ test('grow-disk.sh: gewone ext4-partitie wordt vergroot, daarna is een herhaling
   fs.mkdirSync(sys, { recursive: true });
   fs.writeFileSync(path.join(sys, 'partition'), '1\n');
   const log = path.join(root, 'calls.log');
+  /**
+   * Maakt een nepopdracht in de map met nepprogramma's.
+   * @param {string} name Naam van de opdracht.
+   * @param {string} body Inhoud van het bashscript.
+   * @returns {void} Niets.
+   */
   const fake = (name, body) => fs.writeFileSync(path.join(bin, name), `#!/usr/bin/env bash\n${body}\n`, { mode: 0o755 });
   fake('id', 'echo 0');
   fake('findmnt', 'case "$*" in *SOURCE*) echo /dev/sda1;; *) echo ext4;; esac');
@@ -244,6 +250,10 @@ test('grow-disk.sh: gewone ext4-partitie wordt vergroot, daarna is een herhaling
   fake('df', 'echo "/dev/sda1 30G 10G 20G 33% /"');
   fake('growpart', `echo "growpart $*" >> "${log}"; [[ -e "${root}/gegroeid" ]] && { echo "NOCHANGE: partition 1 is size 1 it cannot be grown"; exit 1; }; touch "${root}/gegroeid"; echo CHANGED`);
   fake('resize2fs', `echo "resize2fs $*" >> "${log}"`);
+  /**
+   * Draait grow-disk.sh met de nepopdrachten.
+   * @returns {{ status: number, stdout: string, stderr: string }} De uitkomst.
+   */
   const run = () => spawnSync('bash', [path.join(__dirname, '..', '..', '..', 'deploy', 'apps01', 'grow-disk.sh')], {
     encoding: 'utf8', env: { PATH: `${bin}:${process.env.PATH}`, SYS_BLOCK: path.join(root, 'sys') },
   });
@@ -265,6 +275,12 @@ test('grow-disk.sh: LVM-indeling vergroot partitie, physical volume, logical vol
   fs.mkdirSync(sys, { recursive: true });
   fs.writeFileSync(path.join(sys, 'partition'), '3\n');
   const log = path.join(root, 'calls.log');
+  /**
+   * Maakt een nepopdracht in de map met nepprogramma's.
+   * @param {string} name Naam van de opdracht.
+   * @param {string} body Inhoud van het bashscript.
+   * @returns {void} Niets.
+   */
   const fake = (name, body) => fs.writeFileSync(path.join(bin, name), `#!/usr/bin/env bash\n${body}\n`, { mode: 0o755 });
   fake('id', 'echo 0');
   fake('findmnt', 'case "$*" in *SOURCE*) echo /dev/mapper/ubuntu--vg-root;; *) echo xfs;; esac');
