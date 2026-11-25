@@ -1,0 +1,32 @@
+/* Klanten: lijst, nieuwe klant en klantkaart. De indeling komt uit shared/layout.css. */
+.klanten-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.klanten-head .spacer { flex: 1; }
+.klanten-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.klanten-filters input[type=search] { flex: 1 1 260px; }
+.klanten-filters select { flex: 0 0 auto; }
+.pager { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.pager .spacer { flex: 1; }
+table.grid tr.row-link { cursor: pointer; }
+table.grid tr.row-link:hover td { background: #f6f9fb; }
+table.grid td.wrap { white-space: normal; min-width: 160px; }
+.pill.zakelijk { background: #ede7f6; color: #5e35b1; }
+.pill.groothandel { background: #fff3e0; color: #ef6c00; }
+.pill.inlog { background: #e8f5e9; color: #2e7d32; }
+.pill.aanvraag { background: #fff8e1; color: #b26a00; }
+.klant-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 14px; }
+.klant-title h1 { margin: 0; }
+.klant-title .spacer { flex: 1; }
+.docs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 14px; align-items: stretch; }
+.docs-grid .card { display: flex; flex-direction: column; margin: 0; }
+.docs-grid table.mini { border-collapse: collapse; width: 100%; font-size: 13px; }
+.docs-grid table.mini th, .docs-grid table.mini td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--line); }
+.docs-grid table.mini th { color: var(--muted); font-weight: 600; font-size: 12px; }
+.docs-grid table.mini .num { text-align: right; white-space: nowrap; }
+.docs-grid .empty { color: var(--muted); font-size: 13px; margin: 0; }
+.request-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; background: #fff8e1; border: 1px solid #f1d98a; border-radius: 6px; padding: 8px 10px; font-size: 13px; margin-bottom: 12px; }
+.request-banner .spacer { flex: 1; }
+.fact-list { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 14px; margin: 0 0 12px; }
+.fact-list dt { color: var(--muted); }
+.fact-list dd { margin: 0; }
+table.grid a { color: var(--primary-dark); text-decoration: none; }
+table.grid a:hover { text-decoration: underline; }
