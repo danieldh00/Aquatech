@@ -4,6 +4,7 @@ const { AnalyzeError } = require('../beregening/plan-analyzer');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const AiModelList = require(path.join(FRONTEND_DIR, 'shared', 'ai-models.js'));
+const { createRateLimiter } = require('../beveiliging/rate-limit');
 const { RESEARCH_BATCH, RESEARCH_CONCURRENCY, MAX_LINKS } = require('./related-items');
 
 /** Fouten waarbij doorgaan zinloos is (sleutel, tegoed, model): de rest van de portie wordt overgeslagen. */
@@ -19,6 +20,8 @@ const ESTIMATE_EUR_PER_ITEM = 0.045;
  */
 function registerRelatedRoutes(app, { related, requireRight, requireJson, audit, settingsFor, aiTenantOf, currentSpecResearcher, limiter, aiUsage }) {
   const requireStock = requireRight('voorraad');
+  // De zware rondes (koppelen, wissen, opnieuw berekenen) lezen en schrijven veel rijen: hoogstens 6 per uur per omgeving.
+  const heavyLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 6, keyFn: (req) => `related-heavy|${req.tenantId}` });
   /**
    * De omgeving van het verzoek.
    * @param {object} req Het verzoek.
@@ -142,13 +145,13 @@ function registerRelatedRoutes(app, { related, requireRight, requireJson, audit,
     return res.json({ results: ordered, aborted });
   });
 
-  app.post('/api/stock/related-ai/link', requireJson, requireStock, (req, res) => {
+  app.post('/api/stock/related-ai/link', requireJson, requireStock, heavyLimiter, (req, res) => {
     const outcome = related.linkWithSpecs(tenantOf(req));
     audit(req, 'gerelateerd_ai_gekoppeld', { items: outcome.items, links: outcome.links });
     res.json(outcome);
   });
 
-  app.post('/api/stock/related-ai/clear', requireJson, requireStock, (req, res) => {
+  app.post('/api/stock/related-ai/clear', requireJson, requireStock, heavyLimiter, (req, res) => {
     const removed = related.clearAi(tenantOf(req));
     audit(req, 'gerelateerd_ai_gewist', { removed });
     res.json({ removed });
@@ -162,7 +165,7 @@ function registerRelatedRoutes(app, { related, requireRight, requireJson, audit,
     return res.json({ model });
   });
 
-  app.post('/api/stock/related/together/refresh', requireJson, requireStock, (req, res) => {
+  app.post('/api/stock/related/together/refresh', requireJson, requireStock, heavyLimiter, (req, res) => {
     const outcome = related.refreshTogether(tenantOf(req));
     audit(req, 'gerelateerd_samen_berekend', outcome);
     res.json(outcome);

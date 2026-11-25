@@ -182,13 +182,14 @@ function createRelatedStore(db) {
     if (!item) return { error: 'not_found', message: 'Artikel niet gevonden.' };
     const wanted = [...new Set((Array.isArray(relatedIds) ? relatedIds : []).map(String))];
     if (wanted.includes(String(item.id))) return { error: 'invalid', message: 'Een artikel kan niet bij zichzelf passen.' };
-    const existingAi = prepare("SELECT related_item_id FROM item_related WHERE tenant_id = ? AND item_id = ? AND source = 'ai'").all(tenantId, item.id).map((row) => String(row.related_item_id));
     if (wanted.length > MAX_LINKS) return { error: 'too_many', message: `Hoogstens ${MAX_LINKS} artikelen per artikel.` };
     if (wanted.length) {
       const found = prepare(`SELECT id FROM stock_items WHERE tenant_id = ? AND parent_id IS NULL AND archived = 0 AND id::text IN (${placeholders(wanted.length)})`).all(tenantId, ...wanted);
       if (found.length !== wanted.length) return { error: 'invalid', message: 'Een gekozen artikel bestaat niet of is een variant of gearchiveerd.' };
     }
     transaction(db, () => {
+      // Binnen de transactie gelezen, zodat een gelijktijdige AI-ronde geen verouderde lijst oplevert.
+      const existingAi = prepare("SELECT related_item_id FROM item_related WHERE tenant_id = ? AND item_id = ? AND source = 'ai'").all(tenantId, item.id).map((row) => String(row.related_item_id));
       prepare("DELETE FROM item_related WHERE tenant_id = ? AND item_id = ? AND source = 'handmatig'").run(tenantId, item.id);
       wanted.forEach((relatedId, index) => {
         prepare("DELETE FROM item_related WHERE tenant_id = ? AND item_id = ? AND related_item_id::text = ?").run(tenantId, item.id, relatedId);
@@ -278,7 +279,8 @@ function createRelatedStore(db) {
     const ranks = new Map();
     for (const row of prepare('SELECT item_id, other_id, score FROM item_together WHERE tenant_id = ?').all(tenantId)) ranks.set(`${row.item_id}|${row.other_id}`, Number(row.score));
     const items = rows.map((row) => ({ id: String(row.item_id), name: row.name, specs: jsonOf(row.specs, null) })).filter((item) => item.specs && Array.isArray(item.specs.connections));
-    const suggestions = suggestLinks(items.map((item) => ({ ...item, rank: 0 })), { perItem: MAX_LINKS });
+    const suggestions = suggestLinks(items.map((item) => ({ ...item, rank: 0 })), { perItem: 100000 });
+    // Eerst rangschikken, dan handmatige paren eruit en pas daarna afkappen op de ruimte die er is (zie hieronder).
     // De rangschikking per artikel hangt af van het artikel zelf (partners van vaak samen besteld eerst).
     const ordered = new Map();
     for (const [itemId, list] of suggestions) ordered.set(itemId, [...list].sort((left, right) => (ranks.get(`${itemId}|${right.relatedId}`) || 0) - (ranks.get(`${itemId}|${left.relatedId}`) || 0)));

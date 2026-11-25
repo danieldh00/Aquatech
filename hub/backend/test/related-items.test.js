@@ -216,8 +216,14 @@ test('AI-ronde: onderzoeken, koppelen met reden en bron, handmatig blijft, wisse
   assert.strictEqual((await admin.put('/app/api/stock/related-ai/model', { model: 'bestaat-niet' })).status, 400);
   // Rechten en andere organisatie.
   assert.strictEqual((await world.vreemd.get(`/app/api/stock/related/${head.id}`)).status, 404);
+  assert.strictEqual((await world.vreemd.put(`/app/api/stock/related/${head.id}`, { relatedIds: [] })).status, 404, 'een andere organisatie kan niet wijzigen');
+  assert.strictEqual((await world.vreemd.del(`/app/api/stock/related/${head.id}/${head.id}`)).status, 404, 'een andere organisatie kan niet verwijderen');
   const customer = createClient(world.base);
   assert.ok([401, 403].includes((await customer.get('/app/api/stock/related')).status));
+  const shopper = world.shoppers[0].client;
+  assert.strictEqual((await shopper.get('/app/api/stock/related')).status, 403, 'een ingelogde klant heeft geen recht voorraad');
+  assert.strictEqual((await shopper.put(`/app/api/stock/related/${head.id}`, { relatedIds: [] })).status, 403);
+  assert.strictEqual((await shopper.put('/app/api/stock/related-ai/model', { model: 'claude-haiku-5-5' })).status, 403);
   // Module uit: alles dicht.
   assert.strictEqual((await admin.put('/app/api/admin/modules', { flags: { 'gerelateerde-artikelen': false } })).status, 200);
   assert.strictEqual((await admin.get('/app/api/stock/related')).status, 409);
@@ -234,13 +240,6 @@ test('webshop: Past bij en Vaak samen besteld op de productpagina, alleen leverb
    * @param {number} onHand Voorraad.
    * @param {number} salePrice Verkoopprijs.
    * @returns {Promise<object>} Het artikel.
-   */
-  /**
-   * Maakt een voorraadartikel aan met voorraad en prijs.
-   * @param {string} code De artikelcode.
-   * @param {number} onHand De voorraad.
-   * @param {number} salePrice De verkoopprijs.
-   * @returns {Promise<object>} Het aangemaakte artikel.
    */
   const make = async (code, onHand, salePrice) => {
     const made = (await admin.post('/app/api/stock/items', { code, name: `Artikel ${code}`, unit: 'st', onHand, salePrice, vatRate: 21 })).body;
