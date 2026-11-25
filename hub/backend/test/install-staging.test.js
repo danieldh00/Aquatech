@@ -186,7 +186,8 @@ test('eerste installatie: eigen geheimen en .env, build, testdata, timer en wat 
   const secrets = ['master-key', 'postgres-password', 'app-db-password', 'admin-password', 'database-url'].map((name) => fs.readFileSync(path.join(site.stagingDir, 'secrets', name), 'utf8'));
   assert.strictEqual(new Set(secrets).size, secrets.length, 'elk geheim is anders');
   assert.match(secrets[0], /^[0-9a-f]{64}$/);
-  assert.match(secrets[4], /^postgresql:\/\/aquatech:[0-9a-f]{64}@postgres:5432\/aquatech\?sslmode=disable$/);
+  assert.match(secrets[4], /^postgresql:\/\/aquatech:[0-9a-f]{64}@aquatech-staging-postgres:5432\/aquatech\?sslmode=disable$/, 'unieke databasehost, nooit `postgres` (naam van de database van de testomgeving in het tunnelnetwerk)');
+  assert.ok(!secrets[4].includes('@postgres:'));
   const appPassword = secrets[2];
   const psqlInput = fs.readFileSync(path.join(site.fake, 'psql-input'), 'utf8');
   assert.ok(psqlInput.includes(`PASSWORD '${appPassword}'`), 'het wachtwoord gaat via stdin naar psql');
