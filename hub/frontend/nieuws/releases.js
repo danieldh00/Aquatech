@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.39.9',
+      date: '2026-11-25',
+      title: 'Staging verbindt met een unieke databasehost',
+      items: [],
+    },
+    {
       version: '1.39.8',
       date: '2026-11-25',
       title: 'Stagingomgeving op apps01',
