@@ -23,7 +23,9 @@ const formatDateTime = (iso) => new Date(iso).toLocaleString('nl-NL', { day: '2-
  * @returns {string} HTML van de kaart.
  */
 function returnItem(record) {
-  const lines = record.lines.map((line) => `<li>${line.qty} × ${escapeHtml(line.name)}</li>`).join('');
+  const partial = Boolean(record.declined && record.declined.length);
+  const lines = record.lines.map((line) => `<li>${partial ? '<span class="return-ok">Goedgekeurd:</span> ' : ''}${line.qty} × ${escapeHtml(line.name)}${partial && record.requested ? ` (je vroeg er ${record.requested.find((asked) => asked.code === line.code)?.qty ?? line.qty})` : ''}</li>`).join('')
+    + (partial ? record.declined.map((line) => `<li><span class="return-no">Afgewezen:</span> ${line.qty} × ${escapeHtml(line.name)}</li>`).join('') : '');
   const decision = record.decisionNote ? `<p class="return-note">${escapeHtml(record.decisionNote)}</p>` : '';
   const credit = record.credit ? `<p class="return-note">Creditnota ${escapeHtml(record.credit.number)}</p>` : '';
   const rejected = record.status === 'afgewezen' ? '<p class="return-note">Een afgewezen retour kan niet opnieuw worden ingediend.</p>' : '';
