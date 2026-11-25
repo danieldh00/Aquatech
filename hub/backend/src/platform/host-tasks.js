@@ -99,7 +99,7 @@ const HOST_TASKS = [
   {
     id: '013-schijf-apps01-vergroten',
     title: 'Schijf van apps01 vergroten (na vergroten in Proxmox)',
-    description: 'De virtuele schijf is in Proxmox groter gemaakt, maar de VM gebruikt nog de oude grootte. Deze taak laat de VM de nieuwe grootte inlezen en vergroot de partitie, eventueel de LVM-volume en het bestandssysteem tot de hele schijf (ext4, xfs of btrfs worden herkend). Zonder herstart en zonder stilstand van de app; is alles al vergroot, dan verandert er niets. Beheer > Systeem toont daarna de nieuwe grootte.',
+    description: 'De virtuele schijf is in Proxmox groter gemaakt, maar de VM gebruikt nog de oude grootte. Deze taak laat de VM de nieuwe grootte inlezen en vergroot de partitie, eventueel de LVM-volume en het bestandssysteem tot de hele schijf (ext4, xfs of btrfs worden herkend). Zonder herstart en zonder stilstand van de app; is alles al vergroot, dan verandert er niets. De bewakingscontrole Vrije schijfruimte gebruikt de nieuwe grootte daarna vanzelf.',
     addedAt: '2026-11-25',
   },
 ];
