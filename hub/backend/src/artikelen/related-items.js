@@ -314,12 +314,13 @@ function createRelatedStore(db) {
     const rows = prepare(`SELECT l.order_id, l.kind, COALESCE(i.parent_id, i.id) AS main_id FROM web_sale_lines l
       JOIN stock_items i ON i.tenant_id = l.tenant_id AND i.id = l.item_id
       WHERE l.tenant_id = ? AND l.order_id IS NOT NULL AND l.sold_at >= ? ORDER BY l.sold_at DESC, l.order_id LIMIT ${MAX_SALE_LINES}`).all(tenantId, since.toISOString());
-    // Is er afgekapt, dan blijft de nieuwste periode over en gaat de laatste (mogelijk halve) bestelling niet mee: een bestelling zit er altijd heel in of helemaal niet.
+    // Is er afgekapt, dan blijft de nieuwste periode over en gaat de laatste (mogelijk halve) bestelling niet mee: alle regels van die bestelling gaan eruit (ook de retourregels, die een eigen datum hebben): een bestelling zit er heel in of helemaal niet.
+    let usedRows = rows;
     if (rows.length >= MAX_SALE_LINES) {
       const cutOrder = String(rows[rows.length - 1].order_id);
-      for (let index = rows.length - 1; index >= 0 && String(rows[index].order_id) === cutOrder; index -= 1) rows.pop();
+      usedRows = rows.filter((row) => String(row.order_id) !== cutOrder);
     }
-    const lines = rows.map((row) => ({ orderId: String(row.order_id), itemId: String(row.main_id), kind: row.kind }));
+    const lines = usedRows.map((row) => ({ orderId: String(row.order_id), itemId: String(row.main_id), kind: row.kind }));
     const result = computeTogether(lines);
     let pairs = 0;
     transaction(db, () => {

@@ -584,18 +584,15 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
       return info;
     },
     /**
-     * De gerelateerde artikelen (Past bij en Vaak samen besteld) van een omgeving als artikelcodes, uit het geheugen (na warm of de eerste keer met
-     * twee queries). Wat zichtbaar en leverbaar is bepaalt de aanroeper met de catalogus.
+     * De gerelateerde artikelen (Past bij en Vaak samen besteld) van een omgeving als artikelcodes, uit het geheugen (gevuld door warm; zonder stand een lege lijst). Wat zichtbaar en leverbaar is bepaalt de aanroeper met de catalogus.
      * @param {string} tenantId De omgeving.
      * @returns {Map<string, { fits: string[], together: string[] }>} Per hoofdartikelcode; leeg zonder deze functie.
      */
     relatedFor(tenantId) {
       if (!relatedOf) return new Map();
+      // Alleen het geheugen: de async warm-taak ververst het, zodat de productpagina nooit zelf queries doet (ook niet bij een verlopen of ontbrekende stand).
       const hit = relatedCache.get(tenantId);
-      if (hit && hit.until > Date.now()) return hit.related;
-      const related = relatedOf(tenantId);
-      relatedCache.set(tenantId, { related, until: Date.now() + CACHE_MS });
-      return related;
+      return hit ? hit.related : new Map();
     },
     /**
      * Wist de cache (tests).
