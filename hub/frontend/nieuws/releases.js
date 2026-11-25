@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.39.7',
+      date: '2026-11-25',
+      title: 'Stagingomgeving herkenbaar en niet indexeerbaar',
+      items: [],
+    },
+    {
       version: '1.39.6',
       date: '2026-11-25',
       title: 'Servertaak voor de stagingomgeving',
