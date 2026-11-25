@@ -57,7 +57,15 @@ function createDepositInvoices(ctx) {
     const settings = invoicingOf(tenantId);
     const language = quote.data.language;
     const built = Core.fromQuoteDeposit(quote, split, { settings, text: (key, values) => DocText.text(language, key, values) });
-    const draft = invoices.create(tenantId, actor, built.data, settings, { quoteId: quote.id, customerId: quote.customerId, deposit: built.data.deposit });
+    let draft;
+    try {
+      draft = invoices.create(tenantId, actor, built.data, settings, { quoteId: quote.id, customerId: quote.customerId, deposit: built.data.deposit });
+    } catch (error) {
+      // Gelijktijdige aanroep (dubbele klik, akkoord plus handmatig): de unieke index houdt het bij één; geef de bestaande terug.
+      const raced = error && error.code === '23505' ? invoices.depositsOf(tenantId, quote.id)[0] : null;
+      if (!raced) throw error;
+      return { exists: true, invoice: invoices.get(tenantId, raced.id) };
+    }
     const finalized = invoices.finalize(tenantId, actor, draft.id, settings);
     if (!finalized || finalized.error) {
       // Zonder klantnaam kan hij niet definitief; het concept blijft staan voor een medewerker.
