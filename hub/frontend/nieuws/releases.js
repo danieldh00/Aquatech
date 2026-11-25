@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.40.7',
+      date: '2026-11-25',
+      title: 'Artikelen samenvoegen zonder handmatige webshopkoppelingen',
+      items: [
+        { text: 'Artikelen samenvoegen tot één variabel artikel blokkeert niet meer als ze aan een webshopproduct hangen. Aquatech zet het hoofdartikel zelf als één variabel product in de webshop en zet de oude losse producten op concept (niet verwijderd). Lukt het niet in de webshop, dan wordt er niets samengevoegd.', for: ['voorraad'] },
+        { text: 'Nieuwe knop *Alles samenvoegen*: één overzicht met alle voorstellen ter bevestiging, daarna worden ze één voor één uitgevoerd met een uitkomst per voorstel.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.40.6',
       date: '2026-11-25',
       title: 'Creditfactuur van een retour direct bij goedkeuren',
