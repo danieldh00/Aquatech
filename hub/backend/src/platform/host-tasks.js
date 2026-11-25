@@ -109,6 +109,12 @@ const HOST_TASKS = [
     description: 'De stagingcontainer droeg in het gedeelde tunnelnetwerk ook de naam aquatech, waardoor een deel van het verkeer naar de testomgeving bij staging uitkwam (stagingbalk, opnieuw inloggen). Deze taak ruimt de oude stagingcontainers op en maakt ze opnieuw aan onder eigen servicenamen (aquatech-staging-app en aquatech-staging-db). De gegevens van staging blijven staan; de testomgeving wordt niet aangeraakt. Draai dit zo snel mogelijk.',
     addedAt: '2026-11-25',
   },
+  {
+    id: '015-staging-opnieuw-proberen',
+    title: 'Staging opnieuw inrichten (oude containers opruimen)',
+    description: 'Taak 014 deed niets, omdat de huidige stagingcommit als mislukt stond gemarkeerd en het script die oversloeg. Het script probeert nu bij een handmatige run altijd opnieuw. Deze taak ruimt de oude stagingcontainers op en maakt ze opnieuw aan onder eigen servicenamen, zodat het verkeer naar de testomgeving niet meer bij staging uitkomt. De gegevens van staging blijven staan; de testomgeving wordt niet aangeraakt. Draai dit zo snel mogelijk.',
+    addedAt: '2026-11-25',
+  },
 ];
 
 const MAX_FILE_BYTES = 64 * 1024;

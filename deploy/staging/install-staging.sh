@@ -148,7 +148,9 @@ fi
 PROXY_VALUE="$TUNNEL_IP/32"
 
 # ---------- 4. Is er iets te doen? ----------
-if [[ "$TARGET" == "$SKIPPED" && "$TARGET" != "$DEPLOYED" ]]; then
+# Alleen de timer slaat een eerder mislukte commit over; een handmatige run (servertaak) probeert het opnieuw, bijvoorbeeld
+# nadat het script of de omgeving is hersteld.
+if [[ "$TIMER" == "1" && "$TARGET" == "$SKIPPED" && "$TARGET" != "$DEPLOYED" ]]; then
   log "Commit $SHORT (origin/$BRANCH) is eerder mislukt en wordt overgeslagen tot er een nieuwere is."
   exit 0
 fi
