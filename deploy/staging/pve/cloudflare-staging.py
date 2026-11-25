@@ -102,6 +102,7 @@ def main():
         if len(owners) != 1:
             fail("Geen eenduidige accounteigenaar gevonden voor Access; zet CF_ACCESS_EMAIL op het toegestane adres.")
         email = owners[0].get("user", {}).get("email", "")
+        print("Access-adres uit de accounteigenaar gekozen (zet CF_ACCESS_EMAIL om af te wijken).")
     if not email:
         fail("Geen e-mailadres voor Access gevonden; zet CF_ACCESS_EMAIL.")
     apps = call(token, "GET", f"/accounts/{account_id}/access/apps") or []

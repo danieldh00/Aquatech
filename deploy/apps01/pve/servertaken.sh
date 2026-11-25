@@ -557,8 +557,6 @@ hosttask_008_vertrouwde_proxy_instellen() {
   hosttask_001_app_update_opnieuw_inrichten
 }
 
-# Taak 006: alleen lezen. Toont de grootste tabellen en het gebruik van de indexen van de productiedatabase (voor de beslissing over
-# zware kolomomzettingen) en bewaart dezelfde uitvoer in update/status/db-stats.txt. Geen gegevens, alleen namen, aantallen en groottes.
 # Taak 012: de stagingomgeving op stg01 inrichten. Draait op de Proxmox-host (zie staging_setup in deel 2); hier alleen
 # de melding dat de taak daar wordt uitgevoerd (code 75 = overslaan zonder fout, niet vastleggen).
 hosttask_012_staging_stg01_inrichten() {
@@ -566,6 +564,8 @@ hosttask_012_staging_stg01_inrichten() {
   return 75
 }
 
+# Taak 006: alleen lezen. Toont de grootste tabellen en het gebruik van de indexen van de productiedatabase (voor de beslissing over
+# zware kolomomzettingen) en bewaart dezelfde uitvoer in update/status/db-stats.txt. Geen gegevens, alleen namen, aantallen en groottes.
 hosttask_006_database_grootte_en_indexgebruik() {
   local out="$APP_DIR/update/status/db-stats.txt" tmp
   docker inspect aquatech-postgres >/dev/null 2>&1 || { echo "FOUT: geen eigen PostgreSQL-container (aquatech-postgres)." >&2; return 1; }
