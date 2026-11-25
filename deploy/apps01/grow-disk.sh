@@ -17,7 +17,7 @@ rescan_disks() {
   local file
   for file in "$SYS_BLOCK"/*/device/rescan; do
     [[ -e "$file" ]] || continue
-    echo 1 > "$file" 2>/dev/null || true
+    echo 1 > "$file" 2>/dev/null || log "WAARSCHUWING: rescan van ${file%/device/rescan} mislukte; de kernel ziet de nieuwe grootte mogelijk nog niet."
   done
 }
 
@@ -45,6 +45,7 @@ grow_partition() { # <partitieapparaat>
   local pair disk number output
   pair="$(split_partition "$1")" || fail "$1 is geen partitie waarvan ik de schijf kan bepalen."
   disk="${pair% *}"; number="${pair#* }"
+  log "schijf $disk is voor de kernel $(lsblk -bdno SIZE "$disk" | head -n1 | tr -d ' ') bytes groot (controleer dat dit de nieuwe grootte is)."
   need_growpart
   if output="$(growpart "$disk" "$number" 2>&1)"; then
     log "partitie $number van $disk vergroot."

@@ -256,3 +256,29 @@ test('grow-disk.sh: gewone ext4-partitie wordt vergroot, daarna is een herhaling
   assert.match(calls, /growpart \/dev\/sda 1/);
   assert.match(calls, /resize2fs \/dev\/sda1/);
 });
+
+test('grow-disk.sh: LVM-indeling vergroot partitie, physical volume, logical volume en bestandssysteem', () => {
+  const root = tempDir();
+  const bin = path.join(root, 'bin');
+  const sys = path.join(root, 'sys', 'sda3');
+  fs.mkdirSync(bin);
+  fs.mkdirSync(sys, { recursive: true });
+  fs.writeFileSync(path.join(sys, 'partition'), '3\n');
+  const log = path.join(root, 'calls.log');
+  const fake = (name, body) => fs.writeFileSync(path.join(bin, name), `#!/usr/bin/env bash\n${body}\n`, { mode: 0o755 });
+  fake('id', 'echo 0');
+  fake('findmnt', 'case "$*" in *SOURCE*) echo /dev/mapper/ubuntu--vg-root;; *) echo xfs;; esac');
+  fake('lsblk', 'case "$*" in *PKNAME*) echo sda;; *TYPE*) echo lvm;; *) echo 85899345920;; esac');
+  fake('readlink', 'echo /dev/sda3');
+  fake('df', 'echo "/dev/mapper/ubuntu--vg-root 30G 10G 20G 33% /"');
+  fake('lvs', 'echo "  ubuntu-vg"');
+  fake('pvs', 'echo "  /dev/sda3"');
+  fake('vgs', 'echo "  53687091200"');
+  for (const name of ['growpart', 'pvresize', 'lvextend', 'xfs_growfs']) fake(name, `echo "${name} $*" >> "${log}"`);
+  const result = spawnSync('bash', [path.join(__dirname, '..', '..', '..', 'deploy', 'apps01', 'grow-disk.sh')], {
+    encoding: 'utf8', env: { PATH: `${bin}:${process.env.PATH}`, SYS_BLOCK: path.join(root, 'sys') },
+  });
+  assert.strictEqual(result.status, 0, result.stderr + result.stdout);
+  const calls = fs.readFileSync(log, 'utf8').trim().split('\n');
+  assert.deepStrictEqual(calls, ['growpart /dev/sda 3', 'pvresize /dev/sda3', 'lvextend -l +100%FREE /dev/mapper/ubuntu--vg-root', 'xfs_growfs /']);
+});
