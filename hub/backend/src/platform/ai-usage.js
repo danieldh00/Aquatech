@@ -104,8 +104,9 @@ function createAiUsageStore(db) {
       cacheReadTokens: toCount(usage.cache_read_input_tokens ?? usage.cacheReadTokens),
       cacheWriteTokens: toCount(usage.cache_creation_input_tokens ?? usage.cacheWriteTokens),
     };
-    const { usd, known } = AiModels.costUsd(model, tokens);
-    const extra = known ? detail : { ...detail, prijsGeschat: true };
+    const webSearches = toCount((usage.server_tool_use && usage.server_tool_use.web_search_requests) ?? usage.webSearches);
+    const { usd, known } = AiModels.costUsd(model, { ...tokens, webSearches });
+    const extra = { ...(known ? detail : { ...detail, prijsGeschat: true }), ...(webSearches ? { zoekopdrachten: webSearches } : {}) };
     let json = JSON.stringify(extra || {});
     if (json.length > MAX_DETAIL) json = JSON.stringify({ afgekapt: true });
     const id = crypto.randomUUID();

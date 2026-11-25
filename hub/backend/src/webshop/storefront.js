@@ -794,6 +794,19 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
         sendWithGroups(req, res, 200, (groups) => cartPage(cart, groups, req.query.vol === '1' ? 'Je winkelwagen is vol: deze wijziging paste er niet meer bij. Plaats eerst deze bestelling en bestel de rest daarna.' : '', fromPlan, { shipping, paymentOptions: paymentOptionsOf(accounts.viewer(req)), continueHref: continuePath ? `../${continuePath}` : '../', quoteRequest: quoteOffered(req, cart), quoteSent: req.query.offerte === 'ja', reordered: req.query.opnieuw === undefined ? null : { added: Math.max(0, Math.floor(Number(req.query.opnieuw)) || 0), notOrderable: codesOf(req.query.niet) } }));
       });
       // Het materiaal uit de stuklijst van de planner in één keer in de winkelwagen (formulier uit de planner, velden q:<code>).
+      // "Alles in winkelwagen" bij Vaak samen besteld: het artikel met zijn partners in één keer (één stuk elk). Alleen wat bestaat, leverbaar is en de gewone prijsregels van deze bezoeker volgt.
+      router.post('/winkelwagen/samen', express.urlencoded({ extended: false, limit: '2kb', parameterLimit: 10 }), (req, res) => {
+        if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
+        if (!orderingOn()) return orderingOff(req, res);
+        const codes = [...new Set([].concat(req.body && req.body.code || []).map((code) => String(code).trim().toUpperCase()).filter(Boolean))].slice(0, 4);
+        if (!codes.length) return res.redirect(303, '../');
+        const priced = orders.priceCart(tenantId, codes.map((code) => ({ code, qty: 1 })), priceOptionsOf(req));
+        const orderable = priced.lines.filter((line) => line.available >= 1).map((line) => ({ code: String(line.code).toUpperCase(), qty: 1 }));
+        const merged = addCartLines(readCart(req), orderable);
+        if (orderable.length) writeCart(req, res, merged.lines);
+        if (orderable.length && !merged.skipped.length) track(req, 'cart_add');
+        res.redirect(303, merged.skipped.length ? '../?vol=1' : '../');
+      });
       router.post('/winkelwagen/planner', express.urlencoded({ extended: false, limit: '32kb', parameterLimit: 200 }), (req, res) => {
         if (crossSite(req)) return res.status(403).type('text').send('Verzoek van een andere site geweigerd.');
         if (!orderingOn()) return orderingOff(req, res);
@@ -1570,7 +1583,11 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     };
     const firstZone = leadMethod && leadMethod.zones ? leadMethod.zones.find((zone) => zone.tiers.length || (zone.qtyTiers || []).length) : null;
     const trust = { freeFrom: firstZone ? firstZone.freeFrom : 0, online: Boolean(orders && payments && payments.optionsFor(tenantId, accounts ? accounts.viewer(req) : null).includes('online')) };
-    sendPage(req, res, 200, () => productPage(product, catalog.groups, chosenCode || (variant ? variant.code : ''), details, { packagingsFor, packCode, leadTextFor, deliveryNoteFor, trust, stockAlert: alertsOn() ? { status: ['ja', 'fout'].includes(req.query.melding) ? req.query.melding : '' } : null }));
+    // Gerelateerde artikelen (Past bij en Vaak samen besteld): alleen met het onderdeel aan en als er iets is; de codes komen uit het geheugen (data.relatedFor).
+    const mainCode = parent ? parent.code : product.code;
+    const relatedEntry = featureOn('gerelateerde-artikelen') && data.relatedFor ? data.relatedFor(tenantId).get(mainCode) : null;
+    const related = relatedEntry && (relatedEntry.fits.length || relatedEntry.together.length) ? { catalog, fits: relatedEntry.fits, together: relatedEntry.together, mainCode } : null;
+    sendPage(req, res, 200, () => productPage(product, catalog.groups, chosenCode || (variant ? variant.code : ''), details, { related, packagingsFor, packCode, leadTextFor, deliveryNoteFor, trust, stockAlert: alertsOn() ? { status: ['ja', 'fout'].includes(req.query.melding) ? req.query.melding : '' } : null }));
   });
 
   router.use((req, res) => {

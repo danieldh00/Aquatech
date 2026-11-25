@@ -26,6 +26,8 @@
     'claude-fable-5': { label: 'Claude Fable 5', input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5 },
   };
   const DEFAULT = 'claude-opus-5-5';
+  // Prijs van één zoekopdracht op internet (dollar), bij AI-functies die zoeken (feature past_bij).
+  const WEB_SEARCH_USD = 0.01;
   const SELECTABLE = Object.keys(MODELS).filter((key) => MODELS[key].select);
 
   // Waarvoor de app AI gebruikt (kolom feature in ai_usage).
@@ -33,6 +35,7 @@
     plan_analyse: 'Plan herkennen',
     inkoop_inlezen: 'Inkoopdocument inlezen',
     product_tekst: 'Producttekst schrijven',
+    past_bij: 'Past bij: specificaties opzoeken',
   };
 
   /**
@@ -80,7 +83,8 @@
     const tokens = (camelName, snakeName) => Math.max(0, Number(counts[camelName] ?? counts[snakeName]) || 0);
     const price = priceOf(model);
     const usd = (tokens('inputTokens', 'input_tokens') * price.input + tokens('outputTokens', 'output_tokens') * price.output
-      + tokens('cacheReadTokens', 'cache_read_input_tokens') * price.cacheRead + tokens('cacheWriteTokens', 'cache_creation_input_tokens') * price.cacheWrite) / 1e6;
+      + tokens('cacheReadTokens', 'cache_read_input_tokens') * price.cacheRead + tokens('cacheWriteTokens', 'cache_creation_input_tokens') * price.cacheWrite) / 1e6
+      + Math.max(0, Number(counts.webSearches) || 0) * WEB_SEARCH_USD;
     return { usd, known: price.known };
   }
 

@@ -283,6 +283,8 @@ test('testdata vult alle features: klantlinks, akkoord met handtekening, werkord
       shop_search_misses: 'zoektermen zonder resultaat ontstaan alleen door echte bezoekers van de eigen webshop (hoofdtenant); een nep-term zou in het overzicht als echte zoekopdracht verschijnen',
       shop_funnel_days: 'de funneltelling ontstaat alleen door echte bezoekers van de eigen webshop (hoofdtenant); nep-aantallen zouden in het overzicht als echt verkeer verschijnen',
       account_tokens: 'eenmalige links voor wachtwoord vergeten en e-mail bevestigen ontstaan alleen per mail in de eigen webshop (hoofdtenant), met een korte geldigheid',
+      item_specs: 'opgezochte specificaties zijn het resultaat van een betaalde AI-aanroep met webzoekopdracht en de eigen sleutel; nep-specificaties zouden als gecontroleerde bron verschijnen',
+      item_together: 'vaak samen besteld wordt berekend uit de orderhistorie van de eigen webshop (hoofdtenant); een testomgeving heeft geen webshop',
     };
     const tables = listTables(db).filter((table) => tableColumns(db, table).some((column) => column.name === 'tenant_id'));
     for (const table of tables) {

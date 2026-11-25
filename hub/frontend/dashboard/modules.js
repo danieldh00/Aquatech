@@ -89,6 +89,7 @@
     { id: 'afspraaklink', partOf: 'planning', title: 'Afspraaklink voor de klant', configuration: { blocked: ['POST /api/workorders/*/share', '/api/workorders/*/send'] } },
     { id: 'etiketten', partOf: 'voorraad', title: 'Etiketten en streepjescodes', section: 'labels', configuration: { sections: ['labels'], settings: ['labelTemplates'], blocked: ['/api/stock/labels', '/api/stock/label-templates'] } },
     { id: 'voorraadtelling', partOf: 'voorraad', title: 'Voorraadtelling', configuration: { blocked: ['/api/stock-counts/**', '/api/orderpick/counts/**'] } },
+    { id: 'gerelateerde-artikelen', partOf: 'voorraad', title: 'Gerelateerde artikelen (Past bij en Vaak samen besteld)', configuration: { blocked: ['/api/stock/related/**', '/api/stock/related-ai/**'] } },
     { id: 'inkoop-inlezen', partOf: 'voorraad', title: 'Leveranciersdocument inlezen met AI', section: 'ai', configuration: { blocked: ['/api/purchase-orders/read'] } },
     { id: 'werkorder-automatisch', partOf: 'werkorders', title: 'Werkorder automatisch klaarzetten bij akkoord', setting: { key: 'autoWorkOrder', field: 'enabled' } },
     { id: 'aanbetaling-automatisch', partOf: 'facturen', title: 'Aanbetalingsfactuur automatisch versturen bij akkoord', setting: { key: 'depositInvoice', field: 'enabled' } },

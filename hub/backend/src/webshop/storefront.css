@@ -764,3 +764,18 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
 
 /* Tikdoel van de zoekknop op smalle schermen: minimaal 44 px */
 @media (max-width: 600px) { .shop-search button { width: 44px; top: 0; bottom: 0; right: 0; } .shop-search input { min-height: 44px; padding-right: 52px; } }
+
+/* Gerelateerde artikelen onder de productpagina (Past bij, Vaak samen besteld) */
+.related { margin: 32px 0; }
+.related h2 { margin: 0 0 4px; }
+.related-sub { margin: 0 0 12px; color: var(--at-muted, #5a6475); font-size: 0.9rem; }
+.related-bundle { display: flex; align-items: center; gap: 12px 20px; flex-wrap: wrap; margin-top: 16px; padding: 16px; border: 1px solid var(--at-line); border-radius: 12px; background: var(--at-bg, #f5f7fa); }
+.related-bundle p { margin: 0; }
+.related-bundle-names { flex: 1 1 260px; font-weight: 600; }
+.related-bundle-total { white-space: nowrap; }
+@media (max-width: 600px) {
+  .related .product-grid { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 12px; margin: 0 -16px; padding: 0 16px 8px; }
+  .related .product-card { flex: 0 0 200px; scroll-snap-align: start; }
+  .related-bundle { flex-direction: column; align-items: stretch; }
+  .related-bundle .button { width: 100%; }
+}

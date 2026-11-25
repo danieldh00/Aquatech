@@ -49,6 +49,7 @@
         <button class="tab" data-tab="counts" data-feature="voorraadtelling" role="tab">Telling</button>
         <button class="tab" data-tab="media" role="tab">Afbeeldingen</button>
         <button class="tab" data-tab="texts" role="tab">Teksten <span id="t-texts" class="count"></span></button>
+        <button class="tab" data-tab="related" data-feature="gerelateerde-artikelen" role="tab">Past bij</button>
       </nav>
 
       <section id="tab-stock" class="tabpane">
@@ -460,6 +461,43 @@
         <div class="tablewrap"><table class="grid" id="tx-table"></table></div>
       </section>
 
+      <section id="tab-related" class="tabpane" hidden>
+        <p class="muted small">Op de productpagina in de webshop staan twee blokken. <b>Past bij</b> stel je hier per artikel in, met de hand of door de AI. De AI zoekt de specificaties van elk artikel op internet op en koppelt alleen als een bron de aansluiting noemt (bijvoorbeeld dezelfde draadmaat, binnen op buiten); bij elke koppeling staan de reden en de bron, en zonder gevonden bron komt er geen koppeling. <b>Vaak samen besteld</b> wordt elk uur berekend uit de verzonden bestellingen, op relevantie en niet op populariteit. De webshop toont alleen actieve, leverbare artikelen met de gewone prijsregels.</p>
+        <div id="rl-notice" class="notice" hidden></div>
+        <div class="form-actions rl-actions">
+          <button class="btn primary" id="rl-ai" type="button">Past bij laten invullen met AI</button>
+          <button class="btn" id="rl-stop" type="button" hidden>Stoppen</button>
+          <label class="inline"><input type="checkbox" id="rl-again"> Ook artikelen opnieuw opzoeken</label>
+          <label class="inline">Model <select id="rl-model" aria-label="Model voor het opzoeken"></select></label>
+          <button class="btn" id="rl-clear" type="button">AI-koppelingen wissen</button>
+          <button class="btn" id="rl-together-refresh" type="button">Vaak samen besteld nu berekenen</button>
+          <span id="rl-progress" class="muted small" role="status"></span>
+        </div>
+        <div class="filters">
+          <input id="rl-search" type="search" placeholder="Zoek op code of naam">
+          <select id="rl-filter" aria-label="Filter">
+            <option value="alle">Alle artikelen</option>
+            <option value="zonder">Zonder Past bij</option>
+            <option value="handmatig">Met handmatige koppeling</option>
+            <option value="ai">Met AI-koppeling</option>
+            <option value="geenspec">Geen specificaties gevonden</option>
+          </select>
+          <span class="spacer"></span>
+          <span id="rl-count" class="muted small"></span>
+        </div>
+        <div class="tablewrap"><table class="grid" id="rl-table"></table></div>
+        <section id="rl-detail" class="card" hidden aria-labelledby="rl-detail-title">
+          <div class="filters"><h2 id="rl-detail-title"></h2><span class="spacer"></span><button class="btn small" id="rl-close" type="button">Sluiten</button></div>
+          <p id="rl-spec-info" class="muted small"></p>
+          <h3>Past bij</h3>
+          <ul id="rl-links" class="rl-list"></ul>
+          <label class="field">Artikel koppelen<input id="rl-add-search" type="search" placeholder="Zoek op code of naam" autocomplete="off"></label>
+          <ul id="rl-add-results" class="rl-list"></ul>
+          <h3>Vaak samen besteld</h3>
+          <ul id="rl-together" class="rl-list"></ul>
+        </section>
+      </section>
+
       <section id="tab-reorder" class="tabpane" hidden>
         <section id="pp-block" class="pp-block" aria-labelledby="pp-title">
           <div class="pp-head">
@@ -734,6 +772,7 @@
   <script src="proposals.js"></script>
   <script src="price-factor.js"></script>
   <script src="item-texts.js"></script>
+  <script src="related.js"></script>
   <script src="counts.js"></script>
   <script src="../shared/excel-import.js"></script>
   <script src="exports.js"></script>
