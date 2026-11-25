@@ -5,7 +5,7 @@ name: Develop bijwerken
 # per module klein. De merge wordt met RELEASE_PUSH_TOKEN naar develop gepusht (bypass in de ruleset van develop,
 # net als bij release.yml). Een merge met conflicten wordt NIET geforceerd: de run faalt en er komt een issue met
 # het label `develop-sync`; los het conflict op in een gewone branch en PR naar develop.
-# Staging draait vanaf develop (staging.yml) en wordt door deze push vanzelf opnieuw gebouwd als hub/ verandert.
+# Staging (apps01, deploy/staging/install-staging.sh) volgt develop en bouwt zichzelf via een timer (elke 15 minuten) opnieuw.
 
 on:
   schedule:

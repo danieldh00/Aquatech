@@ -212,6 +212,8 @@
       price: round2(clampNumber(line.price, -1e7, 1e7)),
       vat: VAT_RATES.includes(Number(line.vat)) ? Number(line.vat) : 21,
       group: GROUPS[line.group] ? line.group : 'producten',
+      // Een regel die een eerder gefactureerde aanbetaling aftrekt: valt buiten de korting (die is al in de aanbetaling verwerkt).
+      ...(line.deposit === true ? { deposit: true } : {}),
     };
   }
 
@@ -229,6 +231,9 @@
     // Betaaltermijn van deze factuur (bijv. die van de klant op de offerte); leeg = de standaard uit de instellingen.
     const paymentDays = fields.paymentDays === null || fields.paymentDays === undefined || fields.paymentDays === '' || !Number.isFinite(Number(fields.paymentDays))
       ? null : Math.min(365, Math.max(0, Math.round(Number(fields.paymentDays))));
+    // Een aanbetalingsfactuur draagt de offerte waarvoor hij is; zonder dit veld is het een gewone factuur (de unieke index in de database leunt daarop).
+    const rawDeposit = fields.deposit && typeof fields.deposit === 'object' && !Array.isArray(fields.deposit) ? fields.deposit : null;
+    const depositMark = rawDeposit && limitText(rawDeposit.quoteId, 64) ? { quoteId: limitText(rawDeposit.quoteId, 64), quoteNumber: limitText(rawDeposit.quoteNumber, 40), amount: round2(clampNumber(rawDeposit.amount, 0, 1e7)) } : null;
     return {
       date,
       paymentDays,
@@ -253,6 +258,7 @@
       discountNote: limitText(fields.discountNote, 120),
       workOrderNumber: limitText(fields.workOrderNumber, 40),
       quoteNumber: limitText(fields.quoteNumber, 40),
+      ...(depositMark ? { deposit: depositMark } : {}),
       creditOfNumber: limitText(fields.creditOfNumber, 40),
       lines: (Array.isArray(fields.lines) ? fields.lines : []).slice(0, MAX_LINES).map(sanitizeLine),
     };
@@ -304,18 +310,24 @@
   function totals(invoice, settings = null) {
     const lines = (invoice && invoice.lines) || [];
     let subtotal = 0;
-    for (const line of lines) subtotal += lineTotal(line);
+    let regularSubtotal = 0;
+    for (const line of lines) {
+      subtotal += lineTotal(line);
+      if (!line.deposit) regularSubtotal += lineTotal(line);
+    }
     subtotal = round2(subtotal);
-    const { type, discount, fraction } = discountOf(invoice, subtotal);
+    // De korting rekent alleen over de gewone regels: een afgetrokken aanbetaling is al een bedrag na korting.
+    const { type, discount, fraction } = discountOf(invoice, round2(regularSubtotal));
     const bases = new Map();
     const categoryTotals = new Map();
     for (const line of lines) {
       const amount = lineTotal(line);
       const rate = Number(line.vat) || 0;
-      bases.set(rate, (bases.get(rate) || 0) + amount * (1 - fraction));
+      const kept = line.deposit ? 1 : 1 - fraction;
+      bases.set(rate, (bases.get(rate) || 0) + amount * kept);
       const category = categoryOf(line, settings);
       const entry = categoryTotals.get(category.key) || { ...category, base: 0 };
-      entry.base += amount * (1 - fraction);
+      entry.base += amount * kept;
       categoryTotals.set(category.key, entry);
     }
     const net = round2(subtotal - discount);
@@ -370,6 +382,8 @@
    *   articles  verkoopgegevens per code ({ CODE: { name, unit, salePrice, vatRate, revenueGroup } })
    *   catalog   catalogus van de planner ({ code: { name, unit, price } }), terugval voor de prijs
    *   hourlyRate uurtarief excl. btw (bedrijfsprofiel)
+   deposits  eerder gefactureerde aanbetalingen van de offerte ([{ number, amount, lines: [{ rate, net }] }]); ze gaan als negatieve regels van de factuur af
+   text      (sleutel, waarden) => tekst in de taal van het document; nodig voor de regels van de aanbetalingen
    * Met offerte: de gekozen offerteregels, plus geboekt materiaal dat niet in
    * de offerte staat als meerwerk. Zonder offerte (bijv. uit een melding):
    * geboekt materiaal (of de materiaallijst) en geboekte uren (of de geplande
@@ -443,6 +457,16 @@
       }
       if (!lines.length) warnings.push('Op deze werkorder is niets geboekt: vul de regels zelf in.');
     }
+    // Eerder gefactureerde aanbetalingen: per btw-tarief een negatieve regel (excl. btw), buiten de korting.
+    const depositNotes = [];
+    const text = typeof ctx.text === 'function' ? ctx.text : (key) => key;
+    for (const deposit of ctx.deposits || []) {
+      for (const group of deposit.lines) {
+        const key = deposit.lines.length > 1 ? 'invoice.depositDeductedRate' : 'invoice.depositDeducted';
+        lines.push({ code: '', description: text(key, { invoice: deposit.number, rate: group.rate }), qty: 1, unit: '', price: -group.net, vat: group.rate, group: 'overig', deposit: true });
+      }
+      depositNotes.push(text('invoice.depositNote', { invoice: deposit.number, amount: `€ ${deposit.amount.toFixed(2).replace('.', ',')}` }));
+    }
     const customer = data.customer || {};
     // Btw verlegd op de offerte: ook de factuur gaat zonder btw, met de vermelding voor de Belastingdienst.
     const shift = quoteData && quoteData.vatShift && quoteData.vatShift.on === true && quoteData.vatShift.number && quoteData.vatShift.status === 'geldig' ? quoteData.vatShift : null;
@@ -450,7 +474,7 @@
     return {
       data: sanitize({
         reference: data.title || '',
-        notes: shift ? `BTW verlegd naar afnemer${shift.number ? ` (btw-nummer ${shift.number})` : ''}; intracommunautaire levering.` : '',
+        notes: [shift ? `BTW verlegd naar afnemer${shift.number ? ` (btw-nummer ${shift.number})` : ''}; intracommunautaire levering.` : '', ...depositNotes].filter(Boolean).join('\n'),
         customer: { name: customer.name, contact: customer.contact, address: customer.address, email: customer.email, phone: customer.phone, vatNumber: shift ? shift.number : '' },
         discountType: quoteData ? quoteData.discountType : 'pct',
         discountPct: quoteData ? quoteData.discountPct : 0,
@@ -464,6 +488,37 @@
         lines,
       }, ctx.settings),
       warnings,
+    };
+  }
+
+  /**
+   * Aanbetalingsfactuur uit een geaccordeerde offerte: per btw-tarief één regel met het deel van de aanbetaling (excl. btw).
+   * @param {{ id: string, number: string, data: object }} quote De offerte.
+   * @param {{ amount: number, groups: { rate: number, net: number }[] }} split De verdeling van de aanbetaling (QuoteCore.depositSplit).
+   * @param {{ text?: Function, settings?: object }} [ctx] text: (sleutel, waarden) => tekst in de taal van het document; settings: factuurinstellingen.
+   * @returns {{ data: object }} De factuurgegevens (met het kenmerk `deposit`, zodat de eindfactuur hem kan aftrekken).
+   */
+  function fromQuoteDeposit(quote, split, ctx = {}) {
+    const quoteData = quote.data || {};
+    const text = typeof ctx.text === 'function' ? ctx.text : (key) => key;
+    const customer = quoteData.customer || {};
+    const shift = quoteData.vatShift && quoteData.vatShift.on === true && quoteData.vatShift.number && quoteData.vatShift.status === 'geldig' ? quoteData.vatShift : null;
+    const lines = split.groups.map((group) => ({
+      code: '', unit: '', qty: 1, price: group.net, vat: shift ? 0 : group.rate, group: 'overig',
+      description: text(split.groups.length > 1 ? 'invoice.depositLineRate' : 'invoice.depositLine', { quote: quote.number, rate: group.rate }),
+    }));
+    return {
+      data: sanitize({
+        reference: quoteData.title || '',
+        intro: text('invoice.depositIntro', { quote: quote.number }),
+        notes: shift ? `BTW verlegd naar afnemer${shift.number ? ` (btw-nummer ${shift.number})` : ''}; intracommunautaire levering.` : '',
+        customer: { name: customer.name, contact: customer.contact, address: customer.address, email: customer.email, phone: customer.phone, vatNumber: shift ? shift.number : '' },
+        paymentDays: quoteData.paymentDays,
+        language: quoteData.language,
+        quoteNumber: quote.number || '',
+        deposit: { quoteId: quote.id, quoteNumber: quote.number || '', amount: split.amount },
+        lines,
+      }, ctx.settings),
     };
   }
 
@@ -494,7 +549,7 @@
   const api = {
     STATUSES, KINDS, GROUPS, VAT_RATES, RATE_NAMES, SECTION_GROUP, MAX_LINES,
     today, addDays, isDate, round2, catKey, sanitizeSettings, categoryOf, sanitizeLine, sanitize, lineTotal, totals,
-    paymentText, discountOf, discountCaption, creditOf, fromWorkOrder, exportRows, sanitizeShopOrders, fillText, SHOP_STATUSES, DEFAULT_SUBJECT, DEFAULT_MAIL,
+    paymentText, discountOf, discountCaption, creditOf, fromWorkOrder, fromQuoteDeposit, exportRows, sanitizeShopOrders, fillText, SHOP_STATUSES, DEFAULT_SUBJECT, DEFAULT_MAIL,
   };
   root.InvoiceCore = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

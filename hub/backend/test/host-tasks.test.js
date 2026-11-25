@@ -60,6 +60,10 @@ function install(setupBody) {
   for (const script of ['restore-test.sh', 'restore-app-check.sh', 'restore-test-drive.sh']) fs.writeFileSync(path.join(repo, script), '#!/usr/bin/env bash\necho hersteltest\n', { mode: 0o755 });
   for (const unit of ['aquatech-restore-test.service', 'aquatech-restore-test.timer', 'aquatech-restore-test.path', 'aquatech-restore-test-drive.service', 'aquatech-restore-test-drive.path']) fs.writeFileSync(path.join(repo, 'systemd', unit), `[Unit]\nDescription=${unit}\n`);
   fs.mkdirSync(path.join(appDir, 'update', 'request'), { recursive: true });
+  // Taak 012 haalt install-staging.sh op de vaste commit op en draait hem zonder invoer.
+  fs.mkdirSync(path.join(repo, '..', 'staging'), { recursive: true });
+  fs.writeFileSync(path.join(repo, '..', 'staging', 'install-staging.sh'), `#!/usr/bin/env bash\necho "staging ingericht" > "${path.join(root, 'staging-gedaan')}"\n`, { mode: 0o755 });
+  fs.writeFileSync(path.join(repo, 'grow-disk.sh'), `#!/usr/bin/env bash\necho "schijf vergroot" > "${path.join(root, 'schijf-gedaan')}"\n`, { mode: 0o755 });
   fs.writeFileSync(path.join(repo, 'setup-app-update.sh'), `#!/usr/bin/env bash\necho "setup met \$SETUP_REF"\n${setupBody}\n`, { mode: 0o755 });
   // Een nep-cosign: de installatietaak haalt hem van een bestand en controleert de SHA-256 zoals bij het echte bestand.
   const cosignSource = path.join(root, 'cosign-download');
@@ -120,6 +124,8 @@ test('hostscript: openstaand voert de taak uit, legt hem vast en doet daarna nie
   assert.deepStrictEqual(fs.readdirSync(systemdDir).sort(), ['aquatech-restore-test-drive.path', 'aquatech-restore-test-drive.service', 'aquatech-restore-test.path', 'aquatech-restore-test.service', 'aquatech-restore-test.timer']);
   assert.match(fs.readFileSync(path.join(root, 'systemctl.log'), 'utf8'), /enable --now aquatech-restore-test\.timer aquatech-restore-test\.path aquatech-restore-test-drive\.path/);
   assert.ok(fs.existsSync(path.join(root, 'cosign-geinstalleerd')), 'taak 011 installeert cosign');
+  assert.ok(fs.existsSync(path.join(root, 'staging-gedaan')), 'taak 012 draait install-staging.sh van de vaste commit');
+  assert.ok(fs.existsSync(path.join(root, 'schijf-gedaan')), 'taak 013 draait grow-disk.sh van de vaste commit');
   assert.ok(Date.parse(ledger.checkedAt) > 0);
   const again = run('openstaand-check', { TASKS_REF: REF });
   assert.strictEqual(again.status, 0);
@@ -220,4 +226,75 @@ test('hostscript: taak 011 installeert cosign niet als de SHA-256 niet klopt', (
   assert.notStrictEqual(out.status, 0);
   assert.match(out.stderr, /SHA-256 van cosign klopt niet/);
   assert.ok(!fs.existsSync(path.join(root, 'cosign-geinstalleerd')), 'niets geïnstalleerd');
+});
+
+test('grow-disk.sh: gewone ext4-partitie wordt vergroot, daarna is een herhaling onschadelijk', () => {
+  const root = tempDir();
+  const bin = path.join(root, 'bin');
+  const sys = path.join(root, 'sys', 'sda1');
+  fs.mkdirSync(bin);
+  fs.mkdirSync(sys, { recursive: true });
+  fs.writeFileSync(path.join(sys, 'partition'), '1\n');
+  const log = path.join(root, 'calls.log');
+  /**
+   * Maakt een nepopdracht in de map met nepprogramma's.
+   * @param {string} name Naam van de opdracht.
+   * @param {string} body Inhoud van het bashscript.
+   * @returns {void} Niets.
+   */
+  const fake = (name, body) => fs.writeFileSync(path.join(bin, name), `#!/usr/bin/env bash\n${body}\n`, { mode: 0o755 });
+  fake('id', 'echo 0');
+  fake('findmnt', 'case "$*" in *SOURCE*) echo /dev/sda1;; *) echo ext4;; esac');
+  fake('lsblk', 'case "$*" in *PKNAME*) echo sda;; *) echo part;; esac');
+  fake('readlink', 'echo /dev/sda1');
+  fake('df', 'echo "/dev/sda1 30G 10G 20G 33% /"');
+  fake('growpart', `echo "growpart $*" >> "${log}"; [[ -e "${root}/gegroeid" ]] && { echo "NOCHANGE: partition 1 is size 1 it cannot be grown"; exit 1; }; touch "${root}/gegroeid"; echo CHANGED`);
+  fake('resize2fs', `echo "resize2fs $*" >> "${log}"`);
+  /**
+   * Draait grow-disk.sh met de nepopdrachten.
+   * @returns {{ status: number, stdout: string, stderr: string }} De uitkomst.
+   */
+  const run = () => spawnSync('bash', [path.join(__dirname, '..', '..', '..', 'deploy', 'apps01', 'grow-disk.sh')], {
+    encoding: 'utf8', env: { PATH: `${bin}:${process.env.PATH}`, SYS_BLOCK: path.join(root, 'sys') },
+  });
+  const first = run();
+  assert.strictEqual(first.status, 0, first.stderr + first.stdout);
+  const second = run();
+  assert.strictEqual(second.status, 0, second.stderr + second.stdout);
+  assert.match(second.stdout, /al zo groot als kan/);
+  const calls = fs.readFileSync(log, 'utf8');
+  assert.match(calls, /growpart \/dev\/sda 1/);
+  assert.match(calls, /resize2fs \/dev\/sda1/);
+});
+
+test('grow-disk.sh: LVM-indeling vergroot partitie, physical volume, logical volume en bestandssysteem', () => {
+  const root = tempDir();
+  const bin = path.join(root, 'bin');
+  const sys = path.join(root, 'sys', 'sda3');
+  fs.mkdirSync(bin);
+  fs.mkdirSync(sys, { recursive: true });
+  fs.writeFileSync(path.join(sys, 'partition'), '3\n');
+  const log = path.join(root, 'calls.log');
+  /**
+   * Maakt een nepopdracht in de map met nepprogramma's.
+   * @param {string} name Naam van de opdracht.
+   * @param {string} body Inhoud van het bashscript.
+   * @returns {void} Niets.
+   */
+  const fake = (name, body) => fs.writeFileSync(path.join(bin, name), `#!/usr/bin/env bash\n${body}\n`, { mode: 0o755 });
+  fake('id', 'echo 0');
+  fake('findmnt', 'case "$*" in *SOURCE*) echo /dev/mapper/ubuntu--vg-root;; *) echo xfs;; esac');
+  fake('lsblk', 'case "$*" in *PKNAME*) echo sda;; *TYPE*) echo lvm;; *) echo 85899345920;; esac');
+  fake('readlink', 'echo /dev/sda3');
+  fake('df', 'echo "/dev/mapper/ubuntu--vg-root 30G 10G 20G 33% /"');
+  fake('lvs', 'echo "  ubuntu-vg"');
+  fake('pvs', 'echo "  /dev/sda3"');
+  fake('vgs', 'echo "  53687091200"');
+  for (const name of ['growpart', 'pvresize', 'lvextend', 'xfs_growfs']) fake(name, `echo "${name} $*" >> "${log}"`);
+  const result = spawnSync('bash', [path.join(__dirname, '..', '..', '..', 'deploy', 'apps01', 'grow-disk.sh')], {
+    encoding: 'utf8', env: { PATH: `${bin}:${process.env.PATH}`, SYS_BLOCK: path.join(root, 'sys') },
+  });
+  assert.strictEqual(result.status, 0, result.stderr + result.stdout);
+  const calls = fs.readFileSync(log, 'utf8').trim().split('\n');
+  assert.deepStrictEqual(calls, ['growpart /dev/sda 3', 'pvresize /dev/sda3', 'lvextend -l +100%FREE /dev/mapper/ubuntu--vg-root', 'xfs_growfs /']);
 });

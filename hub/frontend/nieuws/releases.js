@@ -13,6 +13,51 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.40.1',
+      date: '2026-11-25',
+      title: 'Servertaken: schijf vergroten vóór staging',
+      items: [],
+    },
+    {
+      version: '1.40.0',
+      date: '2026-11-25',
+      title: 'Servertaak: schijf van apps01 vergroten',
+      items: [],
+    },
+    {
+      version: '1.39.9',
+      date: '2026-11-25',
+      title: 'Staging verbindt met een unieke databasehost',
+      items: [],
+    },
+    {
+      version: '1.39.8',
+      date: '2026-11-25',
+      title: 'Stagingomgeving op apps01',
+      items: [],
+    },
+    {
+      version: '1.39.7',
+      date: '2026-11-25',
+      title: 'Stagingomgeving herkenbaar en niet indexeerbaar',
+      items: [],
+    },
+    {
+      version: '1.39.6',
+      date: '2026-11-25',
+      title: 'Servertaak voor de stagingomgeving',
+      items: [],
+    },
+    {
+      version: '1.39.5',
+      date: '2026-11-25',
+      title: 'Aanbetaling op de offerte',
+      items: [
+        { text: 'Op een offerte kun je nu een aanbetaling vragen (percentage of vast bedrag, incl. btw). Zodra de klant akkoord geeft, gaat er automatisch een aanbetalingsfactuur met betaallink naar de klant. De eindfactuur uit de werkorder trekt die aanbetaling weer af, dus de klant betaalt alleen het restant.', for: ['offertes', 'facturen'] },
+        { text: 'Is er geen mailserver of e-mailadres, dan blijft de aanbetalingsfactuur definitief maar onverstuurd en staat er een taak in Openstaande taken. Automatisch versturen is uit te zetten in Beheer > Modules; de factuur is dan met een knop op de offerte te maken.', for: ['facturen'] },
+      ],
+    },
+    {
       version: '1.39.4',
       date: '2026-11-24',
       title: 'Openbare planner: eigen rekenrij voor tekeningen van bezoekers',

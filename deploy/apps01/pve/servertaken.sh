@@ -377,7 +377,7 @@ remote_disk_run() {
 }
 
 # ---------- servertaken (openstaand) ----------
-# Alle taken, oudste eerst. Zelfde id's als HOST_TASKS in hub/backend/src/platform/host-tasks.js (een test bewaakt dat).
+# Alle taken in uitvoeringsvolgorde (013 vóór 012: staging heeft veel vrije schijfruimte nodig). Zelfde id's als HOST_TASKS in hub/backend/src/platform/host-tasks.js (een test bewaakt dat).
 HOST_TASK_IDS=(
   001-app-update-opnieuw-inrichten
   002-hersteltest-back-up-inrichten
@@ -390,6 +390,8 @@ HOST_TASK_IDS=(
   009-update-script-stopt-bij-mislukte-back-up
   010-back-up-integriteitscontrole
   011-image-handtekening-controleren
+  013-schijf-apps01-vergroten
+  012-staging-op-apps01-inrichten
 )
 HOST_TASKS_LEDGER="host-tasks.json"
 # Functienaam van een taak (streepjes worden underscores).
@@ -443,6 +445,29 @@ hosttask_001_app_update_opnieuw_inrichten() {
   dir="$(mktemp -d)"
   fetch_task_file "$dir/setup-app-update.sh" deploy/apps01/setup-app-update.sh || { rm -rf "$dir"; return 1; }
   SETUP_REF="$TASKS_REF" APP_DIR="$APP_DIR" bash "$dir/setup-app-update.sh" || rc=$?
+  rm -rf "$dir"
+  return "$rc"
+}
+
+# Taak 013: de schijf van apps01 vergroten nadat de virtuele schijf in Proxmox groter is gemaakt (deploy/apps01/grow-disk.sh op de
+# vaste commit): rescan, growpart, pvresize/lvextend bij LVM en het bestandssysteem. Veilig herhaalbaar; vraagt geen invoer.
+hosttask_013_schijf_apps01_vergroten() {
+  local dir rc=0
+  dir="$(mktemp -d)"
+  fetch_task_file "$dir/grow-disk.sh" deploy/apps01/grow-disk.sh || { rm -rf "$dir"; return 1; }
+  bash "$dir/grow-disk.sh" || rc=$?
+  rm -rf "$dir"
+  return "$rc"
+}
+
+# Taak 012: de stagingomgeving inrichten (deploy/staging/install-staging.sh op de vaste commit). Een eigen opstelling naast
+# de testomgeving: eigen map, database, geheimen en image; de testomgeving wordt niet herstart of aangepast. Het script
+# installeert zichzelf met een timer die het elke 15 minuten bijwerkt. Veilig herhaalbaar; vraagt geen invoer.
+hosttask_012_staging_op_apps01_inrichten() {
+  local dir rc=0
+  dir="$(mktemp -d)"
+  fetch_task_file "$dir/install-staging.sh" deploy/staging/install-staging.sh || { rm -rf "$dir"; return 1; }
+  bash "$dir/install-staging.sh" || rc=$?
   rm -rf "$dir"
   return "$rc"
 }

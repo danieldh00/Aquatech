@@ -25,16 +25,23 @@ function remembered(key, compute) {
 /**
  * Bouwt de lijst met openstaande taken voor een gebruiker en omgeving.
  * @param {{ user: object, tenantId: string, canHostTasks?: boolean }} viewer De gebruiker (met rechten), de omgeving en of de gebruiker de servertaken mag zien (canUpdate).
- * @param {{ orders: object, purchaseOrders: object, proposalsEnabled: Function, shopEnabled: Function, stockEnabled: Function, workorders?: object, planningEnabled?: Function }} sources De opslag per soort taak (hostTasks = de servertaken, workorders met planningEnabled = de werkorders in te plannen; mogen ontbreken); shopEnabled en stockEnabled zeggen of de webshop en de module voorraad aan staan, planningEnabled of de module planning aan staat.
+ * @param {{ orders: object, purchaseOrders: object, proposalsEnabled: Function, shopEnabled: Function, stockEnabled: Function, workorders?: object, planningEnabled?: Function, invoices?: object, invoicesEnabled?: Function }} sources De opslag per soort taak (hostTasks = de servertaken, workorders met planningEnabled = de werkorders in te plannen; mogen ontbreken); shopEnabled en stockEnabled zeggen of de webshop en de module voorraad aan staan, planningEnabled of de module planning aan staat.
  * @returns {{ key: string, title: string, count: number, href: string, items: { label: string, meta: string, href: string }[] }[]} Alleen taken met minstens één openstaand punt.
  */
-function buildTasks({ user, tenantId, canHostTasks = false }, { hostTasks, orders, purchaseOrders, proposalsEnabled, shopEnabled, stockEnabled, workorders, planningEnabled }) {
+function buildTasks({ user, tenantId, canHostTasks = false }, { hostTasks, orders, purchaseOrders, proposalsEnabled, shopEnabled, stockEnabled, workorders, planningEnabled, invoices, invoicesEnabled }) {
   const tasks = [];
   if (workorders && Roles.can(user, 'planning') && planningEnabled && planningEnabled(tenantId)) {
     const open = workorders.listToSchedule(tenantId, 5);
     tasks.push({
       key: 'in-te-plannen', title: 'Werkorders in te plannen', count: open.total, href: 'planning/',
       items: open.items.map((workOrder) => ({ label: `${workOrder.number} · ${workOrder.customer || workOrder.title || 'Werkorder'}`, meta: `Aangemaakt ${workOrder.createdAt.slice(0, 10)}`, href: `werkorders/?id=${encodeURIComponent(workOrder.id)}` })),
+    });
+  }
+  if (invoices && Roles.can(user, 'facturen') && invoicesEnabled && invoicesEnabled(tenantId)) {
+    const unsent = invoices.unsentDeposits(tenantId, 5);
+    tasks.push({
+      key: 'aanbetaling-versturen', title: 'Aanbetalingsfacturen versturen', count: unsent.total, href: 'facturen/',
+      items: unsent.items.map((invoice) => ({ label: `${invoice.number} · ${invoice.customer}`, meta: invoice.error || 'Nog niet naar de klant gestuurd', href: `facturen/?id=${encodeURIComponent(invoice.id)}` })),
     });
   }
   if (Roles.can(user, 'beheer') && shopEnabled(tenantId)) {

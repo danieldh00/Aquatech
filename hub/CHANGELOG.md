@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.40.1
+
+Servertaak 013 (schijf van apps01 vergroten) draait nu vóór 012 (stagingomgeving inrichten). Staging eist ruim 6 GB vrije ruimte en faalde daardoor op een bijna volle schijf, waarna taak 013 nooit werd uitgevoerd. Alleen de volgorde in `HOST_TASKS` en `HOST_TASK_IDS` is gewisseld; de id's veranderen niet.
+
+## 1.40.0
+
+Servertaak 013 (`013-schijf-apps01-vergroten`, `deploy/apps01/grow-disk.sh`): laat de VM na het vergroten van de virtuele schijf in Proxmox de nieuwe grootte inlezen en vergroot partitie (growpart), bij LVM ook de physical volume en logical volume, en het bestandssysteem (ext4, xfs, btrfs). Idempotent, zonder herstart. De bewakingscontrole *Vrije schijfruimte* leest de grootte bij elke ronde live uit (`statfs`), zonder cache; de nieuwe grootte zichtbaar maken in de app volgt als daar behoefte aan is.
+
+## 1.39.9
+
+- Staging: de app verbindt met `aquatech-staging-postgres` in plaats van `postgres` (die naam heeft in het tunnelnetwerk ook de database van de testomgeving). Na een mislukte build staat ook de bron in `repo/` weer op de draaiende commit.
+- `install-staging.sh` en `docs/STAGING.md`: eerst Cloudflare Access instellen en dan pas de hostnaam publiceren; paragraaf "Vertrouwen en grenzen".
+
+## 1.39.8
+
+- De stagingomgeving is een tweede opstelling op apps01 naast de testomgeving (`deploy/staging/`): eigen compose-project, image (op de server gebouwd), database, geheimen en mappen; alleen de server en de bestaande tunnel zijn gedeeld. `install-staging.sh` richt in én werkt bij (volgt `develop`, terugval bij een mislukte commit, verzonnen testdata, timer elke 15 minuten); servertaak `012-staging-op-apps01-inrichten` (vervangt de eerdere stg01-taak) draait het op een vaste commit.
+- Vervallen: de VM stg01, de Cloudflare-API-stappen, Mailpit, de systemd-units `aquatech-stg-update.*` en de workflow `staging.yml` (er gaat geen staging-image meer naar GHCR).
+
+## 1.39.7
+
+- Met `AQUATECH_STAGING=1` krijgt elk antwoord `X-Robots-Tag: noindex, nofollow, noarchive` en de kop `X-Aquatech-Staging`; `shared/common.js` toont dan een vaste balk "STAGING" (stijl in `brand.css`). Zonder de schakelaar verandert er niets.
+- Dockerfile: bouwargument `VUE_MODULES` (standaard leeg; het productie-image blijft gelijk). Gevuld faalt het nog duidelijk, tot de eerste Vue-module de bouwstap toevoegt.
+
+## 1.39.6
+
+Servertaak `012-staging-stg01-inrichten`: maakt vanaf de Proxmox-host de aparte VM stg01 aan, regelt via de Cloudflare-API de tunnel `aquatech-staging`, DNS en Access (alleen één e-mailadres) voor `aquatech-staging.den-hollander.com` en richt Docker, eigen PostgreSQL, Mailpit en de update-timer in via `deploy/staging/`. Taken die op de Proxmox-host zelf draaien kennen nu een eigen lijst (`HOST_SIDE_TASK_IDS` in `servertaken.sh`, opdrachten `openstaand-lijst` en `taak-vastleggen` op apps01); zonder Cloudflare API-token blijft de taak openstaan. Het stagingscript rolt alleen `ghcr.io/danieldh00/aquatech-staging` uit, nooit het productie-image. Zie `docs/STAGING.md`.
+
+## 1.39.5
+
+- `data.deposit` {on, type pct|amount, pct, amount} op de offerte (`QuoteCore.sanitizeDeposit/depositOf/depositSplit`: het bedrag is incl. btw en wordt over de btw-tarieven verdeeld). Op het klantdocument staat één kader *Betaling* (`quote.deposit*` in `doc-text.js`, nl en en).
+- Aanbetalingsfactuur (`verkoop/deposit-invoices.js`): een gewone factuur met `data.deposit` {quoteId, quoteNumber, amount}; per offerte één (migratie 98: unieke index op `(tenant_id, quote_id)` voor niet-gecrediteerde facturen met dat kenmerk). Bij akkoord (`onAccepted` in server.js, naast de automatische werkorder) definitief maken en versturen met de betaallink; routes `GET|POST /api/quotes/:id/deposit-invoice` (recht `facturen`). Instelling `depositInvoice` {enabled} (standaard aan), module `aanbetaling-automatisch`.
+- Eindfactuur: `InvoiceCore.fromWorkOrder` krijgt `deposits` en trekt per btw-tarief een negatieve regel (`deposit: true`, buiten de korting; `InvoiceCore.totals` rekent de korting alleen over de gewone regels) af; een nog niet definitieve aanbetaling geeft een waarschuwing.
+- Openstaande taak *Aanbetalingsfacturen versturen* (`invoices.unsentDeposits`).
+
 ## 1.39.4
 
 V-04 beschikbaarheid: `plan-runner.js` kent twee rijen (`main`: 2 tegelijk, 20 wachtend voor de AI-koppeling; `lead`: 1 tegelijk, 5 wachtend voor openbare tekeningen), `runPlanTask(methode, args, rij)`. `planWithinLimits` (plan-builder.js) weigert vóór het rekenen een plan met te veel vlakken, hoekpunten, elementen of vreemde coördinaten (de tekening komt wel binnen, zonder concept-offerte). Tests: `plan-builder.test.js`.

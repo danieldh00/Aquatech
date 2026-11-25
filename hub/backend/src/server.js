@@ -80,6 +80,7 @@ const { createPaymentReminderStore, createPaymentReminderRunner } = require('./v
 const { createInvoicePayments } = require('./verkoop/invoice-payments');
 const { registerInvoicePayLinkRoutes } = require('./verkoop/invoice-pay-routes');
 const { createInvoiceStore, registerInvoiceRoutes } = require('./verkoop/invoices');
+const { createDepositInvoices, registerDepositRoutes } = require('./verkoop/deposit-invoices');
 const { createVisma, registerVismaRoutes } = require('./verkoop/visma');
 const { createVismaLog } = require('./verkoop/visma-log');
 const { createPortalStore, registerPortalRoutes } = require('./uitvoering/portal');
@@ -842,7 +843,13 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const owner = store.getTenantBySlug(slug || 'default');
     return Boolean(owner) && !auth.isAuthenticated(req) && Boolean(captcha.publicOf(owner.id));
   };
+  // Stagingomgeving (AQUATECH_STAGING=1): nooit indexeren, en de kop laat de pagina's een stagingbalk tonen (shared/common.js).
+  const stagingMode = env.AQUATECH_STAGING === '1';
   app.use((req, res, next) => {
+    if (stagingMode) {
+      res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+      res.setHeader('X-Aquatech-Staging', '1');
+    }
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'same-origin');
     res.setHeader('Content-Security-Policy', publicPlannerCaptcha(req) ? captchaCspWith(CSP) : CSP);
@@ -2179,6 +2186,12 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     // De betaallink in de mail (invoice-payments.js); de betaalfuncties worden verderop gemaakt, de aanroep komt pas later.
     payLinkOf: (tenantId, invoice) => invoicePayments.linkFor(tenantId, invoice),
   });
+  // Aanbetalingsfactuur bij akkoord op een offerte met aanbetaling (deposit-invoices.js).
+  const depositInvoices = createDepositInvoices({
+    invoices: invoiceStore, sender: invoiceSender, settingsFor: (id) => settingsFor(id),
+    enabled: (tenantId) => ModuleTools.isOn(moduleFlagsOf(tenantId), 'aanbetaling-automatisch'),
+    audit: (entry) => store.audit(entry),
+  });
   const paymentReminderStore = createPaymentReminderStore(database);
   const shopOrders = createShopOrders({
     db: database, invoices: invoiceStore, debtors: debtorStore, stock: stockStore, sender: invoiceSender,
@@ -2340,7 +2353,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     }
   };
   registerQuoteRoutes(app, {
-    onAccepted: createWorkOrderOnAccept,
+    // Na een akkoord: de werkorder klaarzetten en, bij een offerte met aanbetaling, de aanbetalingsfactuur versturen.
+    onAccepted: (tenantId, quoteId) => { createWorkOrderOnAccept(tenantId, quoteId); depositInvoices.onAccepted(tenantId, quoteId); },
     quotes: quoteStore, vies, identify, requireUser, requireAdmin, requireRight, requireJson, audit,
     // Een offerte uit een plan alleen als dat plan is goedgekeurd.
     planReviewOf: (tenantId, planId) => store.planReviewStatus(tenantId, planId),
@@ -2676,6 +2690,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     shopOf: (req) => settingsFor(req.tenantId || tenant.id).get('shopSource'),
     syncLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, keyFn: (req) => req.tenantId || tenant.id }),
   });
+  registerDepositRoutes(app, { deposits: depositInvoices, requireRight, requireJson, tenantOf: (req) => req.tenantId || tenant.id, invoicesEnabled: (tenantId) => ModuleTools.isOn(moduleFlagsOf(tenantId), 'facturen') });
   registerDebtorRoutes(app, { debtors: debtorStore, requireRight, requireJson, audit, addressGuard });
   // Nacalculatie per werkorder: begroot tegenover werkelijk, kosten en marge.
   registerCostingRoutes(app, {
@@ -2997,7 +3012,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
   registerOpenTaskRoutes(app, { identify, canUpdate, sources: { hostTasks, orders: webOrders, purchaseOrders: purchaseOrderStore, proposalsEnabled,
     shopEnabled: (tenantId) => Boolean(settingsFor(tenantId).get('storefront')), stockEnabled: (tenantId) => ModuleTools.isOn(moduleFlagsOf(tenantId), 'voorraad'),
-    workorders: workOrderStore, planningEnabled: (tenantId) => ModuleTools.isOn(moduleFlagsOf(tenantId), 'planning') } });
+    workorders: workOrderStore, planningEnabled: (tenantId) => ModuleTools.isOn(moduleFlagsOf(tenantId), 'planning'),
+    invoices: invoiceStore, invoicesEnabled: (tenantId) => ModuleTools.isOn(moduleFlagsOf(tenantId), 'facturen') } });
 
   registerWebOrderRoutes(app, { orders: webOrders, requireJson, audit, invoices: webOrderInvoices, payments: webPayments, returns: webReturns });
   // Offerte omzetten naar bestelling (verkoop/quote-orders.js).
