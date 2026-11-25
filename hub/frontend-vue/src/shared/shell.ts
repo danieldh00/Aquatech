@@ -47,7 +47,7 @@ export interface ExcelImportOptions {
   subject: string
   keyLabel: string
   templateName: string
-  api: (path: string, options?: { method?: string; body?: unknown }) => Promise<unknown>
+  api: (path: string, options?: { method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; body?: unknown }) => Promise<unknown>
   intro: string
   fieldsPath: string
   importPath: string
