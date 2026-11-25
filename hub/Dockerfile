@@ -7,10 +7,22 @@ RUN npm ci
 COPY backend/tools/minify-frontend.js ./tools/minify-frontend.js
 COPY frontend ../frontend
 RUN node tools/minify-frontend.js ../frontend ../frontend-min
-# Vue-modules (alleen staging): kommagescheiden lijst. Leeg (productie) = niets extra's, het image blijft gelijk.
-# De bouwstap voor de modules zelf komt met de eerste Vue-module (hub/frontend-vue/).
+# Vue-modules (alleen staging): kommagescheiden lijst, bijvoorbeeld "klanten". Leeg (productie) = niets extra's, het
+# image blijft gelijk en npm wordt voor de modules niet eens aangeroepen. Met een lijst bouwt Vite hub/frontend-vue; de
+# pagina van elke genoemde module vervangt de oude pagina in de frontend, de gedeelde bestanden komen in assets/ ernaast.
+# De schil (zijbalk, rekeningmenu) wordt niet gebouwd: de pagina's verwijzen naar de verkleinde bestanden in shared/.
 ARG VUE_MODULES=""
-RUN if [ -n "$VUE_MODULES" ]; then echo "FOUT: VUE_MODULES=$VUE_MODULES, maar er is nog geen Vue-bouwstap." >&2; exit 1; fi
+COPY frontend-vue ../frontend-vue
+RUN if [ -n "$VUE_MODULES" ]; then \
+      set -e; \
+      cd ../frontend-vue && npm ci && npm run build; \
+      for module in $(echo "$VUE_MODULES" | tr ',' ' '); do \
+        [ -f "dist/$module/index.html" ] || { echo "FOUT: Vue-module '$module' bestaat niet in hub/frontend-vue/src/modules." >&2; exit 1; }; \
+        rm -rf "../frontend-min/$module"; \
+        cp -r "dist/$module" "../frontend-min/$module"; \
+      done; \
+      cp -r dist/assets ../frontend-min/assets; \
+    fi
 
 FROM node:22-alpine@sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a
 
