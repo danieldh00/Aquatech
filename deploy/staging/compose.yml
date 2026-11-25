@@ -8,7 +8,9 @@
 name: aquatech-staging
 
 services:
-  aquatech:
+  # De servicenaam is ook een netwerkalias in elk netwerk waar de service in zit, dus in het gedeelde tunnelnetwerk. Daarom
+  # nooit `aquatech` of `postgres` (die namen zijn van de testomgeving): alle servicenamen beginnen met aquatech-staging.
+  aquatech-staging-app:
     image: aquatech-staging:${STAGING_COMMIT:?STAGING_COMMIT ontbreekt in .env}
     pull_policy: never
     build:
@@ -43,7 +45,7 @@ services:
       - master-key
       - database-url
     depends_on:
-      postgres:
+      aquatech-staging-db:
         condition: service_healthy
     networks:
       default: {}
@@ -70,7 +72,7 @@ services:
       start_period: 15s
       retries: 3
 
-  postgres:
+  aquatech-staging-db:
     # Derde partij: vaste digest (Renovate werkt hem bij). Eigen container en eigen map; niets gedeeld met de testomgeving.
     image: postgres:17@sha256:87c8b42f423b45d5247e6aa8fdb2e7762fec164c68a50fe3eb07e7bfcaf4dbcf
     container_name: aquatech-staging-postgres

@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.40.2',
+      date: '2026-11-25',
+      title: 'Staging botst niet meer met de testomgeving',
+      items: [],
+    },
+    {
       version: '1.40.1',
       date: '2026-11-25',
       title: 'Servertaken: schijf vergroten vóór staging',
