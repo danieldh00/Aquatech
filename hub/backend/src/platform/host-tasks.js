@@ -91,10 +91,10 @@ const HOST_TASKS = [
     addedAt: '2026-11-23',
   },
   {
-    id: '012-staging-stg01-inrichten',
-    title: 'Stagingomgeving op stg01 inrichten (Vue-migratie)',
-    description: 'Draait op de Proxmox-host. Maakt de aparte VM stg01 aan (Debian 12, 2 vCPU, 3 GB) en richt hem in: Docker, een eigen PostgreSQL, Mailpit (vangt alle mail op) en een updatetimer die alleen het staging-image uit ghcr.io/danieldh00/aquatech-staging uitrolt. Regelt ook Cloudflare via de API: tunnel, DNS en toegang alleen voor jouw e-mailadres op aquatech-staging.den-hollander.com. Je geeft eenmalig een Cloudflare API-token (onzichtbare invoer; rechten staan in docs/STAGING.md); zonder token blijft de taak openstaan. Productie wordt niet aangeraakt en er wordt niets uit productie gekopieerd. Vereist dat de workflow Staging al een image heeft gebouwd.',
-    addedAt: '2026-11-24',
+    id: '012-staging-op-apps01-inrichten',
+    title: 'Stagingomgeving op apps01 inrichten (Vue-migratie)',
+    description: 'Richt een tweede, aparte opstelling in naast de testomgeving (eigen map, database, geheimen en image; alleen de server en de bestaande tunnel worden gedeeld) die de branch develop volgt en zichzelf elke 15 minuten bijwerkt. Het image wordt op de server gebouwd; de database wordt gevuld met verzonnen testdata; er zijn geen koppelingen of mail. Daarna moet je zelf in de bestaande Cloudflare-tunnel de hostnaam aquatech-staging.den-hollander.com naar http://aquatech-staging:3300 laten wijzen en een Access-toepassing maken die alleen jou toelaat; het script drukt dat aan het eind af. De testomgeving blijft gewoon draaien.',
+    addedAt: '2026-11-25',
   },
 ];
 
