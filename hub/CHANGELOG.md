@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.41.9
+
+Balk van de planner zonder account (`app-controle.js`, `app.css`): hoofdknop volle breedte, Bewaren en Inloggen als gelijke omlijnde knoppen met icoon, minimale knophoogte 40 px. Rondleiding in `js/walkthrough.js` (`PlannerTour`): zes kaarten in de bestaande `.help`-overlay, opent vanzelf bij het eerste bezoek (localStorage `aquatech_planner_rondleiding_gezien`), te heropenen via Hoe werkt het?. Geen servercode.
+
 ## 1.41.8
 
 In `werkorders/werkorders.js` gaan de getallen in de invoervelden van werkstappen (geplande en werkelijke uren) en materialen (aantal) ook door `esc()`, als extra bescherming (CodeQL: client-side XSS). Geen zichtbare verandering.

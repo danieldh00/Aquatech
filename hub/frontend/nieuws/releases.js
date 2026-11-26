@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.41.9',
+      date: '2026-11-26',
+      title: 'Planner zonder account: nettere balk en rondleiding',
+      items: [
+        { text: 'De balk Tekenen zonder account in de planner is opgeruimd: één groene knop Tekening indienen en daaronder gelijke knoppen Bewaren en Inloggen.' },
+        { text: 'Nieuwe bezoekers krijgen de eerste keer een korte rondleiding van zes kaarten. Via Hoe werkt het? in de balk open je hem opnieuw.' },
+      ],
+    },
+    {
       version: '1.41.8',
       date: '2026-11-26',
       title: 'Werkorderschermen extra beschermd',
