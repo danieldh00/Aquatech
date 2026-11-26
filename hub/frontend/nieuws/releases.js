@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.44.3',
+      date: '2026-11-26',
+      title: 'Klanten archiveren en verwijderen vanuit het overzicht',
+      items: [
+        { text: 'In het klantenoverzicht vink je klanten aan en kies je Archiveren of Terughalen. Met het filter *Actieve klanten / Gearchiveerd / Alles* bekijk je het archief.', for: ['klanten'] },
+        { text: 'Beheerders kunnen aangevinkte klanten ook definitief verwijderen (met wachtwoord). Klanten met offertes, werkorders, facturen of bestellingen blijven bewaard en worden met een reden overgeslagen; archiveren is dan het alternatief.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.44.2',
       date: '2026-11-26',
       title: 'Achtergrondtaken met AI gaan na een herstart vanzelf verder',

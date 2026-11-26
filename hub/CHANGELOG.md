@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.44.3
+
+- `POST /api/customers/bulk` {action archiveren|terughalen|verwijderen, ids ≤ 100} (recht `klanten`; verwijderen alleen recht `beheer` + wachtwoord/tweestapscode via `createIdentityConfirm`, audit `klanten_gearchiveerd|teruggehaald|verwijderd`, 60 per kwartier). Een klant met actieve inlog wordt bij archiveren en verwijderen overgeslagen.
+- `archive.removeSelected` (gerichte definitieve verwijdering per id, met dezelfde `ARCHIVABLE`- en koppelingscontrole als het archief); `selectionOf` kent state `alle`.
+- Klantlijst en klantkaart geven `archivedAt`; frontend: vinkjes, actiebalk en archieffilter in `klanten/`.
+
 ## 1.44.2
 
 Een lopende achtergrondtaak staat in de nieuwe interne instelling `backgroundJobs` (geen migratie; `artikelen/background-jobs.js`: `createJobPersistence`, `sanitizeBackgroundJobs`). `startJob` in item-text-bulk.js en related-routes.js bewaart hem bij de start en wist hem als de taak klaar of gestopt is. `app.locals.resumeBackgroundJobs` (server.js) hervat bewaarde taken een halve minuut na het opstarten (tijdens een systeemupdate later opnieuw proberen); een bewaarde taak zonder werk wordt opgeruimd. De velden `descriptionBulkDailyItems` en `relatedAiDailyItems` staan in het AI-formulier van Beheer. Test: `item-text-bulk.test.js`.
