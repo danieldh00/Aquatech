@@ -178,7 +178,7 @@
   };
   const KINDS = { ontvangst: 'Ontvangst', afboeking: 'Afboeking', retour: 'Retour', correctie: 'Correctie', telling: 'Telling' };
 
-  const state = { items: [], reservations: [], moves: null, tab: 'stock', item: null, units: [], open: new Set(), newImage: null, media: null };
+  const state = { items: [], reservations: [], moves: null, tab: 'stock', item: null, units: [], open: new Set(), newImage: null, media: null, page: 1, pageSize: 50 };
 
   /**
    * Toont kort een melding onderin het scherm.
@@ -308,15 +308,84 @@
     $('#t-reserved').textContent = state.reservations.length ? String(state.reservations.length) : '';
   }
 
+  const PAGE_SIZES = [25, 50, 100, 300, 0];
+  const PAGE_SIZE_KEY = 'aquatech_artikelen_paginagrootte';
+
+  /**
+   * Leest de bewaarde paginagrootte (0 = alles); een ongeldige of ontbrekende waarde geeft 50.
+   * @returns {number} Het aantal artikelen per pagina.
+   */
+  function storedPageSize() {
+    try {
+      const value = Number(localStorage.getItem(PAGE_SIZE_KEY));
+      if (PAGE_SIZES.includes(value) && localStorage.getItem(PAGE_SIZE_KEY) !== null) return value;
+    } catch (_) { /* opslag niet beschikbaar: standaard */ }
+    return 50;
+  }
+
+  /**
+   * Knipt de regels in pagina's. Een hoofdartikel blijft samen met zijn open varianten op één pagina.
+   * @param {object[]} rows Alle regels uit `stockRows`.
+   * @returns {{ rows: object[], pages: number, total: number, from: number, to: number }} De regels van de huidige pagina en de teller.
+   */
+  function paginate(rows) {
+    const groups = [];
+    for (const row of rows) {
+      if (row.variant && groups.length) groups[groups.length - 1].push(row); else groups.push([row]);
+    }
+    const size = state.pageSize || groups.length || 1;
+    const pages = Math.max(1, Math.ceil(groups.length / size));
+    state.page = Math.min(Math.max(1, state.page), pages);
+    const start = (state.page - 1) * size;
+    const slice = groups.slice(start, start + size);
+    return { rows: slice.flat(), pages, total: groups.length, from: groups.length ? start + 1 : 0, to: start + slice.length };
+  }
+
+  /**
+   * Tekent de bediening boven en onder de tabel: aantal per pagina, teller en vorige/volgende.
+   * @param {{ pages: number, total: number, from: number, to: number }} info De uitkomst van `paginate`.
+   */
+  function renderPager(info) {
+    const html = `<label class="pager-size">Per pagina <select data-pager-size>${PAGE_SIZES.map((size) => `<option value="${size}"${size === state.pageSize ? ' selected' : ''}>${size || 'Alles'}</option>`).join('')}</select></label>
+      <span class="muted small pager-count">${info.total ? `${info.from}–${info.to} van ${info.total}` : 'Geen artikelen'}</span>
+      <span class="pager-nav"><button class="btn" type="button" data-pager="prev"${state.page <= 1 ? ' disabled' : ''}>‹ Vorige</button><span class="small">Pagina ${state.page} van ${info.pages}</span><button class="btn" type="button" data-pager="next"${state.page >= info.pages ? ' disabled' : ''}>Volgende ›</button></span>`;
+    for (const id of ['#s-pager-top', '#s-pager-bottom']) {
+      const box = $(id);
+      box.innerHTML = html;
+      box.hidden = !state.items.length;
+      /**
+       * Past het aantal per pagina aan en bewaart de keuze voor de volgende keer.
+       * @param {Event} event de wijziging van de keuzelijst
+       */
+      box.querySelector('[data-pager-size]').onchange = (event) => {
+        state.pageSize = Number(event.target.value);
+        state.page = 1;
+        try { localStorage.setItem(PAGE_SIZE_KEY, String(state.pageSize)); } catch (_) { /* niet bewaard */ }
+        renderStock();
+      };
+      box.querySelectorAll('[data-pager]').forEach((button) => {
+        /** Gaat een pagina terug of vooruit; onderaan scrollt hij terug naar de bovenkant van de lijst. */
+        button.onclick = () => {
+          state.page += button.dataset.pager === 'next' ? 1 : -1;
+          renderStock();
+          if (id === '#s-pager-bottom') $('#s-pager-top').scrollIntoView({ block: 'start' });
+        };
+      });
+    }
+  }
+
   /** Tekent de voorraadtabel. */
   function renderStock() {
     const table = $('#s-table');
     if (!state.items.length) {
       table.innerHTML = '<tbody><tr><td class="empty">Nog geen voorraadartikelen. Kies <b>Uit catalogus</b> om artikelen uit de stuklijst op voorraad te nemen, of <b>+ Artikel</b> voor een eigen artikel.</td></tr></tbody>';
       window.StockBulk.bind(table, []);
+      renderPager({ pages: 1, total: 0, from: 0, to: 0 });
       return;
     }
-    const rows = stockRows();
+    const page = paginate(stockRows());
+    renderPager(page);
+    const rows = page.rows;
     table.innerHTML = `<thead><tr>${window.StockBulk.headerCell(rows)}<th>Artikel</th><th>Locatie</th><th class="num">Op voorraad</th><th class="num">Gereserveerd</th><th class="num">Beschikbaar</th><th class="num">Minimum</th><th class="num">Verkoopprijs</th><th class="num">Marge</th><th>Webshop</th><th class="num">Waarde</th></tr></thead>
       <tbody>${rows.map(({ item, variant, open, count }) => `<tr data-id="${esc(item.id)}" class="${item.low ? 'low' : ''}${item.archived ? ' arch' : ''}${variant ? ' variant' : ''}${item.hasVariants ? ' parent' : ''}${window.StockBulk.selected.has(item.id) ? ' picked' : ''}">
         ${window.StockBulk.cell(item)}
@@ -1044,8 +1113,11 @@
     });
     /** Volgt een ander #-adres (terugknop) met het bijbehorende tabblad. */
     window.addEventListener('hashchange', () => { const hash = location.hash.slice(1); if (TABS.includes(hash) && hash !== state.tab) showTabFromAddress(hash); });
-    $('#f-search').oninput = renderStock;
-    $('#f-low').onchange = renderStock;
+    state.pageSize = storedPageSize();
+    /** Een nieuwe zoekterm of ander filter begint weer op pagina 1. */
+    const restartList = () => { state.page = 1; renderStock(); };
+    $('#f-search').oninput = restartList;
+    $('#f-low').onchange = restartList;
     /**
      * Laadt het overzicht opnieuw (met of zonder gearchiveerde artikelen).
      * @returns {Promise<void>}
