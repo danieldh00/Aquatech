@@ -72,6 +72,26 @@ function customerOf(order) {
   return { displayName, email, phone: cleanText(billing.phone).slice(0, 30), address };
 }
 
+/** WordPress-statussen die geen echte bestelling zijn en dus niet in de lijst komen. */
+const HIDDEN_STATUSES = new Set(['checkout-draft', 'auto-draft', 'trash']);
+
+/**
+ * De kopgegevens van een bestelling voor de lijst bij Webshopbestellingen (alleen lezen).
+ * @param {object} order De bestelling zoals WooCommerce hem stuurt.
+ * @returns {{ number: string, status: string, customerName: string, company: string, email: string, phone: string, total: number, paymentTitle: string }} De velden van `wp_orders`.
+ */
+function headerOf(order) {
+  const billing = order.billing || {};
+  const company = cleanText(billing.company).replace(/\s+/g, ' ').slice(0, 80);
+  const person = [billing.first_name, billing.last_name].map(cleanText).filter(Boolean).join(' ').replace(/\s+/g, ' ').slice(0, 80);
+  const total = Number(String(order.total == null ? 0 : order.total).replace(',', '.'));
+  return {
+    number: cleanText(order.number || order.id).slice(0, 40), status: cleanText(order.status).slice(0, 40), customerName: person || company, company,
+    email: cleanText(billing.email).toLowerCase().slice(0, 120), phone: cleanText(billing.phone).slice(0, 30), total: Number.isFinite(total) ? total : 0,
+    paymentTitle: cleanText(order.payment_method_title).slice(0, 80),
+  };
+}
+
 /**
  * De bestelregels van een bestelling in de vorm van de tabel.
  * @param {object} order De bestelling zoals WooCommerce hem stuurt.
@@ -226,8 +246,17 @@ function createWpOrderHistory({ db, settingsFor, fetchImpl = null, afterImport =
     }
     transaction(db, () => {
       for (const order of orders) {
-        if (!COUNTED_STATUSES.has(cleanText(order.status))) continue;
         const orderedAt = orderedAtOf(order);
+        // Kopgegevens voor de lijst (alle echte bestellingen, ook geannuleerde); een nieuwe ronde werkt status en totaal bij.
+        if (orderedAt && !HIDDEN_STATUSES.has(cleanText(order.status))) {
+          const head = headerOf(order);
+          prepare(`INSERT INTO wp_orders (id, tenant_id, wp_order_id, number, status, ordered_at, customer_name, company, email, phone, total, payment_title)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (tenant_id, wp_order_id) DO UPDATE SET number = EXCLUDED.number, status = EXCLUDED.status, customer_name = EXCLUDED.customer_name, company = EXCLUDED.company,
+              email = EXCLUDED.email, phone = EXCLUDED.phone, total = EXCLUDED.total, payment_title = EXCLUDED.payment_title`)
+            .run(crypto.randomUUID(), tenantId, String(order.id), head.number, head.status, orderedAt, head.customerName, head.company, head.email, head.phone, head.total, head.paymentTitle);
+        }
+        if (!COUNTED_STATUSES.has(cleanText(order.status))) continue;
         if (!orderedAt) continue;
         counted += 1;
         for (const line of linesOf(order)) {
@@ -394,4 +423,4 @@ function createWpOrderHistory({ db, settingsFor, fetchImpl = null, afterImport =
   return { start, stop, runAll, importOrders, rematch, status, unmatched, link, round };
 }
 
-module.exports = { createWpOrderHistory, linesOf, orderedAtOf, customerOf, COUNTED_STATUSES };
+module.exports = { createWpOrderHistory, headerOf, HIDDEN_STATUSES, linesOf, orderedAtOf, customerOf, COUNTED_STATUSES };

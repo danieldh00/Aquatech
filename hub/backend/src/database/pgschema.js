@@ -1912,6 +1912,28 @@ const PG_MIGRATIONS = [
     customers_created BIGINT NOT NULL DEFAULT 0
   );
   `,
+  // 102: kopgegevens van de WordPress-bestellingen (alleen lezen, voor de lijst bij Webshopbestellingen): nummer, status, klant, totaal. Geen echte bestelling: nooit voorraad, factuur,
+  // mail of terugschrijven naar WordPress. De ophaalcursor gaat terug, zodat de eerstvolgende ronde de koppen van de al opgehaalde bestellingen aanvult (regels blijven ongemoeid).
+  `
+  CREATE TABLE wp_orders (
+    id             UUID PRIMARY KEY,
+    tenant_id      UUID NOT NULL ${references('tenants(id)')},
+    wp_order_id    ${TEXT_TYPE} NOT NULL,
+    number         ${TEXT_TYPE} NOT NULL,
+    status         ${TEXT_TYPE} NOT NULL DEFAULT '',
+    ordered_at     TIMESTAMPTZ NOT NULL,
+    customer_name  ${TEXT_TYPE} NOT NULL DEFAULT '',
+    company        ${TEXT_TYPE} NOT NULL DEFAULT '',
+    email          ${TEXT_TYPE} NOT NULL DEFAULT '',
+    phone          ${TEXT_TYPE} NOT NULL DEFAULT '',
+    total          DOUBLE PRECISION NOT NULL DEFAULT 0,
+    payment_title  ${TEXT_TYPE} NOT NULL DEFAULT '',
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+  CREATE UNIQUE INDEX wp_orders_unique ON wp_orders (tenant_id, wp_order_id);
+  CREATE INDEX wp_orders_date ON wp_orders (tenant_id, ordered_at);
+  UPDATE wp_order_import SET orders_after = NULL;
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS, UUID_COLUMNS, legacyUuid };

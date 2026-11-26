@@ -25,6 +25,10 @@ const { visibleFor: packagingVisibleFor } = require('../artikelen/packagings');
 
 /** Statussen van een bestelling met hun weergavenaam. */
 const STATUSES = { nieuw: 'Nieuw', verzonden: 'Verzonden', afgerond: 'Afgerond', geannuleerd: 'Geannuleerd' };
+/** Statussen van WordPress-bestellingen in de lijst (alleen lezen); de filtersleutel is `wp-<status>`. */
+const WP_STATUSES = { completed: 'Afgerond', processing: 'In behandeling', 'on-hold': 'In de wacht', pending: 'Wacht op betaling', cancelled: 'Geannuleerd', refunded: 'Terugbetaald', failed: 'Mislukt' };
+/** De bronnen van de lijst: de eigen webshop, de oude WordPress-webshop, of beide. */
+const SOURCES = ['alle', 'systeem', 'wordpress'];
 /** Welke status op welke mag volgen. */
 const TRANSITIONS = { nieuw: ['verzonden', 'geannuleerd'], verzonden: ['afgerond'], afgerond: [], geannuleerd: [] };
 /** Hoogstens zoveel regels in een winkelwagen (de wagen staat in een cookie van hooguit 4 kB). */
@@ -735,7 +739,8 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
    * @param {{ status?: string, query?: string, limit?: number, offset?: number, withLines?: boolean }} [options] Filter op status en zoekterm (nummer, naam of e-mail), paginering en of de regels meekomen (export).
    * @returns {{ total: number, items: object[], counts: Object<string, number> }} Aantal, bestellingen en aantal per status.
    */
-  function list(tenantId, { status = '', query = '', limit = 50, offset = 0, withLines = false, archive = 'verberg' } = {}) {
+  function list(tenantId, { status = '', query = '', limit = 50, offset = 0, withLines = false, archive = 'verberg', source = 'systeem' } = {}) {
+    if (!withLines && (source === 'alle' || source === 'wordpress')) return listWithWordPress(tenantId, { status, query, limit, offset, archive, source });
     const where = ['tenant_id = ?'];
     const args = [tenantId];
     const archiveSql = archiveClause('archived_at', archive).replace(/^ AND /, '');
@@ -752,7 +757,72 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
     const rows = prepare(`SELECT ${COLUMNS}${withLines ? ', data' : `, ${payStatus} AS pay_status`} FROM web_orders WHERE ${clause} ORDER BY created_at DESC, number DESC LIMIT ? OFFSET ?`).all(...args, size, start);
     const counts = Object.fromEntries(Object.keys(STATUSES).map((key) => [key, 0]));
     for (const row of prepare(`SELECT status, COUNT(*) AS n FROM web_orders WHERE tenant_id = ?${archiveClause('archived_at', archive)} GROUP BY status`).all(tenantId)) counts[row.status] = Number(row.n);
-    return { total, items: rows.map((row) => (withLines ? shapeFull(row) : shape(row))), counts };
+    return { total, items: rows.map((row) => (withLines ? shapeFull(row) : shape(row))), counts, wordpress: wordpressCount(tenantId) };
+  }
+
+  /**
+   * Het aantal WordPress-bestellingen van een omgeving (voor de telregel).
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {number} Aantal opgehaalde WordPress-bestellingen.
+   */
+  const wordpressCount = (tenantId) => Number(prepare('SELECT COUNT(*) AS n FROM wp_orders WHERE tenant_id = ?').get(tenantId).n);
+
+  /**
+   * De lijst met ook de (alleen lezen) WordPress-bestellingen: beide bronnen op tijd gesorteerd, met bronfilter, statusfilter (`wp-<status>` voor WordPress) en zoekterm.
+   * WordPress-bestellingen hebben geen archief: ze staan in 'verberg' en 'toon', niet in 'alleen'.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ status: string, query: string, limit: *, offset: *, archive: string, source: string }} options De filters.
+   * @returns {{ total: number, items: object[], counts: Object<string, number>, wordpress: number }} Zoals list(), met bij elke bestelling `source` (`systeem` of `wordpress`).
+   */
+  function listWithWordPress(tenantId, { status, query, limit, offset, archive, source }) {
+    const words = String(query || '').replace(/[%_\\]/g, ' ').trim().toLowerCase().slice(0, 80);
+    const wpStatus = String(status || '').startsWith('wp-') ? String(status).slice(3) : '';
+    const systemWhere = ['1 = 1'];
+    const systemArgs = [];
+    const wpWhere = ['1 = 1'];
+    const wpArgs = [];
+    const archiveSql = archiveClause('archived_at', archive).replace(/^ AND /, '');
+    if (archiveSql) systemWhere.push(archiveSql);
+    if (words) {
+      systemWhere.push('(lower(number) LIKE ? OR lower(customer_name) LIKE ? OR lower(email) LIKE ?)'); systemArgs.push(`%${words}%`, `%${words}%`, `%${words}%`);
+      wpWhere.push('(lower(number) LIKE ? OR lower(customer_name) LIKE ? OR lower(email) LIKE ?)'); wpArgs.push(`%${words}%`, `%${words}%`, `%${words}%`);
+    }
+    if (STATUSES[status]) { systemWhere.push('status = ?'); systemArgs.push(status); wpWhere.push('1 = 0'); }
+    else if (wpStatus) { wpWhere.push('status = ?'); wpArgs.push(wpStatus); systemWhere.push('1 = 0'); }
+    if (source === 'wordpress') systemWhere.push('1 = 0');
+    if (archive === 'alleen') wpWhere.push('1 = 0');
+    const size = Math.min(PAGE_LIMIT, Math.max(1, Math.floor(Number(limit)) || 50));
+    const start = Math.max(0, Math.floor(Number(offset)) || 0);
+    const payStatus = "((data)::jsonb -> 'pay' ->> 'status')";
+    const merged = `SELECT id::text AS id, number, user_id::text AS user_id, status, customer_name, email, total, created_at AS at, updated_at, ${payStatus} AS pay_status, 'systeem' AS source FROM web_orders WHERE tenant_id = ? AND ${systemWhere.join(' AND ')}
+      UNION ALL SELECT id::text, number, NULL, 'wp-' || status, customer_name, email, total, ordered_at, NULL, NULL, 'wordpress' FROM wp_orders WHERE tenant_id = ? AND ${wpWhere.join(' AND ')}`;
+    const args = [tenantId, ...systemArgs, tenantId, ...wpArgs];
+    const total = Number(prepare(`SELECT COUNT(*) AS n FROM (${merged}) AS combined`).get(...args).n);
+    const rows = prepare(`SELECT id, number, user_id, status, customer_name, email, total, at, updated_at, pay_status, source FROM (${merged}) AS combined ORDER BY at DESC, number DESC LIMIT ? OFFSET ?`).all(...args, size, start);
+    const counts = Object.fromEntries(Object.keys(STATUSES).map((key) => [key, 0]));
+    for (const row of prepare(`SELECT status, COUNT(*) AS n FROM web_orders WHERE tenant_id = ?${archiveClause('archived_at', archive)} GROUP BY status`).all(tenantId)) counts[row.status] = Number(row.n);
+    const items = rows.map((row) => (row.source === 'wordpress'
+      ? { id: row.id, number: `WP-${row.number}`, source: 'wordpress', status: row.status, statusLabel: WP_STATUSES[row.status.slice(3)] || row.status.slice(3), customerName: row.customer_name, email: row.email, total: Number(row.total), createdAt: new Date(row.at).toISOString() }
+      : { ...shape({ ...row, created_at: row.at }), source: 'systeem' }));
+    return { total, items, counts, wordpress: wordpressCount(tenantId) };
+  }
+
+  /**
+   * Eén WordPress-bestelling met zijn regels, alleen lezen.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} id Id van de rij in `wp_orders`.
+   * @returns {?object} De bestelling met `lines` (naam, sku, aantal, gekoppeld artikel), of null.
+   */
+  function getWordPress(tenantId, id) {
+    const row = prepare('SELECT id, wp_order_id, number, status, ordered_at, customer_name, company, email, phone, total, payment_title FROM wp_orders WHERE tenant_id = ? AND id::text = ?').get(tenantId, String(id || ''));
+    if (!row) return null;
+    const lines = prepare(`SELECT l.name, l.sku, l.qty, i.code AS item_code FROM wp_order_lines l LEFT JOIN stock_items i ON i.id = l.item_id AND i.tenant_id = l.tenant_id
+      WHERE l.tenant_id = ? AND l.wp_order_id = ? ORDER BY l.wp_line_id`).all(tenantId, row.wp_order_id);
+    return {
+      id: row.id, source: 'wordpress', number: `WP-${row.number}`, status: row.status, statusLabel: WP_STATUSES[row.status] || row.status, createdAt: new Date(row.ordered_at).toISOString(),
+      customerName: row.customer_name, company: row.company, email: row.email, phone: row.phone, total: Number(row.total), paymentTitle: row.payment_title,
+      lines: lines.map((line) => ({ name: line.name, sku: line.sku, qty: Number(line.qty), itemCode: line.item_code || '' })),
+    };
   }
 
   /**
@@ -1457,7 +1527,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
     return { released };
   }
 
-  return { deliveryRulesOf, priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, countGuestSince, countOpenUnpaidGuest, unpaidAmong, guestAccessOf, attachToUser, get, getForUser, listForUser, list, setStatus, setTracking, updateData, changePay, holdForPayment, releaseUnpaidHolds, paidWithOpenHooks, withPendingRefunds, lateRefundsNeeded, unpaidOnline, reminderAllowed, releaseExpired, listToPick, listUnprocessed, getMany, pickable, markPackingSlipsPrinted, setDropshippingSlip, onShipped, onCancelled, onTracking, withFulfilment, getDetailed, ship, recordShipmentLabel, setAllowPartial, listBackorders, markBackorderReady, onPartialShipped };
+  return { deliveryRulesOf, priceCart, shippingQuote, orderTotals, place, createFromQuote, countSince, countGuestSince, countOpenUnpaidGuest, unpaidAmong, guestAccessOf, attachToUser, get, getForUser, listForUser, list, getWordPress, setStatus, setTracking, updateData, changePay, holdForPayment, releaseUnpaidHolds, paidWithOpenHooks, withPendingRefunds, lateRefundsNeeded, unpaidOnline, reminderAllowed, releaseExpired, listToPick, listUnprocessed, getMany, pickable, markPackingSlipsPrinted, setDropshippingSlip, onShipped, onCancelled, onTracking, withFulfilment, getDetailed, ship, recordShipmentLabel, setAllowPartial, listBackorders, markBackorderReady, onPartialShipped };
 }
 
 /**
@@ -1478,13 +1548,21 @@ function registerWebOrderRoutes(app, { orders, requireJson, audit, invoices = nu
   app.get('/api/admin/web-orders', (req, res) => {
     const out = orders.list(req.tenantId, {
       status: String(req.query.status || ''), query: String(req.query.q || ''), limit: req.query.limit, offset: req.query.offset, withLines: req.query.lines === '1', archive: archiveModeOf(req.query.archief),
+      source: SOURCES.includes(req.query.bron) ? req.query.bron : 'systeem',
     });
-    res.json({ ...out, statuses: STATUSES });
+    res.json({ ...out, statuses: STATUSES, wordpressStatuses: Object.fromEntries(Object.entries(WP_STATUSES).map(([key, label]) => [`wp-${key}`, label])) });
   });
 
   // Vóór /:id: het overzicht van backorders.
   app.get('/api/admin/web-orders/backorders', (req, res) => {
     res.json(orders.listBackorders(req.tenantId));
+  });
+
+  // Een WordPress-bestelling (alleen lezen); vóór /:id.
+  app.get('/api/admin/web-orders/wordpress/:id', (req, res) => {
+    const order = orders.getWordPress(req.tenantId, req.params.id);
+    if (!order) return res.status(404).json({ error: 'not_found', message: 'Bestelling niet gevonden.' });
+    res.json({ order });
   });
 
   app.get('/api/admin/web-orders/:id', (req, res) => {
@@ -1556,4 +1634,4 @@ function registerWebOrderRoutes(app, { orders, requireJson, audit, invoices = nu
   });
 }
 
-module.exports = { createWebOrderStore, registerWebOrderRoutes, sanitizeCheckout, deliverySameOf, totalsOf, STATUSES, TRANSITIONS, MAX_QTY, MAX_LINES, PAY_HOLD_MINUTES, stockQtyOf, stockLinesOf, splitCartCode };
+module.exports = { createWebOrderStore, registerWebOrderRoutes, sanitizeCheckout, deliverySameOf, totalsOf, STATUSES, TRANSITIONS, WP_STATUSES, MAX_QTY, MAX_LINES, PAY_HOLD_MINUTES, stockQtyOf, stockLinesOf, splitCartCode };

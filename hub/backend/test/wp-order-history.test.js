@@ -243,3 +243,62 @@ test('routes: rechten, andere organisatie, limiet en module uit', async () => {
   assert.strictEqual((await admin.get(base)).status, 409);
   assert.strictEqual((await admin.post(`${base}/start`, {})).status, 409);
 });
+
+test('kopgegevens voor de lijst: alle echte statussen, bijgewerkt bij opnieuw ophalen, en de lijst toont ze alleen lezen met bronfilter', async () => {
+  const orders = [
+    wcOrder(1, [{ product_id: 4321, name: 'Onbekend ding' }], { number: '1001', total: '123.45', billing: { first_name: 'Petra', last_name: 'Jansen', email: 'petra@voorbeeld.test' }, payment_method_title: 'iDEAL' }),
+    wcOrder(2, [{ product_id: 3000, name: 'Cadeaubon' }], { status: 'cancelled', total: '10.00', billing: { company: 'Tuin BV', email: 'jan@voorbeeld.test' } }),
+    wcOrder(3, [], { status: 'checkout-draft', total: '5' }),
+  ];
+  const scene = world(orders);
+  await scene.history.importOrders(scene.tenantId);
+  const heads = scene.db.prepare('SELECT number, status, customer_name, total FROM wp_orders WHERE tenant_id = ? ORDER BY number').all(scene.tenantId);
+  assert.deepStrictEqual(heads.map((row) => [row.number, row.status, row.customer_name, Number(row.total)]), [['1001', 'completed', 'Petra Jansen', 123.45], ['2', 'cancelled', 'Tuin BV', 10]]);
+  // Opnieuw ophalen werkt de status bij en maakt geen dubbele rij.
+  orders[0].status = 'refunded';
+  orders[0].date_modified_gmt = '2026-10-27T08:00:00';
+  scene.db.prepare('UPDATE wp_order_import SET orders_after = NULL WHERE tenant_id = ?').run(scene.tenantId);
+  await scene.history.importOrders(scene.tenantId);
+  assert.strictEqual(Number(scene.db.prepare('SELECT COUNT(*) AS n FROM wp_orders WHERE tenant_id = ?').get(scene.tenantId).n), 2);
+  assert.strictEqual(scene.db.prepare("SELECT status FROM wp_orders WHERE tenant_id = ? AND wp_order_id = '1'").get(scene.tenantId).status, 'refunded');
+  // De lijst bij Webshopbestellingen: bronfilter, statusfilter, zoeken en detail; er verandert niets aan voorraad, facturen of mail.
+  const { createWebOrderStore } = require('../src/webshop/web-orders');
+  const webOrders = createWebOrderStore(scene.db, { stock: scene.stock });
+  assert.strictEqual(webOrders.list(scene.tenantId, {}).total, 0, 'standaard alleen de eigen webshop');
+  const all = webOrders.list(scene.tenantId, { source: 'alle' });
+  assert.strictEqual(all.total, 2);
+  assert.ok(all.items.every((order) => order.source === 'wordpress' && order.number.startsWith('WP-')));
+  assert.strictEqual(all.wordpress, 2);
+  assert.strictEqual(webOrders.list(scene.tenantId, { source: 'systeem' }).wordpress, 2);
+  assert.strictEqual(webOrders.list(scene.tenantId, { source: 'alle', status: 'wp-cancelled' }).items[0].customerName, 'Tuin BV');
+  assert.strictEqual(webOrders.list(scene.tenantId, { source: 'alle', status: 'nieuw' }).total, 0, 'een eigen status sluit WordPress uit');
+  assert.strictEqual(webOrders.list(scene.tenantId, { source: 'alle', query: 'petra' }).total, 1);
+  assert.strictEqual(webOrders.list(scene.tenantId, { source: 'alle', archive: 'alleen' }).total, 0, 'WordPress heeft geen archief');
+  assert.strictEqual(webOrders.list(scene.tenantId, { source: 'wordpress', limit: 1 }).items.length, 1);
+  const detail = webOrders.getWordPress(scene.tenantId, all.items.find((order) => order.statusLabel === 'Terugbetaald').id);
+  assert.strictEqual(detail.lines[0].name, 'Onbekend ding');
+  assert.strictEqual(webOrders.getWordPress(scene.tenantId, '00000000-0000-4000-8000-000000000000'), null);
+  assert.strictEqual(webOrders.getWordPress('00000000-0000-4000-8000-000000000001', all.items[0].id), null, 'andere organisatie');
+  for (const table of ['web_orders', 'invoices', 'stock_movements']) assert.strictEqual(Number(scene.db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE tenant_id = ?`).get(scene.tenantId).n), 0, table);
+});
+
+test('lijst bij Webshopbestellingen via de API: bronfilter, rechten en andere organisatie', async () => {
+  const { setup: webshopSetup } = require('./helpers/webshop-world');
+  const world = await webshopSetup();
+  const { admin, vreemd } = world;
+  const shopper = world.shoppers[0].client;
+  const tenantId = world.db.prepare("SELECT id FROM tenants WHERE slug = 'default' OR parent_id IS NULL ORDER BY created_at LIMIT 1").get().id;
+  const wpId = require('crypto').randomUUID();
+  world.db.prepare(`INSERT INTO wp_orders (id, tenant_id, wp_order_id, number, status, ordered_at, customer_name, email, total) VALUES (?, ?, '5', '1005', 'completed', now(), 'Oude Klant', 'oud@voorbeeld.test', 42)`).run(wpId, tenantId);
+  const listed = await admin.get('/app/api/admin/web-orders?bron=alle');
+  assert.strictEqual(listed.status, 200);
+  assert.strictEqual(listed.body.items.find((order) => order.source === 'wordpress').number, 'WP-1005');
+  assert.strictEqual(listed.body.wordpress, 1);
+  assert.strictEqual((await admin.get('/app/api/admin/web-orders?bron=systeem')).body.items.some((order) => order.source === 'wordpress'), false);
+  assert.strictEqual((await admin.get('/app/api/admin/web-orders')).body.items.some((order) => order.source === 'wordpress'), false, 'zonder bron alleen de eigen webshop');
+  assert.strictEqual((await admin.get(`/app/api/admin/web-orders/wordpress/${wpId}`)).body.order.customerName, 'Oude Klant');
+  assert.strictEqual((await vreemd.get(`/app/api/admin/web-orders/wordpress/${wpId}`)).status, 404);
+  assert.strictEqual((await vreemd.get('/app/api/admin/web-orders?bron=alle')).body.wordpress, 0);
+  assert.strictEqual((await shopper.get(`/app/api/admin/web-orders/wordpress/${wpId}`)).status, 403);
+  assert.strictEqual((await shopper.get('/app/api/admin/web-orders?bron=alle')).status, 403);
+});

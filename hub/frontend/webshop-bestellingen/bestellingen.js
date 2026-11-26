@@ -29,7 +29,7 @@
   /** Welke status op welke mag volgen, met de tekst van de knop. */
   const NEXT = { nieuw: [['verzonden', 'Markeer als verzonden'], ['geannuleerd', 'Annuleren']], verzonden: [['afgerond', 'Markeer als afgerond']] };
   const PAGE = 50;
-  const state = { status: '', query: '', offset: 0, statuses: {}, openId: null };
+  const state = { status: '', query: '', source: 'alle', offset: 0, statuses: {}, openId: null };
   /** Toont een melding; wordt door init vervangen door die van Beheer. */
   let toast = () => {};
 
@@ -266,6 +266,30 @@
     try { state.openId = id; const out = await api(`/${encodeURIComponent(id)}`); renderDetail(out.order, out.invoice); $('#wo-detail').scrollIntoView({ block: 'nearest' }); } catch (error) { toast(error.message, true); }
   }
 
+  /**
+   * Opent het detail van een WordPress-bestelling: alleen lezen, zonder knoppen (er gaat niets terug naar WordPress en er raakt geen voorraad, factuur of mail).
+   * @param {string} id Id van de WordPress-bestelling.
+   * @returns {Promise<void>}
+   */
+  async function openWordPress(id) {
+    try {
+      state.openId = id;
+      const { order } = await api(`/wordpress/${encodeURIComponent(id)}`);
+      const box = $('#wo-detail');
+      const lines = order.lines.map((line) => `<tr><td>${esc(line.name)}<span class="sub">${esc(line.itemCode || line.sku)}</span></td><td class="num">${esc(line.qty)}</td></tr>`).join('');
+      box.innerHTML = `<h3>${esc(order.number)} <span class="pill analyse">WordPress</span> <span class="pill">${esc(order.statusLabel)}</span></h3>
+        <p>${esc(order.company ? `${order.company} – ` : '')}${esc(order.customerName)}${order.email ? ` · <a href="mailto:${esc(mailtoAddress(order.email))}">${esc(order.email)}</a>` : ''}${order.phone ? ` · ${esc(order.phone)}` : ''}<br>
+        Besteld ${esc(when(order.createdAt))} · totaal ${euro(order.total)}${order.paymentTitle ? ` · ${esc(order.paymentTitle)}` : ''}</p>
+        <div class="tablewrap"><table class="grid"><thead><tr><th>Artikel</th><th class="num">Besteld</th></tr></thead><tbody>${lines || '<tr><td class="empty" colspan="2">Geen regels bewaard voor deze status.</td></tr>'}</tbody></table></div>
+        <p class="muted small">Bestelling uit de oude WordPress-webshop, alleen lezen: er gaat niets terug naar WordPress en er is geen voorraad, factuur of mail aan gekoppeld.</p>
+        <p><button class="btn" id="wo-close">Sluiten</button></p>`;
+      box.hidden = false;
+      /** Sluit het detail. */
+      $('#wo-close').onclick = () => { box.hidden = true; state.openId = null; };
+      box.scrollIntoView({ block: 'nearest' });
+    } catch (error) { toast(error.message, true); }
+  }
+
   /** Archieffilter van de lijst (alleen voor beheerders), gezet in init. */
   let archive = null;
 
@@ -283,22 +307,27 @@
   async function load() {
     const table = $('#wo-table');
     try {
-      const out = await api(archived(`?status=${encodeURIComponent(state.status)}&q=${encodeURIComponent(state.query)}&limit=${PAGE}&offset=${state.offset}`));
+      const out = await api(archived(`?status=${encodeURIComponent(state.status)}&q=${encodeURIComponent(state.query)}&bron=${state.source}&limit=${PAGE}&offset=${state.offset}`));
       state.statuses = out.statuses;
       const select = $('#wo-status');
-      if (!select.options.length) select.innerHTML = `<option value="">Alle statussen</option>${Object.entries(out.statuses).map(([key, label]) => `<option value="${key}">${esc(label)}</option>`).join('')}`;
+      if (!select.options.length) {
+        const wordpress = Object.entries(out.wordpressStatuses || {}).map(([key, label]) => `<option value="${key}">${esc(label)}</option>`).join('');
+        select.innerHTML = `<option value="">Alle statussen</option>${Object.entries(out.statuses).map(([key, label]) => `<option value="${key}">${esc(label)}</option>`).join('')}${wordpress ? `<optgroup label="WordPress">${wordpress}</optgroup>` : ''}`;
+      }
       select.value = state.status;
-      $('#wo-counts').textContent = Object.entries(out.counts).map(([key, count]) => `${out.statuses[key]}: ${count}`).join(' · ');
+      // De bronkeuze verschijnt pas als er WordPress-bestellingen zijn opgehaald.
+      $('#wo-source').hidden = !out.wordpress;
+      $('#wo-counts').textContent = Object.entries(out.counts).map(([key, count]) => `${out.statuses[key]}: ${count}`).join(' · ') + (out.wordpress ? ` · WordPress (alleen lezen): ${out.wordpress}` : '');
       table.innerHTML = !out.items.length ? '<tr><td class="empty">Geen bestellingen.</td></tr>'
         : `<thead><tr><th>Nummer</th><th>Besteld</th><th>Klant</th><th>E-mail</th><th class="num">Totaal</th><th>Status</th></tr></thead><tbody>${out.items.map((order) => `
-          <tr data-id="${esc(order.id)}" class="clickable"><td><a href="#bestellingen" data-open>${esc(order.number)}</a></td><td>${esc(when(order.createdAt))}</td><td>${esc(order.customerName)}</td><td>${esc(order.email)}</td><td class="num">${euro(order.total)}</td><td><span class="pill ${esc(order.status)}">${esc(order.statusLabel)}</span>${order.payStatus && order.payStatus !== 'betaald' && order.status === 'nieuw' ? ` <span class="muted small">${esc(PAY_LABELS[order.payStatus] || order.payStatus)}</span>` : ''}</td></tr>`).join('')}</tbody>`;
+          <tr data-id="${esc(order.id)}" data-source="${esc(order.source || 'systeem')}" class="clickable"><td><a href="#bestellingen" data-open>${esc(order.number)}</a></td><td>${esc(when(order.createdAt))}</td><td>${esc(order.customerName)}</td><td>${esc(order.email)}</td><td class="num">${euro(order.total)}</td><td>${order.source === 'wordpress' ? '<span class="pill analyse" title="Uit de oude WordPress-webshop; alleen lezen">WordPress</span> ' : ''}<span class="pill ${order.source === 'wordpress' ? '' : esc(order.status)}">${esc(order.statusLabel)}</span>${order.payStatus && order.payStatus !== 'betaald' && order.status === 'nieuw' ? ` <span class="muted small">${esc(PAY_LABELS[order.payStatus] || order.payStatus)}</span>` : ''}</td></tr>`).join('')}</tbody>`;
       for (const link of table.querySelectorAll('[data-open]')) {
         /**
          * Opent het detail van de bestelling in deze regel.
          * @param {MouseEvent} event De klik.
          * @returns {void}
          */
-        link.onclick = (event) => { event.preventDefault(); open(link.closest('tr').dataset.id); };
+        link.onclick = (event) => { event.preventDefault(); const row = link.closest('tr'); if (row.dataset.source === 'wordpress') openWordPress(row.dataset.id); else open(row.dataset.id); };
       }
       $('#wo-info').textContent = `${out.total ? state.offset + 1 : 0}–${Math.min(out.total, state.offset + PAGE)} van ${out.total}`;
       $('#wo-prev').disabled = state.offset === 0;
@@ -334,7 +363,7 @@
       const seen = new Set();
       let expectedTotal = null;
       for (;;) {
-        const page = await api(archived(`?status=${encodeURIComponent(status)}&q=${encodeURIComponent(query)}&lines=1&limit=500&offset=${items.length}`));
+        const page = await api(archived(`?status=${encodeURIComponent(status)}&q=${encodeURIComponent(query)}&bron=systeem&lines=1&limit=500&offset=${items.length}`));
         if (expectedTotal === null) expectedTotal = page.total;
         if (page.total !== expectedTotal || page.items.some((order) => seen.has(order.id))) {
           toast('De bestellingen zijn tijdens het exporteren gewijzigd. Start de export opnieuw.', true);
@@ -395,6 +424,8 @@
   function init(options) {
     toast = options.toast || toast;
     let timer = null;
+    /** Filtert op bron (alle, eigen webshop of WordPress). */
+    $('#wo-source').onchange = () => { state.source = $('#wo-source').value; state.offset = 0; load(); };
     /** Filtert op status. */
     $('#wo-status').onchange = () => { state.status = $('#wo-status').value; state.offset = 0; load(); };
     /** Zoekt (kort na het typen) op nummer, naam of e-mail. */
