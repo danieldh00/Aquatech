@@ -911,6 +911,14 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     next();
   });
 
+  // Algemene bovengrens op schrijfacties via de API (CodeQL: missing rate limiting): per ingelogde gebruiker, anders per bezoeker.
+  // Ruim genoeg voor de offline wachtrij; routes met een eigen, strengere limiet houden die. Openbare routes (/api/public) hebben hun eigen limieten.
+  const apiWriteLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: Number(env.API_WRITE_LIMIT) || 1200, keyFn: (req) => `api-schrijven:${identify(req)?.id || clientKey(req)}` });
+  app.use('/api', (req, res, next) => {
+    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS' || req.path.startsWith('/public/')) return next();
+    apiWriteLimiter(req, res, next);
+  });
+
   // Offline wachtrij (frontend/sw.js, werkorders/worklog.js): een bewaarde
   // wijziging draagt X-Aquatech-Owner (`<gebruiker>@<omgeving>` van wie hem
   // maakte). Is er intussen iemand anders ingelogd in deze browser, dan wordt
