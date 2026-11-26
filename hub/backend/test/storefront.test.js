@@ -136,6 +136,17 @@ test('webshop aan: start, categorie en product zonder inloggen, zonder interne g
   assert.ok(!spr.text.includes('<b>Pro</b>'), 'HTML in namen wordt ontsnapt');
 });
 
+test('productpagina: knop Bewerken in beheer alleen voor medewerkers, direct naar de artikelkaart', async () => {
+  const { admin, anonymous, created } = await setup();
+  await admin.put('/app/api/admin/settings', { storefront: true, shopClarity: { enabled: false } });
+  const buis = created[2];
+  const asAdmin = await admin.get('/product/pe-buis-25-mm-buis-25/');
+  assert.strictEqual(asAdmin.status, 200);
+  assert.ok(asAdmin.text.includes(`href="../../app/artikelen/?id=${encodeURIComponent(buis.id)}"`), 'beheerder krijgt de directe link naar de artikelkaart');
+  const asVisitor = await anonymous.get('/product/pe-buis-25-mm-buis-25/');
+  assert.ok(!asVisitor.text.includes('app/artikelen') && !asVisitor.text.includes(buis.id), 'bezoeker ziet de knop en het artikel-id niet');
+});
+
 test('webshop: assets, doorverwijzing, 404 en alleen lezen', async () => {
   const { base, admin, anonymous } = await setup();
   await admin.put('/app/api/admin/settings', { storefront: true, shopClarity: { enabled: false } });
