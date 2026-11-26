@@ -256,7 +256,7 @@
       : !todo.ai.configured ? 'Er is geen API-sleutel ingesteld (Beheer → Integraties → AI-herkenning).'
         : todo.total === 0 ? 'Alles is al behandeld: er zijn geen artikelen meer aan de beurt.'
           : `${todo.total} artikel${todo.total === 1 ? '' : 'en'} aan de beurt (${todo.withExisting} met een bestaande omschrijving). `
-            + `${todo.research ? `Kenmerken opzoeken voor ${todo.withoutFeatures} (model ${todo.ai.researchModelLabel}). ` : ''}Geschatte kosten ${euro(todo.estimateEur)}; het echte verbruik staat bij AI-kosten.`;
+            + `${todo.research ? `Kenmerken opzoeken voor ${todo.withoutFeatures} (model ${todo.ai.researchModelLabel}). ` : ''}Geschatte kosten ${euro(todo.estimateEur)}; het echte verbruik staat bij AI-kosten. Vandaag nog ${todo.remainingToday} artikelen binnen het dagplafond.`;
     const button = $('#tx-bulk-start');
     button.disabled = !ready || todo.total === 0 || state.bulkRunning;
     button.textContent = state.bulkArmed ? `Bevestig: ${todo.total} schrijven (± ${euro(todo.estimateEur)})` : 'Alles schrijven';

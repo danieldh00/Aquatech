@@ -197,3 +197,63 @@ test('omschrijvingen in bulk: rechten, grenzen, modelkeuze en een fout die de po
     assert.strictEqual((await baas.get(`/app/api/stock/item-texts/${empty.id}`)).body.live.description, '');
   } finally { server.close(); }
 });
+
+test('omschrijvingen in bulk: gelijktijdige runs doen niets dubbel, een veranderde tekst wordt niet overschreven en het dagplafond is zichtbaar', async () => {
+  const gates = { TRAAG: null, WACHT: null };
+  const releases = {};
+  for (const key of Object.keys(gates)) gates[key] = new Promise((resolve) => { releases[key] = resolve; });
+  const { server, calls, as } = await setup(async (input) => {
+    const name = input.fields.find((field) => field.label === 'Naam').value;
+    for (const key of Object.keys(gates)) if (name.includes(key)) await gates[key];
+    return behaviour(input);
+  });
+  /**
+   * Wacht tot de nep-schrijver het opgegeven aantal keren is aangeroepen.
+   * @param {number} writes Het aantal aanroepen.
+   * @returns {Promise<void>}
+   */
+  const untilWrites = async (writes) => { for (let attempt = 0; attempt < 100 && calls.writes < writes; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 20)); };
+  try {
+    const baas = await as('baas');
+    const slow = (await baas.post('/app/api/stock/items', { code: 'T1', name: 'Klep TRAAG', unit: 'st' })).body;
+    const first = baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: [slow.id] });
+    await untilWrites(1);
+    const second = (await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: [slow.id] })).body;
+    assert.deepStrictEqual([second.results[0].status, second.results[0].code], ['skipped', 'busy']);
+    releases.TRAAG();
+    assert.strictEqual((await first).body.results[0].status, 'nieuw');
+    assert.strictEqual(calls.writes, 1, 'maar één keer betaald');
+
+    // Verandert iemand de omschrijving terwijl de AI schrijft, dan blijft die staan.
+    const waiting = (await baas.post('/app/api/stock/items', { code: 'W1', name: 'Klep WACHT', unit: 'st' })).body;
+    await baas.put(`/app/api/stock/items/${waiting.id}`, { description: 'Oude tekst.' });
+    const run = baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: [waiting.id] });
+    await untilWrites(2);
+    await baas.put(`/app/api/stock/items/${waiting.id}`, { description: 'Net handmatig aangepast.' });
+    releases.WACHT();
+    const outcome = (await run).body.results[0];
+    assert.deepStrictEqual([outcome.status, outcome.code], ['skipped', 'changed']);
+    assert.strictEqual((await baas.get(`/app/api/stock/item-texts/${waiting.id}`)).body.live.description, 'Net handmatig aangepast.');
+
+    const todo = (await baas.get('/app/api/stock/item-texts/bulk/todo')).body;
+    assert.ok(Number.isInteger(todo.remainingToday) && todo.remainingToday <= 2000 - 2, 'het dagplafond telt de verwerkte artikelen');
+  } finally { server.close(); }
+});
+
+test('omschrijvingen in bulk: het dagplafond stopt de run', async () => {
+  const { server, as } = await setup(behaviour);
+  try {
+    const baas = await as('baas');
+    assert.strictEqual((await baas.put('/app/api/admin/settings', { descriptionBulkDailyItems: 10 })).status, 200);
+    const ids = [];
+    for (let number = 1; number <= 12; number += 1) ids.push((await baas.post('/app/api/stock/items', { code: `D${number}`, name: `Klep ${number}`, unit: 'st' })).body.id);
+    const early = (await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: ids.slice(0, 6) })).body;
+    assert.ok(early.results.every((result) => result.status === 'nieuw'));
+    const late = (await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: ids.slice(6, 12) })).body;
+    assert.deepStrictEqual(late.results.map((result) => result.code || result.status), ['nieuw', 'nieuw', 'nieuw', 'nieuw', 'daily_limit', 'daily_limit']);
+    const refused = await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: [ids[11]] });
+    assert.strictEqual(refused.status, 429);
+    assert.strictEqual(refused.body.error, 'daily_limit');
+    assert.strictEqual((await baas.get('/app/api/stock/item-texts/bulk/todo')).body.remainingToday, 0);
+  } finally { server.close(); }
+});

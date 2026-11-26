@@ -8,7 +8,10 @@
 // - Een tekst met waarschuwingen van de feitencontrole (getal, eenheid of bewering die niet in de gegevens staat) gaat nooit live maar wordt een concept
 //   voor handmatige beoordeling, zoals bij het schrijven per artikel.
 // - Samengevoegde (variabele) artikelen krijgen één tekst op het hoofdartikel; varianten en gearchiveerde artikelen worden overgeslagen.
-// - Een bulkrun telt niet mee voor het dagelijkse maximum van AI-verzoeken (dat is bedoeld voor losse verzoeken); de schatting en de bevestiging in het scherm vervangen dat.
+// - Een bulkrun telt niet mee voor het dagelijkse maximum van AI-verzoeken (dat is bedoeld voor losse verzoeken). In plaats daarvan geldt een eigen dagplafond
+//   (instelling descriptionBulkDailyItems, in het geheugen geteld: één container) en een uurlimiet; de schatting en de bevestiging in het scherm komen daar nog bij.
+// - Een artikel dat al in behandeling is (tweede tabblad, dubbelklik) wordt overgeslagen, en een tekst wordt alleen overschreven als de bestaande omschrijving
+//   nog gelijk is aan die waarop de AI zijn oordeel baseerde.
 const { AnalyzeError } = require('../beregening/plan-analyzer');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
@@ -28,6 +31,22 @@ const FATAL_CODES = ['auth', 'permission', 'not_found', 'no_credit', 'not_config
 /** Soorten waarschuwing die een tekst tegenhouden (een tekst met alleen "weinig gegevens" mag wel live). */
 const BLOCKING_KINDS = ['number', 'unit', 'claim', 'link'];
 
+/** Artikelen die nu in behandeling zijn (sleutel omgeving:artikel), zodat gelijktijdige runs niets dubbel doen. */
+const inFlight = new Set();
+/** Aantal artikelen dat vandaag per omgeving in een bulkrun is verwerkt (sleutel omgeving|datum). */
+const dailyCounts = new Map();
+
+/**
+ * Het aantal artikelen dat een omgeving vandaag al in bulk liet verwerken.
+ * @param {string} tenantId Id van de omgeving.
+ * @returns {{ key: string, count: number }} De sleutel van de teller en de stand.
+ */
+function dailyOf(tenantId) {
+  const key = `${tenantId}|${new Date().toISOString().slice(0, 10)}`;
+  for (const old of dailyCounts.keys()) if (!old.endsWith(key.slice(key.indexOf('|')))) dailyCounts.delete(old);
+  return { key, count: dailyCounts.get(key) || 0 };
+}
+
 /**
  * Koppelt de routes voor de bulkrun aan de app.
  * @param {object} app Express-app.
@@ -37,7 +56,7 @@ const BLOCKING_KINDS = ['number', 'unit', 'claim', 'link'];
 function registerItemTextBulkRoutes(app, ctx) {
   const { drafts, related, stock, requireRight, requireJson, audit, settingsFor, aiTenantOf, currentItemTextWriter, currentSpecResearcher, aiUsage } = ctx;
   const requireStock = requireRight('voorraad');
-  const limiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 600, keyFn: (req) => `item-text-bulk|${req.tenantId}` });
+  const limiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 120, keyFn: (req) => `item-text-bulk|${req.tenantId}` });
   /**
    * De actieve omgeving van het verzoek.
    * @param {object} req Het verzoek.
@@ -67,7 +86,8 @@ function registerItemTextBulkRoutes(app, ctx) {
     const research = req.query.research !== '0';
     const todo = drafts.bulkTodo(tenantId, { review });
     const estimateEur = todo.total * ESTIMATE_WRITE_EUR + (research ? todo.withoutFeatures * ESTIMATE_RESEARCH_EUR : 0);
-    res.json({ ...todo, review, research, estimateEur: Math.round(estimateEur * 100) / 100, ai: stateOf(tenantId) });
+    const remainingToday = Math.max(0, settingsFor(tenantId).get('descriptionBulkDailyItems') - dailyOf(tenantId).count);
+    res.json({ ...todo, review, research, remainingToday, estimateEur: Math.round(estimateEur * 100) / 100, ai: stateOf(tenantId) });
   });
 
   app.put('/api/stock/item-texts/bulk/model', requireJson, requireRight('beheer'), (req, res) => {
@@ -94,6 +114,9 @@ function registerItemTextBulkRoutes(app, ctx) {
     const writer = currentItemTextWriter(tenantId);
     const researcher = currentSpecResearcher(tenantId);
     if (!writer.available || !researcher.available) return res.status(409).json({ error: 'not_configured', message: 'Er is geen API-sleutel ingesteld: een beheerder kan hem invullen bij Beheer → Integraties → AI-herkenning.' });
+    const dailyLimit = settingsFor(tenantId).get('descriptionBulkDailyItems');
+    const today = dailyOf(tenantId);
+    if (today.count >= dailyLimit) return res.status(429).json({ error: 'daily_limit', message: `Het dagplafond voor omschrijvingen in bulk (${dailyLimit} artikelen) is bereikt. Ga morgen verder of verhoog het plafond bij Beheer → Instellingen.` });
     const research = req.body.research !== false;
     const review = req.body.review !== false;
     const results = [];
@@ -148,12 +171,18 @@ function registerItemTextBulkRoutes(app, ctx) {
       const earlier = (drafts.logOf(tenantId, itemId) || {}).textLog;
       if (earlier && ['nieuw', 'overschreven', 'behouden'].includes(earlier.action)) { results.push({ itemId, status: 'skipped', code: 'done', message: 'Dit artikel is al behandeld.' }); return; }
       if (aborted) { results.push({ itemId, status: 'error', code: aborted.code, message: aborted.message }); return; }
+      if (dailyCounts.get(today.key) >= dailyLimit) { results.push({ itemId, status: 'error', code: 'daily_limit', message: 'Het dagplafond voor omschrijvingen in bulk is bereikt.' }); return; }
+      const flightKey = `${tenantId}:${itemId}`;
+      if (inFlight.has(flightKey)) { results.push({ itemId, status: 'skipped', code: 'busy', message: 'Dit artikel wordt al verwerkt.' }); return; }
+      inFlight.add(flightKey);
+      dailyCounts.set(today.key, (dailyCounts.get(today.key) || 0) + 1);
       const started = Date.now();
       let usageLogged = false;
       try {
         await lookUpFeatures(itemId);
         const prepared = drafts.prepareWrite(tenantId, itemId);
         const existing = prepared.facts.fields.some((field) => field.label === 'Bestaande omschrijving');
+        const basis = drafts.currentText(tenantId, itemId);
         if (existing && !review) { results.push({ itemId, status: 'skipped', code: 'has_text', message: 'Heeft al een omschrijving.' }); return; }
         const writeStarted = Date.now();
         const written = await writer.write({ fields: prepared.facts.fields });
@@ -170,8 +199,9 @@ function registerItemTextBulkRoutes(app, ctx) {
           results.push({ itemId, status: 'concept', warnings: draft ? draft.warnings.length : blocking.length });
           return;
         }
-        const applied = drafts.applyWritten(tenantId, itemId, { ...written, reason: written.verdictReason }, stock, req.user);
-        results.push(applied.error ? { itemId, status: 'error', code: applied.error, message: 'De tekst kon niet worden geplaatst.' } : { itemId, status: applied.action });
+        const applied = drafts.applyWritten(tenantId, itemId, { ...written, reason: written.verdictReason, basis }, stock, req.user);
+        if (applied.error === 'changed') results.push({ itemId, status: 'skipped', code: 'changed', message: 'De omschrijving is intussen veranderd; er is niets overschreven.' });
+        else results.push(applied.error ? { itemId, status: 'error', code: applied.error, message: 'De tekst kon niet worden geplaatst.' } : { itemId, status: applied.action });
       } catch (error) {
         if (error instanceof AnalyzeError) {
           if (error.code !== 'not_configured' && !usageLogged) logUsage('product_tekst', itemId, started, { model: error.model, usage: error.usage, status: error.code });
@@ -181,6 +211,8 @@ function registerItemTextBulkRoutes(app, ctx) {
         }
         console.warn(`Omschrijving schrijven mislukt: ${error.message}`);
         results.push({ itemId, status: 'error', code: 'error', message: 'Het schrijven is mislukt door een interne fout.' });
+      } finally {
+        inFlight.delete(flightKey);
       }
     };
     try {

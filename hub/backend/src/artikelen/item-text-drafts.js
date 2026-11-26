@@ -301,19 +301,28 @@ function createItemTextDraftStore(db) {
   }
 
   /**
+   * De omschrijving die nu in gebruik is (eigen, anders die van het webshopproduct).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} itemId Id van het artikel.
+   * @returns {string} De tekst, leeg zonder omschrijving of zonder artikel.
+   */
+  const currentText = (tenantId, itemId) => { const row = findRow(tenantId, itemId); return row ? currentTextOf(row).text : ''; };
+
+  /**
    * Zet een geschreven omschrijving direct live (bulkrun) en legt vast wat er gebeurde. De titel en omschrijving voor zoekmachines worden alleen gevuld als ze leeg zijn.
    * Een bestaande omschrijving wordt bewaard in het logboek, zodat ze terug kan.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} itemId Id van het artikel.
-   * @param {{ description: string, seoTitle: string, seoDescription: string, model?: string, reason?: string }} texts De geschreven tekst.
+   * @param {{ description: string, seoTitle: string, seoDescription: string, model?: string, reason?: string, basis?: string }} texts De geschreven tekst; basis = de omschrijving waarop de AI zijn oordeel baseerde (is ze intussen veranderd, dan wordt niets overschreven).
    * @param {{ update: Function }} stock De voorraadopslag (voor de wijziging van het artikel).
    * @param {object|null} user Wie de run startte.
-   * @returns {{ action?: string, error?: string }} nieuw of overschreven, of een fout.
+   * @returns {{ action?: string, error?: string }} nieuw of overschreven, of een fout (changed = de omschrijving is intussen veranderd).
    */
   function applyWritten(tenantId, itemId, texts, stock, user) {
     const row = findRow(tenantId, itemId);
     if (!row) return { error: 'not_found' };
     const previous = currentTextOf(row);
+    if (texts.basis !== undefined && texts.basis !== previous.text) return { error: 'changed' };
     const live = ItemDetails.sanitizeSeoTitle(row.seo_title) && ItemDetails.sanitizeSeoDescription(row.seo_description);
     const patch = { description: texts.description };
     if (!ItemDetails.sanitizeSeoTitle(row.seo_title)) patch.seoTitle = texts.seoTitle;
@@ -352,7 +361,7 @@ function createItemTextDraftStore(db) {
     return { ok: true };
   }
 
-  return { list, get, save, edit, remove, forApproval, prepareWrite, hasDraft, bulkTodo, featuresSearched, applyWritten, recordKept, restorePrevious, saveFeatures: textLog.saveFeatures, logOf: textLog.read };
+  return { list, get, save, edit, remove, forApproval, prepareWrite, hasDraft, currentText, bulkTodo, featuresSearched, applyWritten, recordKept, restorePrevious, saveFeatures: textLog.saveFeatures, logOf: textLog.read };
 }
 
 /**
