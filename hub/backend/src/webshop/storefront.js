@@ -210,6 +210,17 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     return open ? open.siteKey : '';
   };
   /**
+   * Wat de shop nu werkelijk gebruikt, voor de cookieverklaring: alleen diensten die aan staan worden genoemd.
+   * @returns {{ analytics: boolean, clarity: boolean, captcha: boolean, guestOrders: boolean, onlinePayment: boolean }} Per dienst of de shop hem laadt of gebruikt.
+   */
+  const cookieServicesOf = () => ({
+    analytics: Boolean(analyticsIdOf()),
+    clarity: Boolean(clarityIdOf()),
+    captcha: Boolean(captchaKeyOf()),
+    guestOrders: Boolean(guestOrders) && Boolean(payments) && payments.guestCheckoutAllowed(tenantId),
+    onlinePayment: Boolean(payments) && payments.optionsFor(tenantId, null).includes('online'),
+  });
+  /**
    * Controleert de onzichtbare captcha van een formulier van de shop (alleen als hij aan staat).
    * @param {object} req Het verzoek met het formulier in req.body.
    * @param {string} action De actie van het formulier (zie ACTIONS in beveiliging/captcha.js).
@@ -1436,7 +1447,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     const pathname = req.originalUrl.split('?')[0];
     if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/${req.originalUrl.slice(pathname.length)}`);
     const site = contentOf(req).site;
-    const page = contentOf(req).pages.find((candidate) => candidate.slug === req.params.slug) || legalDefaults(site.contact)[req.params.slug];
+    const page = contentOf(req).pages.find((candidate) => candidate.slug === req.params.slug) || legalDefaults(site.contact, cookieServicesOf())[req.params.slug];
     const groups = catalogOf(req).groups;
     if (!page) return sendPage(req, res, 404, () => notFoundPage('../../', groups));
     sendPage(req, res, 200, () => contentPage(page, groups, '../../', catalogOf(req)));
