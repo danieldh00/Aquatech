@@ -523,6 +523,8 @@
     document.querySelectorAll('.tab').forEach((button) => button.classList.toggle('active', button.dataset.tab === name));
     for (const tabName of TABS) $(`#tab-${tabName}`).hidden = tabName !== name;
     $('#v-title').textContent = TAB_TITLES[name] || 'Artikelen';
+    // Intro en KPI's horen bij de lijst; op de andere onderdelen maken ze de pagina alleen drukker.
+    for (const element of [$('#v-intro'), $('#v-stats')]) element.style.display = name === 'stock' ? '' : 'none';
     if (name === 'units') { $('#units-form').hidden = false; loadUnits().catch((error) => toast(error.message, true)); }
     if (name === 'moves' && !state.moves) loadMoves();
     window.ArtikelenProposals.setTab(name);
