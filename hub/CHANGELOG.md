@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.41.4
+
+`GET /planner/` stuurt bezoekers zonder inlog naar `app/beregening/?tekenen` (het aanmeldformulier blijft bereikbaar met `?account=1`). De planner neemt na het inloggen het lokale ontwerp zonder account over (`_adoptAnonymousDraft`, alleen in een leeg plan, daarna wordt de lokale kopie gewist). Knop *Ontwerp bewaren met account* in de balk van de planner zonder account. AI blijft uit voor anonieme bezoekers; de bestaande limieten op de openbare routes gelden.
+
 ## 1.41.3
 
 - `relatedSections` (storefront-pages.js): de eerste vier producten van elk blok staan open, de rest in een `<details class="related-more">` met knop *Bekijk meer (n)*; zonder script en zonder nieuwe CSP-uitzondering. Test in `related-items.test.js`.

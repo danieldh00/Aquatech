@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.41.4',
+      date: '2026-11-26',
+      title: 'Planner direct gebruiken zonder account',
+      items: [
+        { text: 'De knop Planner in de webshop opent de planner meteen, zonder eerst een account te maken. Je tekent, plaatst sproeiers en zet het materiaal in je winkelwagen. Een account heb je pas nodig om je ontwerp te bewaren of te bestellen.' },
+        { text: 'In de planner zonder account staat de knop Ontwerp bewaren met account. Na registreren of inloggen staat je ontwerp er gewoon.' },
+      ],
+    },
+    {
       version: '1.41.3',
       date: '2026-11-26',
       title: 'Gerelateerde artikelen: maximaal vier zichtbaar',
