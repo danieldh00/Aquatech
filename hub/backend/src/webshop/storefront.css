@@ -634,6 +634,49 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
   .planner-promo-top > div { width: 100%; }
 }
 
+/* Startpagina, nieuw ontwerp (navy blokken): afgeronde kaarten in dezelfde stijl als de categoriepagina's. Staat bewust na de oude regels en overschrijft ze. */
+.home-hero { display: grid; grid-template-columns: 1fr 1fr; width: min(1136px, calc(100% - 32px)); min-height: 420px; margin: 20px auto 0; border-radius: 24px; overflow: hidden; background: linear-gradient(135deg, var(--at-shop-navy), var(--at-shop-navy-dark)); }
+.home-hero > :not(.home-hero-text) { grid-column: 2; grid-row: 1; width: 100%; height: 100%; min-height: 420px; object-fit: cover; border-radius: 0 0 0 120px; }
+.home-hero > picture { display: block; overflow: hidden; border-radius: 0 0 0 120px; }
+.home-hero > picture img { width: 100%; height: 100%; min-height: 420px; object-fit: cover; }
+.home-hero-text { position: static; grid-column: 1; grid-row: 1; padding: 56px 48px; background: none; justify-content: center; gap: 12px; }
+.home-hero h1 { font-size: 2.6rem; line-height: 1.1; font-weight: 800; }
+.home-hero p { max-width: 30em; margin: 0 0 14px; color: var(--at-band); line-height: 1.5; }
+.assortment { background: transparent; margin-top: 40px; padding: 0 16px; }
+.assortment-inner { display: block; max-width: 1136px; margin: 0 auto; padding: 32px; border-radius: 24px; background: var(--at-shop-navy); }
+.assortment-title { width: auto; margin-bottom: 20px; }
+.assortment-title h2 { font-size: 1.6rem; font-weight: 800; }
+.assortment-title p { text-transform: none; color: var(--at-band); }
+.assortment-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; overflow: visible; padding: 0; }
+.assortment-tile { width: auto; padding: 12px; border-radius: 14px; background: var(--at-white); color: var(--at-shop-navy); font-weight: 700; }
+.assortment-tile .product-image { border-radius: 10px; }
+.benefits { background: transparent; color: var(--at-ink); margin-top: 40px; }
+.benefits-inner { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); padding: 0 16px; }
+.benefit { gap: 16px; padding: 20px; border-radius: 20px; background: var(--at-shop-green-soft); }
+.benefit img { padding: 8px; border-radius: 14px; background: var(--at-shop-navy); width: 56px; height: 56px; }
+.benefit strong { color: var(--at-shop-navy); font-size: 1.05rem; }
+.brands { margin-top: 24px; padding: 20px 32px; border: 1px solid var(--at-line); border-radius: 20px; background: var(--at-white); }
+.brands img { height: 44px; filter: grayscale(1); opacity: 0.7; }
+.home-banners { width: min(1136px, calc(100% - 32px)); gap: 20px; margin: 40px auto 0; }
+.home-banner { border-radius: 20px; }
+.business { max-width: 1136px; margin: 40px auto 48px; border-radius: 24px; overflow: hidden; }
+.business.with-form { padding: 0 32px; }
+.tab-labels { justify-content: flex-start; gap: 8px; }
+.tab-labels label { padding: 10px 18px; border: 1px solid var(--at-line); border-radius: 99px; background: var(--at-white); color: var(--at-shop-navy); font-size: 0.9rem; font-weight: 700; }
+#tab-best:checked ~ .tab-labels label[for="tab-best"], #tab-popular:checked ~ .tab-labels label[for="tab-popular"] { background: var(--at-shop-navy); border-color: var(--at-shop-navy); color: var(--at-white); }
+@media (max-width: 860px) {
+  .home-hero { display: block; width: 100%; min-height: 0; margin-top: 0; border-radius: 0; }
+  .home-hero > :not(.home-hero-text), .home-hero > picture { display: block; height: 200px; min-height: 0; border-radius: 0; }
+  .home-hero > picture img { height: 200px; min-height: 0; }
+  .home-hero-text { padding: 28px 20px; }
+  .home-hero h1 { font-size: 1.9rem; }
+  .assortment-inner { padding: 20px 14px; }
+  .assortment-strip { grid-template-columns: repeat(2, 1fr); }
+  .business { margin-inline: 16px; }
+  .business.with-form { padding: 0 16px; }
+  .tab-labels label { font-size: 0.85rem; padding: 8px 14px; }
+}
+
 /* Categoriepagina, nieuw ontwerp: rustige kaarten, grotere prijs en duidelijke knop. Alles hangt onder .browse, zodat de startpagina ongewijzigd blijft. */
 .crumbs-band { background: transparent; border-bottom: 0; }
 .crumbs-band .crumbs { padding-top: 16px; }
