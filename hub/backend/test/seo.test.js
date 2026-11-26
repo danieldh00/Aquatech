@@ -7,6 +7,8 @@ const { createApp } = require('../src/server');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
 const Seo = require('../src/webshop/seo');
+const ItemDetails = require('../src/artikelen/item-details');
+const { createItemTextLog } = require('../src/artikelen/item-text-log');
 const { createLogin, createClient, listen } = require('./helpers/http-client');
 
 const SECRET = 'f'.repeat(64);
@@ -335,6 +337,17 @@ test('productpagina: een door de AI geschreven omschrijving wordt niet getoond (
   assert.match(page.text, /<th scope="row">Worp<\/th><td>4-6 m<\/td>/);
   assert.strictEqual(jsonLdOf(page.text).find((item) => item['@type'] === 'Product').additionalProperty[0].name, 'Worp');
   assert.strictEqual((await admin.get(`/app/api/stock/items/${sproeier.id}`)).body.description, 'Door de AI geschreven tekst.', 'de tekst blijft bewaard');
+});
+
+test('productpagina: een AI-omschrijving met echte vingerafdruk (via recordWrite) die nog klopt blijft verborgen', async () => {
+  const { anonymous, admin, db, main } = await setupShop();
+  const items = (await admin.get('/app/api/stock')).body.items;
+  const sproeier = items.find((item) => item.code === 'SPR-1');
+  const text = 'Tekst van de AI met vingerafdruk.';
+  await admin.put(`/app/api/stock/items/${sproeier.id}`, { description: text });
+  createItemTextLog(db).recordWrite(main, sproeier.id, { action: 'nieuw', model: 'm', textHash: ItemDetails.textHash(text) });
+  const page = await anonymous.get('/product/sproeier-pro-spr-1/');
+  assert.ok(!page.text.includes(text), 'gelijke vingerafdruk: verborgen');
 });
 
 test('productpagina: een AI-omschrijving met vingerafdruk die niet meer klopt (handmatig aangepast) wordt wel getoond', async () => {

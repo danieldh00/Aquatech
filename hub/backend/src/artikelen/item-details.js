@@ -4,6 +4,8 @@
 // gekoppelde webshopproduct (shop_products.description en de zichtbare kenmerken die niet voor
 // variaties zijn). Alles zuivere functies, zodat de shop, de feed en de artikel-API ze delen.
 
+const crypto = require('crypto');
+
 /** Hoogstens zoveel tekens omschrijving. */
 const MAX_DESCRIPTION = 5000;
 /** Hoogstens zoveel tekens in een eigen zoekmachinetitel (langere titels worden in zoekresultaten afgekapt). */
@@ -93,7 +95,7 @@ function sanitizeSpecifications(raw) {
  * @returns {string} 16 hexadecimale tekens.
  */
 function textHash(description) {
-  return require('crypto').createHash('sha256').update(sanitizeDescription(description)).digest('hex').slice(0, 16);
+  return crypto.createHash('sha256').update(sanitizeDescription(description)).digest('hex').slice(0, 16);
 }
 
 /**
