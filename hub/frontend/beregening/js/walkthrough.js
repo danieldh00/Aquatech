@@ -9,6 +9,8 @@
     { title: '4. Stuklijst en bestellen', text: 'Onder Stuklijst & export zie je een prijsindicatie. Met Materiaal bestellen gaat de hele lijst in één keer naar je winkelwagen.' },
     { title: '5. Indienen of bewaren', text: 'Dien je tekening in en een installateur controleert hem en stuurt een offerte. Wil je hem bewaren? Maak een account met Bewaren: je ontwerp gaat dan mee.' }
   ];
+  const STEP_SAVE_ONLY = { title: '5. Bewaren', text: 'Wil je je ontwerp bewaren? Maak een account met Bewaren: je ontwerp gaat dan mee.' };
+  let steps = STEPS;
   let index = 0;
   let card = null;
 
@@ -28,15 +30,16 @@
   /** Sluit de rondleiding. */
   function close() {
     markSeen();
+    document.removeEventListener('keydown', onKey);
     if (card) card.remove();
     card = null;
   }
 
   /** Tekent de huidige kaart van de rondleiding. */
   function render() {
-    const step = STEPS[index];
-    const last = index === STEPS.length - 1;
-    const dots = STEPS.map((_, position) => `<span class="tour-dot${position === index ? ' on' : ''}"></span>`).join('');
+    const step = steps[index];
+    const last = index === steps.length - 1;
+    const dots = steps.map((_, position) => `<span class="tour-dot${position === index ? ' on' : ''}"></span>`).join('');
     card.querySelector('.tour-body').innerHTML = `<h2>${step.title}</h2><p>${step.text}</p>
       <div class="tour-dots" aria-hidden="true">${dots}</div>
       <div class="tour-actions"><button type="button" class="btn" data-tour="skip">${last ? 'Sluiten' : 'Overslaan'}</button>
@@ -44,10 +47,22 @@
     card.querySelector('[data-tour="next"]').focus();
   }
 
-  /** Opent de rondleiding bij de eerste kaart. */
-  function open() {
+  /**
+   * Sluit de rondleiding met Escape.
+   * @param {KeyboardEvent} event de toetsdruk
+   */
+  function onKey(event) {
+    if (event.key === 'Escape') close();
+  }
+
+  /**
+   * Opent de rondleiding bij de eerste kaart.
+   * @param {{canSubmit?: boolean}} [options] canSubmit false = de laatste kaart noemt alleen Bewaren
+   */
+  function open(options) {
     if (card) return;
     index = 0;
+    steps = options && options.canSubmit === false ? STEPS.slice(0, -1).concat([STEP_SAVE_ONLY]) : STEPS;
     card = document.createElement('div');
     card.className = 'help open tour';
     card.setAttribute('role', 'dialog');
@@ -58,15 +73,12 @@
       if (event.target === card || action === 'skip') return close();
       if (action === 'prev' && index > 0) { index -= 1; render(); }
       if (action === 'next') {
-        if (index >= STEPS.length - 1) return close();
+        if (index >= steps.length - 1) return close();
         index += 1;
         render();
       }
     });
-    document.addEventListener('keydown', function onKey(event) {
-      if (!card) { document.removeEventListener('keydown', onKey); return; }
-      if (event.key === 'Escape') close();
-    });
+    document.addEventListener('keydown', onKey);
     document.body.appendChild(card);
     render();
   }

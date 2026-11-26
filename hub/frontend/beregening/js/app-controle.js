@@ -75,7 +75,7 @@
              <div class="rv-act"><a class="btn primary" href="${escapeHtml(this._saveWithAccountHref())}">${saveIcon}Bewaren met account</a><div class="rv-sub">${login}</div></div>`;
         const tour = $('#rv-tour', bar);
         if (tour) tour.addEventListener('click', (event) => { event.preventDefault(); if (window.PlannerTour) window.PlannerTour.open(); });
-        if (window.PlannerTour && !window.PlannerTour.seen() && !this._tourShown) { this._tourShown = true; window.PlannerTour.open(); }
+        if (window.PlannerTour && !window.PlannerTour.seen() && !this._tourShown) { this._tourShown = true; window.PlannerTour.open({ canSubmit: Boolean(drawing.enabled) }); }
         return;
       }
       const review = this.review;
