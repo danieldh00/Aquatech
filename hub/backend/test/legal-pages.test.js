@@ -79,14 +79,14 @@ test('cookieverklaring: Google Analytics en Clarity staan er alleen in als ze aa
   await world.admin.put('/app/api/admin/settings', { shopAnalytics: { enabled: true, measurementId: 'G-TEST1234' } });
   let page = await visitor.get('/pagina/cookieverklaring/');
   assert.match(page.text, /Google Analytics 4/);
-  assert.match(page.text, /policies\.google\.com\/privacy/);
+  assert.ok(page.text.includes('href="https://policies.google.com/privacy"'));
   assert.match(page.text, /aquatech_shop_consent/);
   assert.doesNotMatch(page.text, /Microsoft Clarity/);
   await world.admin.put('/app/api/admin/settings', { shopClarity: { enabled: true, projectId: 'zgjek0q90a' } });
   page = await visitor.get('/pagina/cookieverklaring/');
   assert.match(page.text, /Microsoft Clarity/);
   assert.match(page.text, /_clck/);
-  assert.match(page.text, /privacy\.microsoft\.com/);
+  assert.ok(page.text.includes('href="https://privacy.microsoft.com/nl-nl/privacystatement"'));
   assert.match((await visitor.get('/pagina/privacyverklaring/')).text, /Google Analytics en Microsoft Clarity/);
   await world.admin.put('/app/api/admin/settings', { shopAnalytics: { enabled: false, measurementId: 'G-TEST1234' }, shopClarity: { enabled: false, projectId: 'zgjek0q90a' } });
   assert.doesNotMatch((await visitor.get('/pagina/cookieverklaring/')).text, /Google Analytics|Microsoft Clarity/);
