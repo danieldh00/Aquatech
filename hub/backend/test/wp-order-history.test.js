@@ -207,3 +207,39 @@ test('klanten: elke bestelling met een e-mailadres maakt een klant (zonder inlog
   assert.strictEqual(scene.history.status(scene.tenantId).customers, 2);
   assert.strictEqual(customerOf({ billing: { email: 'geen-adres', first_name: 'X' } }), null);
 });
+
+test('routes: rechten, andere organisatie, limiet en module uit', async () => {
+  const { setup: webshopSetup } = require('./helpers/webshop-world');
+  const world = await webshopSetup();
+  const { admin, vreemd } = world;
+  const shopper = world.shoppers[0].client;
+  const own = (await admin.post('/app/api/stock/items', { code: 'WP-1', name: 'Eigen artikel', onHand: 1, salePrice: 5 })).body;
+  const foreign = (await vreemd.post('/app/api/stock/items', { code: 'WP-2', name: 'Vreemd artikel', onHand: 1, salePrice: 5 })).body;
+  const base = '/app/api/stock/related/wp-orders';
+  const tenantId = world.db.prepare("SELECT id FROM tenants WHERE slug = 'default' OR parent_id IS NULL ORDER BY created_at LIMIT 1").get().id;
+  world.db.prepare("INSERT INTO wp_order_lines (id, tenant_id, wp_order_id, wp_line_id, ordered_at, product_id, name, qty) VALUES (?, ?, '1', '1', now(), '77', 'Onbekend', 1)").run(require('crypto').randomUUID(), tenantId);
+  // Zonder recht voorraad: geen toegang.
+  assert.strictEqual((await shopper.get(base)).status, 403);
+  assert.strictEqual((await shopper.post(`${base}/start`, {})).status, 403);
+  assert.strictEqual((await shopper.post(`${base}/stop`, {})).status, 403);
+  assert.strictEqual((await shopper.post(`${base}/link`, { productId: '77', name: 'Onbekend', itemId: own.id })).status, 403);
+  // Een andere organisatie ziet de regels niet en kan er geen artikel van een ander aan koppelen.
+  const foreignView = await vreemd.get(base);
+  assert.strictEqual(foreignView.status, 200);
+  assert.strictEqual(foreignView.body.status.lines, 0);
+  assert.strictEqual(foreignView.body.unmatched.length, 0);
+  assert.strictEqual((await admin.post(`${base}/link`, { productId: '77', name: 'Onbekend', itemId: foreign.id })).status, 404, 'artikel van een andere organisatie');
+  const linked = await admin.post(`${base}/link`, { productId: '77', name: 'Onbekend', itemId: own.id });
+  assert.strictEqual(linked.status, 200);
+  assert.strictEqual(linked.body.updated, 1);
+  // Starten zonder REST-koppeling geeft meteen 202; de fout staat daarna in de stand. De limiet is 10 per uur.
+  const started = await admin.post(`${base}/start`, {});
+  assert.strictEqual(started.status, 202);
+  for (let attempt = 0; attempt < 9; attempt++) await admin.post(`${base}/start`, {});
+  assert.strictEqual((await admin.post(`${base}/start`, {})).status, 429);
+  assert.strictEqual((await admin.post(`${base}/stop`, {})).status, 200);
+  // Module uit: ook deze adressen zijn dicht.
+  assert.strictEqual((await admin.put('/app/api/admin/modules', { flags: { 'gerelateerde-artikelen': false } })).status, 200);
+  assert.strictEqual((await admin.get(base)).status, 409);
+  assert.strictEqual((await admin.post(`${base}/start`, {})).status, 409);
+});

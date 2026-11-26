@@ -327,8 +327,8 @@ function createRelatedStore(db) {
       WHERE l.tenant_id = ? AND l.ordered_at >= ? ORDER BY l.ordered_at DESC, l.wp_order_id LIMIT ${MAX_SALE_LINES}`).all(tenantId, since.toISOString())
       .map((row) => ({ order_id: `wp:${row.wp_order_id}`, kind: 'verkoop', main_id: row.main_id, sold_at: new Date(row.ordered_at).toISOString() }));
     const combined = wpRows.length
-      ? [...rows.map((row) => ({ ...row, sold_at: String(row.sold_at) })), ...wpRows]
-        .sort((left, right) => (left.sold_at < right.sold_at ? 1 : left.sold_at > right.sold_at ? -1 : String(left.order_id) < String(right.order_id) ? -1 : 1)).slice(0, MAX_SALE_LINES)
+      ? [...rows.map((row) => ({ ...row, sold_at: new Date(row.sold_at).toISOString() })), ...wpRows]
+        .sort((left, right) => (right.sold_at < left.sold_at ? -1 : right.sold_at > left.sold_at ? 1 : String(left.order_id).localeCompare(String(right.order_id)))).slice(0, MAX_SALE_LINES)
       : rows;
     // Is er afgekapt, dan blijft de nieuwste periode over en gaat de laatste (mogelijk halve) bestelling niet mee: alle regels van die bestelling gaan eruit (ook de retourregels, die een eigen datum hebben): een bestelling zit er heel in of helemaal niet.
     let usedRows = combined;
