@@ -9,6 +9,7 @@
 // (status open, betaald, mislukt of verlopen) en kan pas op Verzonden als hij
 // betaald is; een onbetaalde online bestelling houdt de voorraad vast tot hij
 // betaald, geannuleerd of verlopen is.
+const { archiveModeOf, archiveClause } = require('../platform/archive-filter');
 const crypto = require('crypto');
 const { transaction } = require('../database/db');
 const { validEmail } = require('../platform/mailer');
@@ -733,9 +734,11 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
    * @param {{ status?: string, query?: string, limit?: number, offset?: number, withLines?: boolean }} [options] Filter op status en zoekterm (nummer, naam of e-mail), paginering en of de regels meekomen (export).
    * @returns {{ total: number, items: object[], counts: Object<string, number> }} Aantal, bestellingen en aantal per status.
    */
-  function list(tenantId, { status = '', query = '', limit = 50, offset = 0, withLines = false } = {}) {
+  function list(tenantId, { status = '', query = '', limit = 50, offset = 0, withLines = false, archive = 'verberg' } = {}) {
     const where = ['tenant_id = ?'];
     const args = [tenantId];
+    const archiveSql = archiveClause('archived_at', archive).replace(/^ AND /, '');
+    if (archiveSql) where.push(archiveSql);
     if (STATUSES[status]) { where.push('status = ?'); args.push(status); }
     const words = String(query || '').replace(/[%_\\]/g, ' ').trim().toLowerCase().slice(0, 80);
     if (words) { where.push('(lower(number) LIKE ? OR lower(customer_name) LIKE ? OR lower(email) LIKE ?)'); args.push(`%${words}%`, `%${words}%`, `%${words}%`); }
@@ -747,7 +750,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
     const payStatus = "((data)::jsonb -> 'pay' ->> 'status')";
     const rows = prepare(`SELECT ${COLUMNS}${withLines ? ', data' : `, ${payStatus} AS pay_status`} FROM web_orders WHERE ${clause} ORDER BY created_at DESC, number DESC LIMIT ? OFFSET ?`).all(...args, size, start);
     const counts = Object.fromEntries(Object.keys(STATUSES).map((key) => [key, 0]));
-    for (const row of prepare('SELECT status, COUNT(*) AS n FROM web_orders WHERE tenant_id = ? GROUP BY status').all(tenantId)) counts[row.status] = Number(row.n);
+    for (const row of prepare(`SELECT status, COUNT(*) AS n FROM web_orders WHERE tenant_id = ?${archiveClause('archived_at', archive)} GROUP BY status`).all(tenantId)) counts[row.status] = Number(row.n);
     return { total, items: rows.map((row) => (withLines ? shapeFull(row) : shape(row))), counts };
   }
 
@@ -1473,7 +1476,7 @@ function registerWebOrderRoutes(app, { orders, requireJson, audit, invoices = nu
 
   app.get('/api/admin/web-orders', (req, res) => {
     const out = orders.list(req.tenantId, {
-      status: String(req.query.status || ''), query: String(req.query.q || ''), limit: req.query.limit, offset: req.query.offset, withLines: req.query.lines === '1',
+      status: String(req.query.status || ''), query: String(req.query.q || ''), limit: req.query.limit, offset: req.query.offset, withLines: req.query.lines === '1', archive: archiveModeOf(req.query.archief),
     });
     res.json({ ...out, statuses: STATUSES });
   });

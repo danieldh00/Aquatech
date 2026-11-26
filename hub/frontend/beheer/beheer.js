@@ -1287,6 +1287,7 @@
     if (section.pane === 'shopkortingen') window.BeheerKortingen.load();
     if (section.pane === 'shopleveren') window.BeheerLevermethodes.load();
     if (section.pane === 'sproeiers') window.BeheerSproeiers.load();
+    if (section.pane === 'archief') window.BeheerArchief.load();
     if (section.pane === 'aikosten') window.BeheerAiKosten.load();
     if (section.pane === 'kleuren') window.BeheerKleuren.load();
     if (section.pane === 'documentopmaak') window.BeheerDocumentopmaak.load();
@@ -1353,6 +1354,7 @@
     window.BeheerWebshop.init({ toast });
     window.BeheerWebshopInhoud.init({ toast });
     window.BeheerKortingen.init({ toast });
+    window.BeheerArchief.init({ toast });
     window.BeheerModules.init({ toast, onSaved: refreshMenu });
     window.BeheerLevermethodes.init({ toast });
     window.BeheerSproeiers.init({ toast });

@@ -56,6 +56,7 @@
       { id: 'hersteltest-drive', label: 'Hersteltest Google Drive', pane: 'hersteltest-drive', words: 'hersteltest google drive recovery restore test back-up terugzetten wekelijks controle offsite cloud', needs: 'updates' },
       { id: 'backup-drive', label: 'Back-ups naar Google Drive', pane: 'settings', form: 's-backup-drive', words: 'google drive kopie buiten server offsite cloud upload oauth', needs: 'backups' },
       { id: 'vps', label: 'Draaiboek VPS-verhuizing', pane: 'settings', form: 's-vps', words: 'vps verhuizen migratie server nieuwe host draaiboek tunnel cloudflare docker hoofdsleutel terugzetten', needs: 'updates' },
+      { id: 'archief', label: 'Archief', pane: 'archief', words: 'archiveren archief testdata testplannen terughalen verwijderen opruimen go-live bewaarplicht factuur offerte werkorder bestelling klant plan' },
       { id: 'aikosten', label: 'AI-kosten', pane: 'aikosten', words: 'verbruik tokens kosten export per gebruiker' },
       { id: 'debug', label: 'Foutopsporing', pane: 'settings', form: 's-debug', words: 'debug debugmodus foutmelding fout foutcode details' },
       { id: 'updates', label: 'Updates', pane: 'updates', words: 'update versie bijwerken nieuwe versie releasenotes onderhoudsmodus installeren', needs: 'updates' },
