@@ -113,6 +113,18 @@ test('de hook draait ook via een symlink naar het project (geen fail-open)', () 
   assert.equal(run.status, 2, run.stderr);
 });
 
+test('de hook blokkeert ook als alleen het bestandspad via een symlink loopt (omgekeerde richting)', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'hook-'));
+  const link = join(directory, 'project');
+  symlinkSync(root, link, 'dir');
+  const call = JSON.stringify({ tool_name: 'Write', tool_input: { file_path: join(link, 'hub/CHANGELOG.md'), content: 'x' } });
+  const run = spawnSync('node', [join(root, '.claude/hooks/guard.mjs')], { input: call, env: { ...process.env, CLAUDE_PROJECT_DIR: root, AQUATECH_HOOKS_OFF: '' }, encoding: 'utf8' });
+  assert.equal(run.status, 2, run.stderr);
+  const nieuw = JSON.stringify({ tool_name: 'Write', tool_input: { file_path: join(link, 'hub/backend/src/bestaat-nog-niet/a.js'), content: 'db.all(`SELECT * FROM t`)' } });
+  const nieuweRun = spawnSync('node', [join(root, '.claude/hooks/guard.mjs')], { input: nieuw, env: { ...process.env, CLAUDE_PROJECT_DIR: root, AQUATECH_HOOKS_OFF: '' }, encoding: 'utf8' });
+  assert.equal(nieuweRun.status, 2, nieuweRun.stderr);
+});
+
 test('Bash: waarschuwing zonder changes-fragment', () => {
   const result = checkBash('git push -u origin claude/x', { branch: 'claude/x', hubChangedWithoutFragment: true });
   assert.equal(result.warn.length, 1);

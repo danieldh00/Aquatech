@@ -3,7 +3,7 @@
 // Cross-platform (Node). Uitzetten voor één sessie kan alleen door de mens: omgevingsvariabele AQUATECH_HOOKS_OFF=1.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
-import { isAbsolute, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ASK_FILES, BASH_RULES, FILE_RULES, RELEASE_FILES } from './rules.mjs';
 
@@ -116,6 +116,17 @@ export function checkBash(command, context = {}) {
   return result;
 }
 
+/** Geeft het echte pad van een bestand, of van de dichtstbijzijnde bestaande map erboven plus de rest (voor een nieuw bestand). */
+export function realPathOf(path) {
+  const rest = [];
+  let current = path;
+  while (!existsSync(current) && dirname(current) !== current) {
+    rest.unshift(basename(current));
+    current = dirname(current);
+  }
+  return resolve(realpathSync(current), ...rest);
+}
+
 /** Leest stdin volledig als tekst. */
 async function readStdin() {
   const chunks = [];
@@ -149,7 +160,7 @@ async function main() {
     process.exit(0);
   }
   const input = call.tool_input || {};
-  const root = resolve(process.env.CLAUDE_PROJECT_DIR || call.cwd || process.cwd());
+  const root = realPathOf(resolve(process.env.CLAUDE_PROJECT_DIR || call.cwd || process.cwd()));
   const branch = git(root, ['rev-parse', '--abbrev-ref', 'HEAD']);
   if (call.tool_name === 'Bash') {
     let hubChangedWithoutFragment = false;
@@ -161,7 +172,7 @@ async function main() {
     return;
   }
   if (!input.file_path) process.exit(0);
-  const absolute = isAbsolute(input.file_path) ? input.file_path : resolve(root, input.file_path);
+  const absolute = realPathOf(isAbsolute(input.file_path) ? input.file_path : resolve(root, input.file_path));
   const rel = relative(root, absolute).split('\\').join('/');
   if (rel.startsWith('..')) process.exit(0);
   const existing = call.tool_name === 'Write' && existsSync(absolute) ? readFileSync(absolute, 'utf8') : '';
