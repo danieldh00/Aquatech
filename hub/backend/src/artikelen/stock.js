@@ -1242,10 +1242,10 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @param {string} tenantId Id van de omgeving.
    * @param {object[]} products Alle producten uit de webshop (met variaties).
    * @param {Function} matchProduct Functie item ({ code }) → webshopproduct of null.
-   * @param {{ vatRate?: number, priceOf?: Function }} [options] Btw-tarief van nieuwe artikelen en product → verkoopprijs excl. btw.
+   * @param {{ vatRate?: number, priceOf?: Function, onProgress?: Function }} [options] Btw-tarief van nieuwe artikelen, product → verkoopprijs excl. btw en onProgress (krijgt { step: 'toevoegen', total, created, skipped, added: [{ code, name }] } na elke portie van 50).
    * @returns {{ created: number, skippedProducts: number }} Aantallen.
    */
-  function addMissingShop(tenantId, products, matchProduct, { vatRate = 21, priceOf = (product) => product.price } = {}) {
+  function addMissingShop(tenantId, products, matchProduct, { vatRate = 21, priceOf = (product) => product.price, onProgress = null } = {}) {
     const items = prepare('SELECT id, code, name, shop_product_id, parent_id, has_variants, attributes FROM stock_items WHERE tenant_id = ?').all(tenantId);
     const matchedProducts = new Set();
     const parentItems = new Map();
@@ -1266,13 +1266,23 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       seenCodes.add(code);
       fresh.push({ product, code });
     }
+    // Hoofdproducten eerst, dan de variaties; in porties van 50 (elk in een eigen transactie), zodat de voortgang zichtbaar is.
+    const ordered = [...fresh.filter((entry) => !entry.product.parentId), ...fresh.filter((entry) => entry.product.parentId)];
     let created = 0;
-    transaction(db, () => {
-      const inserted = insertShopProducts(tenantId, fresh, parentItems, { vatRate, priceOf });
-      created = inserted.codes.length;
-      skippedProducts += inserted.skipped;
-      if (inserted.codes.length) resyncOpen(tenantId, inserted.codes, { nested: true });
-    });
+    for (let start = 0; start < ordered.length; start += 50) {
+      const chunk = ordered.slice(start, start + 50);
+      transaction(db, () => {
+        const inserted = insertShopProducts(tenantId, chunk, parentItems, { vatRate, priceOf });
+        created += inserted.codes.length;
+        skippedProducts += inserted.skipped;
+        if (inserted.codes.length) resyncOpen(tenantId, inserted.codes, { nested: true });
+        if (onProgress) {
+          const names = new Map(chunk.map((entry) => [entry.code, cleanText(entry.product.name, 200) || entry.code]));
+          onProgress({ step: 'toevoegen', total: ordered.length, created, skipped: skippedProducts, added: inserted.codes.map((code) => ({ code, name: names.get(code) })) });
+        }
+      });
+    }
+    if (onProgress && !ordered.length) onProgress({ step: 'toevoegen', total: 0, created: 0, skipped: skippedProducts, added: [] });
     return { created, skippedProducts };
   }
 

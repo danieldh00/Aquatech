@@ -3,6 +3,7 @@
 const { respondShopError } = require('../webshop/woocommerce');
 const { registerItemImportRoutes } = require('./item-import');
 const { registerPriceListRoutes } = require('./supplier-price-list');
+const { createShopMissingJob } = require('./shop-missing-job');
 const { KINDS, GROUPS, EXPORT_LIMIT, shopCodeOf, isDate } = require('./stock-helpers');
 
 /**
@@ -158,16 +159,19 @@ function registerStockRoutes(app, ctx) {
   });
 
   // TIJDELIJK (tot WooCommerce uit staat): alleen de producten toevoegen die nog geen artikel hebben; archiveert en wijzigt niets.
-  app.post('/api/stock/import-shop-missing', requireJson, requireStock, ctx.importLimiter || ((req, res, next) => next()), async (req, res, next) => {
-    if (!ctx.syncShop) return res.status(409).json({ error: 'not_configured', message: 'Er is geen webshop gekoppeld (Beheer → Integraties → Webshop).' });
-    try {
-      const out = await ctx.syncShop(tenantOf(req), req.user, { addMissing: true });
-      if (out.skipped) return res.status(409).json({ error: 'not_configured', message: 'Er is geen webshop gekoppeld (Beheer → Integraties → Webshop).' });
-      audit(req, 'voorraad_webshop_ontbrekende_toegevoegd', { created: out.created || 0, skipped: out.skippedProducts || 0 });
-      return res.json({ created: out.created || 0, skippedProducts: out.skippedProducts || 0, linked: out.linked || 0 });
-    } catch (error) {
-      return respondShopError(res, error, next);
-    }
+  // Draait als achtergrondtaak (de volledige webshop ophalen duurt langer dan een verzoek mag): POST start, GET geeft de voortgang.
+  const missingJob = ctx.syncShop ? createShopMissingJob({ syncShop: ctx.syncShop }) : null;
+  app.post('/api/stock/import-shop-missing', requireJson, requireStock, ctx.importLimiter || ((req, res, next) => next()), (req, res) => {
+    if (!missingJob) return res.status(409).json({ error: 'not_configured', message: 'Er is geen webshop gekoppeld (Beheer → Integraties → Webshop).' });
+    const tenantId = tenantOf(req);
+    const started = missingJob.start(tenantId, req.user, {
+      onDone: (state) => audit(req, 'voorraad_webshop_ontbrekende_toegevoegd', { created: state.created, skipped: state.skipped, failed: Boolean(state.error) }),
+    });
+    res.status(202).json({ started, ...missingJob.get(tenantId) });
+  });
+  app.get('/api/stock/import-shop-missing', requireStock, (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(missingJob ? missingJob.get(tenantOf(req)) : { running: false, phase: 'idle', added: [] });
   });
 
   app.put('/api/stock/items/:id', requireJson, requireStock, (req, res) => {

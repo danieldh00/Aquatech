@@ -308,10 +308,10 @@ function restAuth(shop) {
 /**
  * Haalt alle gepubliceerde producten op en zet ze om naar het eigen formaat.
  * @param {object} shop url, mode ('store'|'rest'), consumerKey, consumerSecret, pricesIncludeTax en vatRate.
- * @param {object} [options] fetchImpl, allowInsecure, resolveHost, ids (alleen deze producten, REST v3; bijv. vlak voor het terugschrijven) en variations ([{ id, parentId }]: alleen deze variaties).
+ * @param {object} [options] fetchImpl, allowInsecure, resolveHost, ids (alleen deze producten, REST v3; bijv. vlak voor het terugschrijven), variations ([{ id, parentId }]: alleen deze variaties) en onProgress (functie die { step: 'products'|'variations', done, total? } krijgt, voor een voortgangsbalk).
  * @returns {Promise<object[]>} De producten (bij REST met de variaties van variabele producten).
  */
-async function fetchProducts(shop, { fetchImpl = null, allowInsecure = insecureAllowed(), resolveHost = publicAddress, ids = null, variations = null } = {}) {
+async function fetchProducts(shop, { fetchImpl = null, allowInsecure = insecureAllowed(), resolveHost = publicAddress, ids = null, variations = null, onProgress = null } = {}) {
   const { base, send } = await connectionFor(shop, { allowInsecure, resolveHost, fetchImpl });
   const rest = shop.mode === 'rest';
   if ((ids || variations) && !rest) throw new SourceError('rest_required', 'Terugschrijven naar de webshop kan alleen via de REST API.', 400);
@@ -355,13 +355,17 @@ async function fetchProducts(shop, { fetchImpl = null, allowInsecure = insecureA
     if (!Array.isArray(body)) throw new SourceError('invalid_json', 'Onverwacht antwoord van de webshop (geen productlijst).');
     products.push(...body.map((product) => convert(product, shop)));
     rawProducts.push(...body);
+    if (onProgress) onProgress({ step: 'products', done: products.length });
     if (body.length < PER_PAGE || (totalPages && page >= totalPages)) { complete = true; break; }
   }
   if (!complete) throw new SourceError('too_many_products', `De webshop heeft meer dan ${MAX_PAGES * PER_PAGE} producten; ophalen is gestopt zodat er niets wordt gearchiveerd.`);
   if (rest) {
     // Variaties van variabele producten (per product een verzoek).
     const variableProducts = rawProducts.filter((product) => product.type === 'variable');
-    for (const parent of variableProducts) products.push(...await fetchVariationsWith(base, headers, send, parent, shop));
+    for (const [index, parent] of variableProducts.entries()) {
+      products.push(...await fetchVariationsWith(base, headers, send, parent, shop));
+      if (onProgress) onProgress({ step: 'variations', done: index + 1, total: variableProducts.length });
+    }
   }
   return products;
 }
