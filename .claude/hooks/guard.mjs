@@ -2,7 +2,7 @@
 // Leest de toolaanroep als JSON van stdin; exitcode 2 + melding op stderr = geblokkeerd.
 // Cross-platform (Node). Uitzetten voor één sessie kan alleen door de mens: omgevingsvariabele AQUATECH_HOOKS_OFF=1.
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ASK_FILES, BASH_RULES, FILE_RULES, RELEASE_FILES } from './rules.mjs';
@@ -92,7 +92,7 @@ export function checkBash(command, context = {}) {
   const result = { deny: [], ask: [], warn: [] };
   for (const rule of BASH_RULES) {
     if (rule.alleenBij && !rule.alleenBij.test(command)) continue;
-    const text = rule.negeerRegel ? command.split(/\r?\n/).filter((line) => !rule.negeerRegel.test(line)).join('\n') : command;
+    const text = rule.negeerTekst ? command.replace(rule.negeerTekst, '') : command;
     if (rule.patroon.test(text)) result.deny.push(`[${rule.id}] ${rule.melding}`);
   }
   const segments = command.split(/&&|\|\||;|\||\r?\n/);
@@ -168,4 +168,4 @@ async function main() {
   finish(checkFile(rel, changesOf(call.tool_name, input, existing), branch === 'master'));
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) await main();
+if (process.argv[1] && realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1])) await main();

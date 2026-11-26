@@ -124,6 +124,6 @@ export const BASH_RULES = [
   { id: 'pkill', melding: 'Nooit pkill -f in de cloud-sandbox; stop een testserver met kill $(lsof -ti tcp:3300).', patroon: /\bpkill\b[^|;&]*\s-\w*f/ },
   { id: 'raw-github', melding: 'Ruwe GitHub-bestanden altijd op een vaste commit-SHA, nooit op een branch.', patroon: /raw\.githubusercontent\.com\/[^/\s]+\/[^/\s]+\/(?!(?:[0-9a-f]{40})\b)[^\s'"]+/i },
   { id: 'develop', melding: 'De branch develop bestaat niet meer (besluit Daniël 2026-11-25).', patroon: /\bgit\s+(?:push|checkout|switch|branch|merge)\b[^|;&]*\bdevelop\b/ },
-  { id: 'modelnaam-commit', melding: 'Geen modelnamen of -ID\'s in commits of PR\'s (alleen de verplichte Co-Authored-By-regel).', patroon: new RegExp(`claude-(?:${MODEL})-[0-9]|\\b(?:${MODEL})[ -]?[0-9]\\.[0-9]`, 'i'), alleenBij: /\bgit\s+commit\b|\bgh\s+pr\s+(?:create|edit)\b/, negeerRegel: /^\s*Co-Authored-By:/i },
+  { id: 'modelnaam-commit', melding: 'Geen modelnamen of -ID\'s in commits of PR\'s (alleen de verplichte Co-Authored-By-regel).', patroon: new RegExp(`claude-(?:${MODEL})-[0-9]|\\b(?:${MODEL})[ -]?[0-9]\\.[0-9]`, 'i'), alleenBij: /\bgit\s+commit\b|\bgh\s+pr\s+(?:create|edit)\b/, negeerTekst: /Co-Authored-By:[^"'\r\n]*<noreply@anthropic\.com>/gi },
   { id: 'geheim', melding: 'Nooit secrets in de repo of in chat.', patroon: /sk-ant-[A-Za-z0-9_-]{20,}|\bgh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
 ];

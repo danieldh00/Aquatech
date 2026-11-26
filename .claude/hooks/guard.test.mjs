@@ -1,8 +1,14 @@
 // Tests voor de vangrail: draaien met `node --test .claude/hooks/` (geen database nodig).
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { checkBash, checkFile } from './guard.mjs';
 
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const edit = (oldText, newText) => [{ old: oldText, new: newText }];
 const denied = (result) => result.deny.length > 0;
 
@@ -91,6 +97,20 @@ test('Bash: Co-Authored-By-regel met modelnaam mag, de rest niet', () => {
   const trailer = 'Co-Authored-By: Claude Son' + 'net 5.5 <noreply@anthropic.com>';
   assert.ok(!denied(checkBash(`git commit -m "fix\n\n${trailer}"`, { branch: 'claude/x' })));
   assert.ok(denied(checkBash('git commit -m "gemaakt met claude-' + 'opus-5-5"', { branch: 'claude/x' })));
+});
+
+test('Bash: Co-Authored-By op dezelfde regel als git commit mag', () => {
+  const trailer = 'Co-Authored-By: Claude Hai' + 'ku 5.5 <noreply@anthropic.com>';
+  assert.ok(!denied(checkBash(`git commit -m "Fix" -m "${trailer}"`, { branch: 'claude/x' })));
+});
+
+test('de hook draait ook via een symlink naar het project (geen fail-open)', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'hook-'));
+  const link = join(directory, 'project');
+  symlinkSync(root, link, 'dir');
+  const call = JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: join(link, 'hub/CHANGELOG.md'), old_string: 'a', new_string: 'b' } });
+  const run = spawnSync('node', [join(link, '.claude/hooks/guard.mjs')], { input: call, env: { ...process.env, CLAUDE_PROJECT_DIR: link, AQUATECH_HOOKS_OFF: '' }, encoding: 'utf8' });
+  assert.equal(run.status, 2, run.stderr);
 });
 
 test('Bash: waarschuwing zonder changes-fragment', () => {
