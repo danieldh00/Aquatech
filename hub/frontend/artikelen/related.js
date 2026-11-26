@@ -4,7 +4,7 @@
 // Praat met /api/stock/related en /api/stock/related-ai (recht voorraad).
 (function () {
   const context = { api: null, toast: null, esc: null };
-  const state = { data: null, ai: null, openId: null, detail: null, busy: false, polling: false, seen: false };
+  const state = { data: null, ai: null, openId: null, detail: null, busy: false, polling: false, seen: false, wp: null, wpPick: null, wpTimer: 0 };
 
   /**
    * Zoekt het eerste element dat bij de selector past.
@@ -51,6 +51,93 @@
     state.ai = state.data.ai;
     renderList();
     followAi().catch(() => {});
+    await loadWp();
+  }
+
+  /**
+   * Laadt de stand van de WordPress-orderhistorie en tekent het paneel; zolang het ophalen loopt wordt elke 3 seconden ververst.
+   * @returns {Promise<void>}
+   */
+  async function loadWp() {
+    clearTimeout(state.wpTimer);
+    state.wp = await context.api('stock/related/wp-orders');
+    renderWp();
+    if (state.wp.status.running) state.wpTimer = setTimeout(() => loadWp().catch(() => {}), 3000);
+  }
+
+  /** Tekent de stand, de knoppen en de lijst met producten zonder artikel. */
+  function renderWp() {
+    const { status, unmatched } = state.wp;
+    /**
+     * Zet een tijdstip om naar een Nederlandse datum.
+     * @param {string} value ISO-tijd.
+     * @returns {string} De datum, of leeg.
+     */
+    const date = (value) => (value ? new Date(value).toLocaleDateString('nl-NL') : '');
+    const parts = [];
+    if (status.running) parts.push('Bezig met ophalen… dit gaat door als je dit venster sluit.');
+    if (status.lines) parts.push(`${status.orders} bestellingen (${date(status.from)} t/m ${date(status.to)}), ${status.lines} regels, waarvan ${status.matched} aan een artikel gekoppeld${status.unmatched ? ` en ${status.unmatched} nog niet` : ''}.`);
+    else if (!status.running) parts.push('Nog niets opgehaald.');
+    if (status.customers) parts.push(`${status.customers} klant${status.customers === 1 ? '' : 'en'} aangemaakt.`);
+    if (status.enabled && !status.running) parts.push('Wordt elk uur bijgewerkt.');
+    if (status.finishedAt && !status.running) parts.push(`Laatst klaar: ${new Date(status.finishedAt).toLocaleString('nl-NL')}.`);
+    if (status.error) parts.push(`Laatste fout: ${status.error}`);
+    $('#rl-wp-status').textContent = parts.join(' ');
+    $('#rl-wp-start').disabled = status.running;
+    $('#rl-wp-stop').hidden = !status.enabled;
+    $('#rl-wp-months').value = status.months;
+    $('#rl-wp-table').innerHTML = unmatched.length
+      ? `<thead><tr><th>Product</th><th>SKU</th><th>Bestellingen</th><th></th></tr></thead><tbody>${unmatched.map((group, index) => `<tr>
+          <td class="wrap">${context.esc(group.name || '(zonder naam)')}</td><td>${context.esc(group.sku)}</td><td>${group.orders}</td>
+          <td><button class="linkbtn" data-wp-pick="${index}" type="button">Koppelen</button></td></tr>`).join('')}</tbody>`
+      : '<tbody><tr><td class="empty">Alle opgehaalde producten zijn gekoppeld.</td></tr></tbody>';
+  }
+
+  /**
+   * Start het ophalen van de WordPress-orders (serverjob).
+   * @returns {Promise<void>}
+   */
+  async function startWp() {
+    const months = Number($('#rl-wp-months').value) || 24;
+    const out = await context.api('stock/related/wp-orders/start', { method: 'POST', body: { months } });
+    context.toast(out.started ? 'Ophalen gestart.' : 'Er loopt al een ronde.');
+    await loadWp();
+  }
+
+  /**
+   * Zet het uurlijks bijwerken uit.
+   * @returns {Promise<void>}
+   */
+  async function stopWp() {
+    await context.api('stock/related/wp-orders/stop', { method: 'POST', body: {} });
+    context.toast('Uurlijks bijwerken staat uit.');
+    await loadWp();
+  }
+
+  /**
+   * Zoekt artikelen om een product uit de oude orders aan te koppelen.
+   * @returns {Promise<void>}
+   */
+  async function searchWpItems() {
+    const term = $('#rl-wp-search').value.trim();
+    if (term.length < 2) { $('#rl-wp-results').innerHTML = ''; return; }
+    const data = await context.api(`stock/related?${new URLSearchParams({ q: term, filter: 'alle' })}`);
+    $('#rl-wp-results').innerHTML = data.items.slice(0, 8).map((item) => `<li><div><b>${context.esc(item.name)}</b> <span class="muted">${context.esc(item.code)}</span></div>
+      <button class="linkbtn" data-wp-link="${context.esc(item.id)}" type="button">Koppelen</button></li>`).join('') || '<li class="muted">Niets gevonden.</li>';
+  }
+
+  /**
+   * Koppelt de gekozen groep aan een artikel.
+   * @param {string} itemId Id van het artikel.
+   * @returns {Promise<void>}
+   */
+  async function linkWp(itemId) {
+    const group = state.wpPick;
+    if (!group) return;
+    const out = await context.api('stock/related/wp-orders/link', { method: 'POST', body: { ...group, itemId } });
+    context.toast(`${out.updated} regel${out.updated === 1 ? '' : 's'} gekoppeld. Vaak samen besteld wordt bij de volgende ronde bijgewerkt.`);
+    state.wpPick = null; $('#rl-wp-pick').hidden = true; $('#rl-wp-results').innerHTML = ''; $('#rl-wp-search').value = '';
+    await loadWp();
   }
 
   /** Tekent de melding over AI, de knoppen en de tabel. */
@@ -283,6 +370,22 @@
     $('#rl-clear').addEventListener('click', guarded(clearAi));
     $('#rl-together-refresh').addEventListener('click', guarded(refreshTogether));
     $('#rl-model').addEventListener('change', guarded(saveModel));
+    $('#rl-wp-start').addEventListener('click', guarded(startWp));
+    $('#rl-wp-stop').addEventListener('click', guarded(stopWp));
+    $('#rl-wp-table').addEventListener('click', (event) => {
+      const button = event.target.closest('[data-wp-pick]');
+      if (!button) return;
+      state.wpPick = state.wp.unmatched[Number(button.dataset.wpPick)] || null;
+      if (!state.wpPick) return;
+      $('#rl-wp-pick-name').textContent = state.wpPick.name || state.wpPick.sku || 'product';
+      $('#rl-wp-pick').hidden = false;
+      $('#rl-wp-search').focus();
+    });
+    $('#rl-wp-search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(guarded(searchWpItems), 250); });
+    $('#rl-wp-results').addEventListener('click', (event) => {
+      const button = event.target.closest('[data-wp-link]');
+      if (button) guarded(linkWp)(button.dataset.wpLink);
+    });
     $('#rl-table').addEventListener('click', (event) => {
       const button = event.target.closest('[data-open]');
       if (button) guarded(openItem)(button.dataset.open);
