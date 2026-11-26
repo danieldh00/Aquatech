@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.45.2',
+      date: '2026-11-26',
+      title: 'Cookieverklaring met alle gebruikte diensten',
+      items: [
+        { text: 'De webshop heeft een pagina Cookieverklaring (link onderaan, naast de privacyverklaring). Per dienst en per cookie staat erin wat er wordt gebruikt: aanbieder, doel, cookienamen, bewaartermijn, doorgifte buiten de EU en het privacybeleid van de aanbieder. Google Analytics, Microsoft Clarity, reCAPTCHA, bestellen als gast en Mollie staan er alleen in als ze aan staan.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.45.1',
       date: '2026-11-26',
       title: 'Ontbrekende webshopproducten als artikel toevoegen',

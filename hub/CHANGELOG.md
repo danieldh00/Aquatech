@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.45.2
+
+- Nieuwe juridische pagina `cookieverklaring` (`webshop/cookie-notice.js`, `legal-pages.js`): noodzakelijke cookies (`aquatech_winkelwagen`, `aquatech_laatste_lijst`, sessie, gastbestelling, cookiekeuze), analytisch (GA4, Clarity, alleen met toestemming) en diensten van derden (reCAPTCHA, Mollie), afgeleid van wat de shop werkelijk laadt (`cookieServicesOf` in storefront.js). De privacyverklaring noemt Google en Microsoft nu ook alleen als ze aan staan en verwijst naar de cookieverklaring. De cookiebanner is ongewijzigd (noemt geen diensten, niets laadt vóór toestemming). Een eigen pagina met de naam `cookieverklaring` in Beheer gaat voor; de standaardtekst in Beheer toont alle diensten als voorbeeld. Geen migratie.
+
 ## 1.45.1
 
 - `stock.addMissingShop` + `POST /api/stock/import-shop-missing` (recht `voorraad`, alleen lezen uit WordPress, nooit terugschrijven): `shopSync.sync` kreeg de optie `addMissing`: haalt de producten op, maakt alleen de ontbrekende artikelen aan en stopt dan (geen boekingen, prijzen overnemen, variaties aanmaken, archiveren of terugschrijven, ook niet met terugschrijven en spiegelen aan). Audit `voorraad_webshop_ontbrekende_toegevoegd`.
