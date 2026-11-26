@@ -1,7 +1,7 @@
 // Offertes: opslag (tabel quotes), het bedrijfsprofiel voor op de offerte
 // (instelling quoteProfile) en de API-routes. De berekening zelf staat in
 // frontend/offertes/quote-core.js en is gedeeld met de browser.
-const { floorOf } = require('../platform/number-floors');
+const { floorOf, recordFloor } = require('../platform/number-floors');
 const { archiveModeOf, archiveClause } = require('../platform/archive-filter');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
@@ -749,12 +749,14 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
   }
 
   /**
-   * Wist een offerte definitief (AVG-verzoek), ook een al verwijderde.
+   * Wist een offerte definitief (AVG-verzoek), ook een al verwijderde. Het nummer wordt vastgelegd en komt nooit terug.
    * @param {string} tenantId Id van de tenant.
    * @param {string} id Id van de offerte.
    * @returns {boolean} Of er iets is gewist.
    */
   function purge(tenantId, id) {
+    const row = prepare('SELECT number FROM quotes WHERE tenant_id = ? AND id = ?').get(tenantId, String(id));
+    if (row) recordFloor(prepare, tenantId, 'offertes', row.number);
     return prepare('DELETE FROM quotes WHERE tenant_id = ? AND id = ?').run(tenantId, String(id)).changes > 0;
   }
 
