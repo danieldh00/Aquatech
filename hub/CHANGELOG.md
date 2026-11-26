@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.45.6
+
+Hernoeming zonder gedrag te wijzigen: `variant`/`parent`/`has_variants` wordt `subartikel`/`group_id`/`is_group` in code, database (migratie 103: kolommen, index en constraints van `stock_items` en `stock_merges`), API (`PUT /api/stock/items/:id/sub-items`), frontend en tests. Back-ups van vóór schema 103 blijven terug te zetten (`RENAMED_COLUMNS`). WooCommerce-termen, tenants `parent_id`, categorie-`parentSlug` en GA4 `item_variant` blijven.
+
 ## 1.45.5
 
 - Bulkrun (`item-text-bulk.js`): standaardmodus `specs` (`mode: 'texts'` houdt het oude schrijven). `drafts.applySpecs` zet de gevalideerde kenmerken uit `item_specs` als `stock_items.specifications` (leeg = alles, anders alleen nieuwe namen; nooit overschrijven) en legt `specsAt` vast (`recordSpecs`); `bulkTodo({ mode: 'specs' })` toont wat nog niet gevuld is. Geen tekst, dus geen schrijver nodig.
