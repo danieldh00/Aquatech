@@ -5,7 +5,7 @@
 // Praat met /api/stock/item-texts (recht voorraad).
 (function () {
   const context = { api: null, toast: null, esc: null };
-  const state = { data: null, ai: null, selected: new Set(), openId: null, detail: null, busy: false, bulk: null, bulkRunning: false, bulkStop: false, bulkArmed: false };
+  const state = { data: null, ai: null, selected: new Set(), openId: null, detail: null, busy: false, bulk: null, bulkRunning: false, bulkPolling: false, bulkSeen: false, bulkArmed: false };
   const WRITTEN_LABELS = { nieuw: 'Nieuw geschreven', overschreven: 'Overschreven', behouden: 'Bestaande behouden', hersteld: 'Teruggezet' };
   /**
    * Een bedrag in euro's.
@@ -245,6 +245,7 @@
       select.value = todo.ai.model;
     }
     renderBulk();
+    if (!state.bulkPolling) followJob().catch(() => {});
   }
 
   /** Tekent de samenvatting en de knop van de bulkrun. */
@@ -265,37 +266,62 @@
   }
 
   /**
-   * Verwerkt alle artikelen die aan de beurt zijn in porties, met voortgang. Stoppen kan altijd; een fout die doorgaan zinloos maakt (sleutel, tegoed) stopt de rest.
+   * Tekent de voortgang van de achtergrondtaak op de server.
+   * @param {object} job De stand van de taak (running, total, processed, tally, message).
+   */
+  function renderJob(job) {
+    const tally = job.tally || {};
+    const parts = [`${tally.nieuw || 0} nieuw`, `${tally.overschreven || 0} overschreven`, `${tally.behouden || 0} behouden`, `${tally.concept || 0} als concept (waarschuwing)`];
+    if (tally.error) parts.push(`${tally.error} mislukt`);
+    $('#tx-bulk-progress').textContent = job.running
+      ? `Loopt op de server (je mag dit venster sluiten): ${job.processed} van ${job.total}. ${parts.join(', ')}.${job.stopRequested ? ' Stopt na de lopende portie…' : ''}`
+      : `${job.message || ''} ${parts.join(', ')}.`.trim();
+  }
+
+  /**
+   * Volgt de achtergrondtaak: vraagt elke paar seconden de stand op tot de taak klaar is en ververst dan de lijst. Zonder lopende taak gebeurt er niets.
+   * @returns {Promise<void>}
+   */
+  async function followJob() {
+    if (state.bulkPolling) return;
+    state.bulkPolling = true;
+    try {
+      let job = await context.api('stock/item-texts/bulk/job');
+      while (job.running && document.body.contains($('#tx-bulk-progress'))) {
+        state.bulkRunning = true;
+        renderBulk();
+        renderJob(job);
+        await new Promise((resolve) => { setTimeout(resolve, 3000); });
+        job = await context.api('stock/item-texts/bulk/job');
+      }
+      const wasRunning = state.bulkRunning;
+      state.bulkRunning = false;
+      if (job.startedAt && (wasRunning || !state.bulkSeen)) renderJob(job);
+      state.bulkSeen = true;
+      if (wasRunning) {
+        context.toast(job.aborted ? job.message : 'Klaar met schrijven.', Boolean(job.aborted));
+        await load();
+      }
+      await loadBulk();
+    } catch (error) {
+      context.toast(error.message, true);
+    } finally {
+      state.bulkPolling = false;
+      state.bulkRunning = false;
+    }
+  }
+
+  /**
+   * Start de achtergrondtaak op de server voor alle artikelen die aan de beurt zijn; de taak loopt door als het venster sluit.
    * @returns {Promise<void>}
    */
   async function runBulk() {
-    const todo = state.bulk;
     const options = bulkOptions();
-    const ids = todo.ids;
-    state.bulkRunning = true;
-    state.bulkStop = false;
     state.bulkArmed = false;
+    await context.api('stock/item-texts/bulk/job', { method: 'POST', body: { research: options.research, review: options.review } });
+    state.bulkRunning = true;
     renderBulk();
-    const tally = { nieuw: 0, overschreven: 0, behouden: 0, concept: 0, skipped: 0, error: 0 };
-    let stopMessage = '';
-    const size = todo.ai.batchSize || 6;
-    try {
-      for (let start = 0; start < ids.length && !stopMessage && !state.bulkStop; start += size) {
-        $('#tx-bulk-progress').textContent = `Schrijven… ${start} van ${ids.length}`;
-        const out = await context.api('stock/item-texts/bulk/run', { method: 'POST', body: { itemIds: ids.slice(start, start + size), research: options.research, review: options.review } });
-        for (const result of out.results) tally[result.status] = (tally[result.status] || 0) + 1;
-        if (out.aborted) stopMessage = out.aborted.message;
-      }
-    } catch (error) {
-      stopMessage = error.message;
-    }
-    state.bulkRunning = false;
-    const parts = [`${tally.nieuw} nieuw`, `${tally.overschreven} overschreven`, `${tally.behouden} behouden`, `${tally.concept} als concept (waarschuwing)`];
-    if (tally.error) parts.push(`${tally.error} mislukt`);
-    $('#tx-bulk-progress').textContent = `${state.bulkStop ? 'Gestopt. ' : ''}${parts.join(', ')}.${stopMessage ? ` ${stopMessage}` : ''}`;
-    context.toast(stopMessage || 'Klaar met schrijven.', Boolean(stopMessage));
-    await load();
-    await loadBulk();
+    await followJob();
   }
 
   /**
@@ -340,7 +366,7 @@
       if (!state.bulkArmed) { state.bulkArmed = true; renderBulk(); return; }
       runBulk().catch((error) => context.toast(error.message, true));
     });
-    $('#tx-bulk-stop').addEventListener('click', () => { state.bulkStop = true; $('#tx-bulk-progress').textContent = 'Stoppen na de lopende portie…'; });
+    $('#tx-bulk-stop').addEventListener('click', () => { context.api('stock/item-texts/bulk/job/stop', { method: 'POST', body: {} }).catch((error) => context.toast(error.message, true)); });
     for (const id of ['#tx-bulk-research', '#tx-bulk-review']) $(id).addEventListener('change', () => { loadBulk().catch((error) => context.toast(error.message, true)); });
     $('#tx-bulk-model').addEventListener('change', async (event) => {
       try {

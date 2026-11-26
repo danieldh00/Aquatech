@@ -2,7 +2,7 @@
 // (alleen wat letterlijk in de bron staat, met adres en zin; bewaard in item_specs, zie item-text-log.js) en daarna de omschrijving schrijven uit alleen die
 // bekende gegevens (item-text-writer.js, met de specificaties van Past bij).
 //
-// - Vooraf een kostenschatting (GET .../bulk/todo); de browser verwerkt de artikelen in porties (POST .../bulk/run) en kan elk moment stoppen en later verder.
+// - Vooraf een kostenschatting (GET .../bulk/todo); daarna start POST .../bulk/job een achtergrondtaak op de server (background-jobs.js) die alle artikelen in porties doorloopt, ook als de browser sluit; de stand staat bij GET .../bulk/job en stoppen kan met POST .../bulk/job/stop. POST .../bulk/run (één portie) blijft bestaan.
 // - Zonder bestaande omschrijving gaat een tekst zonder waarschuwingen direct live ("nieuw"). Bij een bestaande omschrijving oordeelt de AI of de nieuwe beter is:
 //   zo ja dan wordt hij overschreven ("overschreven", de vorige tekst blijft bewaard en kan terug), zo nee dan blijft hij staan ("behouden").
 // - Een tekst met waarschuwingen van de feitencontrole (getal, eenheid of bewering die niet in de gegevens staat) gaat nooit live maar wordt een concept
@@ -18,6 +18,7 @@ const { FRONTEND_DIR } = require('../paths');
 const AiModelList = require(path.join(FRONTEND_DIR, 'shared', 'ai-models.js'));
 const { createRateLimiter } = require('../beveiliging/rate-limit');
 const { checkText } = require('./item-text-check');
+const { createJobs } = require('./background-jobs');
 
 /** Hoeveel artikelen één verzoek hoogstens bevat. */
 const BULK_BATCH = 6;
@@ -56,6 +57,7 @@ function dailyOf(tenantId) {
 function registerItemTextBulkRoutes(app, ctx) {
   const { drafts, related, stock, requireRight, requireJson, audit, settingsFor, aiTenantOf, currentItemTextWriter, currentSpecResearcher, aiUsage } = ctx;
   const requireStock = requireRight('voorraad');
+  const jobs = ctx.jobs || createJobs();
   const limiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 120, keyFn: (req) => `item-text-bulk|${req.tenantId}` });
   /**
    * De actieve omgeving van het verzoek.
@@ -106,19 +108,22 @@ function registerItemTextBulkRoutes(app, ctx) {
     return res.json({ ok: true });
   });
 
-  app.post('/api/stock/item-texts/bulk/run', requireJson, requireStock, limiter, async (req, res, next) => {
-    const tenantId = tenantOf(req);
-    const ids = Array.isArray(req.body && req.body.itemIds) ? [...new Set(req.body.itemIds.map(String))] : [];
-    if (!ids.length || ids.length > BULK_BATCH) return res.status(400).json({ error: 'invalid', message: `Kies 1 tot ${BULK_BATCH} artikelen per keer.` });
-    if (!settingsFor(tenantId).get('aiEnabled')) return res.status(409).json({ error: 'disabled', message: 'AI staat uit (Beheer → Integraties → AI-herkenning).' });
+  /**
+   * Verwerkt één portie artikelen (hoogstens BULK_BATCH): kenmerken opzoeken, schrijven en plaatsen. Gebruikt door het verzoek per portie én door de achtergrondtaak.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {?object} user De gebruiker voor het kostenoverzicht en het logboek (of null).
+   * @param {string[]} ids De artikelen van deze portie.
+   * @param {{ research: boolean, review: boolean }} options Kenmerken opzoeken en bestaande teksten beoordelen.
+   * @returns {Promise<{ refused: ?{ status: number, error: string, message: string }, results: object[], aborted: ?object }>} De uitkomsten per artikel, of een weigering van de hele portie.
+   */
+  async function processBatch(tenantId, user, ids, { research, review }) {
+    if (!settingsFor(tenantId).get('aiEnabled')) return { refused: { status: 409, error: 'disabled', message: 'AI staat uit (Beheer → Integraties → AI-herkenning).' } };
     const writer = currentItemTextWriter(tenantId);
     const researcher = currentSpecResearcher(tenantId);
-    if (!writer.available || !researcher.available) return res.status(409).json({ error: 'not_configured', message: 'Er is geen API-sleutel ingesteld: een beheerder kan hem invullen bij Beheer → Integraties → AI-herkenning.' });
+    if (!writer.available || !researcher.available) return { refused: { status: 409, error: 'not_configured', message: 'Er is geen API-sleutel ingesteld: een beheerder kan hem invullen bij Beheer → Integraties → AI-herkenning.' } };
     const dailyLimit = settingsFor(tenantId).get('descriptionBulkDailyItems');
     const today = dailyOf(tenantId);
-    if (today.count >= dailyLimit) return res.status(429).json({ error: 'daily_limit', message: `Het dagplafond voor omschrijvingen in bulk (${dailyLimit} artikelen) is bereikt. Ga morgen verder of verhoog het plafond bij Beheer → Instellingen.` });
-    const research = req.body.research !== false;
-    const review = req.body.review !== false;
+    if (today.count >= dailyLimit) return { refused: { status: 429, error: 'daily_limit', message: `Het dagplafond voor omschrijvingen in bulk (${dailyLimit} artikelen) is bereikt. Ga morgen verder of verhoog het plafond (instelling descriptionBulkDailyItems).` } };
     const results = [];
     let aborted = null;
     let cursor = 0;
@@ -133,7 +138,7 @@ function registerItemTextBulkRoutes(app, ctx) {
     const logUsage = (feature, itemId, started, { model, usage, status = 'ok' }) => {
       try {
         const aiSettings = settingsFor(aiTenantOf(tenantId));
-        aiUsage.record({ tenantId, userId: req.user ? req.user.id : null, feature, model: model || writer.model, status, usage: usage || {}, durationMs: Date.now() - started, eurCentsPerUsd: aiSettings.get('aiEurCentsPerUsd'), detail: { itemId, bulk: true } });
+        aiUsage.record({ tenantId, userId: user ? user.id : null, feature, model: model || writer.model, status, usage: usage || {}, durationMs: Date.now() - started, eurCentsPerUsd: aiSettings.get('aiEurCentsPerUsd'), detail: { itemId, bulk: true } });
       } catch (error) {
         console.warn(`AI-verbruik niet vastgelegd: ${error.message}`);
       }
@@ -195,11 +200,11 @@ function registerItemTextBulkRoutes(app, ctx) {
         }
         const blocking = checkText(written, prepared.facts.sourceText).filter((warning) => BLOCKING_KINDS.includes(warning.kind));
         if (blocking.length) {
-          const draft = drafts.save(tenantId, itemId, { ...written, userId: req.user ? req.user.id : null });
+          const draft = drafts.save(tenantId, itemId, { ...written, userId: user ? user.id : null });
           results.push({ itemId, status: 'concept', warnings: draft ? draft.warnings.length : blocking.length });
           return;
         }
-        const applied = drafts.applyWritten(tenantId, itemId, { ...written, reason: written.verdictReason, basis }, stock, req.user);
+        const applied = drafts.applyWritten(tenantId, itemId, { ...written, reason: written.verdictReason, basis }, stock, user);
         if (applied.error === 'changed') results.push({ itemId, status: 'skipped', code: 'changed', message: 'De omschrijving is intussen veranderd; er is niets overschreven.' });
         else results.push(applied.error ? { itemId, status: 'error', code: applied.error, message: 'De tekst kon niet worden geplaatst.' } : { itemId, status: applied.action });
       } catch (error) {
@@ -215,22 +220,59 @@ function registerItemTextBulkRoutes(app, ctx) {
         inFlight.delete(flightKey);
       }
     };
+    await Promise.all(Array.from({ length: Math.min(BULK_CONCURRENCY, ids.length) }, async () => {
+      while (cursor < ids.length) { const itemId = ids[cursor]; cursor += 1; await handle(itemId); }
+    }));
+    const ordered = ids.map((itemId) => results.find((result) => result.itemId === itemId)).filter(Boolean);
+    return { refused: null, results: ordered, aborted };
+  }
+
+  /**
+   * Telt de uitkomsten met een status.
+   * @param {object[]} results De uitkomsten.
+   * @param {string} status De status.
+   * @returns {number} Het aantal.
+   */
+  const countOf = (results, status) => results.filter((result) => result.status === status).length;
+
+  app.post('/api/stock/item-texts/bulk/run', requireJson, requireStock, limiter, async (req, res, next) => {
+    const tenantId = tenantOf(req);
+    const ids = Array.isArray(req.body && req.body.itemIds) ? [...new Set(req.body.itemIds.map(String))] : [];
+    if (!ids.length || ids.length > BULK_BATCH) return res.status(400).json({ error: 'invalid', message: `Kies 1 tot ${BULK_BATCH} artikelen per keer.` });
+    let out;
     try {
-      await Promise.all(Array.from({ length: Math.min(BULK_CONCURRENCY, ids.length) }, async () => {
-        while (cursor < ids.length) { const itemId = ids[cursor]; cursor += 1; await handle(itemId); }
-      }));
+      out = await processBatch(tenantId, req.user, ids, { research: req.body.research !== false, review: req.body.review !== false });
     } catch (error) {
       return next(error);
     }
-    const ordered = ids.map((itemId) => results.find((result) => result.itemId === itemId)).filter(Boolean);
-    /**
-     * Telt de uitkomsten met een status.
-     * @param {string} status De status.
-     * @returns {number} Het aantal.
-     */
-    const count = (status) => ordered.filter((result) => result.status === status).length;
-    audit(req, 'omschrijving_bulk', { requested: ids.length, nieuw: count('nieuw'), overschreven: count('overschreven'), behouden: count('behouden'), concept: count('concept') });
-    return res.json({ results: ordered, aborted });
+    if (out.refused) return res.status(out.refused.status).json({ error: out.refused.error, message: out.refused.message });
+    audit(req, 'omschrijving_bulk', { requested: ids.length, nieuw: countOf(out.results, 'nieuw'), overschreven: countOf(out.results, 'overschreven'), behouden: countOf(out.results, 'behouden'), concept: countOf(out.results, 'concept') });
+    return res.json({ results: out.results, aborted: out.aborted });
+  });
+
+  // Achtergrondtaak: de server loopt zelf alle artikelen aan de beurt door, ook als de browser dicht gaat. De stand is op te vragen en de taak is te stoppen.
+  app.post('/api/stock/item-texts/bulk/job', requireJson, requireStock, (req, res) => {
+    const tenantId = tenantOf(req);
+    const research = req.body && req.body.research !== false;
+    const review = req.body && req.body.review !== false;
+    const todo = drafts.bulkTodo(tenantId, { review });
+    if (!todo.ids.length) return res.status(409).json({ error: 'nothing_to_do', message: 'Er zijn geen artikelen aan de beurt.' });
+    const started = jobs.start(`omschrijvingen|${tenantId}`, {
+      ids: todo.ids, size: BULK_BATCH, options: { research, review },
+      runBatch: (batchIds) => processBatch(tenantId, req.user, batchIds, { research, review }),
+    });
+    if (!started) return res.status(409).json({ error: 'running', message: 'Er loopt al een taak voor deze omgeving.' });
+    audit(req, 'omschrijving_bulk_gestart', { total: todo.ids.length, research, review });
+    return res.status(202).json(jobs.get(`omschrijvingen|${tenantId}`));
+  });
+  app.get('/api/stock/item-texts/bulk/job', requireStock, (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(jobs.get(`omschrijvingen|${tenantOf(req)}`));
+  });
+  app.post('/api/stock/item-texts/bulk/job/stop', requireJson, requireStock, (req, res) => {
+    jobs.stop(`omschrijvingen|${tenantOf(req)}`);
+    audit(req, 'omschrijving_bulk_gestopt', {});
+    res.json(jobs.get(`omschrijvingen|${tenantOf(req)}`));
   });
 }
 

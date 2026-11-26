@@ -257,3 +257,29 @@ test('omschrijvingen in bulk: het dagplafond stopt de run', async () => {
     assert.strictEqual((await baas.get('/app/api/stock/item-texts/bulk/todo')).body.remainingToday, 0);
   } finally { server.close(); }
 });
+
+test('omschrijvingen in bulk: de achtergrondtaak loopt op de server door, toont voortgang, weigert een tweede start en is te stoppen', async () => {
+  const { server, as } = await setup(behaviour);
+  try {
+    const baas = await as('baas');
+    const klant = await as('klant');
+    for (let number = 1; number <= 8; number += 1) await baas.post('/app/api/stock/items', { code: `J${number}`, name: `Klep ${number}`, unit: 'st' });
+    assert.strictEqual((await klant.get('/app/api/stock/item-texts/bulk/job')).status, 403);
+    assert.strictEqual((await klant.post('/app/api/stock/item-texts/bulk/job', {})).status, 403);
+    assert.strictEqual((await baas.get('/app/api/stock/item-texts/bulk/job')).body.running, false, 'nog geen taak');
+    const started = await baas.post('/app/api/stock/item-texts/bulk/job', { research: true, review: true });
+    assert.strictEqual(started.status, 202, JSON.stringify(started.body));
+    assert.strictEqual(started.body.total, 8);
+    let job = (await baas.get('/app/api/stock/item-texts/bulk/job')).body;
+    for (let round = 0; round < 100 && job.running; round += 1) {
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      job = (await baas.get('/app/api/stock/item-texts/bulk/job')).body;
+    }
+    assert.strictEqual(job.running, false);
+    assert.strictEqual(job.processed, 8);
+    assert.strictEqual(job.tally.nieuw, 8);
+    assert.strictEqual(job.message, 'Klaar.');
+    assert.strictEqual((await baas.post('/app/api/stock/item-texts/bulk/job', {})).status, 409, 'niets meer aan de beurt');
+    assert.strictEqual((await baas.get('/app/api/stock/item-texts/bulk/todo')).body.total, 0);
+  } finally { server.close(); }
+});
