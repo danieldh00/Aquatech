@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.44.7',
+      date: '2026-11-26',
+      title: 'WordPress-bestellingen zichtbaar bij Webshopbestellingen',
+      items: [
+        { text: 'Bij Webshopbestellingen staan nu ook de bestellingen uit de oude WordPress-webshop, met het label WordPress en een filter op bron. Ze zijn alleen om te bekijken: er gaat niets terug naar WordPress en er raakt geen voorraad, factuur of mail aan vast.', for: ['voorraad', 'beheer'] },
+      ],
+    },
+    {
       version: '1.44.6',
       date: '2026-11-26',
       title: 'Betere vindbaarheid van productteksten',
