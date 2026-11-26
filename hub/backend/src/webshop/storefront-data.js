@@ -334,7 +334,7 @@ function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE, discoun
     // De prijs voor een zakelijke klant (excl. btw): de zakelijke prijs van het artikel, anders de gewone verkoopprijs.
     const priceBusiness = Math.round((row.business_price != null ? Number(row.business_price) : priceExcl) * 100) / 100;
     return {
-      slug: uniqueSlug(row.name, row.code), code: String(row.code), name: decodeHtmlEntities(row.name), unit: String(row.unit || 'st'),
+      slug: uniqueSlug(row.name, row.code), itemId: String(row.id), code: String(row.code), name: decodeHtmlEntities(row.name), unit: String(row.unit || 'st'),
       ...placementOf(row.categories), priceExcl, vatRate,
       priceIncl: Math.round(priceExcl * (1 + vatRate / 100) * 100) / 100,
       priceBusiness, priceBusinessIncl: Math.round(priceBusiness * (1 + vatRate / 100) * 100) / 100,
@@ -382,7 +382,7 @@ function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE, discoun
     const cheapest = variants.reduce((lowest, variant) => (variant.priceIncl < lowest.priceIncl ? variant : lowest), variants[0]);
     const cheapestBusiness = variants.reduce((lowest, variant) => (variant.priceBusiness < lowest.priceBusiness ? variant : lowest), variants[0]);
     const group = {
-      slug: uniqueSlug(parent.name, parent.code), code: String(parent.code), name: decodeHtmlEntities(parent.name), unit: String(parent.unit || variants[0].unit),
+      slug: uniqueSlug(parent.name, parent.code), itemId: String(parent.id), code: String(parent.code), name: decodeHtmlEntities(parent.name), unit: String(parent.unit || variants[0].unit),
       ...placement,
       priceExcl: cheapest.priceExcl, vatRate: cheapest.vatRate, priceIncl: cheapest.priceIncl,
       priceBusiness: cheapestBusiness.priceBusiness, priceBusinessIncl: cheapestBusiness.priceBusinessIncl,
@@ -390,7 +390,7 @@ function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE, discoun
       inStock: variants.some((variant) => variant.inStock), image: imageOf(parent) || (variants.find((variant) => variant.image) || {}).image || '',
       attributeName: attributeNames.length === 1 ? attributeNames[0] : 'Uitvoeringen',
       variants: variants.map((variant) => ({
-        slug: variant.slug, code: variant.code, label: Object.values(variant.values).join(' / ') || variant.code,
+        slug: variant.slug, itemId: variant.itemId, code: variant.code, label: Object.values(variant.values).join(' / ') || variant.code,
         meta: Object.entries(variant.values).map(([name, value]) => `${name}: ${value}`).join(' | '),
         priceIncl: variant.priceIncl, priceBusiness: variant.priceBusiness, priceBusinessIncl: variant.priceBusinessIncl, vatRate: variant.vatRate, inStock: variant.inStock, stockQty: variant.stockQty, image: variant.image || imageOf(parent),
       })),

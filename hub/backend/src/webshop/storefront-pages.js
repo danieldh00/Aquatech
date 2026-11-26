@@ -935,6 +935,7 @@ function productPage(product, groups, chosenCode = '', details = new Map(), { pa
     <h1>${escapeHtml(product.name)}</h1>
     ${picker}
     <p class="sku">Artikelnummer: ${escapeHtml(shown.code)}${chosen && chosen.meta ? ` | ${escapeHtml(chosen.meta)}` : ''}</p>
+    ${activeShop.staff && shown.itemId ? `<p class="product-edit"><a class="button secondary" href="${root}app/artikelen/?id=${encodeURIComponent(shown.itemId)}" title="Dit artikel bewerken in het beheer">Bewerken in beheer</a></p>` : ''}
     ${packagingPicker}
     <p class="price">${escapeHtml(formatPrice(pack ? pack.price : shownPrice(shown)))} <small>${activeShop.business ? `excl. ${shown.vatRate}% btw · per ${escapeHtml(pack ? `${pack.name} (${pack.factor} ${product.unit})` : product.unit)}<br><span class="price-incl">incl. btw ${escapeHtml(formatPrice(pack ? pack.priceIncl : shown.priceBusinessIncl))}</span>` : `incl. ${shown.vatRate}% btw · per ${escapeHtml(pack ? `${pack.name} (${pack.factor} ${product.unit})` : product.unit)}`}</small></p>
     <p class="stock ${(pack ? pack.inStock : shown.inStock) ? 'in' : 'out'}">${stockText(pack ? pack.inStock : shown.inStock, pack ? null : (shown.stockQty === undefined ? null : shown.stockQty))}</p>
