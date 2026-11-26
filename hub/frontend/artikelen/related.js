@@ -4,11 +4,7 @@
 // Praat met /api/stock/related en /api/stock/related-ai (recht voorraad).
 (function () {
   const context = { api: null, toast: null, esc: null };
-<<<<<<< HEAD
-  const state = { data: null, ai: null, openId: null, detail: null, busy: false, polling: false, seen: false };
-=======
-  const state = { data: null, ai: null, openId: null, detail: null, busy: false, stop: false, wp: null, wpPick: null, wpTimer: 0 };
->>>>>>> 47b9a05 (WordPress-orderhistorie voor Vaak samen besteld (WIP))
+  const state = { data: null, ai: null, openId: null, detail: null, busy: false, polling: false, seen: false, wp: null, wpPick: null, wpTimer: 0 };
 
   /**
    * Zoekt het eerste element dat bij de selector past.
@@ -54,9 +50,7 @@
     state.data = await context.api(`stock/related?${queryOf()}`);
     state.ai = state.data.ai;
     renderList();
-<<<<<<< HEAD
     followAi().catch(() => {});
-=======
     await loadWp();
   }
 
@@ -144,7 +138,6 @@
     context.toast(`${out.updated} regel${out.updated === 1 ? '' : 's'} gekoppeld. Vaak samen besteld wordt bij de volgende ronde bijgewerkt.`);
     state.wpPick = null; $('#rl-wp-pick').hidden = true; $('#rl-wp-results').innerHTML = ''; $('#rl-wp-search').value = '';
     await loadWp();
->>>>>>> 47b9a05 (WordPress-orderhistorie voor Vaak samen besteld (WIP))
   }
 
   /** Tekent de melding over AI, de knoppen en de tabel. */

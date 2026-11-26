@@ -1,4 +1,4 @@
-// Orderhistorie uit de oude WordPress/WooCommerce-webshop, alleen als bron voor "Vaak samen besteld" (migratie 100).
+// Orderhistorie uit de oude WordPress/WooCommerce-webshop, alleen als bron voor "Vaak samen besteld" (migratie 101).
 //
 // - De regels komen in `wp_order_lines`, nooit in `web_orders`: er ontstaat dus geen voorraadmutatie, factuur, mail of omzet. Opnieuw ophalen is veilig
 //   (unieke sleutel per WP-bestelling en regel; een eerdere koppeling, ook een handmatige, blijft staan).

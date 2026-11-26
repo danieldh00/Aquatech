@@ -5,7 +5,7 @@
 // - Past bij handmatig: de gebruiker kiest artikelen (hoogstens MAX_LINKS). Een handmatige koppeling wordt nooit door de AI overschreven of gewist.
 // - Past bij met AI: de AI zoekt specificaties op (related-research.js), de code bepaalt met vaste regels wat past (related-compat.js). Elke koppeling heeft
 //   een reden en bronnen. Zonder gevonden specificaties komt er geen koppeling.
-// - Vaak samen besteld: uit de verzonden bestellingen (web_sale_lines) plus de orderhistorie van de oude WordPress-webshop (wp_order_lines, migratie 100): een artikel telt alleen mee als het relatief vaak samen met het andere voorkomt
+// - Vaak samen besteld: uit de verzonden bestellingen (web_sale_lines) plus de orderhistorie van de oude WordPress-webshop (wp_order_lines, migratie 101): een artikel telt alleen mee als het relatief vaak samen met het andere voorkomt
 //   (minimaal aantal bestellingen, aandeel en lift), niet omdat het populair is. Bestellingen met een retour van dat artikel tellen niet mee.
 // - De webshop toont alleen artikelen die in de catalogus staan (actief, met prijs en in de shop) en leverbaar zijn, met de gewone prijsregels (storefront.js).
 const crypto = require('crypto');
