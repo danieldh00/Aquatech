@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.42.1',
+      date: '2026-11-26',
+      title: 'AI-kosten tellen Past bij niet meer als mislukt',
+      items: [
+        { text: 'Bij AI-kosten stonden alle opzoekingen van Past bij ten onrechte als mislukt. Dat is hersteld, ook voor de oude regels. De tekst boven het scherm noemt nu het standaardmodel en meldt dat Past bij een eigen model heeft.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.42.0',
       date: '2026-11-26',
       title: 'Cookies en mailvelden veiliger uitlezen',

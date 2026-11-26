@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.42.1
+
+`related-routes.js` gaf de uitkomst van het opzoeken (`gevonden`/`niet_gevonden`) door als status van het verzoek aan `aiUsage.record`; alles behalve `ok` telt als mislukt. Nu wordt alleen model en verbruik doorgegeven. `ai-usage.js` behandelt bestaande regels met die twee statussen als gelukt (telling en weergave), zonder migratie. Test: `related-items.test.js` controleert dat alleen de echt mislukte aanvraag meetelt.
+
 ## 1.42.0
 
 Hardening na de CodeQL-scan: `parseCookies` gebruikt een object zonder prototype en `fillParagraphs` (mail-layout.js) vult alleen eigen sleutels in (nooit `constructor` e.d.).
