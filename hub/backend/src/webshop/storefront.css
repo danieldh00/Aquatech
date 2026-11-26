@@ -29,6 +29,9 @@
   --at-shadow-strong: rgba(20, 42, 82, 0.7);
   --at-foot-text: rgba(255, 255, 255, 0.85);
   --at-foot-line: rgba(255, 255, 255, 0.2);
+  --at-foot-pay-bg: #fff;
+  --at-foot-pay-text: var(--at-shop-navy);
+  --at-foot-pay-bitcoin: #b45f06;
 }
 * { box-sizing: border-box; }
 picture { display: contents; }
@@ -260,6 +263,9 @@ a.shop-action.shop-admin:hover { background: var(--at-shop-navy); }
 .business-request { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--at-line); border-radius: 8px; }
 .business-request summary { cursor: pointer; font-weight: 600; }
 .business-request form { margin-top: 12px; }
+.foot-pay { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.foot-pay li { padding: 4px 10px; border: 1px solid var(--at-foot-line); border-radius: 6px; background: var(--at-foot-pay-bg); color: var(--at-foot-pay-text); font-size: 0.75rem; font-weight: 600; line-height: 1.4; }
+.foot-pay .foot-pay-bitcoin { color: var(--at-foot-pay-bitcoin); }
 .foot-note img { display: block; max-width: 100%; height: auto; }
 .button:disabled { background: var(--at-muted); cursor: not-allowed; }
 .shop-foot a[href^="tel:"], .shop-foot a[href^="mailto:"] { text-decoration: none; }
