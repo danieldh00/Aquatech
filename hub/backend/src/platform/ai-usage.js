@@ -17,12 +17,14 @@ const AiModels = require(path.join(FRONTEND_DIR, 'shared', 'ai-models.js'));
 
 const MAX_LIST = 1000;
 const MAX_DETAIL = 2000;
+/** Statussen die een gelukt verzoek betekenen: oudere regels van Past bij bewaarden per ongeluk de uitkomst van het zoeken als status. */
+const OK_STATUSES = ['ok', 'gevonden', 'niet_gevonden'];
 const COLS = `a.id, a.tenant_id, a.user_id, a.feature, a.model, a.status, a.input_tokens, a.output_tokens, a.cache_read_tokens,
   a.cache_write_tokens, a.duration_ms, a.cost_usd_micro, a.cost_eur_micro, a.detail, a.created_at`;
 const SUMS = `COUNT(*) AS requests, COALESCE(SUM(a.input_tokens), 0) AS input_tokens, COALESCE(SUM(a.output_tokens), 0) AS output_tokens,
   COALESCE(SUM(a.cache_read_tokens), 0) AS cache_read_tokens, COALESCE(SUM(a.cache_write_tokens), 0) AS cache_write_tokens,
   COALESCE(SUM(a.duration_ms), 0) AS duration_ms, COALESCE(SUM(a.cost_usd_micro), 0) AS cost_usd_micro,
-  COALESCE(SUM(a.cost_eur_micro), 0) AS cost_eur_micro, COALESCE(SUM(CASE WHEN a.status = 'ok' THEN 0 ELSE 1 END), 0) AS failed`;
+  COALESCE(SUM(a.cost_eur_micro), 0) AS cost_eur_micro, COALESCE(SUM(CASE WHEN a.status IN ('ok', 'gevonden', 'niet_gevonden') THEN 0 ELSE 1 END), 0) AS failed`;
 
 /**
  * Of een waarde een geldige datum is (JJJJ-MM-DD).
@@ -200,7 +202,7 @@ function createAiUsageStore(db) {
         return {
           id: row.id, createdAt: row.created_at, tenant: { id: row.tenant_id, name: row.tenant_name || '–', environment: row.environment || '' },
           user: userOf({ k: row.user_id, username: row.username, display_name: row.display_name, kind: row.kind }), userId: row.user_id,
-          feature: row.feature, featureLabel: AiModels.featureLabel(row.feature), model: row.model, modelLabel: AiModels.label(row.model), status: row.status,
+          feature: row.feature, featureLabel: AiModels.featureLabel(row.feature), model: row.model, modelLabel: AiModels.label(row.model), status: OK_STATUSES.includes(row.status) ? 'ok' : row.status,
           inputTokens: row.input_tokens, outputTokens: row.output_tokens, cacheReadTokens: row.cache_read_tokens, cacheWriteTokens: row.cache_write_tokens,
           durationMs: row.duration_ms, costUsd: row.cost_usd_micro / 1e6, costEur: row.cost_eur_micro / 1e6, detail,
         };
