@@ -41,6 +41,7 @@ Docker is niet beschikbaar in de cloud-sandbox. Er is geen aparte linter; `codes
 - Volgorde: wijzigen → `npm test` → `changes/<naam>.md` (als `hub/` wijzigt) → `README.md` bijwerken bij features/setup → push → PR → CI groen + verplichte **Claude code review** en **Claude security review** → bevindingen oplossen vóór auto-merge.
 - **Versie, `CHANGELOG.md` en `frontend/nieuws/releases.js` nooit zelf aanraken**; `release.yml` doet dat na de merge. Alleen docs/CI zonder effect: PR-label `geen-releasenotes`. Enige uitzondering: een vergeten doelgroep (`for: [...]`) toevoegen aan een bestaand punt in `releases.js` mag in een PR (`audienceOnlyChange`); bestaande doelgroepen, tekst, versies en nieuwe punten blijven geweigerd.
 - Geen modelnamen/-ID's in commits, PR's, code of docs. Geen secrets in repo of chat.
+- **Vangrails (hooks)**: `.claude/settings.json` + `.claude/hooks/guard.mjs` blokkeren o.a. versie/CHANGELOG/releases.js aanraken, SQLite, Vue, `SELECT *`, CDN, admin-merge, `pkill -f`, werken op `master`, force-push, raw-GitHub-URL zonder SHA, secrets en modelnamen. Een melding van de hook is geen storing: pas je aanpak aan. Regels: `.claude/hooks/rules.mjs`; test: `node --test .claude/hooks/`.
 
 ## Servertaken (hosttaken)
 Moet Daniël na een PR iets op de server doen (een serverscript opnieuw draaien, een unit installeren), geef hem dan **nooit een los commando in de chat**. Voeg een genummerde taak toe:
