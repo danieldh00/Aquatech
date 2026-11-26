@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.41.5',
+      date: '2026-11-26',
+      title: 'Kleiner en veiliger image',
+      items: [],
+    },
+    {
       version: '1.41.4',
       date: '2026-11-26',
       title: 'Planner direct gebruiken zonder account',

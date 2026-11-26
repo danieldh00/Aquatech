@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.41.5
+
+Het runtime-image bevat geen npm en npx meer (verwijderd na `npm ci --omit=dev`): de Trivy-meldingen over de npm-eigen bibliotheken (sigstore, picomatch, pacote, brace-expansion, ip-address) gaan daarmee weg. De app en de hostscripts gebruiken alleen `node`.
+
 ## 1.41.4
 
 `GET /planner/` stuurt bezoekers zonder inlog naar `app/beregening/?tekenen` (het aanmeldformulier blijft bereikbaar met `?account=1`). De planner neemt na het inloggen het lokale ontwerp zonder account over (`_adoptAnonymousDraft`, alleen in een leeg plan, daarna wordt de lokale kopie gewist). Knop *Ontwerp bewaren met account* in de balk van de planner zonder account. AI blijft uit voor anonieme bezoekers; de bestaande limieten op de openbare routes gelden.
