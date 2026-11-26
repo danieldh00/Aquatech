@@ -514,8 +514,8 @@
       <td class="c-chk"><input type="checkbox" data-s="done"${step.done ? ' checked' : ''} aria-label="Klaar"></td>
       <td class="c-desc"><input data-s="title" value="${esc(step.title)}" maxlength="300" placeholder="Werkstap">
         <input data-s="details" class="details" value="${esc(step.details)}" maxlength="2000" placeholder="Toelichting (optioneel)"></td>
-      <td class="c-qty"><input data-s="hours" class="num" type="number" min="0" step="0.25" value="${step.hours || ''}" aria-label="Geplande uren" placeholder="–"></td>
-      <td class="c-qty"><input data-s="actualHours" class="num" type="number" min="0" step="0.25" value="${step.actualHours ?? ''}" aria-label="Werkelijke uren" placeholder="–"></td>
+      <td class="c-qty"><input data-s="hours" class="num" type="number" min="0" step="0.25" value="${esc(step.hours || '')}" aria-label="Geplande uren" placeholder="–"></td>
+      <td class="c-qty"><input data-s="actualHours" class="num" type="number" min="0" step="0.25" value="${esc(step.actualHours ?? '')}" aria-label="Werkelijke uren" placeholder="–"></td>
       <td class="c-del"><button class="btn ghost icon" data-del-step title="Stap verwijderen">✕</button></td>
     </tr>`;
   }
@@ -547,7 +547,7 @@
     return `<tr class="line${material.picked ? ' done' : ''}" data-mat="${esc(material.id)}">
       <td class="c-chk"><input type="checkbox" data-m="picked"${material.picked ? ' checked' : ''} aria-label="Verzameld"></td>
       <td class="c-desc"><input data-m="description" value="${esc(material.description)}" maxlength="500" placeholder="Omschrijving">${material.code ? `<span class="code">${esc(material.code)}</span>` : ''}${choose}</td>
-      <td class="c-qty"><input data-m="qty" class="num" type="number" step="any" value="${material.qty}" aria-label="Aantal"></td>
+      <td class="c-qty"><input data-m="qty" class="num" type="number" step="any" value="${esc(material.qty)}" aria-label="Aantal"></td>
       <td class="c-unit"><input data-m="unit" value="${esc(material.unit)}" maxlength="12" aria-label="Eenheid"></td>
       <td class="c-del"><button class="btn ghost icon" data-del-mat title="Regel verwijderen">✕</button></td>
     </tr>`;
