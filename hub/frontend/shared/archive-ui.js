@@ -102,6 +102,10 @@
       } catch (error) {
         messageLabel.textContent = error.message;
         messageLabel.classList.toggle('error', true);
+        // Bij meer dan één portie kan een deel al verwerkt zijn: lijst opnieuw laden en selectie wissen, zodat niets dubbel wordt verstuurd.
+        selection.clear();
+        state.own.clear();
+        try { await onChange(); } catch (reloadError) { /* de melding van de eerste fout blijft staan */ }
       }
       archiveButton.disabled = false;
       restoreButton.disabled = false;

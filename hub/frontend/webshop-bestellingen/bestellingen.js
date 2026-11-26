@@ -404,7 +404,7 @@
     /** Volgende pagina. */
     $('#wo-next').onclick = () => { state.offset += PAGE; load(); };
     $('#wo-export').onclick = exportExcel;
-    archive = window.AquatechArchive.attach({ kind: 'bestellingen', filters: $('#wo-search').closest('.filters'), table: $('#wo-table'), onChange: load });
+    archive = window.AquatechArchive.attach({ kind: 'bestellingen', filters: $('#wo-search').closest('.filters'), table: $('#wo-table'), onChange: () => { state.offset = 0; return load(); } });
     // Een link naar één bestelling (bijvoorbeeld vanuit een omgezette offerte) opent direct het detail.
     const directId = new URLSearchParams(location.search).get('id');
     if (directId) open(directId);
