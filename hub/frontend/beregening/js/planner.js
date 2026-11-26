@@ -439,7 +439,7 @@
   }
 
   /**
-   * Meetpunten binnen het vlak en in een band eromheen (vast per vlak, zodat varianten snel te
+   * Meetpunten binnen het vlak en in een band eromheen (vast per vlak, zodat subartikelen snel te
    * vergelijken zijn).
    * @param {Array<{x: number, y: number}>} points Omtrek van het vlak (met de klok mee).
    * @param {number} reach Breedte van de band buiten het vlak (grootste worp).
@@ -635,24 +635,24 @@
   }
 
   /**
-   * Varianten van één kop om te proberen: worp korter/langer, sproeihoek kleiner/groter,
+   * Subartikelen van één kop om te proberen: worp korter/langer, sproeihoek kleiner/groter,
    * richting draaien, en met een meetraster ook verschuiven en de sector uit de echte rand.
    * @param {object} head De kop.
    * @param {object|null} [grid] Meetraster; alleen dan wordt er ook verschoven.
-   * @returns {object[]} Varianten (passend gemaakt op de nozzle), zonder de kop zelf.
+   * @returns {object[]} Subartikelen (passend gemaakt op de nozzle), zonder de kop zelf.
    */
-  function variantsOf(head, grid = null) {
+  function subItemsOf(head, grid = null) {
     const range = Catalog.headRange ? Catalog.headRange(head) : Catalog.sprinklerTypes[head.type];
-    const variants = [];
+    const subItems = [];
     for (const factor of [0.9, 0.8, 0.7, 0.6, 1.1, 1.2]) {
       const radius = round1(clamp(head.r * factor, range.rMin, range.rMax));
-      if (radius !== head.r) variants.push({ ...head, r: radius });
+      if (radius !== head.r) subItems.push({ ...head, r: radius });
     }
     if (head.arc < 359.9) {
-      for (const arcStep of [-20, -10, 10, 20]) variants.push({ ...head, arc: head.arc + arcStep });
-      for (const turn of [-10, -5, 5, 10]) variants.push({ ...head, start: Math.round(Geo.normDeg(head.start + turn)) });
+      for (const arcStep of [-20, -10, 10, 20]) subItems.push({ ...head, arc: head.arc + arcStep });
+      for (const turn of [-10, -5, 5, 10]) subItems.push({ ...head, start: Math.round(Geo.normDeg(head.start + turn)) });
       // beide randen iets naar binnen (hoek kleiner, midden gelijk)
-      variants.push({ ...head, start: Math.round(Geo.normDeg(head.start + 5)), arc: head.arc - 10 });
+      subItems.push({ ...head, start: Math.round(Geo.normDeg(head.start + 5)), arc: head.arc - 10 });
     }
     // verschuiven (alleen bij automatisch plaatsen): binnenkop een stukje, randkop langs de rand
     if (grid) {
@@ -662,13 +662,13 @@
         const vertex = grid.corners.find((corner) => Geo.dist(corner.p, head) < 0.15);
         if (vertex) {
           for (const [turn, arcStep] of [[0, 0], [0, -15], [15, -15]]) {
-            variants.push({ ...head, start: Math.round(Geo.normDeg(vertex.start + turn)), arc: Math.round(vertex.interior + arcStep) });
+            subItems.push({ ...head, start: Math.round(Geo.normDeg(vertex.start + turn)), arc: Math.round(vertex.interior + arcStep) });
           }
         } else {
           const closest = Geo.closestOnPolygon(head, grid.edge);
           if (closest.d < 0.15) {
             const edgeStart = grid.edge[closest.edge], edgeEnd = grid.edge[(closest.edge + 1) % grid.edge.length];
-            variants.push({ ...head, start: Math.round(Geo.normDeg(Geo.angleOf(Geo.sub(edgeEnd, edgeStart)))), arc: 180 });
+            subItems.push({ ...head, start: Math.round(Geo.normDeg(Geo.angleOf(Geo.sub(edgeEnd, edgeStart)))), arc: 180 });
           }
         }
       }
@@ -676,19 +676,19 @@
       if (head.arc >= 359.9) {
         for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
           const point = { x: head.x + dx * step, y: head.y + dy * step };
-          if (Geo.pointInPolygon(point, grid.pts)) variants.push({ ...head, x: point.x, y: point.y });
+          if (Geo.pointInPolygon(point, grid.pts)) subItems.push({ ...head, x: point.x, y: point.y });
         }
       } else if (Math.abs(head.arc - 180) < 1) {
         const radians = Geo.rad(head.start);
         for (const distance of [-2 * step, -step, step, 2 * step]) {
           const closest = Geo.closestOnPolygon({ x: head.x + Math.cos(radians) * distance, y: head.y + Math.sin(radians) * distance }, grid.edge);
           const edgeStart = grid.edge[closest.edge], edgeEnd = grid.edge[(closest.edge + 1) % grid.edge.length];
-          variants.push({ ...head, x: closest.pt.x, y: closest.pt.y, start: Math.round(Geo.normDeg(Geo.angleOf(Geo.sub(edgeEnd, edgeStart)))) });
+          subItems.push({ ...head, x: closest.pt.x, y: closest.pt.y, start: Math.round(Geo.normDeg(Geo.angleOf(Geo.sub(edgeEnd, edgeStart)))) });
         }
       }
     }
-    return variants.map((variant) => Catalog.fitRotator(variant))
-      .filter((variant) => variant.r !== head.r || variant.arc !== head.arc || variant.start !== head.start || variant.x !== head.x || variant.y !== head.y);
+    return subItems.map((subItem) => Catalog.fitRotator(subItem))
+      .filter((subItem) => subItem.r !== head.r || subItem.arc !== head.arc || subItem.start !== head.start || subItem.x !== head.x || subItem.y !== head.y);
   }
 
   /**
@@ -696,7 +696,7 @@
    * dat er minder water buiten het vlak valt en de verdeling gelijkmatiger wordt.
    * Hebzuchtig: per kop de beste verbetering, rondes tot er niets meer te winnen is.
    * @param {object} grid Meetraster (evaluator).
-   * @param {object[]} heads De koppen (worden vervangen door betere varianten).
+   * @param {object[]} heads De koppen (worden vervangen door betere subartikelen).
    * @param {object} current Huidige beoordeling.
    * @param {number} [rounds] Hoogstens zoveel rondes.
    * @param {Set<string>|null} [onlyIds] Alleen deze koppen afstellen.
@@ -713,7 +713,7 @@
         if (heads[i].type === 'strip' || (onlyIds && !onlyIds.has(heads[i].id))) continue;
         let picked = null;
         apply(grid, totals, heads[i], -1);
-        for (const candidate of variantsOf(heads[i], move ? grid : null)) {
+        for (const candidate of subItemsOf(heads[i], move ? grid : null)) {
           apply(grid, totals, candidate, 1);
           const result = costOf(grid, totals, heads.length);
           apply(grid, totals, candidate, -1);
@@ -931,10 +931,10 @@
           for (const spacingV of spacingsV) {
             // rechthoekig verband mag, maar niet extreem langgerekt (dan valt er midden tussen te weinig)
             if (Math.max(spacingU, spacingV) > 2 * Math.min(spacingU, spacingV)) continue;
-            for (const [variant, form] of shapesFor(round1(Math.min(spacingU, spacingV)))) {
+            for (const [subItem, form] of shapesFor(round1(Math.min(spacingU, spacingV)))) {
               const heads = layout(form, type, spacingU, angle, pattern, spacingV, body);
-              if (seen.has(variant + heads.key)) continue;
-              seen.add(variant + heads.key);
+              if (seen.has(subItem + heads.key)) continue;
+              seen.add(subItem + heads.key);
               candidates.push({ heads, score: score(grid, heads) });
             }
           }

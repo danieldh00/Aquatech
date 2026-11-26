@@ -42,7 +42,7 @@ const { cspWith: captchaCspWith } = require('../beveiliging/captcha');
 /** Inhoud wanneer er geen opslag is: de standaardblokken, geen eigen pagina's. */
 const DEFAULT_CONTENT = { site: DEFAULT_SITE, pages: [] };
 
-/** Content-Security-Policy van de shop: alleen de eigen scripts voor de keuzelijsten van varianten en het afrekenen (die laatste vraagt het adres bij een postcode op bij onze eigen server); afbeeldingen van de webshop komen van https-adressen. */
+/** Content-Security-Policy van de shop: alleen de eigen scripts voor de keuzelijsten van subartikelen en het afrekenen (die laatste vraagt het adres bij een postcode op bij onze eigen server); afbeeldingen van de webshop komen van https-adressen. */
 const STOREFRONT_CSP = [
   "default-src 'none'", "script-src 'self'", "connect-src 'self'", "style-src 'self'", "img-src 'self' https:", "font-src 'self'",
   "base-uri 'none'", "form-action 'self'", "frame-ancestors 'none'",
@@ -56,7 +56,7 @@ const ASSETS = {
   'zoeksuggesties.js': { file: path.join(__dirname, 'storefront-suggest.js'), type: 'text/javascript; charset=utf-8' },
   'menu.js': { file: path.join(__dirname, 'storefront-menu.js'), type: 'text/javascript; charset=utf-8' },
   'kaartaantal.js': { file: path.join(__dirname, 'storefront-card-qty.js'), type: 'text/javascript; charset=utf-8' },
-  'varianten.js': { file: path.join(__dirname, 'storefront-variants.js'), type: 'text/javascript; charset=utf-8' },
+  'subartikelen.js': { file: path.join(__dirname, 'storefront-sub-items.js'), type: 'text/javascript; charset=utf-8' },
   'adres.js': { file: path.join(SHARED_DIR, 'address-lookup.js'), type: 'text/javascript; charset=utf-8' },
   'afrekenen.js': { file: path.join(__dirname, 'storefront-checkout.js'), type: 'text/javascript; charset=utf-8' },
   'captcha.js': { file: path.join(SHARED_DIR, 'captcha.js'), type: 'text/javascript; charset=utf-8' },
@@ -392,15 +392,15 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
       const body = req.body || {};
       const code = String(body.code || '').slice(0, 80);
       const catalog = catalogOf(req);
-      const parent = catalog.products.find((candidate) => (candidate.variants || []).some((entry) => entry.code === code));
-      const product = parent || catalog.products.find((candidate) => candidate.code === code);
+      const articleGroup = catalog.products.find((candidate) => (candidate.subItems || []).some((entry) => entry.code === code));
+      const product = articleGroup || catalog.products.find((candidate) => candidate.code === code);
       if (!product || !alertsOn()) return res.redirect(303, '../');
       /**
        * Het adres van de productpagina na het aanmelden, met de uitkomst.
        * @param {string} status `ja` of `fout`.
        * @returns {string} Het relatieve adres.
        */
-      const back = (status) => `../product/${product.slug}/?${parent ? `v=${encodeURIComponent(code)}&` : ''}melding=${status}#voorraadmelding`;
+      const back = (status) => `../product/${product.slug}/?${articleGroup ? `v=${encodeURIComponent(code)}&` : ''}melding=${status}#voorraadmelding`;
       // Het verborgen veld is ingevuld: een robot. Doen alsof het gelukt is.
       if (body.website) return res.redirect(303, back('ja'));
       if (!(await humanCheck(req, 'stock_alert')).ok) return res.redirect(303, back('fout'));
@@ -1537,19 +1537,19 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     const pathname = req.originalUrl.split('?')[0];
     if (!pathname.endsWith('/')) return res.redirect(302, `${path.posix.basename(pathname)}/${req.originalUrl.slice(pathname.length)}`);
     const catalog = catalogOf(req);
-    const variant = catalog.variantProducts.find((candidate) => candidate.slug === req.params.slug);
-    const parent = variant && catalog.products.find((candidate) => candidate.slug === variant.parentSlug);
-    // Een variant krijgt de keuzelijst van zijn hoofdartikel en staat zelf geselecteerd.
+    const subItem = catalog.subItemProducts.find((candidate) => candidate.slug === req.params.slug);
+    const articleGroup = subItem && catalog.products.find((candidate) => candidate.slug === subItem.articleGroupSlug);
+    // Een subartikel krijgt de keuzelijst van zijn artikelgroep en staat zelf geselecteerd.
     const product = catalog.products.find((candidate) => candidate.slug === req.params.slug)
-      || (parent ? { ...variant, variants: parent.variants, attributeName: parent.attributeName } : variant);
+      || (articleGroup ? { ...subItem, subItems: articleGroup.subItems, attributeName: articleGroup.attributeName } : subItem);
     if (!product) return sendPage(req, res, 404, () => notFoundPage('../../', catalog.groups));
     track(req, 'product');
-    const chosenCode = typeof req.query.v === 'string' ? req.query.v.slice(0, 80) : (variant ? variant.code : '');
-    const details = !data.detailsOf ? new Map() : data.detailsOf(tenantId, [product.code, ...(product.variants || []).map((entry) => entry.code)]);
+    const chosenCode = typeof req.query.v === 'string' ? req.query.v.slice(0, 80) : (subItem ? subItem.code : '');
+    const details = !data.detailsOf ? new Map() : data.detailsOf(tenantId, [product.code, ...(product.subItems || []).map((entry) => entry.code)]);
     /**
      * De verpakkingen (doos, pallet) die deze bezoeker bij een artikel mag kiezen, met de prijs per verpakking uit de winkelwagenberekening
      * (dezelfde regels voor btw, klantgroep en kortingen). Alleen met bestellen aan; een artikel zonder verpakking kost geen prijsberekening.
-     * @param {string} itemCode Artikelcode (bij een hoofdartikel: van de gekozen variant).
+     * @param {string} itemCode Artikelcode (bij een artikelgroep: van de gekozen subartikel).
      * @returns {{ packCode: string, cartCode: string, name: string, factor: number, price: number, priceIncl: number, inStock: boolean }[]} De keuzes, kleinste eerst.
      */
     const packagingsFor = (itemCode) => {
@@ -1568,7 +1568,7 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     };
     const packCode = typeof req.query.p === 'string' ? req.query.p.slice(0, 40) : '';
     // De indicatieve levertijd bij een artikel: met de eerste bezorgmethode die aan staat (anders afhalen), zie delivery-times.js.
-    const leadInfo = data.leadInfoOf ? data.leadInfoOf(tenantId, [product.code, ...(product.variants || []).map((entry) => entry.code)]) : new Map();
+    const leadInfo = data.leadInfoOf ? data.leadInfoOf(tenantId, [product.code, ...(product.subItems || []).map((entry) => entry.code)]) : new Map();
     const shipping = Shipping.sanitizeShipping(settingsFor(tenantId).get('shopShipping'));
     const leadMethod = Shipping.CARRIERS.map((carrier) => shipping[carrier]).find((carrier) => carrier.enabled && carrier.zones.some((zone) => zone.tiers.length || (zone.qtyTiers || []).length)) || (shipping.pickup.enabled ? shipping.pickup : null);
     /**
@@ -1591,16 +1591,16 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
     const deliveryNoteFor = (itemCode) => {
       const info = leadInfo.get(itemCode);
       if (!info || !orders || !orders.deliveryRulesOf) return '';
-      const rules = DeliveryRules.effectiveRules(info.itemRules, info.parentRules, orders.deliveryRulesOf(tenantId).get(itemCode));
+      const rules = DeliveryRules.effectiveRules(info.itemRules, info.groupRules, orders.deliveryRulesOf(tenantId).get(itemCode));
       return DeliveryRules.describeRules(rules, (method) => (shipping[method] ? shipping[method].label : method), product.unit);
     };
     const firstZone = leadMethod && leadMethod.zones ? leadMethod.zones.find((zone) => zone.tiers.length || (zone.qtyTiers || []).length) : null;
     const trust = { freeFrom: firstZone ? firstZone.freeFrom : 0, online: Boolean(orders && payments && payments.optionsFor(tenantId, accounts ? accounts.viewer(req) : null).includes('online')) };
     // Gerelateerde artikelen (Past bij en Vaak samen besteld): alleen met het onderdeel aan en als er iets is; de codes komen uit het geheugen (data.relatedFor).
-    const mainCode = parent ? parent.code : product.code;
+    const mainCode = articleGroup ? articleGroup.code : product.code;
     const relatedEntry = featureOn('gerelateerde-artikelen') && data.relatedFor ? data.relatedFor(tenantId).get(mainCode) : null;
     const related = relatedEntry && (relatedEntry.fits.length || relatedEntry.together.length) ? { catalog, fits: relatedEntry.fits, together: relatedEntry.together, mainCode } : null;
-    sendPage(req, res, 200, () => productPage(product, catalog.groups, chosenCode || (variant ? variant.code : ''), details, { related, packagingsFor, packCode, leadTextFor, deliveryNoteFor, trust, stockAlert: alertsOn() ? { status: ['ja', 'fout'].includes(req.query.melding) ? req.query.melding : '' } : null }));
+    sendPage(req, res, 200, () => productPage(product, catalog.groups, chosenCode || (subItem ? subItem.code : ''), details, { related, packagingsFor, packCode, leadTextFor, deliveryNoteFor, trust, stockAlert: alertsOn() ? { status: ['ja', 'fout'].includes(req.query.melding) ? req.query.melding : '' } : null }));
   });
 
   router.use((req, res) => {

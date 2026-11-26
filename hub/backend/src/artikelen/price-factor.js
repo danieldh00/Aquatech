@@ -178,8 +178,8 @@ const ROWS_SQL = `SELECT i.id, i.code, i.name, i.unit, i.cost_price, i.sale_pric
       WHERE l.tenant_id = i.tenant_id AND l.item_id = i.id AND l.preferred = 1 AND s.archived = 0 LIMIT 1) AS supplier_id
   FROM stock_items i
   LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
-  LEFT JOIN stock_items parent ON parent.tenant_id = i.tenant_id AND parent.id = i.parent_id
-  LEFT JOIN shop_products pp ON pp.tenant_id = i.tenant_id AND pp.id = parent.shop_product_id
+  LEFT JOIN stock_items articleGroup ON articleGroup.tenant_id = i.tenant_id AND articleGroup.id = i.group_id
+  LEFT JOIN shop_products pp ON pp.tenant_id = i.tenant_id AND pp.id = articleGroup.shop_product_id
   WHERE i.tenant_id = ?`;
 
 /**
@@ -207,7 +207,7 @@ function createPriceFactorStore(db, { stock, settingsOf, treeOf }) {
   function categoryLookup(tenantId, config) {
     const tree = treeOf(tenantId);
     const factorOf = new Map(config.categories.map((rule) => [rule.categorySlug, rule.factor]));
-    const parentOf = new Map(flatten(tree).map((node) => [node.slug, node.parentSlug]));
+    const categoryParentOf = new Map(flatten(tree).map((node) => [node.slug, node.parentSlug]));
     /**
      * De diepste categorie van de boom waar een webshopproduct onder valt.
      * @param {*} categoriesJson Het JSON-veld met categorienamen van het webshopproduct.
@@ -224,7 +224,7 @@ function createPriceFactorStore(db, { stock, settingsOf, treeOf }) {
      */
     const categoryFactorOf = (slug) => {
       // De teller beschermt tegen een lus in een kapotte boom (de boom heeft hoogstens vijf niveaus).
-      for (let current = slug, steps = 0; current && parentOf.has(current) && steps < 12; current = parentOf.get(current), steps += 1) {
+      for (let current = slug, steps = 0; current && categoryParentOf.has(current) && steps < 12; current = categoryParentOf.get(current), steps += 1) {
         if (factorOf.has(current)) return factorOf.get(current);
       }
       return null;
@@ -258,7 +258,7 @@ function createPriceFactorStore(db, { stock, settingsOf, treeOf }) {
   function rowsOf(tenantId, onlyItemId = null) {
     const config = configOf(tenantId);
     const lookup = categoryLookup(tenantId, config);
-    const rows = db.prepare(`${ROWS_SQL} AND i.archived = 0 AND i.has_variants = 0 AND i.price_mode = 'factor'${onlyItemId ? ' AND i.id = ?' : ''} ORDER BY i.code`).all(...(onlyItemId ? [tenantId, onlyItemId] : [tenantId]));
+    const rows = db.prepare(`${ROWS_SQL} AND i.archived = 0 AND i.is_group = 0 AND i.price_mode = 'factor'${onlyItemId ? ' AND i.id = ?' : ''} ORDER BY i.code`).all(...(onlyItemId ? [tenantId, onlyItemId] : [tenantId]));
     return rows.map((row) => {
       const result = compute(row, config, lookup);
       const oldPrice = row.sale_price == null ? null : Number(row.sale_price);

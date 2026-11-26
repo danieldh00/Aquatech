@@ -198,7 +198,7 @@ function createPlanTools(shared) {
       const skipped = [];
       for (const line of lines.filter((entry) => entry.section === 'materiaal' && entry.code && Number(entry.qty) > 0)) {
         const match = findArticle(articles, line.code);
-        if (!match || (Array.isArray(match.article.variants) && match.article.variants.length)) { skipped.push(`${line.code} (${line.qty})`); continue; }
+        if (!match || (Array.isArray(match.article.subItems) && match.article.subItems.length)) { skipped.push(`${line.code} (${line.qty})`); continue; }
         materials.push({ code: match.article.code, description: match.article.name || line.description, qty: line.qty, unit: match.article.unit || line.unit || 'st' });
       }
       const cappedMaterials = materials.slice(0, MAX_ORDER_ITEMS);

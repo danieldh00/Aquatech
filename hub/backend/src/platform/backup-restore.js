@@ -61,7 +61,7 @@ const ENTITIES = {
     summary: (row) => `${row.number} · ${row.status}`, overwrite: 'never', children: [{ table: 'purchase_order_lines', column: 'order_id' }],
   },
   stock_item: {
-    label: 'Artikel', table: 'stock_items', numberColumn: 'code', searchColumns: ['code', 'name'], jsonColumns: ['attributes', 'variant_values'],
+    label: 'Artikel', table: 'stock_items', numberColumn: 'code', searchColumns: ['code', 'name'], jsonColumns: ['attributes', 'sub_values'],
     summary: (row) => `${row.code} · ${row.name}`, overwrite: 'columns',
     // De voorraadstand en alles wat de webshopsynchronisatie bijhoudt worden nooit teruggezet: de stand komt uit boekingen.
     neverColumns: ['on_hand', 'shop_product_id', 'shop_dirty', 'shop_price_seen', 'shop_stock_seen', 'shop_synced_at', 'shop_error', 'image_id'],

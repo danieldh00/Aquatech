@@ -51,7 +51,7 @@
   async function loadChoices() {
     const result = await context.api('suppliers');
     state.suppliers = result.items;
-    const items = context.getItems().filter((item) => !item.hasVariants && !item.archived);
+    const items = context.getItems().filter((item) => !item.isGroup && !item.archived);
     $('#po-add-codes').innerHTML = items.map((item) => `<option value="${context.esc(item.code)}">${context.esc(item.name)}</option>`).join('');
   }
 
@@ -304,8 +304,8 @@
     errorBox.textContent = '';
     if (link) {
       const code = $(`tr[data-un="${index}"] [data-field=code]`).value.trim().toLowerCase();
-      const item = context.getItems().find((candidate) => candidate.code.toLowerCase() === code && !candidate.hasVariants && !candidate.archived);
-      if (!item) { errorBox.textContent = 'Kies een bestaande artikelcode (geen hoofdartikel).'; return; }
+      const item = context.getItems().find((candidate) => candidate.code.toLowerCase() === code && !candidate.isGroup && !candidate.archived);
+      if (!item) { errorBox.textContent = 'Kies een bestaande artikelcode (geen artikelgroep).'; return; }
       if (!addImported(state.unmatched[index], item)) { errorBox.textContent = 'Dit artikel staat al op de order.'; return; }
     }
     state.unmatched.splice(index, 1);
@@ -595,10 +595,10 @@
     $('#po-add').onclick = () => {
       const code = $('#po-add-code').value.trim().toLowerCase();
       const qty = Number($('#po-add-qty').value);
-      const item = context.getItems().find((candidate) => candidate.code.toLowerCase() === code && !candidate.hasVariants && !candidate.archived);
+      const item = context.getItems().find((candidate) => candidate.code.toLowerCase() === code && !candidate.isGroup && !candidate.archived);
       const errorBox = $('.err', form);
       errorBox.textContent = '';
-      if (!item) { errorBox.textContent = 'Kies een bestaande artikelcode (geen hoofdartikel).'; return; }
+      if (!item) { errorBox.textContent = 'Kies een bestaande artikelcode (geen artikelgroep).'; return; }
       if (!(qty > 0)) { errorBox.textContent = 'Vul een aantal in.'; return; }
       readLines();
       if (state.lines.some((line) => line.itemId === item.id)) { errorBox.textContent = 'Dit artikel staat al op de order.'; return; }

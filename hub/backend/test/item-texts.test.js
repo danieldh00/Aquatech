@@ -156,7 +156,7 @@ test('producttekst: genereren, fouten en afwijkingen, aanpassen en goedkeuren', 
   } finally { server.close(); }
 });
 
-test('producttekst: veranderde live tekst, overslaan van bestaande concepten, afwijzen, varianten en grenzen', async () => {
+test('producttekst: veranderde live tekst, overslaan van bestaande concepten, afwijzen, subartikelen en grenzen', async () => {
   const { server, calls, as } = await setup(behaviour);
   try {
     const baas = await as('baas');

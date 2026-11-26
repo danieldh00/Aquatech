@@ -309,7 +309,7 @@ function createWebSalesStore(db, { stock = null } = {}) {
   }
 
   /**
-   * De categorie in de webshop per artikel (een variant zonder eigen categorie krijgt die van zijn hoofdartikel).
+   * De categorie in de webshop per artikel (een subartikel zonder eigen categorie krijgt die van zijn artikelgroep).
    * @param {string} tenantId Id van de omgeving.
    * @param {string[]} itemIds De artikelen.
    * @returns {Map<string, string>} Per artikel-id de categorienaam.
@@ -321,8 +321,8 @@ function createWebSalesStore(db, { stock = null } = {}) {
       const rows = prepare(`SELECT i.id, own.categories AS own_categories, parent_product.categories AS parent_categories
         FROM stock_items i
         LEFT JOIN shop_products own ON own.tenant_id = i.tenant_id AND own.id = i.shop_product_id
-        LEFT JOIN stock_items parent ON parent.tenant_id = i.tenant_id AND parent.id = i.parent_id
-        LEFT JOIN shop_products parent_product ON parent_product.tenant_id = i.tenant_id AND parent_product.id = parent.shop_product_id
+        LEFT JOIN stock_items articleGroup ON articleGroup.tenant_id = i.tenant_id AND articleGroup.id = i.group_id
+        LEFT JOIN shop_products parent_product ON parent_product.tenant_id = i.tenant_id AND parent_product.id = articleGroup.shop_product_id
         WHERE i.tenant_id = ? AND i.id IN (${placeholders(part.length)})`).all(tenantId, ...part);
       for (const row of rows) {
         const own = categoryNameOf(row.own_categories);

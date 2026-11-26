@@ -87,7 +87,7 @@ function choiceHint(count, noun, ifNone, cap) {
 }
 
 /**
- * Zoekt in een lijst artikelen (met varianten) op woorden in code en naam. Eerst artikelen waar alle woorden in staan;
+ * Zoekt in een lijst artikelen (met subartikelen) op woorden in code en naam. Eerst artikelen waar alle woorden in staan;
  * zijn die er niet, dan de artikelen met de meeste woorden.
  * @param {object[]} articles De artikelen (stock.articleChoices).
  * @param {string} query De zoektekst.
@@ -99,8 +99,8 @@ function searchArticles(articles, query, limit) {
   if (!words.length) return { items: [], allWords: true };
   const scored = [];
   for (const article of articles) {
-    const variants = Array.isArray(article.variants) ? article.variants : [];
-    const haystack = fold([article.code, article.name, ...variants.map((variant) => `${variant.code} ${variant.name} ${Object.values(variant.values || {}).join(' ')}`)].join(' '));
+    const subItems = Array.isArray(article.subItems) ? article.subItems : [];
+    const haystack = fold([article.code, article.name, ...subItems.map((subItem) => `${subItem.code} ${subItem.name} ${Object.values(subItem.values || {}).join(' ')}`)].join(' '));
     const code = fold(article.code);
     const hits = words.filter((word) => haystack.includes(word)).length;
     if (!hits) continue;
@@ -118,30 +118,30 @@ function searchArticles(articles, query, limit) {
 /**
  * Een artikel zoals de AI het te zien krijgt.
  * @param {object} article Het artikel (stock.articleChoices).
- * @returns {object} code, naam, eenheid, prijs excl. btw, btw, beschikbaar en de varianten.
+ * @returns {object} code, naam, eenheid, prijs excl. btw, btw, beschikbaar en de subartikelen.
  */
 const articleView = (article) => ({
   code: article.code, naam: article.name, eenheid: article.unit || 'st', prijsExclBtw: article.salePrice == null ? null : article.salePrice,
   btw: article.vatRate == null ? null : article.vatRate, beschikbaar: article.available,
-  ...(Array.isArray(article.variants) && article.variants.length ? {
-    varianten: article.variants.slice(0, 30).map((variant) => ({ code: variant.code, naam: variant.name, kenmerken: variant.values || {},
-      prijsExclBtw: variant.salePrice == null ? null : variant.salePrice, beschikbaar: variant.available })),
-    let_op: 'Gebruik de code van een variant (maat/kleur); de code van het hoofdartikel heeft geen eigen prijs of voorraad.',
+  ...(Array.isArray(article.subItems) && article.subItems.length ? {
+    subartikelen: article.subItems.slice(0, 30).map((subItem) => ({ code: subItem.code, naam: subItem.name, kenmerken: subItem.values || {},
+      prijsExclBtw: subItem.salePrice == null ? null : subItem.salePrice, beschikbaar: subItem.available })),
+    let_op: 'Gebruik de code van een subartikel (maat/kleur); de code van de artikelgroep heeft geen eigen prijs of voorraad.',
   } : {}),
 });
 
 /**
- * Zoekt een artikelcode in de lijst (ook de codes van varianten), hoofdletterongevoelig.
+ * Zoekt een artikelcode in de lijst (ook de codes van subartikelen), hoofdletterongevoelig.
  * @param {object[]} articles De artikelen.
  * @param {string} code De code.
- * @returns {{ article: object, parent: object|null }|null} Het artikel (en bij een variant het hoofdartikel), of null.
+ * @returns {{ article: object, parent: object|null }|null} Het artikel (en bij een subartikel de artikelgroep), of null.
  */
 function findArticle(articles, code) {
   const wanted = fold(code);
   if (!wanted) return null;
   for (const article of articles) {
     if (fold(article.code) === wanted) return { article, parent: null };
-    for (const variant of article.variants || []) if (fold(variant.code) === wanted) return { article: variant, parent: article };
+    for (const subItem of article.subItems || []) if (fold(subItem.code) === wanted) return { article: subItem, parent: article };
   }
   return null;
 }

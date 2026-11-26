@@ -112,7 +112,7 @@ test('leveranciers: aanmaken, wijzigen, koppelen aan een artikel, archiveren en 
   }
 });
 
-test('leveranciers: hoofdartikel zonder eigen leverancier, rechten en andere organisatie', async () => {
+test('leveranciers: artikelgroep zonder eigen leverancier, rechten en andere organisatie', async () => {
   const { server, as } = await setup();
   try {
     const baas = await as('baas');
@@ -120,10 +120,10 @@ test('leveranciers: hoofdartikel zonder eigen leverancier, rechten en andere org
     const klant = await as('klant');
     const supplier = (await baas.post('/app/api/suppliers', { name: 'Tuintechniek' })).body;
 
-    // Een artikel met leverancier dat hoofdartikel wordt, verliest zijn koppeling; een hoofdartikel krijgt er geen.
+    // Een artikel met leverancier dat artikelgroep wordt, verliest zijn koppeling; een artikelgroep krijgt er geen.
     const item = (await baas.post('/app/api/stock/items', { code: 'SLANG', name: 'Slang' })).body;
     assert.strictEqual((await baas.put(`/app/api/stock/items/${item.id}/suppliers`, { suppliers: [{ supplierId: supplier.id }] })).status, 200);
-    assert.strictEqual((await baas.put(`/app/api/stock/items/${item.id}/variants`, { attributes: [{ name: 'Lengte', values: ['15 m', '25 m'] }] })).status, 200);
+    assert.strictEqual((await baas.put(`/app/api/stock/items/${item.id}/sub-items`, { attributes: [{ name: 'Lengte', values: ['15 m', '25 m'] }] })).status, 200);
     assert.deepStrictEqual((await baas.get(`/app/api/stock/items/${item.id}/suppliers`)).body.items, []);
     const blocked = await baas.put(`/app/api/stock/items/${item.id}/suppliers`, { suppliers: [{ supplierId: supplier.id }] });
     assert.strictEqual(blocked.status, 409);

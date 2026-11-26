@@ -1,5 +1,5 @@
-// Productkaarten in de shop: elke kaart heeft een aantal-veld en de knop In winkelwagen, een hoofdartikel
-// met varianten is een gewone kaart met keuzelijst, en de kaart is nooit een formulier binnen een link.
+// Productkaarten in de shop: elke kaart heeft een aantal-veld en de knop In winkelwagen, een artikelgroep
+// met subartikelen is een gewone kaart met keuzelijst, en de kaart is nooit een formulier binnen een link.
 const test = require('node:test');
 const { after } = test;
 const assert = require('node:assert');
@@ -14,7 +14,7 @@ const servers = [];
 after(() => { for (const server of servers) server.close(); });
 
 /**
- * Winkel met een gewoon artikel op voorraad, een artikel zonder voorraad en een hoofdartikel met twee varianten.
+ * Winkel met een gewoon artikel op voorraad, een artikel zonder voorraad en een artikelgroep met twee subartikelen.
  * @param {boolean} ordering Of bestellen aan staat.
  * @returns {Promise<{ anonymous: object, main: string }>} Client en tenant.
  */
@@ -30,8 +30,8 @@ async function setup(ordering) {
   await admin.post('/app/api/stock/items', { code: 'BUIS', name: 'PE buis', onHand: 50, salePrice: 2 });
   await admin.post('/app/api/stock/items', { code: 'LEEG', name: 'Leeg artikel', onHand: 0, salePrice: 3 });
   const parent = (await admin.post('/app/api/stock/items', { code: 'KOP', name: 'Koppeling', salePrice: 5 })).body;
-  await admin.put(`/app/api/stock/items/${parent.id}/variants`, { attributes: [{ name: 'Maat', values: ['25 mm', '32 mm'] }] });
-  db.prepare('UPDATE stock_items SET sale_price = 7, on_hand = 3 WHERE tenant_id = ? AND parent_id IS NOT NULL').run(main);
+  await admin.put(`/app/api/stock/items/${parent.id}/sub-items`, { attributes: [{ name: 'Maat', values: ['25 mm', '32 mm'] }] });
+  db.prepare('UPDATE stock_items SET sale_price = 7, on_hand = 3 WHERE tenant_id = ? AND group_id IS NOT NULL').run(main);
   db.prepare('UPDATE stock_items SET shop_sync = 1 WHERE tenant_id = ?').run(main);
   return { anonymous: createClient(base), admin, base };
 }
@@ -45,13 +45,13 @@ function cardsOf(html) {
   return html.split('<article class="product-card"').slice(1).map((part) => part.split('</article>')[0]);
 }
 
-test('elke kaart heeft aantal en winkelwagenknop, ook het hoofdartikel met varianten', async () => {
+test('elke kaart heeft aantal en winkelwagenknop, ook de artikelgroep met subartikelen', async () => {
   const { anonymous } = await setup(true);
   const home = await anonymous.get('/');
   const slug = home.text.match(/href="categorie\/(overig-[0-9a-f]{6})\//)[1];
   const page = await anonymous.get(`/categorie/${slug}/`);
   const cards = cardsOf(page.text);
-  assert.strictEqual(cards.length, 3, 'drie kaarten: twee artikelen en één hoofdartikel (geen losse varianten)');
+  assert.strictEqual(cards.length, 3, 'drie kaarten: twee artikelen en één artikelgroep (geen losse subartikelen)');
   for (const card of cards) {
     assert.match(card, /<form class="card-order" method="post" action="\.\.\/\.\.\/winkelwagen\/">/);
     assert.match(card, /<input type="number" name="qty" value="1" min="1" max="99" aria-label="Aantal"/);
@@ -59,16 +59,16 @@ test('elke kaart heeft aantal en winkelwagenknop, ook het hoofdartikel met varia
     assert.ok(!/<a [^>]*>(?:(?!<\/a>)[^])*<(?:form|input|button|select)/.test(card), 'geen formulier of knop binnen een link');
   }
   const plain = cards.find((card) => card.includes('value="BUIS"'));
-  assert.ok(plain && !plain.includes('data-variant-select'), 'gewoon artikel zonder keuzelijst');
+  assert.ok(plain && !plain.includes('data-sub-item-select'), 'gewoon artikel zonder keuzelijst');
   const empty = cards.find((card) => card.includes('value="LEEG"'));
   assert.match(empty, /name="qty"[^>]*disabled/);
   assert.match(empty, /type="submit" disabled>In winkelwagen/);
-  const variant = cards.find((card) => card.includes('data-variant-select'));
-  assert.match(variant, /2 varianten/);
-  assert.match(variant, /<option value="[^"]+" data-code="[^"]+"[^>]*selected>25 mm<\/option>/, 'eerste variant op voorraad staat voorgekozen');
-  const selectedCode = variant.match(/data-order-code[^>]*>|name="code" value="([^"]+)"/)[1];
-  assert.ok(variant.includes(`<span data-variant-code>${selectedCode}</span>`), 'winkelwagencode volgt de gekozen variant');
-  assert.match(page.text, /assets\/varianten\.js\?v=/);
+  const subItem = cards.find((card) => card.includes('data-sub-item-select'));
+  assert.match(subItem, /2 subartikelen/);
+  assert.match(subItem, /<option value="[^"]+" data-code="[^"]+"[^>]*selected>25 mm<\/option>/, 'eerste subartikel op voorraad staat voorgekozen');
+  const selectedCode = subItem.match(/data-order-code[^>]*>|name="code" value="([^"]+)"/)[1];
+  assert.ok(subItem.includes(`<span data-sub-item-code>${selectedCode}</span>`), 'winkelwagencode volgt de gekozen subartikel');
+  assert.match(page.text, /assets\/subartikelen\.js\?v=/);
 });
 
 test('bestellen uit: de kaart toont een uitgeschakelde knop en geen formulier', async () => {
@@ -99,7 +99,7 @@ test('de aantalknoppen: script wordt geserveerd en geladen, zonder script blijft
 test('de stijl: kaart in het raster, geen paginabrede regel meer', async () => {
   const { anonymous } = await setup(true);
   const css = (await anonymous.get('/assets/winkel.css')).text;
-  assert.ok(!css.includes('.variant-row'), 'oude paginabrede variantregel is weg');
+  assert.ok(!css.includes('.sub-item-row'), 'oude paginabrede subartikelregel is weg');
   assert.match(css, /\.card-order \{[^}]*display: flex/);
   assert.match(css, /@media \(max-width: 520px\) \{ \.card-order \{ flex-direction: column; \}/, 'op de telefoon staan aantal en knop onder elkaar');
 });

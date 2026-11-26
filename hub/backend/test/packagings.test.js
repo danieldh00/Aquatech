@@ -1,5 +1,5 @@
 // Verpakkingseenheden per artikel (artikelen/packagings.js): opslaan, controles, unieke code en EAN, zichtbaarheid per
-// klantcategorie, opruimen bij een hoofdartikel, rechten en scheiding tussen organisaties.
+// klantcategorie, opruimen bij een artikelgroep, rechten en scheiding tussen organisaties.
 const test = require('node:test');
 const { after } = test;
 const assert = require('node:assert');
@@ -96,14 +96,14 @@ test('verpakkingen opslaan, vervangen, EAN-botsingen en rechten', async () => {
   assert.strictEqual((await admin.put(url, { packagings: 'x' })).status, 400);
 });
 
-test('een hoofdartikel heeft geen verpakkingen en verwijderen ruimt ze op', async () => {
+test('een artikelgroep heeft geen verpakkingen en verwijderen ruimt ze op', async () => {
   const { admin } = await setup();
   const item = (await admin.post('/app/api/stock/items', { code: 'TEGEL', name: 'Tegel', unit: 'st', salePrice: 3, vatRate: 21 })).body;
   const url = `/app/api/stock/items/${item.id}/packagings`;
   await admin.put(url, { packagings: [{ code: 'PAL', name: 'Pallet', factor: 100 }] });
-  const variants = await admin.put(`/app/api/stock/items/${item.id}/variants`, { attributes: [{ name: 'Maat', values: ['S', 'M'] }] });
-  assert.ok(variants.status < 300, JSON.stringify(variants.body));
-  assert.deepStrictEqual((await admin.get(url)).body.items, [], 'verpakkingen weg zodra het een hoofdartikel wordt');
+  const subItems = await admin.put(`/app/api/stock/items/${item.id}/sub-items`, { attributes: [{ name: 'Maat', values: ['S', 'M'] }] });
+  assert.ok(subItems.status < 300, JSON.stringify(subItems.body));
+  assert.deepStrictEqual((await admin.get(url)).body.items, [], 'verpakkingen weg zodra het een artikelgroep wordt');
   const refused = await admin.put(url, { packagings: [{ code: 'PAL', name: 'Pallet', factor: 100 }] });
   assert.strictEqual(refused.status, 409);
   const plain = (await admin.post('/app/api/stock/items', { code: 'LOSSE', name: 'Los', unit: 'st' })).body;

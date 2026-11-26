@@ -649,12 +649,12 @@
     const kind = line.optional ? (line.selected ? 'aan' : 'optie') : 'vast';
     const kinds = [['vast', 'Vast'], ['optie', 'Optie'], ['aan', 'Optie (aan)']]
       .map(([key, label]) => `<option value="${key}"${key === kind ? ' selected' : ''}>${label}</option>`).join('');
-    // Code van een hoofdartikel: eerst een maat (variant) kiezen; bij een variant kan een andere maat.
+    // Code van een artikelgroep: eerst een maat (subartikel) kiezen; bij een subartikel kan een andere maat.
     const picker = window.ArticlePicker;
-    const parent = picker && line.code ? picker.parentOf(line.code) : null;
-    const variantOf = picker && line.code && !parent ? picker.parentOfVariant(line.code) : null;
-    const choose = parent ? '<button class="btn small primary ap-variant" data-pick-variant title="Dit artikel heeft varianten: kies de maat">Kies maat</button>'
-      : variantOf ? '<button class="btn small ghost ap-variant" data-pick-variant title="Een andere variant van dit artikel kiezen">Andere maat</button>' : '';
+    const articleGroup = picker && line.code ? picker.groupOf(line.code) : null;
+    const subItemOf = picker && line.code && !articleGroup ? picker.groupOfSubItem(line.code) : null;
+    const choose = articleGroup ? '<button class="btn small primary ap-sub-item" data-pick-sub-item title="Dit artikel heeft subartikelen: kies de maat">Kies maat</button>'
+      : subItemOf ? '<button class="btn small ghost ap-sub-item" data-pick-sub-item title="Een andere subartikel van dit artikel kiezen">Andere maat</button>' : '';
     return `<tr class="line${line.optional ? ` opt${line.selected ? '' : ' off'}` : ''}" data-line="${esc(line.id)}">
       <td class="c-desc"><input data-l="description" value="${esc(line.description)}" maxlength="500" placeholder="Omschrijving">${line.code ? `<span class="code">${esc(line.code)}</span>` : ''}${choose}${lineNote(line)}</td>
       <td class="c-qty"><input data-l="qty" class="num" type="number" step="any" value="${line.qty}" aria-label="Aantal"></td>
@@ -905,7 +905,7 @@
         window.ArticlePicker.open({
           base: '../',
           /**
-           * Zet het gekozen artikel (of de gekozen variant) als materiaalregel met verkoopprijs en btw.
+           * Zet het gekozen artikel (of de gekozen subartikel) als materiaalregel met verkoopprijs en btw.
            * @param {object} article code, name, unit, salePrice en vatRate
            */
           onPick: (article) => {
@@ -921,15 +921,15 @@
         });
         return undefined;
       }
-      const pickVariant = event.target.closest('[data-pick-variant]');
-      if (pickVariant && quote) {
-        const line = quote.data.lines.find((candidate) => candidate.id === pickVariant.closest('[data-line]').dataset.line);
+      const pickSubItem = event.target.closest('[data-pick-sub-item]');
+      if (pickSubItem && quote) {
+        const line = quote.data.lines.find((candidate) => candidate.id === pickSubItem.closest('[data-line]').dataset.line);
         if (!line) return undefined;
-        const parent = window.ArticlePicker.parentOf(line.code) || window.ArticlePicker.parentOfVariant(line.code);
+        const articleGroup = window.ArticlePicker.groupOf(line.code) || window.ArticlePicker.groupOfSubItem(line.code);
         window.ArticlePicker.open({
-          base: '../', parentCode: parent ? parent.code : '', variantCode: line.code,
+          base: '../', groupCode: articleGroup ? articleGroup.code : '', subItemCode: line.code,
           /**
-           * Vervangt de regel door de gekozen variant: code, omschrijving en (als bekend) prijs; aantal blijft.
+           * Vervangt de regel door de gekozen subartikel: code, omschrijving en (als bekend) prijs; aantal blijft.
            * @param {object} article code, name, unit, salePrice en vatRate
            */
           onPick: (article) => {

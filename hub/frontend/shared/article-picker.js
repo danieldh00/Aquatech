@@ -1,7 +1,7 @@
 // Artikelkeuze voor werkorder en offerte: eerst het artikel kiezen, dan (bij
-// een hoofdartikel met varianten) per kenmerk de waarde, bijv. de maat. De
+// een artikelgroep met subartikelen) per kenmerk de waarde, bijv. de maat. De
 // lijst komt uit api/stock/articles (voorraad van de omgeving, zonder
-// inkoopprijs). window.ArticlePicker.open({ onPick }) geeft de gekozen variant
+// inkoopprijs). window.ArticlePicker.open({ onPick }) geeft de gekozen subartikel
 // of het gewone artikel terug als { code, name, unit, salePrice, vatRate }.
 (function () {
   let items = null;
@@ -31,11 +31,11 @@
   /**
    * Haalt de artikellijst op. Zonder refresh hergebruikt hij een al geladen
    * lijst; met refresh (bij elke opening van de keuze) haalt hij hem opnieuw,
-   * zodat een intussen gearchiveerde variant niet meer te kiezen is. Zonder
+   * zodat een intussen gearchiveerde subartikel niet meer te kiezen is. Zonder
    * recht of zonder verbinding komt er een lege lijst terug.
    * @param {string} [base] pad naar de app-root, bijv. '../'
    * @param {boolean} [refresh] true om de lijst opnieuw op te halen
-   * @returns {Promise<object[]>} de artikelen (hoofdartikelen met variants)
+   * @returns {Promise<object[]>} de artikelen (artikelgroepen met subartikelen)
    */
   function load(base = '../', refresh = false) {
     if (items && !refresh) return Promise.resolve(items);
@@ -52,13 +52,13 @@
   }
 
   /**
-   * Het hoofdartikel met deze code (als de lijst al geladen is).
+   * De artikelgroep met deze code (als de lijst al geladen is).
    * @param {string} code de artikelcode
-   * @returns {object|null} het hoofdartikel met attributes en variants, of null
+   * @returns {object|null} de artikelgroep met attributes en subartikelen, of null
    */
-  function parentOf(code) {
+  function groupOf(code) {
     const wanted = String(code || '').toUpperCase();
-    return (items || []).find((article) => article.variants && article.code === wanted) || null;
+    return (items || []).find((article) => article.subItems && article.code === wanted) || null;
   }
 
   /**
@@ -94,17 +94,17 @@
       if (!button) return;
       const article = (items || []).find((candidate) => candidate.code === button.dataset.code);
       if (!article) return;
-      // Een hoofdartikel (ook zonder actieve varianten) heeft geen eigen voorraad en is zelf niet te kiezen.
-      if (article.variants) showVariants(article);
+      // Een artikelgroep (ook zonder actieve subartikelen) heeft geen eigen voorraad en is zelf niet te kiezen.
+      if (article.subItems) showSubItems(article);
       else pick(article);
     };
     dialog.querySelector('.ap-attrs').onchange = renderResult;
     /** Terug naar de artikellijst. */
     dialog.querySelector('.ap-back').onclick = () => { showList(); };
-    /** Voegt de gekozen variant toe. */
+    /** Voegt de gekozen subartikel toe. */
     dialog.querySelector('.ap-add').onclick = () => {
-      const variant = chosenVariant();
-      if (variant) pick({ ...variant, unit: variant.unit || current.article.unit });
+      const subItem = chosenSubItem();
+      if (subItem) pick({ ...subItem, unit: subItem.unit || current.article.unit });
     };
     return dialog;
   }
@@ -115,7 +115,7 @@
     const found = (items || []).filter((article) => !term || `${article.code} ${article.name}`.toLowerCase().includes(term)).slice(0, 60);
     dialog.querySelector('.ap-list').innerHTML = found.map((article) => `<li><button type="button" data-code="${esc(article.code)}">
         <b class="code">${esc(article.code)}</b> ${esc(article.name)}
-        <span class="ap-meta">${article.variants ? `${article.variants.length} varianten · kies daarna de ${esc((article.attributes || []).map((attribute) => attribute.name.toLowerCase()).join(' en ') || 'variant')}` : `${esc(eur(article.salePrice))} · ${esc(nl(article.available))} ${esc(article.unit)} beschikbaar`}</span>
+        <span class="ap-meta">${article.subItems ? `${article.subItems.length} subartikelen · kies daarna de ${esc((article.attributes || []).map((attribute) => attribute.name.toLowerCase()).join(' en ') || 'subItem')}` : `${esc(eur(article.salePrice))} · ${esc(nl(article.available))} ${esc(article.unit)} beschikbaar`}</span>
       </button></li>`).join('') || `<li class="ap-empty">${items && items.length ? 'Niets gevonden.' : 'Geen voorraadartikelen beschikbaar (of geen verbinding).'}</li>`;
   }
 
@@ -130,18 +130,18 @@
   }
 
   /**
-   * Toont stap 2: per kenmerk de waarden waarvoor een variant bestaat.
-   * @param {object} article het hoofdartikel
-   * @param {string} [preferredCode] code van de variant die al gekozen is
+   * Toont stap 2: per kenmerk de waarden waarvoor een subartikel bestaat.
+   * @param {object} article de artikelgroep
+   * @param {string} [preferredCode] code van het subartikel die al gekozen is
    */
-  function showVariants(article, preferredCode = '') {
+  function showSubItems(article, preferredCode = '') {
     current.article = article;
-    const preferred = article.variants.find((variant) => variant.code === String(preferredCode).toUpperCase()) || article.variants[0];
+    const preferred = article.subItems.find((subItem) => subItem.code === String(preferredCode).toUpperCase()) || article.subItems[0];
     dialog.querySelector('.ap-title').textContent = `${article.code} – ${article.name}`;
     dialog.querySelector('.ap-step1').hidden = true;
     dialog.querySelector('.ap-step2').hidden = false;
     dialog.querySelector('.ap-attrs').innerHTML = (article.attributes || []).map((attribute) => {
-      const values = attribute.values.filter((value) => article.variants.some((variant) => variant.values && variant.values[attribute.name] === value));
+      const values = attribute.values.filter((value) => article.subItems.some((subItem) => subItem.values && subItem.values[attribute.name] === value));
       return `<label>${esc(attribute.name)}<select data-attr="${esc(attribute.name)}">${values.map((value) => `<option value="${esc(value)}"${preferred && preferred.values[attribute.name] === value ? ' selected' : ''}>${esc(value)}</option>`).join('')}</select></label>`;
     }).join('');
     renderResult();
@@ -150,29 +150,29 @@
   }
 
   /**
-   * De variant die bij de gekozen waarden hoort.
-   * @returns {object|null} de variant, of null als de combinatie niet bestaat
+   * Het subartikel die bij de gekozen waarden hoort.
+   * @returns {object|null} het subartikel, of null als de combinatie niet bestaat
    */
-  function chosenVariant() {
+  function chosenSubItem() {
     const article = current.article;
     if (!article) return null;
     const wanted = {};
     dialog.querySelectorAll('.ap-attrs select').forEach((select) => { wanted[select.dataset.attr] = select.value; });
-    return article.variants.find((variant) => Object.entries(wanted).every(([name, value]) => variant.values && variant.values[name] === value)) || null;
+    return article.subItems.find((subItem) => Object.entries(wanted).every(([name, value]) => subItem.values && subItem.values[name] === value)) || null;
   }
 
-  /** Toont code, prijs en beschikbaarheid van de gekozen variant. */
+  /** Toont code, prijs en beschikbaarheid van de gekozen subartikel. */
   function renderResult() {
-    const variant = chosenVariant();
-    dialog.querySelector('.ap-result').innerHTML = variant
-      ? `<b class="code">${esc(variant.code)}</b> ${esc(variant.name)}<br>${esc(eur(variant.salePrice)) || 'geen prijs'} · ${esc(nl(variant.available))} ${esc(variant.unit || current.article.unit)} beschikbaar`
-      : (current.article && !current.article.variants.length ? 'Dit hoofdartikel heeft geen actieve varianten. Maak ze aan in Artikelen.' : 'Deze combinatie bestaat niet.');
-    dialog.querySelector('.ap-add').disabled = !variant;
+    const subItem = chosenSubItem();
+    dialog.querySelector('.ap-result').innerHTML = subItem
+      ? `<b class="code">${esc(subItem.code)}</b> ${esc(subItem.name)}<br>${esc(eur(subItem.salePrice)) || 'geen prijs'} · ${esc(nl(subItem.available))} ${esc(subItem.unit || current.article.unit)} beschikbaar`
+      : (current.article && !current.article.subItems.length ? 'Deze artikelgroep heeft geen actieve subartikelen. Maak ze aan in Artikelen.' : 'Deze combinatie bestaat niet.');
+    dialog.querySelector('.ap-add').disabled = !subItem;
   }
 
   /**
    * Geeft de keuze door en sluit het venster.
-   * @param {object} article het gekozen artikel of de gekozen variant
+   * @param {object} article het gekozen artikel of de gekozen subartikel
    */
   function pick(article) {
     const onPick = current.onPick;
@@ -181,32 +181,32 @@
   }
 
   /**
-   * Opent de keuze. Met parentCode begint hij meteen bij de varianten van dat
-   * hoofdartikel (maat kiezen voor een regel die al bestaat).
-   * @param {{ onPick: Function, parentCode?: string, variantCode?: string, base?: string }} options aanroep met de keuze; hoofdartikel; huidige variant; pad naar de app-root
+   * Opent de keuze. Met groupCode begint hij meteen bij de subartikelen van dat
+   * artikelgroep (maat kiezen voor een regel die al bestaat).
+   * @param {{ onPick: Function, groupCode?: string, subItemCode?: string, base?: string }} options aanroep met de keuze; artikelgroep; huidige subartikel; pad naar de app-root
    * @returns {Promise<void>}
    */
-  async function open({ onPick, parentCode = '', variantCode = '', base = '../' }) {
+  async function open({ onPick, groupCode = '', subItemCode = '', base = '../' }) {
     ensureDialog();
     current = { onPick, article: null };
     dialog.querySelector('.ap-search').value = '';
     dialog.querySelector('.ap-list').innerHTML = '<li class="ap-empty">Laden…</li>';
     if (!dialog.open) dialog.showModal();
     await load(base, true);
-    const parent = parentCode ? parentOf(parentCode) : null;
-    if (parent) showVariants(parent, variantCode);
+    const articleGroup = groupCode ? groupOf(groupCode) : null;
+    if (articleGroup) showSubItems(articleGroup, subItemCode);
     else showList();
   }
 
   /**
-   * Het hoofdartikel waar een variantcode onder valt.
-   * @param {string} code de code van de variant
-   * @returns {object|null} het hoofdartikel, of null
+   * De artikelgroep waar een subartikelcode onder valt.
+   * @param {string} code de code van het subartikel
+   * @returns {object|null} de artikelgroep, of null
    */
-  function parentOfVariant(code) {
+  function groupOfSubItem(code) {
     const wanted = String(code || '').toUpperCase();
-    return (items || []).find((article) => (article.variants || []).some((variant) => variant.code === wanted)) || null;
+    return (items || []).find((article) => (article.subItems || []).some((subItem) => subItem.code === wanted)) || null;
   }
 
-  window.ArticlePicker = { load, open, parentOf, parentOfVariant, loaded: () => Boolean(items) };
+  window.ArticlePicker = { load, open, groupOf, groupOfSubItem, loaded: () => Boolean(items) };
 })();

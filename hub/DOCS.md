@@ -572,13 +572,13 @@ van de werkorder. Daardoor is alles vanzelf gekoppeld.
   instellen (doos, pallet): code (bijvoorbeeld PAL), naam, aantal basiseenheden
   (vanaf 2), eigen prijs en zakelijke prijs (leeg = aantal × stukprijs), eigen
   EAN en wie de verpakking ziet (iedereen, zakelijk, groothandel). De voorraad
-  blijft in de basiseenheid. Hoogstens tien per artikel; een hoofdartikel met
-  varianten heeft er geen.
+  blijft in de basiseenheid. Hoogstens tien per artikel; een artikelgroep met
+  subartikelen heeft er geen.
 
 ## Eigen webshop (opzet)
 
 Openbare, alleen-lezen pagina's op de hoofdmap `/` (sinds 1.7.1; voorheen `winkel/`, de app staat onder `/app/`) (stap 1 van een eigen webshop;
-winkelwagen, betaling en varianten volgen). Aanzetten: Beheer → Integraties →
+winkelwagen, betaling en subartikelen volgen). Aanzetten: Beheer → Integraties →
 Webshop en WooCommerce → *Eigen webshop tonen*; uit = overal 404. De shop toont de
 voorraadartikelen van de hoofdtenant die een verkoopprijs hebben, niet
 gearchiveerd zijn en *Naar de webshop* aan hebben. Categorie en afbeelding
@@ -597,7 +597,7 @@ later ook op een eigen domein of in een eigen container kan draaien.
 
 In de planner staat bovenin een knop *Webshop* (en in het menu en de zijbalk *Naar de webshop*) zodra de eigen webshop aan staat
 (`api/config` → `shop`). Staat bestellen ook aan, dan heeft de stuklijst de knop *Alles in winkelwagen*: een formulier naar
-`POST /winkelwagen/planner` met `q:<code>` per regel. De winkel prijst de wagen zelf (incl. of excl. btw, varianten, voorraad,
+`POST /winkelwagen/planner` met `q:<code>` per regel. De winkel prijst de wagen zelf (incl. of excl. btw, subartikelen, voorraad,
 groothandelsvoorwaarden); onbekende of niet te bestellen codes worden op de winkelwagenpagina gemeld. Het aantal uit het plan
 vervangt het aantal in de wagen, dus nogmaals klikken verdubbelt niets.
 
@@ -980,7 +980,7 @@ Met de AI-koppeling maakt een medewerker vanuit Claude of ChatGPT (ook de app op
 
 De leesfuncties `klant_details`, `prijs_voor_klant` en `status_opvragen` hebben samen een limiet van 300 per uur per gebruiker.
 
-Terugvragen: de AI raadt niet. `zoek_klant`/`zoek_artikelen` geven `keuzeNodig` + `vraag` bij meer dan één of geen treffer; `maak_concept_offerte` maakt niets aan zolang er open punten zijn (klant, onbekende code, variant, prijs) en geeft `status: terugvragen` met `vragen`, tenzij `ookMetOpenPunten: true`.
+Terugvragen: de AI raadt niet. `zoek_klant`/`zoek_artikelen` geven `keuzeNodig` + `vraag` bij meer dan één of geen treffer; `maak_concept_offerte` maakt niets aan zolang er open punten zijn (klant, onbekende code, subartikel, prijs) en geeft `status: terugvragen` met `vragen`, tenzij `ookMetOpenPunten: true`.
 
 De AI kan niets versturen, accorderen of wijzigen. Regels met een notitie (twijfel, onbekende code,
 afwijkende prijs, geen verkoopprijs) zijn geel gemarkeerd in de offerte-editor; *Markeer als gecontroleerd* zet ze op

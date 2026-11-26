@@ -119,8 +119,8 @@ function itemFromForm(form) {
   if (!item || typeof item !== 'object') return null;
   const codeField = form.querySelector('[data-order-code]');
   if (codeField && codeField.value) item.item_id = codeField.value;
-  const card = form.closest('[data-variant-row]');
-  const select = card && card.querySelector('[data-variant-select]');
+  const card = form.closest('[data-sub-item-row]');
+  const select = card && card.querySelector('[data-sub-item-select]');
   const option = select && select.options[select.selectedIndex];
   if (option) {
     const price = Number(option.getAttribute('data-value'));

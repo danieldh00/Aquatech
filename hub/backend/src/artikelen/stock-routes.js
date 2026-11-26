@@ -1,4 +1,4 @@
-// API-routes van de voorraad (artikelen, eenheden, mutaties, varianten, samenvoegen, import en
+// API-routes van de voorraad (artikelen, eenheden, mutaties, subartikelen, samenvoegen, import en
 // werkorderverbruik). Letterlijk uit stock.js verplaatst; de opslag komt binnen via ctx.stock.
 const { respondShopError } = require('../webshop/woocommerce');
 const { registerItemImportRoutes } = require('./item-import');
@@ -203,11 +203,11 @@ function registerStockRoutes(app, ctx) {
     const tenantId = tenantOf(req);
     const mirror = Boolean(ctx.shopMirrorOn && ctx.shopMirrorOn(tenantId));
     const publishes = Boolean(ctx.shopCanPublish && ctx.shopCanPublish(tenantId));
-    // publishes: Aquatech zet het hoofdartikel zelf in de webshop; blocked: de webshop bepaalt de lijst maar Aquatech mag niet schrijven.
+    // publishes: Aquatech zet de artikelgroep zelf in de webshop; blocked: de webshop bepaalt de lijst maar Aquatech mag niet schrijven.
     res.json({ groups: stock.mergeSuggestions(tenantId), shop: { publishes, blocked: mirror && !publishes } });
   });
 
-  // Losse artikelen samenvoegen tot de varianten van een nieuw hoofdartikel; gekoppelde webshopproducten worden vervangen door één variabel product.
+  // Losse artikelen samenvoegen tot de subartikelen van een nieuw artikelgroep; gekoppelde webshopproducten worden vervangen door één variabel product.
   app.post('/api/stock/merge', requireJson, requireStock, async (req, res) => {
     const tenantId = tenantOf(req);
     const publishes = Boolean(ctx.shopCanPublish && ctx.shopCanPublish(tenantId) && ctx.shopExclusive && ctx.publishMergedLocked);
@@ -218,20 +218,20 @@ function registerStockRoutes(app, ctx) {
      * @returns {Promise<object>} { status, body } van het antwoord.
      */
     const run = async () => {
-      const out = stock.mergeIntoVariants(tenantId, req.body, { refuseLinked: mirror && !publishes, shopMatchOf: ctx.shopMatchOf ? ctx.shopMatchOf(tenantId) : null, user: req.user });
+      const out = stock.mergeIntoGroup(tenantId, req.body, { refuseLinked: mirror && !publishes, shopMatchOf: ctx.shopMatchOf ? ctx.shopMatchOf(tenantId) : null, user: req.user });
       if (out.error) return { out };
       let shop = null;
       if (publishes && out.unlinked + out.shopProductIds.length > 0) {
         let published;
         try {
-          published = await ctx.publishMergedLocked(tenantId, out.parentId, out.shopProductIds);
+          published = await ctx.publishMergedLocked(tenantId, out.groupId, out.shopProductIds);
         } catch (error) {
-          console.error('Samengevoegd hoofdartikel in de webshop zetten mislukt:', error.message);
+          console.error('Samengevoegd artikelgroep in de webshop zetten mislukt:', error.message);
           published = { error: 'De webshop gaf een onverwachte fout (zie het log).', revert: true, status: 502 };
         }
         if (published.revert) {
           // Niets half laten staan: de samenvoeging terugdraaien, de artikelen zijn dan weer los en gekoppeld.
-          const undone = stock.unmergeVariants(tenantId, out.parentId);
+          const undone = stock.unmergeSubItems(tenantId, out.groupId);
           return { out, reverted: { message: published.error, status: published.status === 409 ? 409 : 502, undoError: undone.error || null } };
         }
         shop = { productId: published.productId, variations: published.variations, hidden: published.hidden, warning: published.warning };
@@ -246,9 +246,9 @@ function registerStockRoutes(app, ctx) {
       return res.status(done.reverted.status).json({ error: 'shop_failed', message: `Niet samengevoegd: de webshop kon niet worden bijgewerkt. ${done.reverted.message}${note}` });
     }
     const { out, shop } = done;
-    const item = stock.get(tenantId, out.parentId);
+    const item = stock.get(tenantId, out.groupId);
     // De samenvoeging staat al in de database: een fout in het auditlogboek mag die niet als mislukt melden.
-    try { audit(req, 'voorraad_samengevoegd', { itemId: out.parentId, code: item.code, merged: out.merged, unlinked: out.unlinked, ...(shop ? { shopHidden: shop.hidden } : {}) }); } catch (error) { console.error('Audit voorraad_samengevoegd mislukt:', error.message); }
+    try { audit(req, 'voorraad_samengevoegd', { itemId: out.groupId, code: item.code, merged: out.merged, unlinked: out.unlinked, ...(shop ? { shopHidden: shop.hidden } : {}) }); } catch (error) { console.error('Audit voorraad_samengevoegd mislukt:', error.message); }
     res.status(201).json({ item, merged: out.merged, unlinked: out.unlinked, shop });
   });
 
@@ -260,9 +260,9 @@ function registerStockRoutes(app, ctx) {
     res.json(out);
   });
 
-  // Een samenvoeging terugdraaien: de varianten worden weer losse artikelen, het hoofdartikel verdwijnt.
+  // Een samenvoeging terugdraaien: de subartikelen worden weer losse artikelen, de artikelgroep verdwijnt.
   app.post('/api/stock/items/:id/unmerge', requireJson, requireStock, (req, res) => {
-    const out = stock.unmergeVariants(tenantOf(req), req.params.id);
+    const out = stock.unmergeSubItems(tenantOf(req), req.params.id);
     if (out.error) return fail(res, out);
     // Het terugdraaien staat al in de database: opruimen en auditlogboek zijn bijzaak en mogen het niet als mislukt melden.
     try { if (ctx.pruneImages) ctx.pruneImages(tenantOf(req)); } catch (error) { console.error('Afbeeldingen opruimen na terugdraaien mislukt:', error.message); }
@@ -270,16 +270,16 @@ function registerStockRoutes(app, ctx) {
     res.json(out);
   });
 
-  // Kenmerken van een hoofdartikel; ontbrekende varianten worden aangemaakt.
-  app.put('/api/stock/items/:id/variants', requireJson, requireStock, (req, res) => {
-    const out = stock.setVariants(tenantOf(req), req.params.id, req.body?.attributes);
+  // Kenmerken van een artikelgroep; ontbrekende subartikelen worden aangemaakt.
+  app.put('/api/stock/items/:id/sub-items', requireJson, requireStock, (req, res) => {
+    const out = stock.setSubItems(tenantOf(req), req.params.id, req.body?.attributes);
     if (out.error) return fail(res, out);
     if (out.removed > 0 && ctx.pruneImages) ctx.pruneImages(tenantOf(req));
-    audit(req, 'voorraad_varianten', { itemId: out.item.id, code: out.item.code, created: out.created, restored: out.restored });
+    audit(req, 'voorraad_subartikelen', { itemId: out.item.id, code: out.item.code, created: out.created, restored: out.restored });
     res.json({ ...out.item, created: out.created, restored: out.restored });
   });
 
-  // Artikel (met varianten) als nieuw product in de webshop zetten; Aquatech is de bron.
+  // Artikel (met subartikelen) als nieuw product in de webshop zetten; Aquatech is de bron.
   app.post('/api/stock/items/:id/publish', requireJson, requireStock, ctx.importLimiter || ((req, res, next) => next()), async (req, res, next) => {
     // Eerst het artikel in deze omgeving: een id van een andere organisatie is 404, ook zonder webshop.
     if (!stock.get(tenantOf(req), req.params.id)) return notFound(res);
@@ -299,7 +299,7 @@ function registerStockRoutes(app, ctx) {
     const out = stock.remove(tenantOf(req), req.params.id);
     if (!out) return notFound(res);
     if (out.error) return res.status(out.status).json({ error: 'reserved_by_order', message: out.error, orders: out.orders });
-    // Ook bij archiveren: een hoofdartikel kan varianten (met eigen afbeelding) echt verwijderd hebben.
+    // Ook bij archiveren: een artikelgroep kan subartikelen (met eigen afbeelding) echt verwijderd hebben.
     if (ctx.pruneImages) ctx.pruneImages(tenantOf(req));
     audit(req, out.deleted ? 'voorraad_artikel_verwijderd' : 'voorraad_artikel_gearchiveerd', { itemId: req.params.id, code: out.code });
     res.json(out);

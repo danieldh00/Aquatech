@@ -4,9 +4,9 @@
 // en de geschiedenis. Gegevens uit /api/stock (recht 'voorraad'). Artikelcodes
 // zijn die van de catalogus (window.Catalog), zodat stuklijst, offerte en
 // werkorder vanzelf aan de voorraad gekoppeld zijn. Export als Excel.
-// Een hoofdartikel met varianten (bijv. per maat) staat als één regel in de
-// lijst en klapt uit naar zijn varianten; op het hoofdartikel beheer je de
-// kenmerken, elke variant heeft een eigen code, prijs en voorraad.
+// Een artikelgroep met subartikelen (bijv. per maat) staat als één regel in de
+// lijst en klapt uit naar zijn subartikelen; op de artikelgroep beheer je de
+// kenmerken, elk subartikel heeft een eigen code, prijs en voorraad.
 (function () {
   const WorkOrderCore = window.WorkOrderCore;
   const Catalog = window.Catalog || { articles: {} };
@@ -247,10 +247,10 @@
   }
 
   /**
-   * De regels van de voorraadtabel: gewone artikelen en hoofdartikelen, met
-   * de varianten eronder als het hoofdartikel open is (of als de zoekterm of
-   * het filter een variant vindt).
-   * @returns {{ item: object, variant?: boolean, open?: boolean, count?: number }[]} De regels in volgorde.
+   * De regels van de voorraadtabel: gewone artikelen en artikelgroepen, met
+   * de subartikelen eronder als de artikelgroep open is (of als de zoekterm of
+   * het filter een subartikel vindt).
+   * @returns {{ item: object, subartikel?: boolean, open?: boolean, count?: number }[]} De regels in volgorde.
    */
   function stockRows() {
     const term = $('#f-search').value.trim().toLowerCase();
@@ -261,41 +261,41 @@
      * @returns {boolean} true als het in beeld moet
      */
     const matches = (item) => (!low || item.low) && (!term || `${item.code} ${item.name} ${item.location}`.toLowerCase().includes(term));
-    const parentIds = new Set(state.items.filter((item) => item.hasVariants).map((item) => item.id));
-    const variantsOf = new Map();
+    const groupIds = new Set(state.items.filter((item) => item.isGroup).map((item) => item.id));
+    const subItemsOf = new Map();
     for (const item of state.items) {
-      if (!item.parentId || !parentIds.has(item.parentId)) continue;
-      if (!variantsOf.has(item.parentId)) variantsOf.set(item.parentId, []);
-      variantsOf.get(item.parentId).push(item);
+      if (!item.groupId || !groupIds.has(item.groupId)) continue;
+      if (!subItemsOf.has(item.groupId)) subItemsOf.set(item.groupId, []);
+      subItemsOf.get(item.groupId).push(item);
     }
     const rows = [];
     for (const item of state.items) {
-      if (item.parentId && parentIds.has(item.parentId)) continue;
-      if (!item.hasVariants) {
+      if (item.groupId && groupIds.has(item.groupId)) continue;
+      if (!item.isGroup) {
         if (matches(item)) rows.push({ item });
         continue;
       }
-      const variants = variantsOf.get(item.id) || [];
-      const found = variants.filter(matches);
+      const subItems = subItemsOf.get(item.id) || [];
+      const found = subItems.filter(matches);
       const filtered = Boolean(term || low);
       if (!matches(item) && !found.length) continue;
       const open = state.open.has(item.id) || (filtered && found.length > 0);
-      rows.push({ item, open, count: variants.filter((variant) => !variant.archived).length });
-      if (open) rows.push(...(filtered && found.length ? found : variants).map((variant) => ({ item: variant, variant: true })));
+      rows.push({ item, open, count: subItems.filter((subItem) => !subItem.archived).length });
+      if (open) rows.push(...(filtered && found.length ? found : subItems).map((subItem) => ({ item: subItem, subItem: true })));
     }
     return rows;
   }
 
   /**
-   * De waarden van een variant als tekst.
-   * @param {object} item de variant (values)
+   * De waarden van een subartikel als tekst.
+   * @param {object} item het subartikel (values)
    * @returns {string} bijv. 'Maat: 16 mm'
    */
   const valuesText = (item) => Object.entries(item.values || {}).map(([name, value]) => `${name}: ${value}`).join(' · ');
 
   /** Tekent de tellers boven het overzicht. */
   function renderStats() {
-    const live = state.items.filter((item) => !item.archived && !item.hasVariants);
+    const live = state.items.filter((item) => !item.archived && !item.isGroup);
     const value = live.reduce((total, item) => total + (item.value || 0), 0);
     const orders = new Set(state.reservations.map((reservation) => reservation.workOrder.id)).size;
     $('#v-stats').innerHTML = [
@@ -324,14 +324,14 @@
   }
 
   /**
-   * Knipt de regels in pagina's. Een hoofdartikel blijft samen met zijn open varianten op één pagina.
+   * Knipt de regels in pagina's. Een artikelgroep blijft samen met zijn open subartikelen op één pagina.
    * @param {object[]} rows Alle regels uit `stockRows`.
    * @returns {{ rows: object[], pages: number, total: number, from: number, to: number }} De regels van de huidige pagina en de teller.
    */
   function paginate(rows) {
     const groups = [];
     for (const row of rows) {
-      if (row.variant && groups.length) groups[groups.length - 1].push(row); else groups.push([row]);
+      if (row.subItem && groups.length) groups[groups.length - 1].push(row); else groups.push([row]);
     }
     const size = state.pageSize || groups.length || 1;
     const pages = Math.max(1, Math.ceil(groups.length / size));
@@ -387,22 +387,22 @@
     renderPager(page);
     const rows = page.rows;
     table.innerHTML = `<thead><tr>${window.StockBulk.headerCell(rows)}<th>Artikel</th><th>Locatie</th><th class="num">Op voorraad</th><th class="num">Gereserveerd</th><th class="num">Beschikbaar</th><th class="num">Minimum</th><th class="num">Verkoopprijs</th><th class="num">Marge</th><th>Webshop</th><th class="num">Waarde</th></tr></thead>
-      <tbody>${rows.map(({ item, variant, open, count }) => `<tr data-id="${esc(item.id)}" class="${item.low ? 'low' : ''}${item.archived ? ' arch' : ''}${variant ? ' variant' : ''}${item.hasVariants ? ' parent' : ''}${window.StockBulk.selected.has(item.id) ? ' picked' : ''}">
+      <tbody>${rows.map(({ item, subItem, open, count }) => `<tr data-id="${esc(item.id)}" class="${item.low ? 'low' : ''}${item.archived ? ' arch' : ''}${subItem ? ' sub-item' : ''}${item.isGroup ? ' articleGroup' : ''}${window.StockBulk.selected.has(item.id) ? ' picked' : ''}">
         ${window.StockBulk.cell(item)}
-        <td class="wrap">${item.hasVariants ? `<button class="toggle" data-toggle="${esc(item.id)}" aria-expanded="${open ? 'true' : 'false'}" title="${open ? 'Varianten verbergen' : 'Varianten tonen'}">${open ? '▾' : '▸'}</button>` : ''}<b class="code">${esc(item.code)}</b>${item.hasVariants ? ` <span class="pill">${count} variant${count === 1 ? '' : 'en'}</span>` : ''}${item.archived ? ' <span class="pill">Gearchiveerd</span>' : ''}<span class="sub">${esc(variant && valuesText(item) ? valuesText(item) : item.name)}</span></td>
+        <td class="wrap">${item.isGroup ? `<button class="toggle" data-toggle="${esc(item.id)}" aria-expanded="${open ? 'true' : 'false'}" title="${open ? 'Subartikelen verbergen' : 'Subartikelen tonen'}">${open ? '▾' : '▸'}</button>` : ''}<b class="code">${esc(item.code)}</b>${item.isGroup ? ` <span class="pill">${count} subItem${count === 1 ? '' : 'en'}</span>` : ''}${item.archived ? ' <span class="pill">Gearchiveerd</span>' : ''}<span class="sub">${esc(subItem && valuesText(item) ? valuesText(item) : item.name)}</span></td>
         <td>${esc(item.location)}</td>
         <td class="num${item.onHand < 0 ? ' neg' : ''}">${esc(nl(item.onHand))} ${esc(item.unit)}</td>
         <td class="num">${item.reserved ? `${esc(nl(item.reserved))}<span class="sub">${item.orders} werkorder${item.orders === 1 ? '' : 's'}</span>` : ''}</td>
         <td class="num avail">${esc(nl(item.available))}${item.low ? ' <span class="pill low">Bijbestellen</span>' : ''}</td>
-        <td class="num">${item.minQty && !item.hasVariants ? esc(nl(item.minQty)) : ''}</td>
-        <td class="num">${item.hasVariants ? '' : `${esc(eur(item.salePrice))}${item.salePrice != null && item.vatRate !== 21 ? `<span class="sub">${item.vatRate}% btw</span>` : ''}${item.priceMode === 'factor' ? '<span class="sub">× factor</span>' : ''}`}</td>
-        <td class="num${item.margin != null && item.margin < 0 ? ' neg' : ''}">${item.hasVariants || item.margin == null ? '' : `${esc(nl(item.margin))}%`}</td>
+        <td class="num">${item.minQty && !item.isGroup ? esc(nl(item.minQty)) : ''}</td>
+        <td class="num">${item.isGroup ? '' : `${esc(eur(item.salePrice))}${item.salePrice != null && item.vatRate !== 21 ? `<span class="sub">${item.vatRate}% btw</span>` : ''}${item.priceMode === 'factor' ? '<span class="sub">× factor</span>' : ''}`}</td>
+        <td class="num${item.margin != null && item.margin < 0 ? ' neg' : ''}">${item.isGroup || item.margin == null ? '' : `${esc(nl(item.margin))}%`}</td>
         <td>${shopPill(item)}</td>
         <td class="num">${esc(eur(item.value))}</td>
       </tr>`).join('') || '<tr><td colspan="11" class="empty">Niets gevonden.</td></tr>'}</tbody>`;
     table.querySelectorAll('tr[data-id]').forEach((row) => {
       /**
-       * Opent het artikel, of klapt bij het pijltje de varianten uit of in.
+       * Opent het artikel, of klapt bij het pijltje de subartikelen uit of in.
        * @param {MouseEvent} event de klik
        * @returns {Promise<void>|undefined}
        */
@@ -589,7 +589,7 @@
     const names = state.units.map((unit) => unit.name);
     if (extra && !names.includes(extra)) names.push(extra);
     document.querySelectorAll('select[data-units]').forEach((select) => {
-      const keep = select.offsetParent === null ? '' : select.value;
+      const keep = select.offsetGroup === null ? '' : select.value;
       const options = keep && !names.includes(keep) ? [...names, keep] : names;
       select.innerHTML = options.map((name) => `<option value="${esc(name)}">${esc(name)}</option>`).join('');
       select.value = options.includes(keep) ? keep : (options.includes('st') ? 'st' : options[0] || '');
@@ -691,17 +691,17 @@
     window.ArtikelenMedia.renderImage();
     $('#d-remove').hidden = item.archived;
     $('#d-restore').hidden = !item.archived;
-    $('#move-form').hidden = item.archived || item.hasVariants;
-    $('#d-parent-note').hidden = !item.hasVariants;
-    $('#d-labels').hidden = item.hasVariants || item.archived;
+    $('#move-form').hidden = item.archived || item.isGroup;
+    $('#d-articleGroup-note').hidden = !item.isGroup;
+    $('#d-labels').hidden = item.isGroup || item.archived;
     if (!$('#d-labels').hidden) window.ItemLabels.attach($('#labels-form'), $('#l-preview'), $('#l-err'), () => state.item);
-    $('#d-publish').hidden = Boolean(item.shop.productId || !item.shopSync || item.parentId || item.archived);
-    $('#d-res-card').hidden = item.hasVariants;
-    $('#d-moves-card').hidden = item.hasVariants;
-    const variantOf = $('#d-variant-of');
-    variantOf.hidden = !item.parent;
-    variantOf.innerHTML = item.parent ? `Variant van <a href="./?id=${encodeURIComponent(item.parent.id)}" data-open="${esc(item.parent.id)}">${esc(item.parent.code)} ${esc(item.parent.name)}</a>${valuesText(item) ? ` · ${esc(valuesText(item))}` : ''}` : '';
-    renderVariants();
+    $('#d-publish').hidden = Boolean(item.shop.productId || !item.shopSync || item.groupId || item.archived);
+    $('#d-res-card').hidden = item.isGroup;
+    $('#d-moves-card').hidden = item.isGroup;
+    const subItemOf = $('#d-sub-item-of');
+    subItemOf.hidden = !item.articleGroup;
+    subItemOf.innerHTML = item.articleGroup ? `Subartikel van <a href="./?id=${encodeURIComponent(item.articleGroup.id)}" data-open="${esc(item.articleGroup.id)}">${esc(item.articleGroup.code)} ${esc(item.articleGroup.name)}</a>${valuesText(item) ? ` · ${esc(valuesText(item))}` : ''}` : '';
+    renderSubItems();
     renderCosts();
     window.ArtikelenSuppliers.showItem(item).catch((error) => toast(error.message, true));
     window.ArtikelenPackagings.showItem(item).catch((error) => toast(error.message, true));
@@ -726,8 +726,8 @@
   function renderCosts() {
     const item = state.item;
     const section = $('#d-costs');
-    section.hidden = item.hasVariants;
-    if (item.hasVariants) return;
+    section.hidden = item.isGroup;
+    if (item.isGroup) return;
     $('#cost-form').hidden = item.archived;
     const prices = item.costPrices || [];
     $('#d-prices').innerHTML = prices.length ? `<thead><tr><th>Geldig vanaf</th><th class="num">Prijs</th><th class="num">Verschil</th><th>Door</th><th>Opmerking</th></tr></thead>
@@ -759,38 +759,38 @@
       <button class="btn ghost icon" type="button" data-del-attr title="Kenmerk weghalen">✕</button>
     </div>`;
 
-  /** Tekent het blok Varianten: de kenmerken en de varianten van een hoofdartikel (niet bij een variant). */
-  function renderVariants() {
+  /** Tekent het blok Subartikelen: de kenmerken en de subartikelen van een artikelgroep (niet bij een subartikel). */
+  function renderSubItems() {
     const item = state.item;
-    const card = $('#d-variants');
-    card.hidden = Boolean(item.parentId) || (item.archived && !item.hasVariants);
+    const card = $('#d-sub-items');
+    card.hidden = Boolean(item.groupId) || (item.archived && !item.isGroup);
     if (card.hidden) return;
-    const variants = item.variants || [];
-    $('#v-hint').textContent = item.hasVariants
-      ? 'Voeg waarden toe om nieuwe varianten te maken. Een variant weghalen doe je op de variant zelf.'
-      : 'Heeft dit artikel maten, kleuren of lengtes? Geef de kenmerken op; elke combinatie wordt een variant met een eigen code, prijs en voorraad. Kan alleen zolang dit artikel zelf geen voorraad of boekingen heeft.';
-    $('#v-unmerge-row').hidden = !item.hasVariants;
+    const subItems = item.subItems || [];
+    $('#v-hint').textContent = item.isGroup
+      ? 'Voeg waarden toe om nieuwe subartikelen te maken. Een subartikel weghalen doe je op het subartikel zelf.'
+      : 'Heeft dit artikel maten, kleuren of lengtes? Geef de kenmerken op; elke combinatie wordt een subartikel met een eigen code, prijs en voorraad. Kan alleen zolang dit artikel zelf geen voorraad of boekingen heeft.';
+    $('#v-unmerge-row').hidden = !item.isGroup;
     $('#v-attrs').innerHTML = (item.attributes.length ? item.attributes : [{ name: '', values: [] }]).map(attributeRow).join('');
-    $('#d-var-table').innerHTML = variants.length ? `<thead><tr><th>Variant</th><th class="num">Op voorraad</th><th class="num">Gereserveerd</th><th class="num">Beschikbaar</th><th class="num">Minimum</th><th class="num">Inkoopprijs</th><th class="num">Verkoopprijs</th><th>Webshop</th></tr></thead>
-      <tbody>${variants.map((variant) => `<tr data-id="${esc(variant.id)}" class="${variant.low ? 'low' : ''}${variant.archived ? ' arch' : ''}">
-        <td class="wrap"><a class="code variant-link" href="./?id=${esc(encodeURIComponent(variant.id))}">${esc(variant.code)}</a>${variant.archived ? ' <span class="pill">Gearchiveerd</span>' : ''}<span class="sub">${esc(valuesText(variant))}</span></td>
-        <td class="num${variant.onHand < 0 ? ' neg' : ''}">${esc(nl(variant.onHand))} ${esc(variant.unit)}</td>
-        <td class="num">${variant.reserved ? esc(nl(variant.reserved)) : ''}</td>
-        <td class="num avail">${esc(nl(variant.available))}${variant.low ? ' <span class="pill low">Bijbestellen</span>' : ''}</td>
-        <td class="num">${variant.minQty ? esc(nl(variant.minQty)) : ''}</td>
-        <td class="num">${esc(eur(variant.costPrice))}</td>
-        <td class="num">${esc(eur(variant.salePrice))}</td>
-        <td>${shopPill(variant)}</td></tr>`).join('')}</tbody>` : '';
+    $('#d-var-table').innerHTML = subItems.length ? `<thead><tr><th>Subartikel</th><th class="num">Op voorraad</th><th class="num">Gereserveerd</th><th class="num">Beschikbaar</th><th class="num">Minimum</th><th class="num">Inkoopprijs</th><th class="num">Verkoopprijs</th><th>Webshop</th></tr></thead>
+      <tbody>${subItems.map((subItem) => `<tr data-id="${esc(subItem.id)}" class="${subItem.low ? 'low' : ''}${subItem.archived ? ' arch' : ''}">
+        <td class="wrap"><a class="code sub-item-link" href="./?id=${esc(encodeURIComponent(subItem.id))}">${esc(subItem.code)}</a>${subItem.archived ? ' <span class="pill">Gearchiveerd</span>' : ''}<span class="sub">${esc(valuesText(subItem))}</span></td>
+        <td class="num${subItem.onHand < 0 ? ' neg' : ''}">${esc(nl(subItem.onHand))} ${esc(subItem.unit)}</td>
+        <td class="num">${subItem.reserved ? esc(nl(subItem.reserved)) : ''}</td>
+        <td class="num avail">${esc(nl(subItem.available))}${subItem.low ? ' <span class="pill low">Bijbestellen</span>' : ''}</td>
+        <td class="num">${subItem.minQty ? esc(nl(subItem.minQty)) : ''}</td>
+        <td class="num">${esc(eur(subItem.costPrice))}</td>
+        <td class="num">${esc(eur(subItem.salePrice))}</td>
+        <td>${shopPill(subItem)}</td></tr>`).join('')}</tbody>` : '';
     $('#d-var-table').querySelectorAll('tr[data-id]').forEach((row) => {
       /**
-       * Opent de variant.
+       * Opent het subartikel.
        * @returns {Promise<void>}
        */
       row.onclick = () => openItem(row.dataset.id, true);
     });
-    $('#d-var-table').querySelectorAll('.variant-link').forEach((link) => {
+    $('#d-var-table').querySelectorAll('.sub-item-link').forEach((link) => {
       /**
-       * Opent de variant via de link (ook met het toetsenbord), zonder de pagina te herladen.
+       * Opent het subartikel via de link (ook met het toetsenbord), zonder de pagina te herladen.
        * @param {MouseEvent} event de klik
        * @returns {void}
        */
@@ -979,7 +979,7 @@
       }
     };
     /**
-     * Draait het samenvoegen terug na bevestiging: de varianten worden weer losse artikelen.
+     * Draait het samenvoegen terug na bevestiging: de subartikelen worden weer losse artikelen.
      * @returns {Promise<void>}
      */
     $('#v-unmerge').onclick = async () => {
@@ -990,11 +990,11 @@
         const preview = await api(`stock/items/${encodeURIComponent(item.id)}/unmerge`);
         if (preview.blocked) { toast(preview.blocked, true); return; }
         const outcomeText = { weg: ' (na het samenvoegen bijgemaakt: wordt verwijderd)', gearchiveerd: ' (na het samenvoegen bijgemaakt, heeft boekingen: wordt gearchiveerd)' };
-        const codes = preview.variants.map((variant) => `• ${variant.code} ${variant.name}${outcomeText[variant.outcome] || ''}`).join('\n');
-        const looseCount = preview.variants.filter((variant) => variant.outcome === 'los').length;
+        const codes = preview.subItems.map((subItem) => `• ${subItem.code} ${subItem.name}${outcomeText[subItem.outcome] || ''}`).join('\n');
+        const looseCount = preview.subItems.filter((subItem) => subItem.outcome === 'los').length;
         const origin = preview.logged
           ? `Samengevoegd op ${new Date(preview.mergedAt).toLocaleDateString('nl-NL')}. ${preview.restoresLinks ? `${preview.restoresLinks} webshopkoppeling${preview.restoresLinks === 1 ? '' : 'en'} komt terug.` : ''}`
-          : 'Van deze samenvoeging is geen momentopname (gemaakt vóór deze functie): de varianten worden losgemaakt, eerdere webshopkoppelingen komen niet terug.';
+          : 'Van deze samenvoeging is geen momentopname (gemaakt vóór deze functie): de subartikelen worden losgemaakt, eerdere webshopkoppelingen komen niet terug.';
         if (!confirm(`${item.code} ongedaan maken?\n\n${looseCount} ${looseCount === 1 ? 'artikel wordt' : 'artikelen worden'} weer los en ${item.code} verdwijnt:\n${codes}\n\nCode, omschrijving, prijzen, voorraad (ook boekingen sinds het samenvoegen) en afbeelding blijven zoals ze nu zijn. ${origin}`)) return;
         const result = await api(`stock/items/${encodeURIComponent(item.id)}/unmerge`, { method: 'POST', body: {} });
         toast(`${result.restored} artikelen weer los${result.linksRestored ? `, ${result.linksRestored} webshopkoppeling${result.linksRestored === 1 ? '' : 'en'} hersteld` : ''}`);
@@ -1008,16 +1008,16 @@
       }
     };
     /**
-     * Opent het hoofdartikel vanaf een variant.
+     * Opent de artikelgroep vanaf een subartikel.
      * @param {MouseEvent} event de klik
      */
-    $('#d-variant-of').onclick = (event) => {
+    $('#d-sub-item-of').onclick = (event) => {
       const link = event.target.closest('[data-open]');
       if (!link) return;
       event.preventDefault();
       openItem(link.dataset.open, true);
     };
-    const variantsForm = $('#variants-form');
+    const subItemsForm = $('#sub-items-form');
     /** Voegt een lege regel voor een kenmerk toe (hooguit drie). */
     $('#v-add-attr').onclick = () => {
       if ($('#v-attrs').children.length >= 3) { toast('Hooguit drie kenmerken per artikel.', true); return; }
@@ -1032,34 +1032,34 @@
       if (button) button.closest('.v-attr').remove();
     };
     /**
-     * Slaat de kenmerken op; de server maakt de ontbrekende varianten aan.
+     * Slaat de kenmerken op; de server maakt de ontbrekende subartikelen aan.
      * @param {SubmitEvent} event het verzenden
      * @returns {Promise<void>}
      */
-    variantsForm.onsubmit = async (event) => {
+    subItemsForm.onsubmit = async (event) => {
       event.preventDefault();
-      const errorBox = $('.err', variantsForm);
+      const errorBox = $('.err', subItemsForm);
       errorBox.textContent = '';
-      const attributes = [...variantsForm.querySelectorAll('.v-attr')].map((row) => ({
+      const attributes = [...subItemsForm.querySelectorAll('.v-attr')].map((row) => ({
         name: $('[data-a="name"]', row).value, values: $('[data-a="values"]', row).value.split(','),
       })).filter((attribute) => attribute.name.trim() || attribute.values.some((value) => value.trim()));
-      if (!state.item.hasVariants && !attributes.length) { errorBox.textContent = 'Geef minstens één kenmerk met waarden op.'; return; }
+      if (!state.item.isGroup && !attributes.length) { errorBox.textContent = 'Geef minstens één kenmerk met waarden op.'; return; }
       try {
-        const result = await api(`stock/items/${encodeURIComponent(state.item.id)}/variants`, { method: 'PUT', body: { attributes } });
+        const result = await api(`stock/items/${encodeURIComponent(state.item.id)}/sub-items`, { method: 'PUT', body: { attributes } });
         state.item = result;
         renderItem();
-        toast(result.created || result.restored ? `${result.created} variant${result.created === 1 ? '' : 'en'} aangemaakt${result.restored ? `, ${result.restored} teruggezet` : ''}` : 'Opgeslagen');
+        toast(result.created || result.restored ? `${result.created} subItem${result.created === 1 ? '' : 'en'} aangemaakt${result.restored ? `, ${result.restored} teruggezet` : ''}` : 'Opgeslagen');
       } catch (error) {
         errorBox.textContent = error.message;
       }
     };
     /**
-     * Zet het artikel (met varianten) als nieuw product in de webshop.
+     * Zet het artikel (met subartikelen) als nieuw product in de webshop.
      * @returns {Promise<void>}
      */
     $('#d-publish').onclick = async () => {
       const item = state.item;
-      if (!confirm(`${item.code} als nieuw product in de webshop zetten${item.hasVariants ? ' (met alle varianten)' : ''}? Het product is daarna meteen zichtbaar in de webshop.`)) return;
+      if (!confirm(`${item.code} als nieuw product in de webshop zetten${item.isGroup ? ' (met alle subartikelen)' : ''}? Het product is daarna meteen zichtbaar in de webshop.`)) return;
       const button = $('#d-publish');
       button.disabled = true;
       try {
@@ -1191,11 +1191,11 @@
     window.ArtikelenMerge.setup({
       api, toast, esc, eur, nl, getItems: () => state.items,
       /**
-       * Na het samenvoegen: de lijst verversen en het nieuwe hoofdartikel openen.
-       * @param {object} parent het nieuwe hoofdartikel
+       * Na het samenvoegen: de lijst verversen en de nieuwe artikelgroep openen.
+       * @param {object} articleGroup de nieuwe artikelgroep
        * @returns {Promise<void>}
        */
-      onMerged: async (parent) => { state.open.add(parent.id); await load(); await openItem(parent.id, true); },
+      onMerged: async (articleGroup) => { state.open.add(articleGroup.id); await load(); await openItem(articleGroup.id, true); },
       /**
        * Na Alles samenvoegen: alleen de lijst verversen (het scherm toont het resultaat per groep).
        * @returns {Promise<void>}

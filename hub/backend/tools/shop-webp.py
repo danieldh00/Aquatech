@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Maakt de WebP-varianten van de grote afbeeldingen van de shop (hero, banners, zakelijk).
+"""Maakt de WebP-subartikelen van de grote afbeeldingen van de shop (hero, banners, zakelijk).
 
 Gebruik (vanuit hub/backend, Pillow met WebP nodig): python3 tools/shop-webp.py
 De JPEG's blijven staan (terugval en bestaande verwijzingen in Beheer); de shop zet er een picture-element omheen zodra
-`<naam>.webp` bestaat. Bij elke afbeelding een kleine variant (`<naam>-klein.webp`) voor smalle schermen.
+`<naam>.webp` bestaat. Bij elke afbeelding een kleine versie (`<naam>-klein.webp`) voor smalle schermen.
 """
 from pathlib import Path
 from PIL import Image
 
 ASSETS = Path(__file__).resolve().parent.parent / "src" / "webshop" / "assets"
-# bestand: (breedte van de kleine variant, kwaliteit grote, kwaliteit kleine)
+# bestand: (breedte van de kleine subartikel, kwaliteit grote, kwaliteit kleine)
 FILES = {
     "hero-tuin.jpg": (720, 74, 72),
     "banner-druppelslang.jpg": (600, 72, 70),

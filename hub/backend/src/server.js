@@ -2863,7 +2863,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     if (cached && cached.catalog === catalog && cached.key === key) return cached.rules;
     const resolve = resolveDeliveryRules(flattenCategories(shopContentStore.publicContent(tenantId).tree), clean);
     const rules = new Map();
-    for (const product of [...catalog.products, ...catalog.variantProducts]) {
+    for (const product of [...catalog.products, ...catalog.subItemProducts]) {
       const found = resolve(product.treeSlug || product.categorySlug);
       if (found.length) rules.set(product.code, found);
     }

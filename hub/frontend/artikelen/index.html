@@ -120,9 +120,9 @@
         </form>
 
         <form id="merge-form" class="card-form" hidden novalidate>
-          <h3>Artikelen samenvoegen tot één variabel artikel</h3>
+          <h3>Artikelen samenvoegen tot één artikelgroep</h3>
           <div id="mg-step1">
-            <p class="muted small">Losse artikelen die eigenlijk maten of kleuren van één product zijn (bijv. PE-buis 16, 20 en 25 mm) worden de varianten van één hoofdartikel. Voorraad, prijzen en alle verwijzingen blijven bestaan. Je controleert alles eerst nog.</p>
+            <p class="muted small">Losse artikelen die eigenlijk maten of kleuren van één product zijn (bijv. PE-buis 16, 20 en 25 mm) worden de subartikelen van één artikelgroep. Voorraad, prijzen en alle verwijzingen blijven bestaan. Je controleert alles eerst nog.</p>
             <h4>Voorstellen</h4>
             <div class="row actions" id="mg-all-bar" hidden>
               <button class="btn primary" type="button" id="mg-all">Alles samenvoegen…</button>
@@ -139,8 +139,8 @@
           </div>
           <div id="mg-step2" hidden>
             <div class="row">
-              <label class="grow">Code hoofdartikel<input id="mg-code" maxlength="40" required></label>
-              <label class="grow">Omschrijving hoofdartikel<input id="mg-name" maxlength="200" required></label>
+              <label class="grow">Code artikelgroep<input id="mg-code" maxlength="40" required></label>
+              <label class="grow">Omschrijving artikelgroep<input id="mg-name" maxlength="200" required></label>
               <label>Kenmerk<input id="mg-attribute" maxlength="40" required></label>
             </div>
             <div class="tablewrap"><table class="grid" id="mg-table">
@@ -158,7 +158,7 @@
           <div id="mg-step3" hidden>
             <p class="muted small" id="mga-intro"></p>
             <div class="tablewrap"><table class="grid" id="mga-table">
-              <thead><tr><th><input type="checkbox" id="mga-toggle" checked aria-label="Alle voorstellen aan of uit"></th><th>Hoofdartikel</th><th>Code</th><th>Kenmerk en waarden</th><th>Webshop</th><th>Uitkomst</th></tr></thead>
+              <thead><tr><th><input type="checkbox" id="mga-toggle" checked aria-label="Alle voorstellen aan of uit"></th><th>Artikelgroep</th><th>Code</th><th>Kenmerk en waarden</th><th>Webshop</th><th>Uitkomst</th></tr></thead>
               <tbody id="mga-rows"></tbody>
             </table></div>
             <h4>Wat verandert er</h4>
@@ -473,7 +473,7 @@
             <label class="chk full" hidden><input type="checkbox" id="tx-bulk-review" checked> Bestaande omschrijvingen beoordelen: de AI vervangt ze alleen als de nieuwe beter is. De vorige tekst blijft bewaard en kan per artikel terug.</label>
             <label class="field span-2" hidden>Model voor het schrijven<select id="tx-bulk-model"></select></label>
           </div>
-          <p class="muted small">Eigen specificaties worden nooit overschreven; er komen alleen kenmerken bij waarvan de naam er nog niet staat. Samengevoegde artikelen krijgen de specificaties op het hoofdartikel. Door de AI geschreven omschrijvingen worden niet meer in de webshop getoond (ze blijven bewaard). Je kunt stoppen en later verder; wat klaar is, wordt overgeslagen.</p>
+          <p class="muted small">Eigen specificaties worden nooit overschreven; er komen alleen kenmerken bij waarvan de naam er nog niet staat. Artikelen in een artikelgroep krijgen de specificaties op de artikelgroep. Door de AI geschreven omschrijvingen worden niet meer in de webshop getoond (ze blijven bewaard). Je kunt stoppen en later verder; wat klaar is, wordt overgeslagen.</p>
           <div class="form-actions tx-actions">
             <button class="btn primary" id="tx-bulk-start" type="button" disabled>Specificaties vullen</button>
             <button class="btn" id="tx-bulk-stop" type="button" hidden>Stoppen</button>
@@ -610,7 +610,7 @@
         <a id="d-back" class="btn" href="./">← Voorraad</a>
         <h1 id="d-title"></h1>
       </div>
-      <p id="d-variant-of" class="muted" hidden></p>
+      <p id="d-sub-item-of" class="muted" hidden></p>
       <div id="d-stats" class="stats"></div>
       <form id="move-form" class="card-form move-card" novalidate>
         <h3>Mutatie boeken</h3>
@@ -629,7 +629,7 @@
       </form>
       <form id="edit-form" class="card-form" novalidate>
         <h3>Gegevens</h3>
-        <p class="muted small" id="d-parent-note" hidden>Dit is een hoofdartikel: de voorraad zit bij de varianten. Eenheid, btw en omzetgroep gelden voor alle varianten; prijzen zijn de standaard voor nieuwe varianten.</p>
+        <p class="muted small" id="d-parent-note" hidden>Dit is een artikelgroep: de voorraad zit bij de subartikelen. Eenheid, btw en omzetgroep gelden voor alle subartikelen; prijzen zijn de standaard voor nieuwe subartikelen.</p>
         <div class="item-groups">
           <fieldset class="item-group">
             <legend>Basis</legend>
@@ -638,7 +638,7 @@
           <label>Eenheid<select name="unit" data-units></select></label>
           <label class="span-2">Omschrijving<input name="name" maxlength="200" required></label>
           <label title="Het artikelnummer van de fabrikant (8 of 13 cijfers, staat onder de streepjescode op de verpakking). Leeg = het etiket krijgt de artikelcode als streepjescode.">EAN<input name="ean" maxlength="20" inputmode="numeric" autocomplete="off" placeholder="8 of 13 cijfers"></label>
-          <label title="Het merk staat in de gestructureerde gegevens van de productpagina (voor zoekmachines). Een variant neemt het merk van het hoofdartikel over zolang hij er zelf geen heeft.">Merk<input name="brand" maxlength="60" autocomplete="off"></label>
+          <label title="Het merk staat in de gestructureerde gegevens van de productpagina (voor zoekmachines). Een subartikel neemt het merk van de artikelgroep over zolang hij er zelf geen heeft.">Merk<input name="brand" maxlength="60" autocomplete="off"></label>
               <label class="span-2">Notities<textarea name="notes" rows="2" maxlength="1000"></textarea></label>
             </div>
           </fieldset>
@@ -696,7 +696,7 @@
           <button class="btn primary" type="submit">Opslaan</button>
           <button class="btn danger" type="button" id="d-remove">Verwijderen</button>
           <button class="btn" type="button" id="d-restore" hidden>Terugzetten uit archief</button>
-          <button class="btn" type="button" id="d-publish" hidden title="Maakt dit artikel (met varianten) aan als nieuw product in de gekoppelde webshop">In webshop zetten</button>
+          <button class="btn" type="button" id="d-publish" hidden title="Maakt dit artikel (met subartikelen) aan als nieuw product in de gekoppelde webshop">In webshop zetten</button>
         </div>
         <div class="err" role="alert"></div>
       </form>
@@ -788,20 +788,20 @@
         <div class="label-preview" id="l-preview"></div>
         <div class="err" role="alert" id="l-err"></div>
       </section>
-      <section class="card-form" id="d-variants" hidden>
-        <h3>Varianten</h3>
+      <section class="card-form" id="d-sub-items" hidden>
+        <h3>Subartikelen</h3>
         <p class="muted small" id="v-hint"></p>
-        <form id="variants-form" novalidate>
+        <form id="sub-items-form" novalidate>
           <div id="v-attrs"></div>
           <div class="row">
             <button class="btn small" type="button" id="v-add-attr">+ Kenmerk</button>
-            <button class="btn primary" type="submit">Varianten bijwerken</button>
+            <button class="btn primary" type="submit">Subartikelen bijwerken</button>
           </div>
           <div class="err" role="alert"></div>
         </form>
         <div class="tablewrap"><table class="grid" id="d-var-table"></table></div>
         <div class="row actions" id="v-unmerge-row" hidden>
-          <button class="btn" type="button" id="v-unmerge" title="Maakt van de varianten weer losse artikelen en haalt dit hoofdartikel weg">Samenvoeging ongedaan maken</button>
+          <button class="btn" type="button" id="v-unmerge" title="Maakt van de subartikelen weer losse artikelen en haalt deze artikelgroep weg">Samenvoeging ongedaan maken</button>
         </div>
       </section>
       <section class="card-form" id="d-res-card">

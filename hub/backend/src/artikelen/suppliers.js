@@ -11,7 +11,7 @@
 //   leverancier heeft een voorraadstatus (`stock_status`: leeg = onbekend, `in_stock`, `out`). Is de voorkeur
 //   niet leverbaar, dan kiest het bestelvoorstel de eerste backup die dat wel is (met diens artikelnummer en prijs).
 //   De verkoopprijs blijft bij de voorkeursleverancier horen.
-// - Een hoofdartikel (met varianten) heeft zelf geen leverancier: die hoort bij de varianten.
+// - Een artikelgroep (met subartikelen) heeft zelf geen leverancier: die hoort bij de subartikelen.
 const crypto = require('crypto');
 const { transaction } = require('../database/db');
 
@@ -296,9 +296,9 @@ function createSupplierStore(db) {
      */
     const run = (work) => (nested ? work() : transaction(db, work));
     return run(() => {
-      const item = prepare('SELECT id, has_variants FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, String(itemId || ''));
+      const item = prepare('SELECT id, is_group FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, String(itemId || ''));
       if (!item) return { error: 'not_found', status: 404 };
-      if (Number(item.has_variants) && checked.value.length) return { error: 'Een hoofdartikel heeft geen eigen leverancier; stel die in bij de varianten.', field: 'suppliers', status: 409 };
+      if (Number(item.is_group) && checked.value.length) return { error: 'Een artikelgroep heeft geen eigen leverancier; stel die in bij de subartikelen.', field: 'suppliers', status: 409 };
       if (checked.value.length) {
         const ids = checked.value.map((entry) => entry.supplierId);
         const known = prepare(`SELECT id, archived FROM suppliers WHERE tenant_id = ? AND id IN (${ids.map(() => '?').join(', ')})`).all(tenantId, ...ids);
@@ -323,7 +323,7 @@ function createSupplierStore(db) {
   /**
    * Onthoudt de artikelnummers van een leverancier bij hun artikelen, binnen de transactie van de aanroeper.
    * Bestaat een koppeling al, dan blijft wat er staat (alleen een leeg nummer wordt gevuld); anders komt er een
-   * koppeling bij (de voorkeur als het artikel nog geen leverancier had). Een hoofdartikel krijgt niets.
+   * koppeling bij (de voorkeur als het artikel nog geen leverancier had). Een artikelgroep krijgt niets.
    * Twee leesquery's voor alle regels samen, daarna alleen schrijven wat nieuw is.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} supplierId Id van de leverancier.
@@ -339,7 +339,7 @@ function createSupplierStore(db) {
     if (!wanted.size) return;
     const ids = [...wanted.keys()];
     const marks = ids.map(() => '?').join(', ');
-    const variantParents = new Set(prepare(`SELECT id FROM stock_items WHERE tenant_id = ? AND has_variants = 1 AND id IN (${marks})`).all(tenantId, ...ids).map((row) => row.id));
+    const subItemParents = new Set(prepare(`SELECT id FROM stock_items WHERE tenant_id = ? AND is_group = 1 AND id IN (${marks})`).all(tenantId, ...ids).map((row) => row.id));
     const known = new Set(prepare(`SELECT id FROM stock_items WHERE tenant_id = ? AND id IN (${marks})`).all(tenantId, ...ids).map((row) => row.id));
     const links = prepare(`SELECT id, item_id, supplier_id, supplier_sku FROM item_suppliers WHERE tenant_id = ? AND item_id IN (${marks})`).all(tenantId, ...ids);
     const linksOf = new Map();
@@ -348,7 +348,7 @@ function createSupplierStore(db) {
       linksOf.get(link.item_id).push(link);
     }
     for (const [itemId, cleanSku] of wanted) {
-      if (!known.has(itemId) || variantParents.has(itemId)) continue;
+      if (!known.has(itemId) || subItemParents.has(itemId)) continue;
       const existing = linksOf.get(itemId) || [];
       const own = existing.find((link) => link.supplier_id === supplierId);
       if (own) {

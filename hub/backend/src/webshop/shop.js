@@ -86,7 +86,7 @@ function createShopStore(db) {
 
   /**
    * Kiest de kenmerken die bewaard worden: eerst alle variatiekenmerken (die zijn nodig voor
-   * de varianten), daarna de overige, samen hooguit twintig.
+   * de subartikelen), daarna de overige, samen hooguit twintig.
    * @param {object[]} attributes De kenmerken van het product.
    * @returns {object[]} De te bewaren kenmerken.
    */

@@ -64,25 +64,25 @@ test('groothandelsprijs: de hoogste van staffel, klant en categorie; nooit opget
   assert.strictEqual(Wholesale.wholesalePrice(10, 1, tiers, 10, 10).source, 'klant', 'bij gelijk gaat de klant voor de categorie');
 });
 
-test('catalogus: zakelijke prijs na korting, eigen zakelijke prijs blijft, varianten volgen het hoofdartikel', () => {
+test('catalogus: zakelijke prijs na korting, eigen zakelijke prijs blijft, subartikelen volgen de artikelgroep', () => {
   const rows = [
     { id: 'a', code: 'A', name: 'Koppeling', unit: 'st', on_hand: 5, sale_price: 10, vat_rate: 21, categories: JSON.stringify([CHILD.name]) },
     { id: 'b', code: 'B', name: 'Met eigen prijs', unit: 'st', on_hand: 5, sale_price: 20, business_price: 15, vat_rate: 21, categories: JSON.stringify([CHILD.name]) },
     { id: 'c', code: 'C', name: 'Computer', unit: 'st', on_hand: 5, sale_price: 100, vat_rate: 21, categories: JSON.stringify([OTHER.name]) },
-    { id: 'p', code: 'P', name: 'Hoofd', unit: 'st', has_variants: 1, attributes: '[{"name":"Maat","values":["16","20"]}]', sale_price: null, vat_rate: 21, categories: JSON.stringify([PARENT.name]) },
-    { id: 'v1', code: 'P16', name: 'Hoofd 16', unit: 'st', on_hand: 5, parent_id: 'p', variant_values: '{"Maat":"16"}', sale_price: 8, vat_rate: 21 },
-    { id: 'v2', code: 'P20', name: 'Hoofd 20', unit: 'st', on_hand: 5, parent_id: 'p', variant_values: '{"Maat":"20"}', sale_price: 12, business_price: 11, vat_rate: 21 },
+    { id: 'p', code: 'P', name: 'Hoofd', unit: 'st', is_group: 1, attributes: '[{"name":"Maat","values":["16","20"]}]', sale_price: null, vat_rate: 21, categories: JSON.stringify([PARENT.name]) },
+    { id: 'v1', code: 'P16', name: 'Hoofd 16', unit: 'st', on_hand: 5, group_id: 'p', sub_values: '{"Maat":"16"}', sale_price: 8, vat_rate: 21 },
+    { id: 'v2', code: 'P20', name: 'Hoofd 20', unit: 'st', on_hand: 5, group_id: 'p', sub_values: '{"Maat":"20"}', sale_price: 12, business_price: 11, vat_rate: 21 },
   ];
   const config = { rules: [{ categorySlug: PARENT.slug, discountPct: 10 }, { categorySlug: CHILD.slug, discountPct: 25 }] };
   const catalog = buildCatalog(rows, new Map(), DEFAULT_TREE, config);
-  const byCode = new Map([...catalog.products, ...catalog.variantProducts].map((product) => [product.code, product]));
+  const byCode = new Map([...catalog.products, ...catalog.subItemProducts].map((product) => [product.code, product]));
   assert.deepStrictEqual([byCode.get('A').priceBusinessList, byCode.get('A').priceBusiness, byCode.get('A').categoryDiscountPct, byCode.get('A').priceBusinessIncl], [10, 7.5, 25, 9.07]);
   assert.strictEqual(byCode.get('A').priceIncl, 12.1, 'particuliere prijs ongewijzigd');
   assert.deepStrictEqual([byCode.get('B').priceBusiness, byCode.get('B').categoryDiscountPct], [15, 0], 'eigen zakelijke prijs gaat voor');
   assert.deepStrictEqual([byCode.get('C').priceBusiness, byCode.get('C').categoryDiscountPct], [100, 0]);
-  assert.deepStrictEqual([byCode.get('P16').priceBusiness, byCode.get('P16').categoryDiscountPct], [7.2, 10], 'variant: 10% van de hoofdcategorie');
+  assert.deepStrictEqual([byCode.get('P16').priceBusiness, byCode.get('P16').categoryDiscountPct], [7.2, 10], 'subItem: 10% van de hoofdcategorie');
   assert.deepStrictEqual([byCode.get('P20').priceBusiness, byCode.get('P20').categoryDiscountPct], [11, 0]);
-  assert.strictEqual(byCode.get('P').priceBusiness, 7.2, 'laagste zakelijke prijs van de varianten');
+  assert.strictEqual(byCode.get('P').priceBusiness, 7.2, 'laagste zakelijke prijs van de subartikelen');
   assert.deepStrictEqual([...catalog.discountByCode], [['A', 25], ['P16', 10]]);
   assert.strictEqual(buildCatalog(rows, new Map(), DEFAULT_TREE).discountByCode.size, 0, 'zonder instelling geen kortingen');
 });

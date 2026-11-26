@@ -47,18 +47,18 @@ table.grid tr[data-id]:hover td { background: var(--at-green-soft); }
 .chips .chip button:hover { background: color-mix(in srgb, var(--at-danger) 12%, transparent); color: var(--at-danger); }
 .chips .chip button:disabled { opacity: 0.3; cursor: default; background: none; color: var(--muted); }
 
-/* Hoofdartikelen met varianten: uitklappen in de lijst, kenmerken op het artikel. */
+/* Artikelgroepen met subartikelen: uitklappen in de lijst, kenmerken op het artikel. */
 table.grid tr.parent td:first-child { font-weight: 600; }
-table.grid tr.variant td:first-child { padding-left: 34px; }
-table.grid tr.variant td { background: color-mix(in srgb, var(--at-teal) 5%, transparent); }
+table.grid tr.sub-item td:first-child { padding-left: 34px; }
+table.grid tr.sub-item td { background: color-mix(in srgb, var(--at-teal) 5%, transparent); }
 table.grid .toggle { border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 14px; width: 22px; padding: 0; margin-right: 4px; }
 table.grid .toggle:hover { color: var(--at-teal); }
 @media (max-width: 640px) { table.grid .toggle { width: 36px; min-height: 36px; } }
-#d-variants { border-left: 4px solid var(--at-teal); }
-#d-variants .v-attr { align-items: flex-end; }
-#d-variants .tablewrap { margin-top: 14px; }
-#d-variant-of { margin: -6px 0 12px; }
-#d-var-table .variant-link { font-weight: 600; color: inherit; }
+#d-sub-items { border-left: 4px solid var(--at-teal); }
+#d-sub-items .v-attr { align-items: flex-end; }
+#d-sub-items .tablewrap { margin-top: 14px; }
+#d-sub-item-of { margin: -6px 0 12px; }
+#d-var-table .sub-item-link { font-weight: 600; color: inherit; }
 
 /* Afbeelding bij een artikel: voorbeeld naast de bestandskeuze. */
 .image-row { align-items: center; }
@@ -78,7 +78,7 @@ table.grid .toggle:hover { color: var(--at-teal); }
 .media-card figcaption { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; font-size: 13px; }
 .media-card figcaption b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Artikelen samenvoegen tot een variabel artikel. */
+/* Artikelen samenvoegen tot een artikelgroep. */
 .merge-groups { display: grid; gap: 8px; margin-bottom: 14px; }
 .merge-group { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; }
 .merge-group .sub { display: block; font-size: 12px; color: var(--muted); }

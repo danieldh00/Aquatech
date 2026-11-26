@@ -214,7 +214,7 @@ a.shop-action.shop-admin:hover { background: var(--at-shop-navy); }
 .product-card:hover .product-name, .product-card:focus-within .product-name, .product-card:active .product-name, .product-row:hover .product-name, .product-row:focus-within .product-name, .product-row:active .product-name { -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
 .product-price { font-weight: 700; }
 .product-foot { display: flex; flex-direction: column; gap: 6px; margin-top: auto; }
-.variant-badge { align-self: flex-start; padding: 2px 8px; font-size: 0.8rem; font-weight: 600; color: var(--at-shop-navy); background: var(--at-line); border-radius: 999px; }
+.sub-item-badge { align-self: flex-start; padding: 2px 8px; font-size: 0.8rem; font-weight: 600; color: var(--at-shop-navy); background: var(--at-line); border-radius: 999px; }
 .stock { font-size: 0.85rem; font-weight: 600; margin: 0; }
 .stock.in { color: var(--at-shop-green-dark); }
 .stock.out { color: var(--at-stock-out); }
@@ -362,24 +362,24 @@ a.shop-action.shop-admin:hover { background: var(--at-shop-navy); }
 .cms-cta p { margin: 0 0 12px; }
 .cms-cta .button { display: inline-block; }
 
-/* Productkaart: hoofdartikelen met varianten hebben een keuzelijst, alle kaarten een aantal en winkelwagenknop. */
+/* Productkaart: artikelgroepen met subartikelen hebben een keuzelijst, alle kaarten een aantal en winkelwagenknop. */
 .product-card .product-name { text-decoration: none; }
 .product-card .product-name:hover { text-decoration: underline; }
-.product-card .variant-meta { margin: 0; font-size: 0.8rem; overflow-wrap: anywhere; }
+.product-card .sub-item-meta { margin: 0; font-size: 0.8rem; overflow-wrap: anywhere; }
 .product-card .product-price { margin: 0; font-weight: 400; }
 .product-card .product-price strong { font-size: 1.1rem; }
 .product-card .product-price small { font-size: 0.8rem; color: var(--at-muted); }
-.variant-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
-.variant-pick label { display: flex; flex-direction: column; gap: 2px; flex: 1 1 100%; min-width: 0; font-size: 0.75rem; color: var(--at-muted); }
-.variant-pick select { width: 100%; min-width: 0; font: inherit; font-size: 1rem; color: inherit; padding: 8px; border: 1px solid var(--at-line); border-radius: 6px; background: var(--at-white); }
-.variant-count { font-size: 0.8rem; color: var(--at-muted); }
-.js-on .variant-go { display: none; }
+.sub-item-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.sub-item-pick label { display: flex; flex-direction: column; gap: 2px; flex: 1 1 100%; min-width: 0; font-size: 0.75rem; color: var(--at-muted); }
+.sub-item-pick select { width: 100%; min-width: 0; font: inherit; font-size: 1rem; color: inherit; padding: 8px; border: 1px solid var(--at-line); border-radius: 6px; background: var(--at-white); }
+.sub-item-count { font-size: 0.8rem; color: var(--at-muted); }
+.js-on .sub-item-go { display: none; }
 .card-order { display: flex; gap: 8px; align-items: stretch; }
 .card-order input { width: 64px; flex: none; font: inherit; padding: 8px; border: 1px solid var(--at-line); border-radius: 6px; }
 .card-order .button { flex: 1; min-width: 0; padding: 8px 12px; }
-.product-info .variant-pick { margin: 8px 0 12px; flex-direction: column; align-items: stretch; }
-.product-info .variant-pick label { flex: none; }
-.product-info .variant-pick .button { align-self: flex-start; }
+.product-info .sub-item-pick { margin: 8px 0 12px; flex-direction: column; align-items: stretch; }
+.product-info .sub-item-pick label { flex: none; }
+.product-info .sub-item-pick .button { align-self: flex-start; }
 @media (max-width: 520px) { .card-order { flex-direction: column; } .card-order input { width: 100%; } }
 
 /* Keuze tussen alle producten en alleen wat op voorraad is. */
@@ -743,7 +743,7 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
 .product-detail .product-order .button { flex: 1; height: 56px; padding: 0 24px; border-radius: 12px; background: var(--at-shop-green-dark); font-size: 1.05rem; font-weight: 800; }
 .product-detail .product-order .button:hover { filter: brightness(0.92); }
 .product-detail .product-order .button:disabled { background: var(--at-muted); filter: none; }
-.product-detail .variant-pick select { height: 48px; padding: 0 12px; border: 1.5px solid var(--at-line); border-radius: 12px; }
+.product-detail .sub-item-pick select { height: 48px; padding: 0 12px; border: 1.5px solid var(--at-line); border-radius: 12px; }
 .product-detail .trust-strip { margin-top: 20px; padding: 18px 20px; border-radius: 16px; gap: 12px; }
 .product-detail .stock-alert { max-width: none; border-radius: 16px; }
 .product-details { padding: 8px 28px 24px; border-radius: 20px; margin-top: 32px; }
@@ -788,8 +788,8 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
 }
 
 /* Productkaart, ontwerp 2 (home en categorieën, één ontwerp): foto met vaste hoogte op een zacht vlak met het voorraadlabel erop, naam op twee regels,
-   een vaste rij voor de variantkeuze (kaarten zonder variant tonen daar het artikelnummer), daarna prijs en aantal + knop onderaan. Alles staat
-   in elke kaart op dezelfde hoogte, dus niets schuift door een variantkeuze. Op smalle kaarten (container query) blijft de knop een icoon. */
+   een vaste rij voor de subartikelkeuze (kaarten zonder subartikel tonen daar het artikelnummer), daarna prijs en aantal + knop onderaan. Alles staat
+   in elke kaart op dezelfde hoogte, dus niets schuift door een subartikelkeuze. Op smalle kaarten (container query) blijft de knop een icoon. */
 .product-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; }
 .product-card { position: relative; gap: 0; padding: 0; border-radius: 16px; overflow: hidden; container-type: inline-size; transition: border-color 0.15s, box-shadow 0.15s; }
 .product-card:hover { border-color: var(--at-shop-teal); box-shadow: 0 8px 22px rgba(27, 55, 104, 0.12); }
@@ -800,12 +800,12 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
 .product-card .stock::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: currentColor; }
 .product-card > :not(.product-image):not(.stock) { margin-left: 16px; margin-right: 16px; }
 .product-card .product-name, .product-card:hover .product-name, .product-card:focus-within .product-name, .product-card:active .product-name { min-height: 2.7em; margin-top: 14px; font-size: 0.95rem; line-height: 1.35; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
-.product-card .variant-pick, .product-card .card-sku { display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; flex-wrap: nowrap; gap: 0; min-height: 52px; margin-top: 6px; margin-bottom: 0; padding-bottom: 6px; box-sizing: border-box; }
-.product-card .variant-pick label { flex: none; gap: 2px; font-size: 0.72rem; }
-.product-card .variant-pick .variant-go { height: 34px; margin-top: 6px; padding: 0 12px; }
-.product-card .variant-pick select { height: 34px; padding: 0 8px; font-size: 0.85rem; border-radius: 8px; }
+.product-card .sub-item-pick, .product-card .card-sku { display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; flex-wrap: nowrap; gap: 0; min-height: 52px; margin-top: 6px; margin-bottom: 0; padding-bottom: 6px; box-sizing: border-box; }
+.product-card .sub-item-pick label { flex: none; gap: 2px; font-size: 0.72rem; }
+.product-card .sub-item-pick .sub-item-go { height: 34px; margin-top: 6px; padding: 0 12px; }
+.product-card .sub-item-pick select { height: 34px; padding: 0 8px; font-size: 0.85rem; border-radius: 8px; }
 .product-card .card-sku { font-size: 0.72rem; color: var(--at-muted); }
-.product-card .variant-count, .product-card .variant-meta { display: none; }
+.product-card .sub-item-count, .product-card .sub-item-meta { display: none; }
 .product-card .product-foot { display: flex; flex-direction: column; gap: 0; padding: 8px 0 16px; }
 .product-card .product-price { color: var(--at-ink); white-space: nowrap; }
 .product-card .product-price strong { font-size: 1.4rem; font-weight: 800; }
@@ -826,7 +826,7 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
   .product-card > :not(.product-image):not(.stock) { margin-left: 10px; margin-right: 10px; }
   .product-card .stock { top: 6px; left: 6px; font-size: 0.75rem; }
   .product-card .product-name, .product-card:hover .product-name, .product-card:focus-within .product-name, .product-card:active .product-name { font-size: 0.82rem; }
-  .product-card .variant-pick, .product-card .card-sku { min-height: 48px; }
+  .product-card .sub-item-pick, .product-card .card-sku { min-height: 48px; }
   .product-card .product-price strong { font-size: 1.15rem; }
   .product-card .card-order input { width: 46px; }
 }

@@ -6,7 +6,7 @@
 //   AAD = tenant + afbeelding-id). Zo gaat hij mee in de back-ups en in
 //   PostgreSQL, en wist het verwijderen van een tenant hem ook.
 // - Dezelfde foto (SHA-256 van de inhoud) wordt één keer bewaard en door meerdere
-//   artikelen gedeeld, bijvoorbeeld de varianten van een product.
+//   artikelen gedeeld, bijvoorbeeld de subartikelen van een product.
 // - Overnemen uit de oude webshop: artikelen zonder eigen afbeelding waarvan het
 //   gekoppelde webshopproduct een afbeelding op een https-adres heeft, worden in
 //   porties gedownload (alleen openbare adressen, zonder omleidingen, met een

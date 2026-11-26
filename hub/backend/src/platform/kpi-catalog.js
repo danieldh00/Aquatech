@@ -167,7 +167,7 @@ const CATALOG = [
      * @returns {{ value: number, unit: string, detail: string }} De waarde, de eenheid (euro of aantal) en de toelichting.
      */
     compute: ({ db, tenantId }) => {
-      const items = db.prepare('SELECT COUNT(*) AS count FROM stock_items WHERE tenant_id = ? AND archived = 0 AND has_variants = 0 AND stock_managed = 1 AND min_qty > 0 AND on_hand < min_qty').get(tenantId);
+      const items = db.prepare('SELECT COUNT(*) AS count FROM stock_items WHERE tenant_id = ? AND archived = 0 AND is_group = 0 AND stock_managed = 1 AND min_qty > 0 AND on_hand < min_qty').get(tenantId);
       return { value: Number(items.count), unit: 'aantal', detail: plural(items.count, 'artikel moet', 'artikelen moeten') + ' worden bijbesteld' };
     },
   },

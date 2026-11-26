@@ -8,7 +8,7 @@
 // tenant in de AAD) gaan ongewijzigd mee. De hoofdsleutel blijft dus nodig.
 const crypto = require('crypto');
 const { listTables, tableColumns, schemaVersion, deferForeignKeys } = require('./db');
-const { UUID_COLUMNS, legacyUuid } = require('./pgschema');
+const { UUID_COLUMNS, RENAMED_COLUMNS, RENAMED_COLUMNS_VERSION, legacyUuid } = require('./pgschema');
 
 const BATCH = 200;
 // Tabellen met grote rijen (foto's) in kleinere porties, zodat het geheugen klein blijft.
@@ -181,12 +181,14 @@ async function importLines(db, lines, options = {}) {
         insert = null;
         if (!target) continue;
         // Alleen de kolommen die in beide bestaan, op hun plek in de regels van de export.
-        positions = parsed.columns.map((column, index) => ({ column, index })).filter((entry) => target.columns.includes(entry.column));
+        // Kolommen die na de back-up zijn hernoemd (artikelgroep en subartikel, migratie 103) komen onder hun nieuwe naam binnen.
+        const renamed = header.schemaVersion < RENAMED_COLUMNS_VERSION ? RENAMED_COLUMNS[parsed.table] || {} : {};
+        positions = parsed.columns.map((column, index) => ({ column: renamed[column] || column, index })).filter((entry) => target.columns.includes(entry.column));
         // Reserveringen uit een back-up van vóór migratie 96 hadden één kolom: `order:<id>` voor een webshopbestelling.
         splitReservationOwner = parsed.table === 'stock_reservations' && !parsed.columns.includes('web_order_id') && positions.some((entry) => entry.column === 'work_order_id');
         const columnNames = positions.map((entry) => entry.column);
         // Id's uit een back-up van vóór migratie 97 zijn tekst: niet-uuid-waarden krijgen dezelfde afgeleide uuid als in de migratie.
-        const uuidColumns = UUID_COLUMNS[parsed.table] || [];
+        const uuidColumns = (UUID_COLUMNS[parsed.table] || []).map((column) => (RENAMED_COLUMNS[parsed.table] || {})[column] || column);
         uuidAt = [...positions.map((entry) => (uuidColumns.includes(entry.column) ? (target.required.includes(entry.column) ? 'required' : true) : false)), ...(splitReservationOwner ? [true] : [])];
         if (splitReservationOwner) columnNames.push('web_order_id');
         insert = db.prepare(`INSERT INTO ${parsed.table} (${columnNames.join(', ')}) VALUES (${columnNames.map(() => '?').join(', ')})`);

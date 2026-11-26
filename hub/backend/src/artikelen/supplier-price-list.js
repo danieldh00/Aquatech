@@ -105,7 +105,7 @@ function planPriceList({ stock, suppliers, tenantId, supplierId, body }) {
     if (!item) return { ...base, status: 'onbekend', warnings: ['Geen artikel gevonden; deze regel wordt overgeslagen.'] };
     const itemLabel = { code: `${item.code}`, name: item.name };
     if (item.archived) return { ...base, ...itemLabel, status: 'fout', problems: ['Dit artikel is gearchiveerd.'] };
-    if (item.hasVariants) return { ...base, ...itemLabel, status: 'fout', problems: ['Een hoofdartikel heeft geen eigen prijs; gebruik het nummer of de EAN van de variant.'] };
+    if (item.isGroup) return { ...base, ...itemLabel, status: 'fout', problems: ['Een artikelgroep heeft geen eigen prijs; gebruik het nummer of de EAN van het subartikel.'] };
     if (seenItems.has(item.id)) return { ...base, ...itemLabel, status: 'fout', problems: ['Dit artikel staat al eerder in de prijslijst.'] };
     seenItems.add(item.id);
     const link = context.links.get(item.id) || null;

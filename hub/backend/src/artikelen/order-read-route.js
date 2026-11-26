@@ -68,7 +68,7 @@ function registerOrderReadRoute(app, ctx) {
       logUsage({ model: result.model, usage: result.usage, detail: { lines: result.lines.length, type: result.documentType } });
       const supplierList = suppliers.list(tenantId);
       const supplier = req.body.supplierId ? supplierList.find((entry) => entry.id === String(req.body.supplierId)) || null : matchSupplier(result.supplierName, supplierList);
-      const items = stock.list(tenantId).filter((item) => !item.hasVariants && !item.archived);
+      const items = stock.list(tenantId).filter((item) => !item.isGroup && !item.archived);
       const skuToItem = new Map();
       if (supplier) for (const link of suppliers.skusOf(tenantId, supplier.id)) skuToItem.set(normalize(link.supplierSku), link.itemId);
       const matches = matchLines(result.lines, items, skuToItem);

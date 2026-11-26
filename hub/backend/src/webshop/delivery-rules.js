@@ -2,7 +2,7 @@
 // en de uitkomst voor een winkelwagen. Zuivere functies zonder database, plus de beheerroutes voor de regels per categorie
 // (instelling deliveryRules, Beheer > Webshop > Levermethodes). Ophalen valt buiten de regels: dat kan altijd.
 //
-// Rangorde van de regels: het artikel zelf (bij een variant anders het hoofdartikel) > de diepste categorie met regels > geen beperking.
+// Rangorde van de regels: het artikel zelf (bij een subartikel anders de artikelgroep) > de diepste categorie met regels > geen beperking.
 // Een gemengde wagen gaat met de zwaarste methode mee: is voor één artikel alleen pallet toegestaan, dan geldt pallet voor de hele bestelling.
 
 /** De methodes waarvoor regels gelden, van licht naar zwaar (de rang bepaalt welke methode een andere mag vervangen). */
@@ -145,9 +145,9 @@ function blockedMethods(lines) {
 }
 
 /**
- * De regels die voor een artikel gelden: eigen regels, anders die van het hoofdartikel, anders die van de diepste categorie.
+ * De regels die voor een artikel gelden: eigen regels, anders die van de artikelgroep, anders die van de diepste categorie.
  * @param {*} itemRules De regels van het artikel (JSON-tekst of lijst).
- * @param {*} parentRules De regels van het hoofdartikel (bij een variant).
+ * @param {*} parentRules De regels van de artikelgroep (bij een subartikel).
  * @param {object[]} categoryRules De regels van de categorie (al opgezocht; leeg = geen).
  * @returns {?object[]} De regels, of null als er geen beperking is.
  */

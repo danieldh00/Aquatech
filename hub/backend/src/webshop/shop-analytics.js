@@ -112,13 +112,13 @@ function money(amount) {
 
 /**
  * Een artikel zoals GA4 het wil: artikelcode als item_id, nooit persoonsgegevens.
- * @param {{ id: string, name: string, category?: string, variant?: string, price?: number, quantity?: number, listName?: string, index?: number, pack?: string }} source Het artikel.
+ * @param {{ id: string, name: string, category?: string, subartikel?: string, price?: number, quantity?: number, listName?: string, index?: number, pack?: string }} source Het artikel.
  * @returns {object} Het GA4-artikel (lege velden weggelaten).
  */
 function itemOf(source) {
   const item = { item_id: String(source.id || '').slice(0, 100), item_name: String(source.name || '').slice(0, 100) };
   if (source.category) item.item_category = String(source.category).slice(0, 100);
-  if (source.variant) item.item_variant = String(source.variant).slice(0, 100);
+  if (source.subItem) item.item_variant = String(source.subItem).slice(0, 100);
   if (source.price !== undefined) item.price = money(source.price);
   if (source.quantity !== undefined) item.quantity = Math.max(1, Math.floor(Number(source.quantity)) || 1);
   if (source.listName) item.item_list_name = String(source.listName).slice(0, 100);
@@ -128,9 +128,9 @@ function itemOf(source) {
 
 /**
  * Een catalogusproduct als GA4-artikel.
- * @param {object} product Een product of variant uit de catalogus (code, name, categoryName).
+ * @param {object} product Een product of subartikel uit de catalogus (code, name, categoryName).
  * @param {number} price De getoonde prijs (incl. btw, of excl. voor een zakelijke klant).
- * @param {{ listName?: string, index?: number, quantity?: number, variant?: string }} [extra] Lijstnaam, plek in de lijst, aantal en de variant.
+ * @param {{ listName?: string, index?: number, quantity?: number, subartikel?: string }} [extra] Lijstnaam, plek in de lijst, aantal en het subartikel.
  * @returns {object} Het GA4-artikel.
  */
 function itemOfProduct(product, price, extra = {}) {

@@ -727,9 +727,9 @@ test('hulpfuncties: terugkeeradressen, scopes, PKCE, tokens en het zoeken van ar
   assert.strictEqual(parseToken(`aqt_rt_abc.${'b'.repeat(43)}`, 'at'), null);
   assert.strictEqual(parseToken(`aqt_at_abc.${'b'.repeat(43)}`, 'at').tenantId, 'abc');
   const articles = [
-    { code: 'SPR-1', name: 'Sproeier rotor', variants: [] },
-    { code: 'SLANG', name: 'Druppelslang', variants: [{ code: 'SLANG-16', name: 'Druppelslang 16 mm', values: { maat: '16 mm' } }] },
-    { code: 'KRAAN', name: 'Kogelkraan messing', variants: [] },
+    { code: 'SPR-1', name: 'Sproeier rotor', subItems: [] },
+    { code: 'SLANG', name: 'Druppelslang', subItems: [{ code: 'SLANG-16', name: 'Druppelslang 16 mm', values: { maat: '16 mm' } }] },
+    { code: 'KRAAN', name: 'Kogelkraan messing', subItems: [] },
   ];
   assert.deepStrictEqual(searchArticles(articles, 'rotor sproeier', 5).items.map((item) => item.code), ['SPR-1']);
   assert.strictEqual(searchArticles(articles, 'kraan plastic', 5).allWords, false);
@@ -742,7 +742,7 @@ test('maak_concept_werkorder: nieuwe werkorder zonder offerte, vraagt terug bij 
   const { base, admin, installer } = await setup();
   const { accessToken } = await connect(base, admin);
   const customer = (await callTool(base, accessToken, 'maak_klant', { naam: 'Jan Tuinman', postcode: '8071 AB', huisnummer: '1' })).structuredContent;
-  // Open punten: onbekend artikel en een artikel met varianten leiden tot terugvragen; er wordt niets aangemaakt.
+  // Open punten: onbekend artikel en een artikel met subartikelen leiden tot terugvragen; er wordt niets aangemaakt.
   await admin.post('/app/api/stock/items', { code: 'SLANG-X', name: 'Druppelslang', unit: 'm', salePrice: 2, vatRate: 21, onHand: 10 });
   const asked = await callTool(base, accessToken, 'maak_concept_werkorder', { klantId: customer.id, titel: 'Winterklaar', materiaal: [{ artikelcode: 'VERZONNEN-9', aantal: 1 }] });
   assert.strictEqual(asked.isError, false);
@@ -977,7 +977,7 @@ test('maak_rapport_excel: meldt afkappen en rekent de totalen over alle regels',
     openInvoiceRows: (_req, limit) => ({ rows: Array.from({ length: limit }, () => ({ klant: 'K', nummer: 'F1', soort: 'factuur', datum: '2026-11-01', vervaldatum: '2026-11-15', dagenTeLaat: 0, bedragInclBtw: 10 })), truncated: true }),
     openInvoices: () => ({ totaalOpenstaand: 1234.5 }),
     storeReport: (_req, fileName, buffer) => { stored.push(buffer); return { url: 'https://x/app/api/mcp-download/t', fileName: `${fileName}.xlsx`, expiresAt: Date.now() + 1000 }; },
-    articleChoices: () => [{ code: 'A', name: 'Een', salePrice: 1, vatRate: 21, available: 1, variants: [{ code: 'A1', name: 'v1', values: {}, salePrice: 1, available: 1 }, { code: 'A2', name: 'v2', values: {}, salePrice: 1, available: 1 }, { code: 'A3', name: 'v3', values: {}, salePrice: 1, available: 1 }, { code: 'A4', name: 'v4', values: {}, salePrice: 1, available: 1 }] }],
+    articleChoices: () => [{ code: 'A', name: 'Een', salePrice: 1, vatRate: 21, available: 1, subItems: [{ code: 'A1', name: 'v1', values: {}, salePrice: 1, available: 1 }, { code: 'A2', name: 'v2', values: {}, salePrice: 1, available: 1 }, { code: 'A3', name: 'v3', values: {}, salePrice: 1, available: 1 }, { code: 'A4', name: 'v4', values: {}, salePrice: 1, available: 1 }] }],
   });
   const req = { user: { id: 'u1' }, tenantId: 't1', mcpScopes: new Set(['rapporten.excel']) };
   const hours = (await tools.call('maak_rapport_excel', { soort: 'urenstaat', van: '2026-11-01', tot: '2026-11-13' }, req)).structuredContent;
@@ -990,7 +990,7 @@ test('maak_rapport_excel: meldt afkappen en rekent de totalen over alle regels',
   assert.strictEqual(invoices.totaalOpenstaand, 1234.5);
   const stock = (await tools.call('maak_rapport_excel', { soort: 'voorraadlijst' }, req)).structuredContent;
   assert.strictEqual(stock.afgekapt, true);
-  assert.strictEqual(readZip(stored[2])['xl/worksheets/sheet1.xml'].match(/<row /g).length, 4, 'ook varianten houden het plafond');
+  assert.strictEqual(readZip(stored[2])['xl/worksheets/sheet1.xml'].match(/<row /g).length, 4, 'ook subartikelen houden het plafond');
 });
 
 /**

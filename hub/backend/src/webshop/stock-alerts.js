@@ -24,10 +24,10 @@ function createStockAlerts(db) {
    * @returns {?{ code: string, name: string, available: number }} Het artikel, of null.
    */
   const itemOf = (tenantId, code) => {
-    const row = db.prepare(`SELECT i.code, i.name, i.on_hand, i.stock_managed, i.has_variants,
+    const row = db.prepare(`SELECT i.code, i.name, i.on_hand, i.stock_managed, i.is_group,
         (SELECT COALESCE(SUM(r.qty), 0) FROM stock_reservations r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id) AS reserved
       FROM stock_items i WHERE i.tenant_id = ? AND i.archived = 0 AND i.code = ?`).get(tenantId, String(code));
-    if (!row || Number(row.has_variants) === 1) return null;
+    if (!row || Number(row.is_group) === 1) return null;
     return { code: row.code, name: row.name, managed: Number(row.stock_managed) !== 0, available: Math.round((Number(row.on_hand) - Number(row.reserved)) * 1000) / 1000 };
   };
 

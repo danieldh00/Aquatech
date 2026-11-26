@@ -10,8 +10,8 @@
 // Terugschrijven (updateProducts, alleen REST v3 met lees- en schrijfrechten):
 // prijs en voorraad uit Aquatech naar de webshop (instelling shopSource.push,
 // zie shop-sync.js); een variatie via /products/<id>/variations/batch.
-// Aanmaken (createProduct, createVariations): een artikel of hoofdartikel met
-// varianten uit Aquatech als nieuw product in de webshop.
+// Aanmaken (createProduct, createVariations): een artikel of artikelgroep met
+// subartikelen uit Aquatech als nieuw product in de webshop.
 
 const net = require('net');
 const { publicAddress } = require('../beveiliging/netguard');

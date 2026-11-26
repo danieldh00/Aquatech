@@ -183,19 +183,19 @@ function buildLabelPdf(template, entries) {
  * @param {object} db De database.
  * @param {string} tenantId De omgeving.
  * @param {string[]} ids De artikel-id's.
- * @returns {object[]} De artikelen (id, code, name, ean, salePrice, vatRate, hasVariants).
+ * @returns {object[]} De artikelen (id, code, name, ean, salePrice, vatRate, isGroup).
  */
 function itemsForLabels(db, tenantId, ids) {
   if (!ids.length) return [];
-  return db.prepare(`SELECT i.id, i.code, i.name, i.ean, i.sale_price, i.vat_rate, i.has_variants, i.variant_values, p.name AS parent_name FROM stock_items i
-      LEFT JOIN stock_items p ON p.tenant_id = i.tenant_id AND p.id = i.parent_id
+  return db.prepare(`SELECT i.id, i.code, i.name, i.ean, i.sale_price, i.vat_rate, i.is_group, i.sub_values, p.name AS group_name FROM stock_items i
+      LEFT JOIN stock_items p ON p.tenant_id = i.tenant_id AND p.id = i.group_id
       WHERE i.tenant_id = ? AND i.id IN (${ids.map(() => '?').join(', ')})`).all(tenantId, ...ids)
     .map((row) => {
       let values = {};
-      try { values = JSON.parse(row.variant_values || '{}') || {}; } catch { values = {}; }
+      try { values = JSON.parse(row.sub_values || '{}') || {}; } catch { values = {}; }
       const label = Object.values(values).join(' / ');
-      return { id: row.id, code: row.code, name: row.parent_name && label ? `${row.parent_name} ${label}` : row.name, ean: row.ean || null,
-        salePrice: row.sale_price == null ? null : Number(row.sale_price), vatRate: Number(row.vat_rate ?? 21), hasVariants: Boolean(Number(row.has_variants)) };
+      return { id: row.id, code: row.code, name: row.group_name && label ? `${row.group_name} ${label}` : row.name, ean: row.ean || null,
+        salePrice: row.sale_price == null ? null : Number(row.sale_price), vatRate: Number(row.vat_rate ?? 21), isGroup: Boolean(Number(row.is_group)) };
     });
 }
 
@@ -228,8 +228,8 @@ function registerLabelRoutes(app, { db, requireRight, settingsOf, audit, limiter
     if (total > MAX_LABELS) return res.status(400).json({ error: 'too_many', message: `Hoogstens ${MAX_LABELS} etiketten per keer.` });
     const items = itemsForLabels(db, req.tenantId, [...wanted.keys()]);
     if (items.length !== wanted.size) return res.status(404).json({ error: 'not_found', message: 'Artikel niet gevonden.' });
-    const parent = items.find((item) => item.hasVariants);
-    if (parent) return res.status(400).json({ error: 'has_variants', message: `${parent.code} heeft varianten: druk de etiketten per variant af.` });
+    const articleGroup = items.find((item) => item.isGroup);
+    if (articleGroup) return res.status(400).json({ error: 'is_group', message: `${articleGroup.code} heeft subartikelen: druk de etiketten per subartikel af.` });
     const out = buildLabelPdf(template, items.map((item) => ({ item, qty: wanted.get(item.id) })));
     if (out.error) return res.status(400).json({ error: 'not_printable', message: out.error });
     audit(req, 'etiketten_afgedrukt', { sjabloon: template.key, artikelen: items.length, etiketten: out.count });

@@ -69,11 +69,11 @@ test('catalogus: meest verkocht uit de verkochte aantallen per code', () => {
   assert.deepStrictEqual(catalog.bestsellers.map((product) => product.code), ['C', 'A']);
 });
 
-test('catalogus: variantverkopen tellen samen voor het hoofdartikel', () => {
+test('catalogus: subartikelverkopen tellen samen voor de artikelgroep', () => {
   const rows = [
-    { id: 'P', code: 'KOP', name: 'Koppeling', has_variants: 1, image: 'https://x.nl/k.jpg' },
-    { id: 'V1', parent_id: 'P', code: 'KOP-1', name: 'Koppeling 1', on_hand: 1, sale_price: 1 },
-    { id: 'V2', parent_id: 'P', code: 'KOP-2', name: 'Koppeling 2', on_hand: 1, sale_price: 1 },
+    { id: 'P', code: 'KOP', name: 'Koppeling', is_group: 1, image: 'https://x.nl/k.jpg' },
+    { id: 'V1', group_id: 'P', code: 'KOP-1', name: 'Koppeling 1', on_hand: 1, sale_price: 1 },
+    { id: 'V2', group_id: 'P', code: 'KOP-2', name: 'Koppeling 2', on_hand: 1, sale_price: 1 },
     { id: 'S', code: 'LOS', name: 'Los artikel', on_hand: 1, sale_price: 1, image: 'https://x.nl/l.jpg' },
   ];
   const catalog = buildCatalog(rows, new Map([['KOP-1', 3], ['KOP-2', 3], ['LOS', 5]]));
@@ -103,7 +103,7 @@ test('startpagina: hero zonder tekst, banners, kolommen, citaat en tabbladen na 
   assert.deepStrictEqual(catalog.bestsellers.map((product) => product.code), ['BUIS-25']);
 });
 
-test('startpagina: hero, banners en zakelijk blok als WebP met een JPEG-terugval, kleine variant voor smalle schermen', async () => {
+test('startpagina: hero, banners en zakelijk blok als WebP met een JPEG-terugval, kleine versie voor smalle schermen', async () => {
   const { base } = await setup();
   const home = await (await fetch(`${base}/`)).text();
   assert.match(home, /<picture><source type="image\/webp" srcset="assets\/hero-tuin-klein\.webp\?v=[^ ]+ 720w, assets\/hero-tuin\.webp\?v=[^ ]+ 1440w" sizes="100vw"><img src="assets\/hero-tuin\.jpg\?v=[^"]+" alt="" width="1440" height="419" fetchpriority="high"><\/picture>/);
@@ -114,7 +114,7 @@ test('startpagina: hero, banners en zakelijk blok als WebP met een JPEG-terugval
     assert.strictEqual(file.status, 200, name);
     assert.strictEqual(file.headers.get('content-type'), 'image/webp');
   }
-  // Logo's en pictogrammen (PNG zonder WebP-variant) blijven gewone afbeeldingen.
+  // Logo's en pictogrammen (PNG zonder WebP-sub-item) blijven gewone afbeeldingen.
   assert.doesNotMatch(home, /<picture><source[^>]*usp-/);
 });
 

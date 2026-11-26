@@ -70,7 +70,7 @@
       refresh();
     });
     input.addEventListener('input', refresh);
-    // Het varianten-script zet het veld uit bij een uitverkocht artikel; volg dat.
+    // Het subartikelen-script zet het veld uit bij een uitverkocht artikel; volg dat.
     new MutationObserver(refresh).observe(input, { attributes: true, attributeFilter: ['disabled'] });
     refresh();
   }

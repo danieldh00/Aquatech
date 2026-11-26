@@ -1,4 +1,4 @@
-// Zoeken in de webshop: normaliseren, rangschikken (exacte code eerst), meervouden, verwante woorden, tikfouten en varianten.
+// Zoeken in de webshop: normaliseren, rangschikken (exacte code eerst), meervouden, verwante woorden, tikfouten en subartikelen.
 const test = require('node:test');
 const assert = require('node:assert');
 const { setup } = require('./helpers/webshop-world');
@@ -11,7 +11,7 @@ const CATALOG = [
   { code: 'DR16', name: 'Druppelslang 16 mm', categoryName: 'Druppelleiding', inStock: true },
   { code: 'KLEP1', name: 'Magneetklep 24V', categoryName: 'Kleppen', inStock: true },
   { code: 'REGEN', name: 'Regensensor draadloos', categoryName: 'Sensoren', inStock: true },
-  { code: 'KOP', name: 'Koppeling 32 mm', categoryName: 'Koppelingen', inStock: true, variants: [{ code: 'KOP-25', label: '25 mm', inStock: false }, { code: 'KOP-32', label: '32 mm', inStock: true }] },
+  { code: 'KOP', name: 'Koppeling 32 mm', categoryName: 'Koppelingen', inStock: true, subItems: [{ code: 'KOP-25', label: '25 mm', inStock: false }, { code: 'KOP-32', label: '32 mm', inStock: true }] },
   { code: 'KOGEL', name: 'Kogelkraan 1 inch', categoryName: 'Afsluiters', inStock: true },
   { code: 'MPX', name: 'Onderdeel voor mp2000', categoryName: 'Overig', inStock: true },
 ];
@@ -46,7 +46,7 @@ test('exacte artikelcode staat bovenaan, ook als de naam van een ander product d
   assert.strictEqual(codesOf('spr-10')[0], 'SPR-10');
   assert.deepStrictEqual(codesOf('SPR10'), ['SPR-10'], 'zonder streepje');
   assert.deepStrictEqual(codesOf('spr 10'), ['SPR-10'], 'met spatie');
-  assert.deepStrictEqual(codesOf('kop32'), ['KOP'], 'variantcode zonder streepje');
+  assert.deepStrictEqual(codesOf('kop32'), ['KOP'], 'subartikelcode zonder streepje');
 });
 
 test('een leeg of onbruikbaar zoekwoord geeft niets', () => {
@@ -80,7 +80,7 @@ test('een korte tikfout in een kort woord wordt niet geraden', () => {
   assert.deepStrictEqual(codesOf('klap'), []);
 });
 
-test('varianten: het woord moet bij één variant passen en het voorraadfilter volgt die variant', () => {
+test('subartikelen: het woord moet bij één subartikel passen en het voorraadfilter volgt dat subartikel', () => {
   assert.deepStrictEqual(codesOf('koppeling 25'), ['KOP']);
   assert.deepStrictEqual(codesOf('koppeling 25', { onlyInStock: true }), []);
   assert.deepStrictEqual(codesOf('koppeling 32', { onlyInStock: true }), ['KOP']);

@@ -210,6 +210,15 @@ CREATE TABLE shop_sync (
 );
 `;
 
+// Kolommen die later zijn hernoemd, per tabel: oude naam -> nieuwe naam. Een back-up van vóór migratie 103 (artikelgroep en subartikel) heeft de oude namen;
+// importLines (table-rows.js) leest ze onder de nieuwe naam in. Migratie 97 gebruikt UUID_COLUMNS met de oude namen en blijft dus ongewijzigd.
+const RENAMED_COLUMNS = {
+  stock_items: { parent_id: 'group_id', has_variants: 'is_group', variant_values: 'sub_values' },
+  stock_merges: { parent_id: 'group_id', parent_code: 'group_code', parent_name: 'group_name' },
+};
+/** Het schemanummer waarbij RENAMED_COLUMNS is toegepast (migratie 103). */
+const RENAMED_COLUMNS_VERSION = 103;
+
 // Migraties na het basisschema: PG_MIGRATIONS[0] is migratie
 // PG_BASE_VERSION + 1, enzovoort. Alleen toevoegen, nooit aanpassen.
 /**
@@ -1934,6 +1943,20 @@ const PG_MIGRATIONS = [
   CREATE INDEX wp_orders_date ON wp_orders (tenant_id, ordered_at);
   UPDATE wp_order_import SET orders_after = NULL;
   `,
+  // 103: eigen taal voor artikelen: een hoofdartikel heet een artikelgroep en een variant een subartikel (kolommen en namen in de database volgen de schermen).
+  // Alleen hernoemen: geen gegevens veranderen. Oude back-ups lezen mee via RENAMED_COLUMNS (table-rows.js).
+  `
+  ALTER TABLE stock_items RENAME COLUMN parent_id TO group_id;
+  ALTER TABLE stock_items RENAME COLUMN has_variants TO is_group;
+  ALTER TABLE stock_items RENAME COLUMN variant_values TO sub_values;
+  ALTER INDEX stock_items_parent RENAME TO stock_items_group;
+  ALTER TABLE stock_items RENAME CONSTRAINT stock_items_parent_id_fkey TO stock_items_group_id_fkey;
+  ALTER TABLE stock_items RENAME CONSTRAINT stock_items_has_variants_flag TO stock_items_is_group_flag;
+  ALTER TABLE stock_merges RENAME COLUMN parent_id TO group_id;
+  ALTER TABLE stock_merges RENAME COLUMN parent_code TO group_code;
+  ALTER TABLE stock_merges RENAME COLUMN parent_name TO group_name;
+  ALTER INDEX stock_merges_parent RENAME TO stock_merges_group;
+  `,
 ];
 
-module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS, UUID_COLUMNS, legacyUuid };
+module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS, UUID_COLUMNS, RENAMED_COLUMNS, RENAMED_COLUMNS_VERSION, legacyUuid };

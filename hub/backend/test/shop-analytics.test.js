@@ -37,7 +37,7 @@ test('cspWith: zonder ID ongewijzigd, met ID alleen script-src en connect-src er
 });
 
 test('gebeurtenissen: artikel, lijst, zoekopdracht, winkelwagen, afrekenen en aankoop zonder persoonsgegevens', () => {
-  const item = Analytics.itemOfProduct({ code: 'SPR-1', name: 'Sproeier', categoryName: 'Sproeiers' }, 10.456, { listName: 'Sproeiers', index: 1, variant: '1/2"' });
+  const item = Analytics.itemOfProduct({ code: 'SPR-1', name: 'Sproeier', categoryName: 'Sproeiers' }, 10.456, { listName: 'Sproeiers', index: 1, subItem: '1/2"' });
   assert.deepStrictEqual(item, { item_id: 'SPR-1', item_name: 'Sproeier', item_category: 'Sproeiers', item_variant: '1/2"', price: 10.46, item_list_name: 'Sproeiers', index: 1 });
   assert.strictEqual(Analytics.itemOf({ id: 'A', name: 'B', quantity: 0 }).quantity, 1);
   assert.strictEqual(Analytics.itemOf({ id: 'A', name: 'B', price: 'x' }).price, 0);
@@ -408,8 +408,8 @@ test('script: add_to_cart, select_item, remove_from_cart en de stappen van afrek
    * @param {object} [extra] Attributen en selectors.
    * @returns {object} Het formulier.
    */
-  const makeForm = (fields, { item = null, classes = [], variant = null, checkout = false } = {}) => ({
-    closest: (selector) => (selector === '[data-variant-row]' ? (variant ? { querySelector: () => ({ options: [variant], selectedIndex: 0 }) } : null) : selector === '.product-card' ? null : {}),
+  const makeForm = (fields, { item = null, classes = [], subItem = null, checkout = false } = {}) => ({
+    closest: (selector) => (selector === '[data-sub-item-row]' ? (subItem ? { querySelector: () => ({ options: [subItem], selectedIndex: 0 }) } : null) : selector === '.product-card' ? null : {}),
     hasAttribute: (name) => (name === 'data-item' ? Boolean(item) : name === 'data-shop-checkout' ? checkout : false),
     getAttribute: (name) => (name === 'data-item' ? JSON.stringify(item) : null),
     classList: { contains: (name) => classes.includes(name) },
@@ -421,9 +421,9 @@ test('script: add_to_cart, select_item, remove_from_cart en de stappen van afrek
     },
   });
   /**
-   * Een nagebootste optie van de keuzelijst met varianten.
+   * Een nagebootste optie van de keuzelijst met subartikelen.
    * @param {number} price De prijs.
-   * @param {string} label De naam van de variant.
+   * @param {string} label De naam van het subartikel.
    * @returns {object} De optie.
    */
   const optionOf = (price, label) => ({ getAttribute: (name) => (name === 'data-value' ? String(price) : name === 'data-label' ? label : null) });
@@ -434,7 +434,7 @@ test('script: add_to_cart, select_item, remove_from_cart en de stappen van afrek
    */
   const submit = (form) => browser.documentHandlers.submit({ target: form });
 
-  submit(makeForm({ action: 'add', code: 'SPR-1-L', qty: '3' }, { item: { item_id: 'SPR-1', item_name: 'Sproeier', price: 5 }, variant: optionOf(7.5, 'Groot') }));
+  submit(makeForm({ action: 'add', code: 'SPR-1-L', qty: '3' }, { item: { item_id: 'SPR-1', item_name: 'Sproeier', price: 5 }, subItem: optionOf(7.5, 'Groot') }));
   let call = callsOf(browser.win, 'event').pop();
   assert.strictEqual(call[1], 'add_to_cart');
   assert.strictEqual(call[2].value, 22.5);

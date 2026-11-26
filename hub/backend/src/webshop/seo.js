@@ -167,20 +167,20 @@ function breadcrumbJsonLd(crumbs, baseUrl) {
 
 /**
  * Een product met aanbieding (prijs incl. btw voor consumenten, voorraad) als Schema.org Product.
- * Een hoofdartikel met varianten krijgt een AggregateOffer (laagste en hoogste prijs).
- * @param {{ product: object, baseUrl: string, canonicalPath: string, shopName: string, description: string, brand?: string, ean?: string, specifications?: { name: string, value: string }[] }} input product = uit de catalogus (code, name, priceIncl, inStock, image, categoryName, optioneel variants), canonicalPath = pad van de pagina, description = de tekst van de pagina, brand = het merk van het artikel (leeg = geen merk in de gegevens) en ean = de EAN van het getoonde artikel (alleen bij een enkel artikel of variant, nooit bij een prijsbereik) en specifications = de specificaties die de pagina zichtbaar toont (komen als additionalProperty mee, nooit iets wat niet op de pagina staat).
+ * Een artikelgroep met subartikelen krijgt een AggregateOffer (laagste en hoogste prijs).
+ * @param {{ product: object, baseUrl: string, canonicalPath: string, shopName: string, description: string, brand?: string, ean?: string, specifications?: { name: string, value: string }[] }} input product = uit de catalogus (code, name, priceIncl, inStock, image, categoryName, optioneel subartikelen), canonicalPath = pad van de pagina, description = de tekst van de pagina, brand = het merk van het artikel (leeg = geen merk in de gegevens) en ean = de EAN van het getoonde artikel (alleen bij een enkel artikel of subartikel, nooit bij een prijsbereik) en specifications = de specificaties die de pagina zichtbaar toont (komen als additionalProperty mee, nooit iets wat niet op de pagina staat).
  * @returns {object} Het Schema.org-object.
  */
 function productJsonLd({ product, baseUrl, canonicalPath, shopName, description, brand = '', ean = '', specifications = [] }) {
   const url = absoluteUrl(baseUrl, canonicalPath);
   const seller = { '@type': 'Organization', name: shopName };
-  const variants = product.variants || [];
+  const subItems = product.subItems || [];
   const image = imageUrlOf(baseUrl, product.image);
-  const offers = variants.length
+  const offers = subItems.length
     ? {
-      '@type': 'AggregateOffer', priceCurrency: 'EUR', offerCount: variants.length, url,
-      lowPrice: Math.min(...variants.map((variant) => variant.priceIncl)).toFixed(2), highPrice: Math.max(...variants.map((variant) => variant.priceIncl)).toFixed(2),
-      availability: variants.some((variant) => variant.inStock) ? AVAILABILITY.in : AVAILABILITY.out, itemCondition: 'https://schema.org/NewCondition', seller,
+      '@type': 'AggregateOffer', priceCurrency: 'EUR', offerCount: subItems.length, url,
+      lowPrice: Math.min(...subItems.map((subItem) => subItem.priceIncl)).toFixed(2), highPrice: Math.max(...subItems.map((subItem) => subItem.priceIncl)).toFixed(2),
+      availability: subItems.some((subItem) => subItem.inStock) ? AVAILABILITY.in : AVAILABILITY.out, itemCondition: 'https://schema.org/NewCondition', seller,
     }
     : {
       '@type': 'Offer', priceCurrency: 'EUR', price: Number(product.priceIncl).toFixed(2), url,
@@ -188,7 +188,7 @@ function productJsonLd({ product, baseUrl, canonicalPath, shopName, description,
     };
   const properties = (Array.isArray(specifications) ? specifications : []).filter((entry) => entry && entry.name && entry.value).slice(0, 40)
     .map((entry) => ({ '@type': 'PropertyValue', name: String(entry.name), value: String(entry.value) }));
-  const gtin = !variants.length && /^(\d{8}|\d{13})$/.test(String(ean)) ? String(ean) : '';
+  const gtin = !subItems.length && /^(\d{8}|\d{13})$/.test(String(ean)) ? String(ean) : '';
   return {
     '@context': 'https://schema.org', '@type': 'Product', name: product.name, sku: product.code, description,
     ...(brand ? { brand: { '@type': 'Brand', name: brand } } : {}),
@@ -256,7 +256,7 @@ function sitemapXml(entries, baseUrl) {
 }
 
 /**
- * Alle pagina's voor de sitemap: startpagina, hoofdcategorieën, categorieën met producten, vaste pagina's, producten en varianten.
+ * Alle pagina's voor de sitemap: startpagina, hoofdcategorieën, categorieën met producten, vaste pagina's, producten en subartikelen.
  * @param {{ catalog: object, pages: { slug: string }[] }} input catalog = de gepubliceerde catalogus (zie buildCatalog), pages = de vaste pagina's (zie infoPagesOf in storefront.js).
  * @returns {{ path: string, lastModified?: string }[]} De pagina's met pad vanaf de startpagina en (bij producten) de laatste wijziging.
  */
@@ -267,7 +267,7 @@ function sitemapEntriesOf({ catalog, pages }) {
     if (!category.hidden && category.count > 0) entries.push({ path: `categorie/${category.slug}/` });
   }
   for (const page of pages) entries.push({ path: page.slug === 'over-ons' ? 'over-ons/' : `pagina/${page.slug}/` });
-  for (const product of [...catalog.products, ...(catalog.variantProducts || [])]) entries.push({ path: `product/${product.slug}/`, lastModified: product.updatedAt || '' });
+  for (const product of [...catalog.products, ...(catalog.subItemProducts || [])]) entries.push({ path: `product/${product.slug}/`, lastModified: product.updatedAt || '' });
   return entries;
 }
 
@@ -300,7 +300,7 @@ function feedDescription(details, fallback) {
 }
 
 /**
- * De productfeed voor Google Merchant Center (RSS 2.0 met g:-velden): elk artikel met foto, ook elke variant apart.
+ * De productfeed voor Google Merchant Center (RSS 2.0 met g:-velden): elk artikel met foto, ook elk subartikel apart.
  * @param {{ shopName: string, baseUrl: string, products: object[], groups: object[], details?: Map<string, { description: string }> }} input products = uit de catalogus, groups = hoofdcategorieën (voor product_type), details = omschrijving per artikelcode (storefront-data.detailsOf; zonder een korte standaardtekst).
  * @returns {string} Het XML-document.
  */
@@ -329,9 +329,9 @@ function merchantFeedXml({ shopName, baseUrl, products, groups, details = new Ma
     </item>`);
   };
   for (const product of products) {
-    if (product.variants && product.variants.length) {
-      for (const variant of product.variants) {
-        addItem({ id: variant.code, title: `${product.name} – ${variant.label}`, slug: variant.slug, image: variant.image || product.image, priceIncl: variant.priceIncl, inStock: variant.inStock, product, groupId: product.code });
+    if (product.subItems && product.subItems.length) {
+      for (const subItem of product.subItems) {
+        addItem({ id: subItem.code, title: `${product.name} – ${subItem.label}`, slug: subItem.slug, image: subItem.image || product.image, priceIncl: subItem.priceIncl, inStock: subItem.inStock, product, groupId: product.code });
       }
     } else {
       addItem({ id: product.code, title: product.name, slug: product.slug, image: product.image, priceIncl: product.priceIncl, inStock: product.inStock, product });

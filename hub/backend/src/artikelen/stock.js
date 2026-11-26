@@ -26,16 +26,16 @@
 // - Bestelvoorstel (migratie 30): artikelen waarvan beschikbaar onder het
 //   minimum zakt, met het aantal om aan te vullen tot reorder_qty ("bestellen
 //   tot"; leeg = 2× minimum), afgerond naar boven op hele eenheden.
-// - Varianten (migratie 33): een hoofdartikel (has_variants) heeft kenmerken
+// - Subartikelen (migratie 33): een artikelgroep (is_group) heeft kenmerken
 //   (bijv. Maat: 16 mm, 20 mm) en zelf geen voorraad; elke combinatie is een
-//   variant: een gewoon voorraadartikel met eigen code, prijs, kostprijs,
-//   voorraad, minimum en bestelniveau (parent_id + variant_values). Werkorders,
-//   offertes en facturen gebruiken de code van de variant; staat de code van
-//   een hoofdartikel op een werkorder, dan moet er eerst een maat gekozen
-//   worden (forWorkOrder: chooseVariant). Eenheid, btw en omzetgroep volgen het
-//   hoofdartikel.
-// - Samenvoegen (1.5.8): losse artikelen worden de varianten van een nieuw hoofdartikel
-//   (mergeIntoVariants). Hun id, code, voorraad, prijzen, afbeelding, boekingen en
+//   subartikel: een gewoon voorraadartikel met eigen code, prijs, kostprijs,
+//   voorraad, minimum en bestelniveau (group_id + sub_values). Werkorders,
+//   offertes en facturen gebruiken de code van het subartikel; staat de code van
+//   een artikelgroep op een werkorder, dan moet er eerst een maat gekozen
+//   worden (forWorkOrder: chooseSubItem). Eenheid, btw en omzetgroep volgen het
+//   artikelgroep.
+// - Samenvoegen (1.5.8): losse artikelen worden de subartikelen van een nieuw artikelgroep
+//   (mergeIntoGroup). Hun id, code, voorraad, prijzen, afbeelding, boekingen en
 //   reserveringen blijven zoals ze zijn, dus werkorders, offertes en facturen
 //   verwijzen nog steeds naar dezelfde code. mergeSuggestions stelt groepen voor.
 // - Inkoopprijzen en FIFO (migratie 45, stock-costs.js): elke mutatie gaat via book
@@ -45,13 +45,13 @@
 const crypto = require('crypto');
 const { transaction } = require('../database/db');
 const { loadArticles } = require('../webshop/shop');
-const { suggestGroups, MAX_GROUP_SIZE } = require('./variant-suggestions');
+const { suggestGroups, MAX_GROUP_SIZE } = require('./group-suggestions');
 const Wholesale = require('../webshop/wholesale');
 const ItemDetails = require('./item-details');
 const { createStockCosts, parsePrice } = require('./stock-costs');
 const PriceFactor = require('./price-factor');
 const DeliveryRules = require('../webshop/delivery-rules');
-const { MANUAL, OPEN, MAX_QTY, LIST_LIMIT, EXPORT_LIMIT, BATCH, currentTimestamp, round3, normalizeCode, shopCodeOf, cleanText, isDate, sumQty, DEFAULT_UNITS, parseJson, sanitizeAttributes, combinations, shopAttributesOf, mergeAttributes, valuesKey, codePart, variantName, placeholders, sanitizeItem, needsOf } = require('./stock-helpers');
+const { MANUAL, OPEN, MAX_QTY, LIST_LIMIT, EXPORT_LIMIT, BATCH, currentTimestamp, round3, normalizeCode, shopCodeOf, cleanText, isDate, sumQty, DEFAULT_UNITS, parseJson, sanitizeAttributes, combinations, shopAttributesOf, mergeAttributes, valuesKey, codePart, subItemName, placeholders, sanitizeItem, needsOf } = require('./stock-helpers');
 const { registerStockRoutes } = require('./stock-routes');
 const { KINDS, GROUPS, VAT_RATES } = require('./stock-helpers');
 
@@ -59,7 +59,7 @@ const { KINDS, GROUPS, VAT_RATES } = require('./stock-helpers');
  * Maakt de opslag voor voorraadartikelen, mutaties en reserveringen.
  * @param {object} db De database.
  * @param {{ articles?: Function, onDirty?: Function }} [options] Catalogus van de planner; aanroep na een wijziging voor de webshop.
- * @returns {object} list, get, create, update, remove, move, setVariants, articleChoices, mergeSuggestions, mergeIntoVariants, unmergePreview, unmergeVariants, importCatalog, importShop, mirrorShop, addMissingShop, movements, reservations, syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode, reorderProposal, reserveOrder, releaseOrder, issueOrder en onDirty.
+ * @returns {object} list, get, create, update, remove, move, setSubItems, articleChoices, mergeSuggestions, mergeIntoGroup, unmergePreview, unmergeSubItems, importCatalog, importShop, mirrorShop, addMissingShop, movements, reservations, syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode, reorderProposal, reserveOrder, releaseOrder, issueOrder en onDirty.
  */
 function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) {
   /**
@@ -100,8 +100,8 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    */
   const dirty = (tenantId) => { if (dirtyHook) dirtyHook(tenantId); };
   const SALE_COLS = 'stock_managed, sale_price, business_price, vat_rate, revenue_group, weight_grams, shop_sync, shop_product_id, shop_dirty, shop_synced_at, shop_error, order_pack_size, order_min_qty, price_tiers, unit_content, ean, price_mode, price_factor';
-  const VARIANT_COLS = 'parent_id, has_variants, attributes, variant_values, image_id';
-  const ITEM_COLS = `id, code, name, unit, location, min_qty, reorder_qty, on_hand, cost_price, notes, archived, created_at, updated_at, ${SALE_COLS}, ${VARIANT_COLS}`;
+  const GROUP_COLS = 'group_id, is_group, attributes, sub_values, image_id';
+  const ITEM_COLS = `id, code, name, unit, location, min_qty, reorder_qty, on_hand, cost_price, notes, archived, created_at, updated_at, ${SALE_COLS}, ${GROUP_COLS}`;
   const MOVE_COLS = 'm.id, m.item_id, m.kind, m.qty, m.balance, m.work_order_id, m.work_order_number, m.source, m.note, m.user_name, m.created_at';
 
   /**
@@ -130,33 +130,33 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       stockManaged: itemRow.stock_managed === undefined ? true : Boolean(Number(itemRow.stock_managed)),
       shopSync: itemRow.shop_sync === undefined ? true : Boolean(Number(itemRow.shop_sync)),
       shop: { productId: itemRow.shop_product_id || null, pending: Boolean(Number(itemRow.shop_dirty)), syncedAt: itemRow.shop_synced_at || null, error: itemRow.shop_error || '' },
-      parentId: itemRow.parent_id || null, imageId: itemRow.image_id || null, hasVariants: Boolean(Number(itemRow.has_variants)),
-      attributes: Number(itemRow.has_variants) ? parseJson(itemRow.attributes, []) : [],
-      values: itemRow.parent_id ? parseJson(itemRow.variant_values, {}) : null,
+      groupId: itemRow.group_id || null, imageId: itemRow.image_id || null, isGroup: Boolean(Number(itemRow.is_group)),
+      attributes: Number(itemRow.is_group) ? parseJson(itemRow.attributes, []) : [],
+      values: itemRow.group_id ? parseJson(itemRow.sub_values, {}) : null,
       createdAt: itemRow.created_at, updatedAt: itemRow.updated_at,
     };
   };
   /**
-   * Telt bij een hoofdartikel de varianten op: stand, gereserveerd,
-   * beschikbaar, werkorders en waarde; onder het minimum als een variant dat is.
-   * @param {object} parent Het hoofdartikel (shapeItem).
-   * @param {object[]} variants Zijn varianten (shapeItem), zonder de gearchiveerde.
-   * @param {number} orders Aantal verschillende werkorders met een reservering op een van de varianten.
-   * @returns {object} Het hoofdartikel met de totalen en variantCount.
+   * Telt bij een artikelgroep de subartikelen op: stand, gereserveerd,
+   * beschikbaar, werkorders en waarde; onder het minimum als een subartikel dat is.
+   * @param {object} articleGroup De artikelgroep (shapeItem).
+   * @param {object[]} subartikelen Zijn subartikelen (shapeItem), zonder de gearchiveerde.
+   * @param {number} orders Aantal verschillende werkorders met een reservering op een van de subartikelen.
+   * @returns {object} De artikelgroep met de totalen en subItemCount.
    */
-  const withTotals = (parent, variants, orders) => {
+  const withTotals = (articleGroup, subItems, orders) => {
     /**
-     * Telt een veld van alle varianten op.
+     * Telt een veld van alle subartikelen op.
      * @param {string} key Het veld, bijv. 'onHand'.
      * @returns {number} Het totaal.
      */
-    const total = (key) => round3(variants.reduce((sum, variant) => sum + (variant[key] || 0), 0));
-    const values = variants.filter((variant) => variant.value != null);
+    const total = (key) => round3(subItems.reduce((sum, subItem) => sum + (subItem[key] || 0), 0));
+    const values = subItems.filter((subItem) => subItem.value != null);
     return {
-      ...parent, onHand: total('onHand'), reserved: total('reserved'), available: total('available'),
+      ...articleGroup, onHand: total('onHand'), reserved: total('reserved'), available: total('available'),
       orders: Number(orders) || 0,
-      value: values.length ? Math.round(values.reduce((sum, variant) => sum + variant.value, 0) * 100) / 100 : null,
-      low: variants.some((variant) => variant.low), variantCount: variants.length,
+      value: values.length ? Math.round(values.reduce((sum, subItem) => sum + subItem.value, 0) * 100) / 100 : null,
+      low: subItems.some((subItem) => subItem.low), subItemCount: subItems.length,
     };
   };
   /**
@@ -179,41 +179,41 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    */
   function list(tenantId, { archived = false } = {}) {
     const items = listRows(tenantId, { archived });
-    const variantsOf = new Map();
+    const subItemsOf = new Map();
     for (const item of items) {
-      if (!item.parentId || item.archived) continue;
-      if (!variantsOf.has(item.parentId)) variantsOf.set(item.parentId, []);
-      variantsOf.get(item.parentId).push(item);
+      if (!item.groupId || item.archived) continue;
+      if (!subItemsOf.has(item.groupId)) subItemsOf.set(item.groupId, []);
+      subItemsOf.get(item.groupId).push(item);
     }
-    return items.map((item) => (item.hasVariants ? withTotals(item, variantsOf.get(item.id) || [], item.familyOrders) : item));
+    return items.map((item) => (item.isGroup ? withTotals(item, subItemsOf.get(item.id) || [], item.familyOrders) : item));
   }
 
   /**
    * Artikelrijen met het gereserveerde aantal (som over open werkorders), in één query.
-   * Bij een hoofdartikel en zijn varianten staat in familyOrders het aantal verschillende
-   * werkorders over alle actieve varianten (een werkorder met twee maten telt één keer).
-   * Met parentId tellen de reserveringen alleen voor die varianten (niet eerst alles van de omgeving).
+   * Bij een artikelgroep en zijn subartikelen staat in familyOrders het aantal verschillende
+   * werkorders over alle actieve subartikelen (een werkorder met twee maten telt één keer).
+   * Met groupId tellen de reserveringen alleen voor die subartikelen (niet eerst alles van de omgeving).
    * @param {string} tenantId Id van de omgeving.
-   * @param {{ archived?: boolean, parentId?: string|null }} [filters] Ook gearchiveerde; alleen de varianten van dit hoofdartikel.
+   * @param {{ archived?: boolean, groupId?: string|null }} [filters] Ook gearchiveerde; alleen de subartikelen van deze artikelgroep.
    * @returns {object[]} De artikelen (shapeItem met familyOrders), op code.
    */
-  function listRows(tenantId, { archived = false, parentId = null } = {}) {
-    const family = parentId ? String(parentId) : null;
-    const reservedFilter = family ? ' AND item_id IN (SELECT id FROM stock_items WHERE tenant_id = ? AND parent_id = ?)' : '';
-    const familyFilter = family ? ' AND sibling.parent_id = ?' : '';
+  function listRows(tenantId, { archived = false, groupId = null } = {}) {
+    const family = groupId ? String(groupId) : null;
+    const reservedFilter = family ? ' AND item_id IN (SELECT id FROM stock_items WHERE tenant_id = ? AND group_id = ?)' : '';
+    const familyFilter = family ? ' AND sibling.group_id = ?' : '';
     const args = [tenantId, ...(family ? [tenantId, family] : []), tenantId, tenantId, ...(family ? [family] : []), tenantId];
     let where = archived ? '' : ' AND i.archived = 0';
-    if (family) { where += ' AND i.parent_id = ?'; args.push(family); }
+    if (family) { where += ' AND i.group_id = ?'; args.push(family); }
     return prepare(`SELECT i.id, i.code, i.name, i.unit, i.location, i.min_qty, i.reorder_qty, i.on_hand, i.cost_price, i.notes, i.archived, i.created_at, i.updated_at,
         i.sale_price, i.business_price, i.vat_rate, i.revenue_group, i.weight_grams, i.shop_sync, i.shop_product_id, i.shop_dirty, i.shop_synced_at, i.shop_error,
-        i.order_pack_size, i.order_min_qty, i.price_tiers, i.unit_content, i.ean, i.price_mode, i.price_factor, i.parent_id, i.has_variants, i.attributes, i.variant_values, i.image_id,
+        i.order_pack_size, i.order_min_qty, i.price_tiers, i.unit_content, i.ean, i.price_mode, i.price_factor, i.group_id, i.is_group, i.attributes, i.sub_values, i.image_id,
         COALESCE(r.qty, 0) AS reserved, COALESCE(r.orders, 0) AS orders, COALESCE(f.orders, 0) AS family_orders
       FROM stock_items i
       LEFT JOIN (SELECT item_id, SUM(qty) AS qty, COUNT(*) AS orders FROM stock_reservations WHERE tenant_id = ?${reservedFilter} GROUP BY item_id) r ON r.item_id = i.id
-      LEFT JOIN (SELECT sibling.parent_id, COUNT(DISTINCT COALESCE(family.work_order_id, family.web_order_id)) AS orders FROM stock_reservations family
+      LEFT JOIN (SELECT sibling.group_id, COUNT(DISTINCT COALESCE(family.work_order_id, family.web_order_id)) AS orders FROM stock_reservations family
           JOIN stock_items sibling ON sibling.id = family.item_id AND sibling.tenant_id = ?
-          WHERE family.tenant_id = ? AND sibling.archived = 0 AND sibling.parent_id IS NOT NULL${familyFilter} GROUP BY sibling.parent_id) f
-        ON f.parent_id = COALESCE(i.parent_id, i.id)
+          WHERE family.tenant_id = ? AND sibling.archived = 0 AND sibling.group_id IS NOT NULL${familyFilter} GROUP BY sibling.group_id) f
+        ON f.group_id = COALESCE(i.group_id, i.id)
       WHERE i.tenant_id = ?${where} ORDER BY i.code`)
       .all(...args).map((itemRow) => ({ ...shapeItem(itemRow, itemRow.reserved, itemRow.orders), familyOrders: Number(itemRow.family_orders) || 0 }));
   }
@@ -306,20 +306,20 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   function get(tenantId, id) {
     const itemRow = findItemWithDetails(tenantId, id);
     if (!itemRow) return null;
-    if (Number(itemRow.has_variants)) {
-      // Hoofdartikel: geen eigen voorraad, wel de varianten met hun totalen.
-      const variants = listRows(tenantId, { archived: true, parentId: itemRow.id });
-      const parent = withTotals(shapeItem(itemRow), variants.filter((variant) => !variant.archived), variants.length ? variants[0].familyOrders : 0);
-      return { ...parent, ...detailsOf(itemRow), variants, reservations: [], movements: [] };
+    if (Number(itemRow.is_group)) {
+      // Artikelgroep: geen eigen voorraad, wel de subartikelen met hun totalen.
+      const subItems = listRows(tenantId, { archived: true, groupId: itemRow.id });
+      const articleGroup = withTotals(shapeItem(itemRow), subItems.filter((subItem) => !subItem.archived), subItems.length ? subItems[0].familyOrders : 0);
+      return { ...articleGroup, ...detailsOf(itemRow), subItems, reservations: [], movements: [] };
     }
     const reservations = reservationsOf(tenantId, itemRow.id);
     const item = shapeItem(itemRow, reservations.reduce((sum, reservation) => sum + reservation.qty, 0), reservations.length);
     const movements = prepare(`SELECT ${MOVE_COLS} FROM stock_movements m WHERE m.tenant_id = ? AND m.item_id = ? ORDER BY m.created_at DESC, m.id LIMIT ${LIST_LIMIT}`)
       .all(tenantId, itemRow.id).map(shapeMove);
-    const parentRow = itemRow.parent_id ? prepare('SELECT id, code, name, attributes, archived FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, itemRow.parent_id) : null;
-    const parent = parentRow ? { id: parentRow.id, code: parentRow.code, name: parentRow.name, attributes: parseJson(parentRow.attributes, []), archived: Boolean(parentRow.archived) } : null;
+    const groupRow = itemRow.group_id ? prepare('SELECT id, code, name, attributes, archived FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, itemRow.group_id) : null;
+    const articleGroup = groupRow ? { id: groupRow.id, code: groupRow.code, name: groupRow.name, attributes: parseJson(groupRow.attributes, []), archived: Boolean(groupRow.archived) } : null;
     const history = costs.historyOf(tenantId, itemRow.id);
-    return { ...item, ...detailsOf(itemRow), parent, reservations, movements, costPrices: history.prices, layers: history.layers };
+    return { ...item, ...detailsOf(itemRow), articleGroup, reservations, movements, costPrices: history.prices, layers: history.layers };
   }
 
   /**
@@ -470,7 +470,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       // komt de wijziging met oud, nieuw en bron in het auditlog.
       const costChanged = (merged.costPrice == null) !== (existing.cost_price == null) || Math.abs(Number(merged.costPrice ?? 0) - Number(existing.cost_price ?? 0)) > 0.00005;
       const factorChanged = merged.priceMode === 'factor' && (existing.price_mode !== 'factor' || (merged.priceFactor ?? null) !== (existing.price_factor ?? null) || costChanged);
-      if (factorChanged && pricer && !Number(existing.has_variants)) {
+      if (factorChanged && pricer && !Number(existing.is_group)) {
         const factorPrice = pricer(tenantId, { id: existing.id, costPrice: merged.costPrice, priceFactor: merged.priceFactor });
         if (factorPrice !== null) {
           merged.salePrice = factorPrice;
@@ -479,34 +479,34 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       }
       // Een handmatig gewijzigde verkoopprijs bij modus factor (zonder wijziging van modus, factor of inkoopprijs) zou binnen een uur
       // worden teruggezet: de berekende prijs blijft staan (het formulier toont het veld dan alleen-lezen).
-      if (!factorChanged && merged.priceMode === 'factor' && fields.salePrice !== undefined && pricer && !Number(existing.has_variants)
+      if (!factorChanged && merged.priceMode === 'factor' && fields.salePrice !== undefined && pricer && !Number(existing.is_group)
         && pricer(tenantId, { id: existing.id, costPrice: merged.costPrice, priceFactor: merged.priceFactor }) !== null) {
         merged.salePrice = existing.sale_price;
       }
       const mergedTerms = Wholesale.sanitizeTerms(merged);
       if (mergedTerms.error) return { error: mergedTerms.error, field: mergedTerms.field, status: 400 };
       const archived = raw && raw.archived !== undefined ? (raw.archived ? 1 : 0) : existing.archived;
-      const isParent = Boolean(Number(existing.has_variants));
+      const isGroup = Boolean(Number(existing.is_group));
       if (archived && !existing.archived) {
-        const variantIds = isParent ? prepare('SELECT id FROM stock_items WHERE tenant_id = ? AND parent_id = ?').all(tenantId, existing.id).map((variant) => variant.id) : [];
-        const held = heldByOrders(tenantId, [existing.id, ...variantIds]);
+        const subItemIds = isGroup ? prepare('SELECT id FROM stock_items WHERE tenant_id = ? AND group_id = ?').all(tenantId, existing.id).map((subItem) => subItem.id) : [];
+        const held = heldByOrders(tenantId, [existing.id, ...subItemIds]);
         if (held) return held;
       }
-      if (!archived && existing.archived && existing.parent_id) {
-        const parentRow = prepare('SELECT archived FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, existing.parent_id);
-        if (parentRow && parentRow.archived) return { error: 'Zet eerst het hoofdartikel terug uit het archief.', status: 409 };
+      if (!archived && existing.archived && existing.group_id) {
+        const groupRow = prepare('SELECT archived FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, existing.group_id);
+        if (groupRow && groupRow.archived) return { error: 'Zet eerst de artikelgroep terug uit het archief.', status: 409 };
       }
       // EAN eerst controleren: na de UPDATE hieronder zou een fout de andere wijzigingen toch laten staan.
       const ean = fields.ean !== undefined ? (fields.ean || null) : (existing.ean || null);
       if (ean !== (existing.ean || null)) {
-        if (ean && isParent) return { error: 'Een hoofdartikel met varianten heeft geen eigen EAN; geef elke variant een EAN.', field: 'ean', status: 400 };
+        if (ean && isGroup) return { error: 'Een artikelgroep met subartikelen heeft geen eigen EAN; geef elk subartikel een EAN.', field: 'ean', status: 400 };
         const eanProblem = eanTaken(tenantId, existing.id, ean);
         if (eanProblem) return eanProblem;
       }
       if (fields.unit) rememberUnit(tenantId, fields.unit);
       // Andere prijs of btw (of weer meesturen): opnieuw naar de webshop. Een
-      // hoofdartikel heeft in de webshop geen eigen prijs of voorraad.
-      const toShop = !isParent && ((merged.salePrice ?? null) !== (existing.sale_price ?? null) || merged.vatRate !== Number(existing.vat_rate) || (merged.shopSync && !Number(existing.shop_sync)));
+      // artikelgroep heeft in de webshop geen eigen prijs of voorraad.
+      const toShop = !isGroup && ((merged.salePrice ?? null) !== (existing.sale_price ?? null) || merged.vatRate !== Number(existing.vat_rate) || (merged.shopSync && !Number(existing.shop_sync)));
       prepare(`UPDATE stock_items SET code = ?, name = ?, unit = ?, location = ?, min_qty = ?, reorder_qty = ?, cost_price = ?, notes = ?, archived = ?, archived_by_parent = 0, updated_at = ?,
            sale_price = ?, business_price = ?, vat_rate = ?, revenue_group = ?, shop_sync = ?, weight_grams = ?,
            order_pack_size = ?, order_min_qty = ?, price_tiers = ?, unit_content = ?, ean = ?, price_mode = ?, price_factor = ?,
@@ -519,37 +519,37 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       // Een andere inkoopprijs komt als nieuwe regel in de historie (de oude blijft staan).
       costs.noteFormPrice(tenantId, existing.id, existing.cost_price, merged.costPrice, user);
       if (archived && !existing.archived) prepare('DELETE FROM stock_reservations WHERE tenant_id = ? AND item_id = ?').run(tenantId, existing.id);
-      let variantsToShop = false;
-      if (isParent) variantsToShop = followParent(tenantId, existing, merged, archived);
-      return { item: get(tenantId, existing.id), toShop: toShop || variantsToShop };
+      let subItemsToShop = false;
+      if (isGroup) subItemsToShop = followGroup(tenantId, existing, merged, archived);
+      return { item: get(tenantId, existing.id), toShop: toShop || subItemsToShop };
     }));
     if (out.toShop) dirty(tenantId);
     return out;
   }
 
   /**
-   * Varianten volgen hun hoofdartikel: eenheid, btw en omzetgroep worden
-   * gelijk, en archiveren of terugzetten geldt voor alle varianten. Binnen de
+   * Subartikelen volgen hun artikelgroep: eenheid, btw en omzetgroep worden
+   * gelijk, en archiveren of terugzetten geldt voor alle subartikelen. Binnen de
    * transactie van update.
    * @param {string} tenantId Id van de omgeving.
-   * @param {object} existing Het hoofdartikel zoals het was.
-   * @param {object} merged De nieuwe velden van het hoofdartikel.
-   * @param {number} archived 1 als het hoofdartikel nu gearchiveerd is.
-   * @returns {boolean} true als gekoppelde varianten opnieuw naar de webshop moeten (ander btw-tarief).
+   * @param {object} existing De artikelgroep zoals het was.
+   * @param {object} merged De nieuwe velden van de artikelgroep.
+   * @param {number} archived 1 als de artikelgroep nu gearchiveerd is.
+   * @returns {boolean} true als gekoppelde subartikelen opnieuw naar de webshop moeten (ander btw-tarief).
    */
-  function followParent(tenantId, existing, merged, archived) {
+  function followGroup(tenantId, existing, merged, archived) {
     const timestamp = currentTimestamp();
     const vatChanged = merged.vatRate !== Number(existing.vat_rate);
     prepare(`UPDATE stock_items SET unit = ?, vat_rate = ?, revenue_group = ?, updated_at = ?,
         shop_dirty = CASE WHEN ? = 1 AND shop_product_id IS NOT NULL AND shop_sync = 1 THEN 1 ELSE shop_dirty END
-      WHERE tenant_id = ? AND parent_id = ?`).run(merged.unit, merged.vatRate, merged.revenueGroup, timestamp, vatChanged ? 1 : 0, tenantId, existing.id);
+      WHERE tenant_id = ? AND group_id = ?`).run(merged.unit, merged.vatRate, merged.revenueGroup, timestamp, vatChanged ? 1 : 0, tenantId, existing.id);
     if (archived && !existing.archived) {
-      prepare('DELETE FROM stock_reservations WHERE tenant_id = ? AND item_id IN (SELECT id FROM stock_items WHERE tenant_id = ? AND parent_id = ?)').run(tenantId, tenantId, existing.id);
-      prepare('UPDATE stock_items SET archived = 1, archived_by_parent = 1, updated_at = ? WHERE tenant_id = ? AND parent_id = ? AND archived = 0').run(timestamp, tenantId, existing.id);
+      prepare('DELETE FROM stock_reservations WHERE tenant_id = ? AND item_id IN (SELECT id FROM stock_items WHERE tenant_id = ? AND group_id = ?)').run(tenantId, tenantId, existing.id);
+      prepare('UPDATE stock_items SET archived = 1, archived_by_parent = 1, updated_at = ? WHERE tenant_id = ? AND group_id = ? AND archived = 0').run(timestamp, tenantId, existing.id);
     } else if (!archived && existing.archived) {
-      // Alleen de varianten die met het hoofdartikel mee het archief in gingen; een los verwijderde variant blijft weg.
-      const codes = prepare('SELECT code FROM stock_items WHERE tenant_id = ? AND parent_id = ? AND archived_by_parent = 1').all(tenantId, existing.id).map((row) => row.code);
-      prepare('UPDATE stock_items SET archived = 0, archived_by_parent = 0, updated_at = ? WHERE tenant_id = ? AND parent_id = ? AND archived_by_parent = 1').run(timestamp, tenantId, existing.id);
+      // Alleen de subartikelen die met de artikelgroep mee het archief in gingen; een los verwijderde subartikel blijft weg.
+      const codes = prepare('SELECT code FROM stock_items WHERE tenant_id = ? AND group_id = ? AND archived_by_parent = 1').all(tenantId, existing.id).map((row) => row.code);
+      prepare('UPDATE stock_items SET archived = 0, archived_by_parent = 0, updated_at = ? WHERE tenant_id = ? AND group_id = ? AND archived_by_parent = 1').run(timestamp, tenantId, existing.id);
       if (codes.length) resyncOpen(tenantId, codes, { nested: true });
     }
     return vatChanged;
@@ -559,7 +559,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * Zoekt de open webshopbestellingen die een van deze artikelen reserveren. Zo'n artikel mag niet weg of het archief in:
    * de bestelling kan anders niet meer worden verzonden.
    * @param {string} tenantId Id van de omgeving.
-   * @param {string[]} itemIds Id's van de artikelen (het artikel zelf en zijn varianten).
+   * @param {string[]} itemIds Id's van de artikelen (het artikel zelf en zijn subartikelen).
    * @returns {{ error: string, status: number, orders: string[] }|null} De fout met de bestelnummers, of null als niets het tegenhoudt.
    */
   function heldByOrders(tenantId, itemIds) {
@@ -599,8 +599,8 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
 
   /**
    * Verwijderen: zonder mutaties echt weg, anders gearchiveerd (het logboek
-   * blijft). Een hoofdartikel neemt zijn varianten mee; het blijft zelf
-   * (gearchiveerd) bestaan zolang er een gearchiveerde variant is.
+   * blijft). Een artikelgroep neemt zijn subartikelen mee; het blijft zelf
+   * (gearchiveerd) bestaan zolang er een gearchiveerde subartikel is.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van het artikel.
    * @returns {object|null} { deleted, code } of { archived, code }, { error, status, orders } als een open webshopbestelling het artikel reserveert, of null.
@@ -609,14 +609,14 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     return transaction(db, () => {
       const existing = findItem(tenantId, id);
       if (!existing) return null;
-      let keepParent = false;
-      const variants = Number(existing.has_variants) ? prepare('SELECT id FROM stock_items WHERE tenant_id = ? AND parent_id = ?').all(tenantId, existing.id) : [];
-      const held = heldByOrders(tenantId, [existing.id, ...variants.map((variant) => variant.id)]);
+      let keepGroup = false;
+      const subItems = Number(existing.is_group) ? prepare('SELECT id FROM stock_items WHERE tenant_id = ? AND group_id = ?').all(tenantId, existing.id) : [];
+      const held = heldByOrders(tenantId, [existing.id, ...subItems.map((subItem) => subItem.id)]);
       if (held) return held;
-      for (const variant of variants) {
-        if (removeRow(tenantId, variant)) keepParent = true;
+      for (const subItem of subItems) {
+        if (removeRow(tenantId, subItem)) keepGroup = true;
       }
-      if (keepParent) {
+      if (keepGroup) {
         prepare('UPDATE stock_items SET archived = 1, updated_at = ? WHERE tenant_id = ? AND id = ?').run(currentTimestamp(), tenantId, existing.id);
         return { archived: true, code: existing.code };
       }
@@ -625,62 +625,62 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   }
 
   /**
-   * Maakt van een artikel een hoofdartikel met kenmerken en maakt de varianten
+   * Maakt van een artikel een artikelgroep met kenmerken en maakt de subartikelen
    * aan die nog ontbreken (elke combinatie van waarden; een gearchiveerde
-   * variant met dezelfde waarden komt terug). Varianten krijgen de code van het
-   * hoofdartikel met de waarden erachter (bijv. PE-BUIS-16MM) en nemen eenheid,
-   * prijzen, btw, omzetgroep en webshopinstelling over. Een variant waarvan
+   * subartikel met dezelfde waarden komt terug). Subartikelen krijgen de code van het
+   * artikelgroep met de waarden erachter (bijv. PE-BUIS-16MM) en nemen eenheid,
+   * prijzen, btw, omzetgroep en webshopinstelling over. Een subartikel waarvan
    * een waarde is weggehaald gaat weg (met boekingen: gearchiveerd), net als
-   * bij verwijderen. Kenmerken zonder varianten maken er weer een gewoon
+   * bij verwijderen. Kenmerken zonder subartikelen maken er weer een gewoon
    * artikel van.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van het artikel.
    * @param {*} rawAttributes De kenmerken: [{ name, values }].
    * @returns {object} { item, created, restored, removed }, of { error, field, status }.
    */
-  function setVariants(tenantId, id, rawAttributes) {
+  function setSubItems(tenantId, id, rawAttributes) {
     const checked = sanitizeAttributes(rawAttributes);
     if (checked.error) return checked;
     const attributes = checked.value;
     const out = transaction(db, () => {
       const existing = findItem(tenantId, id);
       if (!existing) return { error: 'not_found', status: 404 };
-      if (existing.parent_id) return { error: 'Een variant kan zelf geen varianten hebben.', status: 409 };
+      if (existing.group_id) return { error: 'Een subartikel kan zelf geen subartikelen hebben.', status: 409 };
       if (existing.archived) return { error: 'Dit artikel is gearchiveerd.', status: 409 };
-      const variants = prepare('SELECT id, code, archived, variant_values FROM stock_items WHERE tenant_id = ? AND parent_id = ?').all(tenantId, existing.id);
-      const live = variants.filter((variant) => !variant.archived);
-      if (!Number(existing.has_variants)) {
+      const subItems = prepare('SELECT id, code, archived, sub_values FROM stock_items WHERE tenant_id = ? AND group_id = ?').all(tenantId, existing.id);
+      const live = subItems.filter((subItem) => !subItem.archived);
+      if (!Number(existing.is_group)) {
         // Een gewoon artikel met voorraad of boekingen blijft dat: die voorraad hoort bij geen enkele maat.
         const used = Math.abs(Number(existing.on_hand)) > 0 || prepare('SELECT EXISTS (SELECT 1 FROM stock_movements WHERE tenant_id = ? AND item_id = ?) OR EXISTS (SELECT 1 FROM stock_reservations WHERE tenant_id = ? AND item_id = ?) AS n')
           .get(tenantId, existing.id, tenantId, existing.id).n;
-        if (used && attributes.length) return { error: 'Dit artikel heeft al voorraad of boekingen. Maak een nieuw hoofdartikel en zet de varianten daaronder.', status: 409 };
+        if (used && attributes.length) return { error: 'Dit artikel heeft al voorraad of boekingen. Maak een nieuw artikelgroep en zet de subartikelen daaronder.', status: 409 };
       }
       const timestamp = currentTimestamp();
       if (!attributes.length) {
-        if (live.length) return { error: 'Verwijder eerst de varianten; daarna kan dit weer een gewoon artikel worden.', field: 'attributes', status: 409 };
-        prepare("UPDATE stock_items SET has_variants = 0, attributes = '', updated_at = ? WHERE tenant_id = ? AND id = ?").run(timestamp, tenantId, existing.id);
+        if (live.length) return { error: 'Verwijder eerst de subartikelen; daarna kan dit weer een gewoon artikel worden.', field: 'attributes', status: 409 };
+        prepare("UPDATE stock_items SET is_group = 0, attributes = '', updated_at = ? WHERE tenant_id = ? AND id = ?").run(timestamp, tenantId, existing.id);
         return { created: [], restored: 0 };
       }
       const before = parseJson(existing.attributes, []).map((attribute) => attribute.name.toLowerCase()).join('|');
       if (live.length && before !== attributes.map((attribute) => attribute.name.toLowerCase()).join('|')) {
-        return { error: 'Zolang er varianten zijn, kun je alleen waarden toevoegen of weghalen, niet de kenmerken zelf.', field: 'attributes', status: 409 };
+        return { error: 'Zolang er subartikelen zijn, kun je alleen waarden toevoegen of weghalen, niet de kenmerken zelf.', field: 'attributes', status: 409 };
       }
-      const byKey = new Map(variants.map((variant) => [valuesKey(parseJson(variant.variant_values, {})), variant]));
+      const byKey = new Map(subItems.map((subItem) => [valuesKey(parseJson(subItem.sub_values, {})), subItem]));
       const taken = new Set(prepare('SELECT code FROM stock_items WHERE tenant_id = ?').all(tenantId).map((row) => row.code));
       const insert = prepare(`INSERT INTO stock_items (id, tenant_id, code, name, unit, location, min_qty, on_hand, cost_price, notes, archived, created_at, updated_at,
-          sale_price, business_price, vat_rate, revenue_group, shop_sync, parent_id, variant_values, weight_grams)
+          sale_price, business_price, vat_rate, revenue_group, shop_sync, group_id, sub_values, weight_grams)
         VALUES (?, ?, ?, ?, ?, '', 0, 0, ?, '', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
       const created = [];
       let restored = 0;
       let removed = 0;
       const wanted = combinations(attributes);
       const wantedKeys = new Set(wanted.map(valuesKey));
-      // Een weggehaalde waarde: die varianten gaan weg (met boekingen: archief), net als bij verwijderen.
-      const leaving = live.filter((variant) => !wantedKeys.has(valuesKey(parseJson(variant.variant_values, {}))));
-      const held = heldByOrders(tenantId, leaving.map((variant) => variant.id));
+      // Een weggehaalde waarde: die subartikelen gaan weg (met boekingen: archief), net als bij verwijderen.
+      const leaving = live.filter((subItem) => !wantedKeys.has(valuesKey(parseJson(subItem.sub_values, {}))));
+      const held = heldByOrders(tenantId, leaving.map((subItem) => subItem.id));
       if (held) return { ...held, field: 'attributes' };
-      for (const variant of leaving) {
-        removeRow(tenantId, variant);
+      for (const subItem of leaving) {
+        removeRow(tenantId, subItem);
         removed++;
       }
       for (const values of wanted) {
@@ -697,12 +697,12 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         let code = base;
         for (let suffix = 2; taken.has(code); suffix++) code = `${base}-${suffix}`;
         taken.add(code);
-        insert.run(crypto.randomUUID(), tenantId, code, variantName(existing.name, values), existing.unit, existing.cost_price, timestamp, timestamp,
+        insert.run(crypto.randomUUID(), tenantId, code, subItemName(existing.name, values), existing.unit, existing.cost_price, timestamp, timestamp,
           existing.sale_price, existing.business_price ?? null, existing.vat_rate, existing.revenue_group, existing.shop_sync, existing.id, JSON.stringify(values), existing.weight_grams ?? null);
         created.push(code);
       }
-      // Een gekoppeld hoofdartikel: de nieuwe varianten komen bij de volgende ronde in de webshop.
-      prepare(`UPDATE stock_items SET has_variants = 1, ean = NULL, attributes = ?, updated_at = ?,
+      // Een gekoppeld artikelgroep: de nieuwe subartikelen komen bij de volgende ronde in de webshop.
+      prepare(`UPDATE stock_items SET is_group = 1, ean = NULL, attributes = ?, updated_at = ?,
           shop_dirty = CASE WHEN ? = 1 AND shop_product_id IS NOT NULL AND shop_sync = 1 THEN 1 ELSE shop_dirty END
         WHERE tenant_id = ? AND id = ?`).run(JSON.stringify(attributes), timestamp, created.length ? 1 : 0, tenantId, existing.id);
       prepare('DELETE FROM item_suppliers WHERE tenant_id = ? AND item_id = ?').run(tenantId, existing.id);
@@ -723,38 +723,38 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @returns {object[]} De voorstellen: attributeName, name, code en items (id, code, name, value).
    */
   function mergeSuggestions(tenantId) {
-    const rows = prepare('SELECT id, code, name, unit, vat_rate, revenue_group, archived, parent_id, has_variants FROM stock_items WHERE tenant_id = ?').all(tenantId);
-    const loose = rows.filter((row) => !row.archived && !row.parent_id && !Number(row.has_variants))
+    const rows = prepare('SELECT id, code, name, unit, vat_rate, revenue_group, archived, group_id, is_group FROM stock_items WHERE tenant_id = ?').all(tenantId);
+    const loose = rows.filter((row) => !row.archived && !row.group_id && !Number(row.is_group))
       .map((row) => ({ id: row.id, code: row.code, name: row.name, unit: row.unit, vatRate: Number(row.vat_rate ?? 21), revenueGroup: row.revenue_group || 'producten' }));
     return suggestGroups(loose, new Set(rows.map((row) => row.code)));
   }
 
   /**
-   * Voegt losse artikelen samen tot de varianten van een nieuw hoofdartikel. De
+   * Voegt losse artikelen samen tot de subartikelen van een nieuw artikelgroep. De
    * artikelen zelf blijven bestaan (zelfde id en code, dus werkorders, offertes,
    * facturen en bestellingen verwijzen nog naar hetzelfde artikel) en houden hun
    * voorraad, prijzen, afbeelding, boekingen en reserveringen; ze krijgen alleen
-   * een hoofdartikel en een waarde voor het kenmerk. Het hoofdartikel neemt eenheid,
+   * een artikelgroep en een waarde voor het kenmerk. De artikelgroep neemt eenheid,
    * btw, omzetgroep en prijzen van het eerste artikel (op code) over en neemt de
    * eerste afbeelding over. Is een artikel apart aan een webshopproduct gekoppeld,
-   * dan vervalt die koppeling: het hoofdartikel kan daarna met "In webshop zetten"
+   * dan vervalt die koppeling: de artikelgroep kan daarna met "In webshop zetten"
    * als één variabel product worden aangemaakt (het oude webshopproduct blijft in
    * de webshop staan tot je het daar weghaalt). Per samenvoeging komt een
-   * momentopname in het logboek (stock_merges), zodat unmergeVariants het kan terugdraaien.
+   * momentopname in het logboek (stock_merges), zodat unmergeSubItems het kan terugdraaien.
    * @param {string} tenantId Id van de omgeving.
-   * @param {{ ids?: string[], code?: string, name?: string, attributeName?: string, values?: Object<string, string> }} raw De invoer: de artikelen, code en omschrijving van het hoofdartikel, naam van het kenmerk en de waarde per artikel-id.
-   * @param {{ refuseLinked?: boolean, shopMatchOf?: Function, user?: object }} [options] user: wie samenvoegt (voor het logboek); refuseLinked: weiger artikelen die aan een webshopproduct gekoppeld zijn (nodig als de webshop de artikellijst bepaalt: de volgende synchronisatie zou de varianten archiveren); shopMatchOf: functie artikelrij → webshopproduct of null, om ook artikelen te weigeren die via code of sku met een los webshopproduct samenvallen.
-   * @returns {object} { parentId, merged, unlinked, shopProductIds } met het id van het nieuwe hoofdartikel, het aantal samengevoegde artikelen, het aantal verbroken webshopkoppelingen en de id's van hun webshopproducten; of { error, field?, status }.
+   * @param {{ ids?: string[], code?: string, name?: string, attributeName?: string, values?: Object<string, string> }} raw De invoer: de artikelen, code en omschrijving van de artikelgroep, naam van het kenmerk en de waarde per artikel-id.
+   * @param {{ refuseLinked?: boolean, shopMatchOf?: Function, user?: object }} [options] user: wie samenvoegt (voor het logboek); refuseLinked: weiger artikelen die aan een webshopproduct gekoppeld zijn (nodig als de webshop de artikellijst bepaalt: de volgende synchronisatie zou de subartikelen archiveren); shopMatchOf: functie artikelrij → webshopproduct of null, om ook artikelen te weigeren die via code of sku met een los webshopproduct samenvallen.
+   * @returns {object} { groupId, merged, unlinked, shopProductIds } met het id van de nieuwe artikelgroep, het aantal samengevoegde artikelen, het aantal verbroken webshopkoppelingen en de id's van hun webshopproducten; of { error, field?, status }.
    */
-  function mergeIntoVariants(tenantId, raw, { refuseLinked = false, shopMatchOf = null, user = null } = {}) {
+  function mergeIntoGroup(tenantId, raw, { refuseLinked = false, shopMatchOf = null, user = null } = {}) {
     const input = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
     const ids = Array.isArray(input.ids) ? [...new Set(input.ids.map((id) => String(id)))] : [];
     if (ids.length < 2) return { error: 'Kies minstens twee artikelen om samen te voegen.', field: 'ids', status: 400 };
     if (ids.length > MAX_GROUP_SIZE) return { error: `Hooguit ${MAX_GROUP_SIZE} artikelen per keer.`, field: 'ids', status: 400 };
     const code = normalizeCode(input.code);
-    if (code.length > 40 || !/^[A-Z0-9][A-Z0-9._\-/+ ]*$/.test(code)) return { error: 'Geef het hoofdartikel een code (letters, cijfers en - . / +).', field: 'code', status: 400 };
+    if (code.length > 40 || !/^[A-Z0-9][A-Z0-9._\-/+ ]*$/.test(code)) return { error: 'Geef de artikelgroep een code (letters, cijfers en - . / +).', field: 'code', status: 400 };
     const name = cleanText(input.name, 200);
-    if (!name) return { error: 'Geef het hoofdartikel een omschrijving.', field: 'name', status: 400 };
+    if (!name) return { error: 'Geef de artikelgroep een omschrijving.', field: 'name', status: 400 };
     const attributeName = cleanText(input.attributeName, 40);
     if (!attributeName) return { error: 'Geef het kenmerk een naam (bijv. Maat of Kleur).', field: 'attributeName', status: 400 };
     const rawValues = input.values && typeof input.values === 'object' && !Array.isArray(input.values) ? input.values : {};
@@ -763,92 +763,92 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     for (const id of ids) {
       const value = cleanText(rawValues[id], 40);
       if (!value) return { error: 'Geef elk artikel een waarde voor het kenmerk (bijv. 16 mm).', field: 'values', status: 400 };
-      if (seen.has(value.toLowerCase())) return { error: `De waarde ${value} komt twee keer voor; elke variant heeft een eigen waarde.`, field: 'values', status: 409 };
+      if (seen.has(value.toLowerCase())) return { error: `De waarde ${value} komt twee keer voor; elk subartikel heeft een eigen waarde.`, field: 'values', status: 409 };
       seen.add(value.toLowerCase());
       valueOf.set(id, value);
     }
     return transaction(db, () => {
-      const rows = prepare(`SELECT id, code, unit, location, cost_price, sale_price, business_price, vat_rate, revenue_group, shop_sync, shop_product_id, shop_price_seen, shop_stock_seen, shop_dirty, shop_error, image_id, archived, parent_id, has_variants
+      const rows = prepare(`SELECT id, code, unit, location, cost_price, sale_price, business_price, vat_rate, revenue_group, shop_sync, shop_product_id, shop_price_seen, shop_stock_seen, shop_dirty, shop_error, image_id, archived, group_id, is_group
           FROM stock_items WHERE tenant_id = ? AND id IN (${placeholders(ids.length)})`).all(tenantId, ...ids);
       if (rows.length !== ids.length) return { error: 'not_found', status: 404 };
       for (const row of rows) {
         if (row.archived) return { error: `${row.code} is gearchiveerd.`, field: 'ids', status: 409 };
-        if (row.parent_id) return { error: `${row.code} is al een variant van een hoofdartikel.`, field: 'ids', status: 409 };
-        if (Number(row.has_variants)) return { error: `${row.code} is zelf al een hoofdartikel.`, field: 'ids', status: 409 };
+        if (row.group_id) return { error: `${row.code} is al een subartikel van een artikelgroep.`, field: 'ids', status: 409 };
+        if (Number(row.is_group)) return { error: `${row.code} is zelf al een artikelgroep.`, field: 'ids', status: 409 };
       }
       if (refuseLinked) {
         const linked = rows.find((row) => row.shop_product_id || (shopMatchOf && shopMatchOf(row)));
-        if (linked) return { error: `${linked.code} hangt aan (of komt overeen met) een webshopproduct en de webshop bepaalt de artikellijst. Zet in Beheer → Integraties → Webshop de REST API aan met "Aquatech is de bron" (dan zet Aquatech het hoofdartikel zelf in de webshop), of zet "webshop bepaalt de artikellijst" uit.`, field: 'ids', status: 409 };
+        if (linked) return { error: `${linked.code} hangt aan (of komt overeen met) een webshopproduct en de webshop bepaalt de artikellijst. Zet in Beheer → Integraties → Webshop de REST API aan met "Aquatech is de bron" (dan zet Aquatech de artikelgroep zelf in de webshop), of zet "webshop bepaalt de artikellijst" uit.`, field: 'ids', status: 409 };
       }
       const first = [...rows].sort((left, right) => (left.code < right.code ? -1 : left.code > right.code ? 1 : 0))[0];
       if (rows.some((row) => row.unit !== first.unit || Number(row.vat_rate) !== Number(first.vat_rate) || row.revenue_group !== first.revenue_group)) {
-        return { error: 'De artikelen hebben niet dezelfde eenheid, btw en omzetgroep. Een variant volgt die van het hoofdartikel; pas ze eerst aan.', field: 'ids', status: 409 };
+        return { error: 'De artikelen hebben niet dezelfde eenheid, btw en omzetgroep. Een subartikel volgt die van de artikelgroep; pas ze eerst aan.', field: 'ids', status: 409 };
       }
       if (findCode(tenantId, code)) return { error: 'Er is al een artikel met deze code.', field: 'code', status: 409 };
       const timestamp = currentTimestamp();
-      const parentId = crypto.randomUUID();
+      const groupId = crypto.randomUUID();
       const attributes = [{ name: attributeName, values: ids.map((id) => valueOf.get(id)) }];
       const checked = sanitizeAttributes(attributes);
       if (checked.error) return checked;
       prepare(`INSERT INTO stock_items (id, tenant_id, code, name, unit, location, min_qty, on_hand, cost_price, notes, archived, created_at, updated_at,
-          sale_price, business_price, vat_rate, revenue_group, shop_sync, has_variants, attributes, image_id)
+          sale_price, business_price, vat_rate, revenue_group, shop_sync, is_group, attributes, image_id)
         VALUES (?, ?, ?, ?, ?, '', 0, 0, ?, '', 0, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`)
-        .run(parentId, tenantId, code, name, first.unit, first.cost_price, timestamp, timestamp, first.sale_price, first.business_price ?? null, first.vat_rate, first.revenue_group,
+        .run(groupId, tenantId, code, name, first.unit, first.cost_price, timestamp, timestamp, first.sale_price, first.business_price ?? null, first.vat_rate, first.revenue_group,
           rows.some((row) => Number(row.shop_sync) || row.shop_product_id) ? 1 : 0, JSON.stringify(checked.value), (rows.find((row) => row.image_id) || {}).image_id || null);
       let unlinked = 0;
       for (const row of rows) {
-        // Een apart webshopproduct past niet bij een variatie: de koppeling vervalt, het hoofdartikel wordt later als geheel aan de webshop gekoppeld.
+        // Een apart webshopproduct past niet bij een variatie: de koppeling vervalt, de artikelgroep wordt later als geheel aan de webshop gekoppeld.
         if (row.shop_product_id) unlinked++;
-        prepare(`UPDATE stock_items SET parent_id = ?, variant_values = ?, archived_by_parent = 0, updated_at = ?,
+        prepare(`UPDATE stock_items SET group_id = ?, sub_values = ?, archived_by_parent = 0, updated_at = ?,
             shop_product_id = NULL, shop_price_seen = NULL, shop_stock_seen = NULL, shop_dirty = 0, shop_error = ''
-          WHERE tenant_id = ? AND id = ?`).run(parentId, JSON.stringify({ [checked.value[0].name]: valueOf.get(row.id) }), timestamp, tenantId, row.id);
+          WHERE tenant_id = ? AND id = ?`).run(groupId, JSON.stringify({ [checked.value[0].name]: valueOf.get(row.id) }), timestamp, tenantId, row.id);
       }
       // Momentopname voor het terugdraaien: wat het samenvoegen aan de artikelen verandert (de webshopkoppeling).
       const snapshot = rows.map((row) => ({
         id: row.id, code: row.code, shopProductId: row.shop_product_id || null, shopPriceSeen: row.shop_price_seen ?? null,
         shopStockSeen: row.shop_stock_seen ?? null, shopDirty: Number(row.shop_dirty) || 0, shopError: row.shop_error || '',
       }));
-      prepare('INSERT INTO stock_merges (id, tenant_id, parent_id, parent_code, parent_name, snapshot, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-        .run(crypto.randomUUID(), tenantId, parentId, code, name, JSON.stringify(snapshot), (user && user.id) || null, timestamp);
+      prepare('INSERT INTO stock_merges (id, tenant_id, group_id, group_code, group_name, snapshot, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(crypto.randomUUID(), tenantId, groupId, code, name, JSON.stringify(snapshot), (user && user.id) || null, timestamp);
       // De webshopproducten van deze artikelen (gekoppeld, of via code/sku herkend): die worden na het samenvoegen vervangen door het ene variabele product.
       const shopProductIds = [...new Set(rows.map((row) => {
         const product = row.shop_product_id ? { id: row.shop_product_id } : shopMatchOf ? shopMatchOf(row) : null;
         return product && !product.parentId ? String(product.id) : '';
       }).filter(Boolean))];
-      return { parentId, merged: rows.length, unlinked, shopProductIds };
+      return { groupId, merged: rows.length, unlinked, shopProductIds };
     });
   }
 
   /**
-   * De logboekregel van de samenvoeging waaruit een hoofdartikel is ontstaan (de laatste die nog niet is teruggedraaid).
+   * De logboekregel van de samenvoeging waaruit een artikelgroep is ontstaan (de laatste die nog niet is teruggedraaid).
    * @param {string} tenantId Id van de omgeving.
-   * @param {string} parentId Id van het hoofdartikel.
-   * @returns {{ id: string, createdAt: string, snapshot: object[] }|null} De regel, of null als het hoofdartikel niet via samenvoegen is gemaakt (of voor versie 1.5.9).
+   * @param {string} groupId Id van de artikelgroep.
+   * @returns {{ id: string, createdAt: string, snapshot: object[] }|null} De regel, of null als de artikelgroep niet via samenvoegen is gemaakt (of voor versie 1.5.9).
    */
-  function mergeLogOf(tenantId, parentId) {
-    const row = prepare('SELECT id, snapshot, created_at FROM stock_merges WHERE tenant_id = ? AND parent_id = ? AND undone_at IS NULL ORDER BY created_at DESC LIMIT 1').get(tenantId, parentId);
+  function mergeLogOf(tenantId, groupId) {
+    const row = prepare('SELECT id, snapshot, created_at FROM stock_merges WHERE tenant_id = ? AND group_id = ? AND undone_at IS NULL ORDER BY created_at DESC LIMIT 1').get(tenantId, groupId);
     return row ? { id: row.id, createdAt: row.created_at, snapshot: parseJson(row.snapshot, []) } : null;
   }
 
   /**
    * Controleert of een samenvoeging kan worden teruggedraaid en laat zien wat er gebeurt.
    * @param {string} tenantId Id van de omgeving.
-   * @param {string} id Id van het hoofdartikel.
-   * @returns {object} { code, name, variants: [{ code, name, value, archived, outcome }] (outcome: los, weg of gearchiveerd), logged, mergedAt, restoresLinks, blocked }; blocked is een tekst als terugdraaien nu niet kan (hoofdartikel in de webshop, of een later bijgemaakte variant is gereserveerd); of { error, status }.
+   * @param {string} id Id van de artikelgroep.
+   * @returns {object} { code, name, subartikelen: [{ code, name, value, archived, outcome }] (outcome: los, weg of gearchiveerd), logged, mergedAt, restoresLinks, blocked }; blocked is een tekst als terugdraaien nu niet kan (artikelgroep in de webshop, of een later bijgemaakte subartikel is gereserveerd); of { error, status }.
    */
   function unmergePreview(tenantId, id) {
-    const parent = findItem(tenantId, id);
-    if (!parent) return { error: 'not_found', status: 404 };
-    if (!Number(parent.has_variants)) return { error: 'Dit is geen hoofdartikel.', status: 409 };
-    const children = prepare('SELECT id, code, name, variant_values, archived, shop_product_id FROM stock_items WHERE tenant_id = ? AND parent_id = ? ORDER BY code').all(tenantId, parent.id);
-    const log = mergeLogOf(tenantId, parent.id);
+    const articleGroup = findItem(tenantId, id);
+    if (!articleGroup) return { error: 'not_found', status: 404 };
+    if (!Number(articleGroup.is_group)) return { error: 'Dit is geen artikelgroep.', status: 409 };
+    const children = prepare('SELECT id, code, name, sub_values, archived, shop_product_id FROM stock_items WHERE tenant_id = ? AND group_id = ? ORDER BY code').all(tenantId, articleGroup.id);
+    const log = mergeLogOf(tenantId, articleGroup.id);
     const inLog = new Map((log ? log.snapshot : []).map((entry) => [entry.id, entry]));
-    // Een na het samenvoegen bijgemaakte variant gaat weg, of wordt bij boekingen gearchiveerd: één query voor alle varianten.
+    // Een na het samenvoegen bijgemaakte subartikel gaat weg, of wordt bij boekingen gearchiveerd: één query voor alle subartikelen.
     const extra = log ? children.filter((child) => !inLog.has(child.id)) : [];
     const moved = new Set(extra.length
       ? prepare(`SELECT DISTINCT item_id FROM stock_movements WHERE tenant_id = ? AND item_id IN (${placeholders(extra.length)})`).all(tenantId, ...extra.map((child) => child.id)).map((row) => row.item_id)
       : []);
-    // Een reservering op een na het samenvoegen bijgemaakte variant zou bij het weghalen verdwijnen: dan blokkeren.
+    // Een reservering op een na het samenvoegen bijgemaakte subartikel zou bij het weghalen verdwijnen: dan blokkeren.
     const reserved = extra.length
       ? prepare(`SELECT 1 AS found FROM stock_reservations WHERE tenant_id = ? AND item_id IN (${placeholders(extra.length)}) LIMIT 1`).get(tenantId, ...extra.map((child) => child.id))
       : null;
@@ -858,10 +858,10 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       ? prepare(`SELECT shop_product_id FROM stock_items WHERE tenant_id = ? AND shop_product_id IN (${placeholders(wantedLinks.length)})`).all(tenantId, ...wantedLinks).map((row) => row.shop_product_id)
       : []);
     return {
-      code: parent.code,
-      name: parent.name,
-      variants: children.map((child) => ({
-        code: child.code, name: child.name, value: Object.values(parseJson(child.variant_values, {})).join(' '), archived: Boolean(child.archived),
+      code: articleGroup.code,
+      name: articleGroup.name,
+      subItems: children.map((child) => ({
+        code: child.code, name: child.name, value: Object.values(parseJson(child.sub_values, {})).join(' '), archived: Boolean(child.archived),
         outcome: !log || inLog.has(child.id) ? 'los' : moved.has(child.id) ? 'gearchiveerd' : 'weg',
       })),
       logged: Boolean(log),
@@ -870,38 +870,38 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         const shopProductId = inLog.get(child.id) && inLog.get(child.id).shopProductId;
         return shopProductId && !child.shop_product_id && !takenLinks.has(shopProductId);
       }).length,
-      blocked: parent.shop_product_id
-        ? `${parent.code} is aan een webshopproduct gekoppeld (bijv. via In webshop zetten). Haal dat product eerst uit de webshop of ontkoppel het; daarna kun je de samenvoeging terugdraaien.`
-        : reserved ? 'Een na het samenvoegen bijgemaakte variant is gereserveerd voor een werkorder of bestelling. Handel die reservering eerst af of haal de variant van de werkorder; daarna kun je de samenvoeging terugdraaien.' : null,
+      blocked: articleGroup.shop_product_id
+        ? `${articleGroup.code} is aan een webshopproduct gekoppeld (bijv. via In webshop zetten). Haal dat product eerst uit de webshop of ontkoppel het; daarna kun je de samenvoeging terugdraaien.`
+        : reserved ? 'Een na het samenvoegen bijgemaakt subartikel is gereserveerd voor een werkorder of bestelling. Handel die reservering eerst af of haal het subartikel van de werkorder; daarna kun je de samenvoeging terugdraaien.' : null,
     };
   }
 
   /**
-   * Draait een samenvoeging terug: de varianten worden weer losse artikelen en het
-   * hoofdartikel verdwijnt. Id, code, omschrijving, prijzen, voorraad, afbeelding,
+   * Draait een samenvoeging terug: de subartikelen worden weer losse artikelen en het
+   * artikelgroep verdwijnt. Id, code, omschrijving, prijzen, voorraad, afbeelding,
    * boekingen en reserveringen van de artikelen zijn nooit veranderd en blijven dus
    * zoals ze nu zijn (ook mutaties na het samenvoegen). Uit de momentopname komt
    * de webshopkoppeling terug (tenzij het artikel inmiddels een nieuwe koppeling heeft of het webshopproduct aan een ander
-   * artikel hangt). Bij een hoofdartikel zonder logboekregel (samengevoegd voor
-   * 1.5.9) worden alleen de varianten losgemaakt; webshopkoppelingen kunnen dan niet
-   * terugkomen. Een variant die na het samenvoegen is bijgemaakt gaat weg (met
+   * artikel hangt). Bij een artikelgroep zonder logboekregel (samengevoegd voor
+   * 1.5.9) worden alleen de subartikelen losgemaakt; webshopkoppelingen kunnen dan niet
+   * terugkomen. Een subartikel die na het samenvoegen is bijgemaakt gaat weg (met
    * boekingen: gearchiveerd en losgemaakt).
    * @param {string} tenantId Id van de omgeving.
-   * @param {string} id Id van het hoofdartikel.
+   * @param {string} id Id van de artikelgroep.
    * @returns {object} { code, restored, removed, linksRestored, reconstructed }; of { error, status }.
    */
-  function unmergeVariants(tenantId, id) {
+  function unmergeSubItems(tenantId, id) {
     const preview = unmergePreview(tenantId, id);
     if (preview.error) return preview;
     if (preview.blocked) return { error: preview.blocked, status: 409 };
     const out = transaction(db, () => {
-      const parent = findItem(tenantId, id);
-      if (!parent || !Number(parent.has_variants)) return { error: 'not_found', status: 404 };
-      const log = mergeLogOf(tenantId, parent.id);
+      const articleGroup = findItem(tenantId, id);
+      if (!articleGroup || !Number(articleGroup.is_group)) return { error: 'not_found', status: 404 };
+      const log = mergeLogOf(tenantId, articleGroup.id);
       const inLog = new Map((log ? log.snapshot : []).map((entry) => [entry.id, entry]));
-      const children = prepare('SELECT id, code, archived, archived_by_parent, shop_product_id FROM stock_items WHERE tenant_id = ? AND parent_id = ?').all(tenantId, parent.id);
-      // Een na het samenvoegen bijgemaakte variant gaat weg; dat kan niet zolang een open webshopbestelling hem reserveert.
-      const held = heldByOrders(tenantId, [parent.id, ...(log ? children.filter((child) => !inLog.has(child.id)).map((child) => child.id) : [])]);
+      const children = prepare('SELECT id, code, archived, archived_by_parent, shop_product_id FROM stock_items WHERE tenant_id = ? AND group_id = ?').all(tenantId, articleGroup.id);
+      // Een na het samenvoegen bijgemaakte subartikel gaat weg; dat kan niet zolang een open webshopbestelling hem reserveert.
+      const held = heldByOrders(tenantId, [articleGroup.id, ...(log ? children.filter((child) => !inLog.has(child.id)).map((child) => child.id) : [])]);
       if (held) return held;
       const reopened = [];
       const wantedLinks = [...new Set([...inLog.values()].map((entry) => entry.shopProductId).filter(Boolean))];
@@ -914,16 +914,16 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       let linksRestored = 0;
       for (const child of children) {
         if (log && !inLog.has(child.id)) {
-          // Na het samenvoegen bijgemaakte variant: weg, of bij boekingen gearchiveerd en losgemaakt.
+          // Na het samenvoegen bijgemaakte subartikel: weg, of bij boekingen gearchiveerd en losgemaakt.
           if (removeRow(tenantId, child)) {
-            prepare("UPDATE stock_items SET parent_id = NULL, variant_values = '', archived_by_parent = 0 WHERE tenant_id = ? AND id = ?").run(tenantId, child.id);
+            prepare("UPDATE stock_items SET group_id = NULL, sub_values = '', archived_by_parent = 0 WHERE tenant_id = ? AND id = ?").run(tenantId, child.id);
           }
           removed++;
           continue;
         }
         if (child.archived && child.archived_by_parent) reopened.push(child.code);
         const entry = inLog.get(child.id);
-        prepare(`UPDATE stock_items SET parent_id = NULL, variant_values = '', archived = CASE WHEN archived_by_parent = 1 THEN 0 ELSE archived END,
+        prepare(`UPDATE stock_items SET group_id = NULL, sub_values = '', archived = CASE WHEN archived_by_parent = 1 THEN 0 ELSE archived END,
             archived_by_parent = 0, updated_at = ? WHERE tenant_id = ? AND id = ?`).run(timestamp, tenantId, child.id);
         if (entry && entry.shopProductId && !child.shop_product_id && !taken.has(entry.shopProductId)) {
           prepare('UPDATE stock_items SET shop_product_id = ?, shop_price_seen = ?, shop_stock_seen = ?, shop_dirty = ?, shop_error = ? WHERE tenant_id = ? AND id = ?')
@@ -933,11 +933,11 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         }
         restored++;
       }
-      removeRow(tenantId, parent);
-      // Varianten die door het gearchiveerde hoofdartikel waren gearchiveerd (reserveringen weg) zijn weer actief: werkorders opnieuw laten reserveren.
+      removeRow(tenantId, articleGroup);
+      // Subartikelen die door het gearchiveerde artikelgroep waren gearchiveerd (reserveringen weg) zijn weer actief: werkorders opnieuw laten reserveren.
       if (reopened.length) resyncOpen(tenantId, reopened, { nested: true });
       if (log) prepare('UPDATE stock_merges SET undone_at = ? WHERE tenant_id = ? AND id = ?').run(timestamp, tenantId, log.id);
-      return { code: parent.code, restored, removed, linksRestored, reconstructed: !log };
+      return { code: articleGroup.code, restored, removed, linksRestored, reconstructed: !log };
     });
     // Herstelde webshopkoppelingen krijgen bij de volgende ronde de actuele prijs en voorraad.
     if (out.linksRestored) dirty(tenantId);
@@ -946,10 +946,10 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
 
   /**
    * De artikellijst om uit te kiezen (werkorder, offerte): gewone artikelen en
-   * hoofdartikelen met hun varianten, met verkoopprijs en beschikbaar aantal;
+   * artikelgroepen met hun subartikelen, met verkoopprijs en beschikbaar aantal;
    * zonder inkoopprijs of andere interne velden. Gearchiveerde artikelen niet.
    * @param {string} tenantId Id van de omgeving.
-   * @returns {object[]} code, name, unit, salePrice, vatRate en available; een hoofdartikel ook attributes en variants (met values).
+   * @returns {object[]} code, name, unit, salePrice, vatRate en available; een artikelgroep ook attributes en subartikelen (met values).
    */
   function articleChoices(tenantId) {
     const items = listRows(tenantId);
@@ -959,14 +959,14 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
      * @returns {object} code, name, unit, salePrice, vatRate en available.
      */
     const pick = (item) => ({ code: item.code, name: item.name, unit: item.unit, salePrice: item.salePrice, vatRate: item.vatRate, available: item.available });
-    const parents = new Map(items.filter((item) => item.hasVariants).map((item) => [item.id, { ...pick(item), attributes: item.attributes, variants: [] }]));
+    const articleGroups = new Map(items.filter((item) => item.isGroup).map((item) => [item.id, { ...pick(item), attributes: item.attributes, subItems: [] }]));
     const out = [];
     for (const item of items) {
-      if (item.hasVariants) out.push(parents.get(item.id));
-      else if (item.parentId && parents.has(item.parentId)) parents.get(item.parentId).variants.push({ ...pick(item), values: item.values });
+      if (item.isGroup) out.push(articleGroups.get(item.id));
+      else if (item.groupId && articleGroups.has(item.groupId)) articleGroups.get(item.groupId).subItems.push({ ...pick(item), values: item.values });
       else out.push(pick(item));
     }
-    for (const parent of parents.values()) parent.available = round3(parent.variants.reduce((sum, variant) => sum + variant.available, 0));
+    for (const articleGroup of articleGroups.values()) articleGroup.available = round3(articleGroup.subItems.reduce((sum, subItem) => sum + subItem.available, 0));
     return out;
   }
 
@@ -999,7 +999,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       const existing = findItem(tenantId, id);
       if (!existing) return { error: 'not_found', status: 404 };
       if (existing.archived) return { error: 'Dit artikel is gearchiveerd.', status: 409 };
-      if (Number(existing.has_variants)) return { error: 'Een hoofdartikel heeft zelf geen voorraad: boek op een variant.', status: 409 };
+      if (Number(existing.is_group)) return { error: 'Een artikelgroep heeft zelf geen voorraad: boek op een subartikel.', status: 409 };
       const delta = kind === 'telling' ? round3(qty - existing.on_hand) : round3(qty);
       const movementId = book(tenantId, existing.id, delta, { kind, note: kind === 'telling' ? note || `Geteld: ${round3(qty)}` : note, user, unitCost: checkedCost.value });
       if (hasCost && (existing.cost_price == null || Math.abs(Number(existing.cost_price) - checkedCost.value) > 0.00005)) {
@@ -1040,18 +1040,18 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
 
   /**
    * Zet webshopproducten in de voorraad (binnen de transactie van de
-   * aanroeper). Een variabel product wordt een hoofdartikel met kenmerken, zijn
-   * variaties worden varianten eronder; een variatie komt pas na zijn product.
+   * aanroeper). Een variabel product wordt een artikelgroep met kenmerken, zijn
+   * variaties worden subartikelen eronder; een variatie komt pas na zijn product.
    * @param {string} tenantId Id van de omgeving.
    * @param {{ product: object, code: string }[]} fresh De nieuwe producten met hun voorraadcode.
-   * @param {Map<string, object>} parentItems Bestaande hoofdartikelen per webshop-product-id ({ id, name, has_variants, attributes }).
+   * @param {Map<string, object>} groupItems Bestaande artikelgroepen per webshop-product-id ({ id, name, is_group, attributes }).
    * @param {{ vatRate: number, priceOf: Function }} options Btw-tarief van nieuwe artikelen en product → verkoopprijs excl. btw.
    * @returns {{ codes: string[], skipped: number }} De codes van de nieuwe artikelen en het aantal overgeslagen variaties.
    */
-  function insertShopProducts(tenantId, fresh, parentItems, { vatRate, priceOf }) {
+  function insertShopProducts(tenantId, fresh, groupItems, { vatRate, priceOf }) {
     const timestamp = currentTimestamp();
     const put = prepare(`INSERT INTO stock_items (id, tenant_id, code, name, unit, location, min_qty, on_hand, cost_price, notes, archived, created_at, updated_at,
-        sale_price, vat_rate, revenue_group, shop_sync, shop_product_id, parent_id, has_variants, attributes, variant_values, stock_managed)
+        sale_price, vat_rate, revenue_group, shop_sync, shop_product_id, group_id, is_group, attributes, sub_values, stock_managed)
       VALUES (?, ?, ?, ?, 'st', '', 0, 0, NULL, '', 0, ?, ?, ?, ?, 'producten', 1, ?, ?, ?, ?, ?, ?)`);
     const codes = [];
     let skipped = 0;
@@ -1065,14 +1065,14 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         const attributes = shopAttributesOf(product);
         const id = crypto.randomUUID();
         put.run(id, tenantId, code, cleanText(product.name, 200) || code, timestamp, timestamp, null, vatRate, String(product.id), null, 1, JSON.stringify(attributes), '', 1);
-        parentItems.set(String(product.id), { id, name: cleanText(product.name, 200) || code, has_variants: 1, attributes: JSON.stringify(attributes) });
+        groupItems.set(String(product.id), { id, name: cleanText(product.name, 200) || code, is_group: 1, attributes: JSON.stringify(attributes) });
       } else if (product.parentId) {
-        const parent = parentItems.get(String(product.parentId));
-        if (!parent || !Number(parent.has_variants)) { skipped++; continue; }
+        const articleGroup = groupItems.get(String(product.parentId));
+        if (!articleGroup || !Number(articleGroup.is_group)) { skipped++; continue; }
         const values = {};
         for (const attribute of product.attributes || []) if (attribute.name && attribute.option) values[cleanText(attribute.name, 40)] = cleanText(attribute.option, 40);
-        put.run(crypto.randomUUID(), tenantId, code, Object.keys(values).length ? variantName(parent.name, values) : cleanText(product.name, 200) || code, timestamp, timestamp,
-          salePrice, vatRate, String(product.id), parent.id, 0, '', JSON.stringify(values), managed);
+        put.run(crypto.randomUUID(), tenantId, code, Object.keys(values).length ? subItemName(articleGroup.name, values) : cleanText(product.name, 200) || code, timestamp, timestamp,
+          salePrice, vatRate, String(product.id), articleGroup.id, 0, '', JSON.stringify(values), managed);
       } else {
         put.run(crypto.randomUUID(), tenantId, code, cleanText(product.name, 200) || code, timestamp, timestamp, salePrice, vatRate, String(product.id), null, 0, '', '', managed);
       }
@@ -1083,32 +1083,32 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
 
   /**
    * Maakt van een bestaand gewoon artikel dat aan een variabel webshopproduct
-   * gekoppeld is (van vóór de varianten) een hoofdartikel, zodat de variaties
+   * gekoppeld is (van vóór de subartikelen) een artikelgroep, zodat de variaties
    * eronder kunnen komen. Alleen als het artikel geen voorraad, boekingen of
    * reserveringen heeft; anders krijgt het een melding en blijft het zoals het
    * is. Binnen een lopende transactie.
    * @param {string} tenantId Id van de omgeving.
-   * @param {object} item Het artikel (id); wordt bij omzetten bijgewerkt (has_variants, attributes).
+   * @param {object} item Het artikel (id); wordt bij omzetten bijgewerkt (is_group, attributes).
    * @param {object} product Het variabele webshopproduct.
-   * @returns {boolean} true als het artikel nu een hoofdartikel is.
+   * @returns {boolean} true als het artikel nu een artikelgroep is.
    */
-  function promoteToParent(tenantId, item, product) {
-    const row = prepare('SELECT on_hand, parent_id, has_variants FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, item.id);
-    if (!row || row.parent_id) return false;
-    if (Number(row.has_variants)) return true;
+  function promoteToGroup(tenantId, item, product) {
+    const row = prepare('SELECT on_hand, group_id, is_group FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, item.id);
+    if (!row || row.group_id) return false;
+    if (Number(row.is_group)) return true;
     const used = Math.abs(Number(row.on_hand)) > 0 || prepare('SELECT EXISTS (SELECT 1 FROM stock_movements WHERE tenant_id = ? AND item_id = ?) OR EXISTS (SELECT 1 FROM stock_reservations WHERE tenant_id = ? AND item_id = ?) AS n')
       .get(tenantId, item.id, tenantId, item.id).n;
     if (used) {
       prepare('UPDATE stock_items SET shop_error = ? WHERE tenant_id = ? AND id = ?')
-        .run('In de webshop is dit een product met variaties, maar dit artikel heeft voorraad of boekingen. Maak een nieuw hoofdartikel en zet de varianten daaronder.', tenantId, item.id);
+        .run('In de webshop is dit een product met variaties, maar dit artikel heeft voorraad of boekingen. Maak een nieuw artikelgroep en zet de subartikelen daaronder.', tenantId, item.id);
       return false;
     }
     const attributes = JSON.stringify(shopAttributesOf(product));
-    prepare('UPDATE stock_items SET has_variants = 1, ean = NULL, attributes = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(attributes, currentTimestamp(), tenantId, item.id);
+    prepare('UPDATE stock_items SET is_group = 1, ean = NULL, attributes = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(attributes, currentTimestamp(), tenantId, item.id);
     prepare('DELETE FROM item_suppliers WHERE tenant_id = ? AND item_id = ?').run(tenantId, item.id);
     prepare('DELETE FROM item_packagings WHERE tenant_id = ? AND item_id = ?').run(tenantId, item.id);
     prepare('DELETE FROM item_text_drafts WHERE tenant_id = ? AND item_id = ?').run(tenantId, item.id);
-    item.has_variants = 1;
+    item.is_group = 1;
     item.attributes = attributes;
     return true;
   }
@@ -1116,15 +1116,15 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   /**
    * Bestaande artikelen die bij een variabel webshopproduct horen, per product-id.
    * @param {string} tenantId Id van de omgeving.
-   * @returns {Map<string, object>} id, name, has_variants en attributes per webshop-product-id.
+   * @returns {Map<string, object>} id, name, is_group en attributes per webshop-product-id.
    */
-  const parentItemsOf = (tenantId) => new Map(prepare('SELECT id, name, has_variants, attributes, shop_product_id FROM stock_items WHERE tenant_id = ? AND parent_id IS NULL AND shop_product_id IS NOT NULL')
+  const groupItemsOf = (tenantId) => new Map(prepare('SELECT id, name, is_group, attributes, shop_product_id FROM stock_items WHERE tenant_id = ? AND group_id IS NULL AND shop_product_id IS NOT NULL')
     .all(tenantId).map((row) => [String(row.shop_product_id), row]));
 
   /**
    * Producten uit de webshop als voorraadartikel overnemen (nog niet bestaande
    * codes). Code = het veld aquatech_code, de sku of WC-<id>; prijs = de webshopprijs
-   * (excl. btw). Een variabel product neemt zijn variaties mee als varianten.
+   * (excl. btw). Een variabel product neemt zijn variaties mee als subartikelen.
    * De stand komt bij de volgende synchronisatie uit de webshop.
    * @param {string} tenantId Id van de omgeving.
    * @param {object[]} products De webshopproducten (met variaties).
@@ -1151,13 +1151,13 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     const have = new Set(fresh.length ? prepare(`SELECT code FROM stock_items WHERE tenant_id = ? AND code IN (${placeholders(fresh.length)})`).all(tenantId, ...fresh.map((entry) => entry.code)).map((row) => row.code) : []);
     const todo = fresh.filter((entry) => !have.has(entry.code));
     const out = transaction(db, () => {
-      const parentItems = parentItemsOf(tenantId);
-      // Een eerder als gewoon artikel overgenomen variabel product wordt (als dat veilig kan) een hoofdartikel.
+      const groupItems = groupItemsOf(tenantId);
+      // Een eerder als gewoon artikel overgenomen variabel product wordt (als dat veilig kan) een artikelgroep.
       for (const product of chosen) {
-        const item = product.type === 'variable' && parentItems.get(String(product.id));
-        if (item && !Number(item.has_variants)) promoteToParent(tenantId, item, product);
+        const item = product.type === 'variable' && groupItems.get(String(product.id));
+        if (item && !Number(item.is_group)) promoteToGroup(tenantId, item, product);
       }
-      return insertShopProducts(tenantId, todo, parentItems, { vatRate: 21, priceOf: (product) => product.price });
+      return insertShopProducts(tenantId, todo, groupItems, { vatRate: 21, priceOf: (product) => product.price });
     });
     if (out.codes.length) resyncOpen(tenantId, out.codes);
     return { created: out.codes.length, existing: have.size, skipped };
@@ -1168,8 +1168,8 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * code of sku wordt een voorraadartikel (nieuw, of een gearchiveerd artikel
    * komt terug), artikelen die niet in de webshop staan worden gearchiveerd
    * (nooit verwijderd: werkorders, offertes en facturen houden hun regels).
-   * Een variabel product wordt een hoofdartikel, zijn variaties varianten; nieuwe
-   * waarden van een kenmerk in de webshop komen bij het hoofdartikel.
+   * Een variabel product wordt een artikelgroep, zijn variaties subartikelen; nieuwe
+   * waarden van een kenmerk in de webshop komen bij de artikelgroep.
    * @param {string} tenantId Id van de omgeving.
    * @param {object[]} products Alle producten uit de webshop (met variaties).
    * @param {Function} matchProduct Functie item ({ code }) → webshopproduct of null.
@@ -1177,23 +1177,23 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @returns {{ created: number, restored: number, archived: number, skippedProducts: number }} Aantallen.
    */
   function mirrorShop(tenantId, products, matchProduct, { vatRate = 21, priceOf = (product) => product.price } = {}) {
-    const items = prepare('SELECT id, code, name, archived, shop_product_id, parent_id, has_variants, attributes FROM stock_items WHERE tenant_id = ?').all(tenantId);
+    const items = prepare('SELECT id, code, name, archived, shop_product_id, group_id, is_group, attributes FROM stock_items WHERE tenant_id = ?').all(tenantId);
     const timestamp = currentTimestamp();
     const matchedProducts = new Set();
-    const parentItems = new Map();
+    const groupItems = new Map();
     const restore = [];
     const archive = [];
     const attributeUpdates = [];
-    const legacyParents = [];
+    const legacyGroup = [];
     const seenCodes = new Set(items.map((item) => item.code));
     for (const item of items) {
       const product = matchProduct(item);
       if (product) {
         matchedProducts.add(String(product.id));
         if (item.archived) restore.push(item);
-        if (!product.parentId) parentItems.set(String(product.id), item);
-        if (product.type === 'variable' && !Number(item.has_variants) && !item.parent_id) legacyParents.push({ item, product });
-        else if (product.type === 'variable' && Number(item.has_variants)) {
+        if (!product.parentId) groupItems.set(String(product.id), item);
+        if (product.type === 'variable' && !Number(item.is_group) && !item.group_id) legacyGroup.push({ item, product });
+        else if (product.type === 'variable' && Number(item.is_group)) {
           const merged = mergeAttributes(parseJson(item.attributes, []), shopAttributesOf(product));
           if (JSON.stringify(merged) !== item.attributes) attributeUpdates.push({ id: item.id, attributes: JSON.stringify(merged) });
         }
@@ -1214,9 +1214,9 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     let createdCount = 0;
     transaction(db, () => {
       for (const update of attributeUpdates) prepare('UPDATE stock_items SET attributes = ?, updated_at = ? WHERE tenant_id = ? AND id = ?').run(update.attributes, timestamp, tenantId, update.id);
-      // Van vóór de varianten: een gewoon artikel bij een variabel product wordt (als dat veilig kan) een hoofdartikel.
-      for (const { item, product } of legacyParents) promoteToParent(tenantId, item, product);
-      const inserted = insertShopProducts(tenantId, fresh, parentItems, { vatRate, priceOf });
+      // Van vóór de subartikelen: een gewoon artikel bij een variabel product wordt (als dat veilig kan) een artikelgroep.
+      for (const { item, product } of legacyGroup) promoteToGroup(tenantId, item, product);
+      const inserted = insertShopProducts(tenantId, fresh, groupItems, { vatRate, priceOf });
       createdCount = inserted.codes.length;
       skippedProducts += inserted.skipped;
       for (let start = 0; start < restore.length; start += BATCH) {
@@ -1246,15 +1246,15 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @returns {{ created: number, skippedProducts: number }} Aantallen.
    */
   function addMissingShop(tenantId, products, matchProduct, { vatRate = 21, priceOf = (product) => product.price, onProgress = null } = {}) {
-    const items = prepare('SELECT id, code, name, shop_product_id, parent_id, has_variants, attributes FROM stock_items WHERE tenant_id = ?').all(tenantId);
+    const items = prepare('SELECT id, code, name, shop_product_id, group_id, is_group, attributes FROM stock_items WHERE tenant_id = ?').all(tenantId);
     const matchedProducts = new Set();
-    const parentItems = new Map();
+    const groupItems = new Map();
     const seenCodes = new Set(items.map((item) => item.code));
     for (const item of items) {
       const product = matchProduct(item);
       if (!product) continue;
       matchedProducts.add(String(product.id));
-      if (!product.parentId) parentItems.set(String(product.id), item);
+      if (!product.parentId) groupItems.set(String(product.id), item);
     }
     const productIds = new Set(products.map((product) => String(product.id)));
     const fresh = [];
@@ -1272,7 +1272,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     for (let start = 0; start < ordered.length; start += 50) {
       const chunk = ordered.slice(start, start + 50);
       transaction(db, () => {
-        const inserted = insertShopProducts(tenantId, chunk, parentItems, { vatRate, priceOf });
+        const inserted = insertShopProducts(tenantId, chunk, groupItems, { vatRate, priceOf });
         created += inserted.codes.length;
         skippedProducts += inserted.skipped;
         if (inserted.codes.length) resyncOpen(tenantId, inserted.codes, { nested: true });
@@ -1318,7 +1318,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @returns {object[]} De rijen.
    */
   const itemsFor = (tenantId, codes) => (codes.length
-    ? prepare(`SELECT ${ITEM_COLS} FROM stock_items WHERE tenant_id = ? AND archived = 0 AND has_variants = 0 AND code IN (${placeholders(codes.length)})`).all(tenantId, ...codes) : []);
+    ? prepare(`SELECT ${ITEM_COLS} FROM stock_items WHERE tenant_id = ? AND archived = 0 AND is_group = 0 AND code IN (${placeholders(codes.length)})`).all(tenantId, ...codes) : []);
   /**
    * Netto afgeboekt per artikel voor deze werkorder (afboeking − retour).
    * @param {string} tenantId Id van de omgeving.
@@ -1468,7 +1468,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     return inTransaction(() => {
       const existing = findItem(tenantId, id);
       if (!existing) return { error: 'not_found', status: 404 };
-      if (Number(existing.has_variants)) return { error: 'Een hoofdartikel heeft zelf geen voorraad: geef de inkoopprijs per variant op.', status: 409 };
+      if (Number(existing.is_group)) return { error: 'Een artikelgroep heeft zelf geen voorraad: geef de inkoopprijs per subartikel op.', status: 409 };
       const out = costs.addPrice(tenantId, existing, { price: input.price, validFrom: input.validFrom, note: input.note, user });
       if (out.error) return { ...out, status: 400 };
       repriceItem(tenantId, existing.id, 'inkoopprijs', user);
@@ -1585,15 +1585,15 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       });
     }
     const stockCodes = new Set(items.map((item) => item.code));
-    // Code van een hoofdartikel: eerst een maat (variant) kiezen.
+    // Code van een artikelgroep: eerst een maat (subartikel) kiezen.
     const missing = [...need.keys()].filter((code) => !stockCodes.has(code));
-    const parentRows = missing.length ? prepare(`SELECT code, name FROM stock_items WHERE tenant_id = ? AND archived = 0 AND has_variants = 1 AND code IN (${placeholders(missing.length)})`).all(tenantId, ...missing) : [];
-    const parentCodes = new Set(parentRows.map((row) => row.code));
-    const chooseVariant = parentRows.map((row) => ({ code: row.code, name: row.name, qty: need.get(row.code).qty, unit: need.get(row.code).unit }));
-    const notInStock = [...need.entries()].filter(([code]) => !stockCodes.has(code) && !parentCodes.has(code)).map(([code, required]) => ({ code, description: required.description, qty: required.qty, unit: required.unit }));
+    const groupRows = missing.length ? prepare(`SELECT code, name FROM stock_items WHERE tenant_id = ? AND archived = 0 AND is_group = 1 AND code IN (${placeholders(missing.length)})`).all(tenantId, ...missing) : [];
+    const groupCodes = new Set(groupRows.map((row) => row.code));
+    const chooseSubItem = groupRows.map((row) => ({ code: row.code, name: row.name, qty: need.get(row.code).qty, unit: need.get(row.code).unit }));
+    const notInStock = [...need.entries()].filter(([code]) => !stockCodes.has(code) && !groupCodes.has(code)).map(([code, required]) => ({ code, description: required.description, qty: required.qty, unit: required.unit }));
     lines.sort((left, right) => left.code.localeCompare(right.code));
     return {
-      workOrder: { id: workOrder.id, number: workOrder.number, status: workOrder.status }, lines, notInStock, chooseVariant,
+      workOrder: { id: workOrder.id, number: workOrder.number, status: workOrder.status }, lines, notInStock, chooseSubItem,
       usage: usageBooked(tenantId, workOrder.id),
       movements: movements(tenantId, { workOrderId: workOrder.id, limit: LIST_LIMIT }),
     };
@@ -1662,7 +1662,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         if (item && earlier.item_id === item.id) continue;
         if (round3(earlier.qty)) last = book(tenantId, earlier.item_id, -earlier.qty, { kind: earlier.qty < 0 ? 'retour' : 'afboeking', workOrder, source, note: 'Verbruik gewijzigd', user });
       }
-      if (item && !item.archived && !Number(item.has_variants)) {
+      if (item && !item.archived && !Number(item.is_group)) {
         const was = round3(-(previous.find((earlier) => earlier.item_id === item.id)?.qty || 0));
         const delta = round3((Number(qty) || 0) - was);
         if (delta) last = book(tenantId, item.id, -delta, { kind: delta > 0 ? 'afboeking' : 'retour', workOrder, source, note: 'Materiaalverbruik', user });
@@ -1686,8 +1686,8 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     const wanted = codes ? [...new Set(codes.map(normalizeCode))].filter(Boolean) : null;
     if (wanted && !wanted.length) return {};
     const rows = wanted
-      ? prepare(`SELECT id, code, name, unit, sale_price, cost_price, vat_rate, revenue_group FROM stock_items WHERE tenant_id = ? AND has_variants = 0 AND code IN (${placeholders(wanted.length)})`).all(tenantId, ...wanted)
-      : prepare('SELECT id, code, name, unit, sale_price, cost_price, vat_rate, revenue_group FROM stock_items WHERE tenant_id = ? AND archived = 0 AND has_variants = 0').all(tenantId);
+      ? prepare(`SELECT id, code, name, unit, sale_price, cost_price, vat_rate, revenue_group FROM stock_items WHERE tenant_id = ? AND is_group = 0 AND code IN (${placeholders(wanted.length)})`).all(tenantId, ...wanted)
+      : prepare('SELECT id, code, name, unit, sale_price, cost_price, vat_rate, revenue_group FROM stock_items WHERE tenant_id = ? AND archived = 0 AND is_group = 0').all(tenantId);
     const out = {};
     for (const row of rows) {
       out[row.code] = { id: row.id, name: row.name, unit: row.unit, salePrice: row.sale_price == null ? null : Number(row.sale_price), vatRate: Number(row.vat_rate), revenueGroup: row.revenue_group };
@@ -1712,7 +1712,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   function reorderProposal(tenantId, { preferred = new Map(), incoming = new Map() } = {}) {
     let total = null;
     const groups = new Map();
-    const items = list(tenantId).filter((item) => !item.hasVariants && item.available + (incoming.get(item.id) || 0) < item.minQty).map((item) => {
+    const items = list(tenantId).filter((item) => !item.isGroup && item.available + (incoming.get(item.id) || 0) < item.minQty).map((item) => {
       const onTheWay = incoming.get(item.id) || 0;
       const target = item.reorderQty != null && item.reorderQty >= item.minQty ? item.reorderQty : round3(item.minQty * 2);
       const supplier = preferred.get(item.id) || null;
@@ -1767,7 +1767,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    */
   function repriceItem(tenantId, itemId, source, user = null) {
     const row = findItem(tenantId, itemId);
-    if (!pricer || !row || row.archived || Number(row.has_variants) || row.price_mode !== 'factor') return false;
+    if (!pricer || !row || row.archived || Number(row.is_group) || row.price_mode !== 'factor') return false;
     const price = pricer(tenantId, { id: row.id, costPrice: row.cost_price, priceFactor: row.price_factor ?? null });
     if (price === null || (row.sale_price != null && Math.abs(Number(row.sale_price) - price) < 0.005)) return false;
     prepare(`UPDATE stock_items SET sale_price = ?, updated_at = ?, shop_dirty = CASE WHEN shop_sync = 1 AND shop_product_id IS NOT NULL THEN 1 ELSE shop_dirty END
@@ -1787,7 +1787,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    */
   function receiptCost(tenantId, itemId, unitCost, { user = null, note = '' } = {}) {
     const existing = findItem(tenantId, itemId);
-    if (!existing || Number(existing.has_variants) || !Number.isFinite(unitCost) || unitCost < 0) return;
+    if (!existing || Number(existing.is_group) || !Number.isFinite(unitCost) || unitCost < 0) return;
     if (existing.cost_price != null && Math.abs(Number(existing.cost_price) - unitCost) <= 0.00005) return;
     // Een fout in de prijshistorie mag de ontvangst van goederen niet blokkeren: de voorraad is dan al geboekt. De fout komt wel in het log.
     const added = costs.addPrice(tenantId, existing, { price: unitCost, note, user });
@@ -1823,7 +1823,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         for (const { change, price } of block) args.push(change.id, price);
         const result = prepare(`UPDATE stock_items SET sale_price = CASE id ${whens} END, updated_at = ?,
           shop_dirty = CASE WHEN shop_sync = 1 AND shop_product_id IS NOT NULL THEN 1 ELSE shop_dirty END
-          WHERE tenant_id = ? AND id IN (${marks}) AND has_variants = 0 AND archived = 0 AND price_mode = 'factor' RETURNING id`)
+          WHERE tenant_id = ? AND id IN (${marks}) AND is_group = 0 AND archived = 0 AND price_mode = 'factor' RETURNING id`)
           .all(...args, currentTimestamp(), tenantId, ...block.map(({ change }) => change.id));
         const touched = new Set(result.map((row) => row.id));
         changed += touched.size;
@@ -1837,7 +1837,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
 
   /**
    * Zet nieuwe verkoopprijzen door (herberekening met de prijsfactor), in één transactie. Gekoppelde webshopproducten gaan opnieuw mee.
-   * Hoofdartikelen (met varianten) hebben geen eigen prijs en worden overgeslagen.
+   * Artikelgroepen (met subartikelen) hebben geen eigen prijs en worden overgeslagen.
    * @param {string} tenantId Id van de omgeving.
    * @param {{ id: string, salePrice: number }[]} changes De nieuwe prijzen (excl. btw).
    * @returns {number} Aantal artikelen waarvan de prijs is gewijzigd.
@@ -1848,7 +1848,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     transaction(db, () => {
       const update = prepare(`UPDATE stock_items SET sale_price = ?, updated_at = ?,
           shop_dirty = CASE WHEN shop_sync = 1 AND shop_product_id IS NOT NULL THEN 1 ELSE shop_dirty END
-        WHERE tenant_id = ? AND id = ? AND has_variants = 0 AND archived = 0`);
+        WHERE tenant_id = ? AND id = ? AND is_group = 0 AND archived = 0`);
       for (const change of changes) {
         const price = Math.round(Number(change.salePrice) * 100) / 100;
         if (Number.isFinite(price) && price >= 0 && price <= MAX_QTY) changed += Number(update.run(price, timestamp, tenantId, String(change.id)).changes) || 0;
@@ -1952,7 +1952,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   }
 
   return {
-    units, addUnit, removeUnit, setVariants, articleChoices, mergeSuggestions, mergeIntoVariants, unmergePreview, unmergeVariants,
+    units, addUnit, removeUnit, setSubItems, articleChoices, mergeSuggestions, mergeIntoGroup, unmergePreview, unmergeSubItems,
     list, get, create, update, remove, move, importCatalog, importShop, mirrorShop, addMissingShop, movements, reservations: reservationsOf,
     syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode,
     reorderProposal, reserveOrder, releaseOrder, issueOrder, issueOrderPart, shortageFor, onDirty: setDirtyHook, setPricer, setPriceLogger, setSalePrices, repriceItem, applyAutoPrices, receiptCost,

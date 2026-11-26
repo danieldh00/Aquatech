@@ -110,7 +110,7 @@ function planItemImport({ stock, tenantId, body }) {
       if (checked.error) problems.push(checked.error);
       else if (existing) {
         if (existing.archived) problems.push('Dit artikel is gearchiveerd; zet het eerst terug uit het archief.');
-        else if (existing.hasVariants) problems.push('Een hoofdartikel met varianten wijzig je niet via de import; importeer de varianten zelf.');
+        else if (existing.isGroup) problems.push('Een artikelgroep met subartikelen wijzig je niet via de import; importeer de subartikelen zelf.');
         else {
           const diff = diffItem(checked.value, existing);
           changes = diff.changes;

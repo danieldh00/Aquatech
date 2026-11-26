@@ -320,7 +320,7 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
     if (Number(supplier.archived) && supplier.id !== allowArchivedSupplierId) return { error: 'Deze leverancier is gearchiveerd.', field: 'supplierId', status: 409 };
     const ids = value.lines.map((line) => line.itemId);
     const items = ids.length
-      ? prepare(`SELECT id, code, name, unit, cost_price, has_variants, archived FROM stock_items WHERE tenant_id = ? AND id IN (${placeholders(ids.length)})`).all(tenantId, ...ids)
+      ? prepare(`SELECT id, code, name, unit, cost_price, is_group, archived FROM stock_items WHERE tenant_id = ? AND id IN (${placeholders(ids.length)})`).all(tenantId, ...ids)
       : [];
     const itemById = new Map(items.map((item) => [item.id, item]));
     const links = ids.length
@@ -331,7 +331,7 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
     for (const line of value.lines) {
       const item = itemById.get(line.itemId);
       if (!item) return { error: 'Een artikel op deze order bestaat niet.', field: 'itemId', status: 404 };
-      if (Number(item.has_variants)) return { error: `${item.code} is een hoofdartikel: bestel een maat of variant.`, field: 'itemId', status: 409 };
+      if (Number(item.is_group)) return { error: `${item.code} is een artikelgroep: bestel een maat of subItem.`, field: 'itemId', status: 409 };
       if (Number(item.archived)) return { error: `${item.code} is gearchiveerd.`, field: 'itemId', status: 409 };
       const link = linkByItem.get(item.id);
       let unitCost = line.unitCost;
@@ -821,7 +821,7 @@ function createPurchaseOrderStore(db, { stock, suppliers }) {
       // niet al als wat besteld of onderweg is het artikel tijdelijk uit het voorstel haalt.
       const stale = prepare(`SELECT d.item_id FROM purchase_proposal_dismissals d
         JOIN stock_items i ON i.tenant_id = d.tenant_id AND i.id = d.item_id
-        WHERE d.tenant_id = ? AND (i.archived = 1 OR i.has_variants = 1
+        WHERE d.tenant_id = ? AND (i.archived = 1 OR i.is_group = 1
           OR i.on_hand - (SELECT COALESCE(SUM(r.qty), 0) FROM stock_reservations r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id) >= i.min_qty)`)
         .all(tenantId).map((row) => row.item_id);
       for (let start = 0; start < stale.length; start += 500) {

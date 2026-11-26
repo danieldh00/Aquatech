@@ -1,5 +1,5 @@
 // Feitencontrole van een door de AI geschreven producttekst. De tekst mag alleen feiten bevatten die in de bekende
-// artikelgegevens staan (naam, code, eenheid, merk, EAN, categorie, specificaties, varianten, bestaande omschrijvingen).
+// artikelgegevens staan (naam, code, eenheid, merk, EAN, categorie, specificaties, subartikelen, bestaande omschrijvingen).
 // `buildFacts` zet die gegevens om naar bronvelden (voor de opdracht aan de AI én als bron voor de controle);
 // `checkText` vergelijkt getallen, getal + eenheid en claims (certificeringen, garantie) in de concepttekst met die bron en
 // geeft elke afwijking terug als waarschuwing voor het goedkeuringsscherm. Alles zuivere functies, zonder database of netwerk.
@@ -73,7 +73,7 @@ function buildFacts(row, categoryName = '', specs = null) {
   const clip = (value) => String(value || '').trim().slice(0, MAX_SOURCE_TEXT);
   let attributes = [];
   try { attributes = JSON.parse(row.attributes || '[]'); } catch { attributes = []; }
-  const variantLines = (Array.isArray(attributes) ? attributes : []).filter((attribute) => attribute && attribute.name && Array.isArray(attribute.values) && attribute.values.length)
+  const subItemLines = (Array.isArray(attributes) ? attributes : []).filter((attribute) => attribute && attribute.name && Array.isArray(attribute.values) && attribute.values.length)
     .map((attribute) => `${attribute.name}: ${attribute.values.join(', ')}`);
   const known = specs && typeof specs === 'object' ? specs : {};
   const connectionLines = (Array.isArray(known.connections) ? known.connections : []).map((connection) => (connection.kind === 'draad' ? `${connection.gender}draad ${connection.size}` : `${connection.kind} ${connection.size}`));
@@ -88,7 +88,7 @@ function buildFacts(row, categoryName = '', specs = null) {
     ['Naam', row.name], ['Artikelcode', row.code], ['Eenheid', row.unit], ['Merk', details.brand], ['EAN', row.ean],
     ['Gewicht (gram)', row.weight_grams == null ? '' : String(row.weight_grams)], ['Categorie in de webshop', categoryName],
     ['Specificaties', details.specifications.map((specification) => `${specification.name}: ${specification.value}`).join('\n')],
-    ['Beschikbaar in (varianten)', variantLines.join('\n')],
+    ['Beschikbaar in (subartikelen)', subItemLines.join('\n')],
     ['Soort artikel (volgens fabrikantbron)', known.role && known.role !== 'overig' ? known.role : ''],
     ['Aansluitingen (volgens fabrikantbron)', connectionLines.join('; ')],
     ['Werkdruk in bar (volgens fabrikantbron)', rangeText(known.pressureBar)],

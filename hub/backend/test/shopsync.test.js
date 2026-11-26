@@ -326,20 +326,20 @@ test('webshop: een nieuwe variatie bij een bestaand variabel artikel krijgt de n
   const { tid, stock, db } = setup(new Map(), { url: 'http://shop.test', mode: 'rest', mirror: false });
   const user = { id: null, display_name: 'Test' };
   const parent = stock.create(tid, user, { code: 'KRAAN', name: 'Kogelkraan', salePrice: 5 }).item;
-  db.prepare('UPDATE stock_items SET has_variants = 1, shop_product_id = ?, attributes = ? WHERE tenant_id = ? AND id = ?')
+  db.prepare('UPDATE stock_items SET is_group = 1, shop_product_id = ?, attributes = ? WHERE tenant_id = ? AND id = ?')
     .run('60', JSON.stringify([{ name: 'Maat', values: ['1/2'] }]), tid, parent.id);
   const parentProduct = { id: '60', type: 'variable', sku: 'KRAAN', code: '', name: 'Kogelkraan', price: 5, attributes: [], parentId: null };
   const variation = { id: '61', type: 'variation', parentId: '60', sku: 'KRAAN-34', code: '', name: 'Kogelkraan 3/4', price: 6, attributes: [{ name: 'Maat', option: '3/4' }], stockQty: null };
   /**
-   * Koppelt alleen het bestaande hoofdartikel aan zijn webshopproduct.
+   * Koppelt alleen het bestaande artikelgroep aan zijn webshopproduct.
    * @param {{ code: string }} item Het artikel.
    * @returns {object|null} Het webshopproduct of null.
    */
   const match = (item) => (item.code === 'KRAAN' ? parentProduct : null);
   const out = stock.addMissingShop(tid, [parentProduct, variation], match, { vatRate: 21, priceOf: (item) => item.price });
   assert.strictEqual(out.created, 1);
-  const added = db.prepare('SELECT name, parent_id FROM stock_items WHERE tenant_id = ? AND code = ?').get(tid, 'KRAAN-34');
+  const added = db.prepare('SELECT name, group_id FROM stock_items WHERE tenant_id = ? AND code = ?').get(tid, 'KRAAN-34');
   assert.ok(added.name.startsWith('Kogelkraan'), `naam: ${added.name}`);
   assert.ok(!added.name.includes('undefined'));
-  assert.strictEqual(String(added.parent_id), String(parent.id));
+  assert.strictEqual(String(added.group_id), String(parent.id));
 });

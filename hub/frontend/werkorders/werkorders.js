@@ -542,12 +542,12 @@
    * @returns {string} HTML van de regel
    */
   function materialRow(material) {
-    // Code van een hoofdartikel: eerst een maat (variant) kiezen; bij een variant kan een andere maat.
+    // Code van een artikelgroep: eerst een maat (subartikel) kiezen; bij een subartikel kan een andere maat.
     const picker = window.ArticlePicker;
-    const parent = picker && material.code ? picker.parentOf(material.code) : null;
-    const variantOf = picker && material.code && !parent ? picker.parentOfVariant(material.code) : null;
-    const choose = parent ? '<button class="btn small primary ap-variant" data-pick-variant title="Dit artikel heeft varianten: kies de maat">Kies maat</button>'
-      : variantOf ? '<button class="btn small ghost ap-variant" data-pick-variant title="Een andere variant van dit artikel kiezen">Andere maat</button>' : '';
+    const articleGroup = picker && material.code ? picker.groupOf(material.code) : null;
+    const subItemOf = picker && material.code && !articleGroup ? picker.groupOfSubItem(material.code) : null;
+    const choose = articleGroup ? '<button class="btn small primary ap-sub-item" data-pick-sub-item title="Dit artikel heeft subartikelen: kies de maat">Kies maat</button>'
+      : subItemOf ? '<button class="btn small ghost ap-sub-item" data-pick-sub-item title="Een andere subartikel van dit artikel kiezen">Andere maat</button>' : '';
     return `<tr class="line${material.picked ? ' done' : ''}" data-mat="${esc(material.id)}">
       <td class="c-chk"><input type="checkbox" data-m="picked"${material.picked ? ' checked' : ''} aria-label="Verzameld"></td>
       <td class="c-desc"><input data-m="description" value="${esc(material.description)}" maxlength="500" placeholder="Omschrijving">${material.code ? `<span class="code">${esc(material.code)}</span>` : ''}${choose}</td>
@@ -746,7 +746,7 @@
         window.ArticlePicker.open({
           base: '../',
           /**
-           * Zet het gekozen artikel (of de gekozen variant) als materiaal op de werkorder.
+           * Zet het gekozen artikel (of de gekozen subartikel) als materiaal op de werkorder.
            * @param {object} article code, name en unit
            */
           onPick: (article) => {
@@ -759,15 +759,15 @@
         });
         return undefined;
       }
-      const pickVariant = event.target.closest('[data-pick-variant]');
-      if (pickVariant) {
-        const material = workOrder.data.materials.find((candidate) => candidate.id === pickVariant.closest('[data-mat]').dataset.mat);
+      const pickSubItem = event.target.closest('[data-pick-sub-item]');
+      if (pickSubItem) {
+        const material = workOrder.data.materials.find((candidate) => candidate.id === pickSubItem.closest('[data-mat]').dataset.mat);
         if (!material) return undefined;
-        const parent = window.ArticlePicker.parentOf(material.code) || window.ArticlePicker.parentOfVariant(material.code);
+        const articleGroup = window.ArticlePicker.groupOf(material.code) || window.ArticlePicker.groupOfSubItem(material.code);
         window.ArticlePicker.open({
-          base: '../', parentCode: parent ? parent.code : '', variantCode: material.code,
+          base: '../', groupCode: articleGroup ? articleGroup.code : '', subItemCode: material.code,
           /**
-           * Vervangt de regel door de gekozen variant (aantal blijft).
+           * Vervangt de regel door de gekozen subartikel (aantal blijft).
            * @param {object} article code, name en unit
            */
           onPick: (article) => {

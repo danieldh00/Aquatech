@@ -1889,7 +1889,7 @@
     },
     /**
      * Knop onder de stuklijst die al het materiaal in één keer in de winkelwagen van de webshop zet
-     * (een gewoon formulier naar de winkel: prijzen, btw, varianten en voorraad bepaalt de winkel zelf).
+     * (een gewoon formulier naar de winkel: prijzen, btw, subartikelen en voorraad bepaalt de winkel zelf).
      * @param {object[]} rows de regels van de stuklijst (code, qty, unit: de winkel rekent om of laat een artikel in een andere eenheid weg)
      * @param {{ anonymous?: boolean }} [options] anonymous: voor een bezoeker zonder account (de aanroeper weet dat er besteld kan worden)
      * @returns {string} HTML, leeg als de webshop niet bestelbaar is of er geen regels zijn
