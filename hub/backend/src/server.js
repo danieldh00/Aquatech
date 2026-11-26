@@ -2464,7 +2464,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // ---------- Voorraadbeheer: reserveren en afboeken op werkorders (zie stock.js) ----------
   registerStockRoutes(app, { stock: stockStore, suppliers: supplierStore, purchaseOrders: purchaseOrderStore, pruneImages: (tid) => itemImageStore.prune(tid), requireRight, requireAnyRight, requireJson, audit, shopProductsOf: (tid) => shopStore.products(tid),
-    syncShop: (tid, user) => shopSync.run(tid, { full: true, user }),
+    syncShop: (tid, user, options = {}) => shopSync.run(tid, { full: true, user, ...options }),
     publishToShop: (tid, itemId) => shopSync.publish(tid, itemId),
     shopMatchOf: (tid) => shopSync.matcher(shopStore.products(tid), (settingsFor(tid).get('shopSource') || {}).mapping),
     shopCanPublish: (tid) => shopSync.canPublish(tid),

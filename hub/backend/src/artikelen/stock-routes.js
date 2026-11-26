@@ -157,6 +157,19 @@ function registerStockRoutes(app, ctx) {
     res.json(out);
   });
 
+  // TIJDELIJK (tot WooCommerce uit staat): alleen de producten toevoegen die nog geen artikel hebben; archiveert en wijzigt niets.
+  app.post('/api/stock/import-shop-missing', requireJson, requireStock, ctx.importLimiter || ((req, res, next) => next()), async (req, res, next) => {
+    if (!ctx.syncShop) return res.status(409).json({ error: 'not_configured', message: 'Er is geen webshop gekoppeld (Beheer → Integraties → Webshop).' });
+    try {
+      const out = await ctx.syncShop(tenantOf(req), req.user, { addMissing: true });
+      if (out.skipped) return res.status(409).json({ error: 'not_configured', message: 'Er is geen webshop gekoppeld (Beheer → Integraties → Webshop).' });
+      audit(req, 'voorraad_webshop_ontbrekende_toegevoegd', { created: out.created || 0, skipped: out.skippedProducts || 0 });
+      return res.json({ created: out.created || 0, skippedProducts: out.skippedProducts || 0, linked: out.linked || 0 });
+    } catch (error) {
+      return respondShopError(res, error, next);
+    }
+  });
+
   app.put('/api/stock/items/:id', requireJson, requireStock, (req, res) => {
     const out = stock.update(tenantOf(req), req.params.id, req.body, req.user);
     if (out.error) return fail(res, out);

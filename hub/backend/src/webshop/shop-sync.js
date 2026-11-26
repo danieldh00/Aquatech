@@ -179,7 +179,9 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
       const linked = item.shop_product_id && byId.get(String(item.shop_product_id));
       if (linked) return linked;
       const mappedSku = byMapping.get(item.code);
-      const found = (mappedSku && bySku.get(mappedSku)) || byCode.get(item.code) || bySku.get(item.code) || null;
+      // Een product zonder sku kreeg bij het overnemen de code WC-<id>; zo vindt de koppeling het terug als die weg is.
+      const wooId = /^WC-(\d{1,20})$/.exec(String(item.code || ''));
+      const found = (mappedSku && bySku.get(mappedSku)) || byCode.get(item.code) || bySku.get(item.code) || (wooId && byId.get(wooId[1])) || null;
       // Een variant hoort bij een variatie: een los product (ook met dezelfde sku) komt er niet voor in aanmerking.
       return found && item.parent_id && !found.parentId ? null : found;
     };
@@ -205,10 +207,10 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
   /**
    * Eén synchronisatie: voorraad en prijs uit de webshop verwerken en terugschrijven wat er veranderd is.
    * @param {string} tenantId Id van de omgeving.
-   * @param {{ full?: boolean, user?: object }} [options] full: alle producten ophalen (en de catalogus bijwerken), anders alleen de gewijzigde, gekoppelde artikelen; user voor de voorraadboekingen.
+   * @param {{ full?: boolean, user?: object, addMissing?: boolean }} [options] full: alle producten ophalen (en de catalogus bijwerken), anders alleen de gewijzigde, gekoppelde artikelen; user voor de voorraadboekingen; addMissing: ook de producten die nog geen artikel hebben aanmaken, zonder iets te archiveren (ook met spiegelen uit).
    * @returns {Promise<object>} Samenvatting (created, restored, archived, skippedProducts, mirror, linked, unlinked, soldInShop, pricesFromShop, updated, failed) of { skipped }.
    */
-  async function sync(tenantId, { full = true, user = null } = {}) {
+  async function sync(tenantId, { full = true, user = null, addMissing = false } = {}) {
     const shopConfig = configOf(tenantId);
     if (!shopConfig.url) return { skipped: 'not_configured' };
     if (!full && !shopConfig.push) return { skipped: 'no_push' };
@@ -231,7 +233,12 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
         vatRate: shopConfig.vatRate,
         priceOf: (product) => (product.rawRegular != null ? exclOf(product.rawRegular, shopConfig.vatRate, shopConfig) : product.price),
       })
-      : null;
+      : (full && addMissing
+        ? stock.addMissingShop(tenantId, products, match, {
+          vatRate: shopConfig.vatRate,
+          priceOf: (product) => (product.rawRegular != null ? exclOf(product.rawRegular, shopConfig.vatRate, shopConfig) : product.price),
+        })
+        : null);
     const items = full ? itemsOf(tenantId, false) : dirtyItems;
     const byId = new Map(products.map((product) => [String(product.id), product]));
     const pushStockOn = Boolean(shopConfig.push && shopConfig.pushStock !== false && shopConfig.mode === 'rest');
