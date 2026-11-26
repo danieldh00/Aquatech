@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.45.1
+
+- `stock.addMissingShop` + `POST /api/stock/import-shop-missing` (recht `voorraad`, alleen lezen uit WordPress, nooit terugschrijven): `shopSync.sync` kreeg de optie `addMissing`: haalt de producten op, maakt alleen de ontbrekende artikelen aan en stopt dan (geen boekingen, prijzen overnemen, variaties aanmaken, archiveren of terugschrijven, ook niet met terugschrijven en spiegelen aan). Audit `voorraad_webshop_ontbrekende_toegevoegd`.
+- `matcher` koppelt een artikel met code `WC-<id>` aan het webshopproduct met dat id (voorheen bleef zo'n artikel zonder koppeling na het verlies van de koppeling).
+- Tijdelijk: knop en route vervallen samen met de WooCommerce-koppeling.
+
 ## 1.45.0
 
 De knop *Bewerken in beheer* op de productpagina verschijnt alleen voor accounts met het recht `voorraad` (of een hoofdbeheerder), niet meer voor elke medewerkersrol. `viewer()` geeft daarvoor `canStock`; de test dekt een planner zonder voorraadrecht.

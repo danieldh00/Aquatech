@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.45.1',
+      date: '2026-11-26',
+      title: 'Ontbrekende webshopproducten als artikel toevoegen',
+      items: [
+        { text: 'Bij Artikelen staat een knop *Ontbrekende uit webshop toevoegen*: die maakt artikelen aan voor producten uit de oude webshop die hier nog niet staan, zonder iets te archiveren of te wijzigen. De knop is tijdelijk, zolang WooCommerce nog draait.', for: ['voorraad'] },
+        { text: 'Artikelen met de code WC-<nummer> (producten zonder sku) worden weer aan hun webshopproduct gekoppeld.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.45.0',
       date: '2026-11-26',
       title: 'Bewerken-knop alleen met voorraadrecht',
