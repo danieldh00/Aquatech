@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.42.2
+
+Startpagina (`storefront.css`): onder 860 px is de assortimentsstrip een horizontale swipe-rij met tegels van 132 px (scroll-snap); op brede schermen blijft de vulrij ongewijzigd.
+
 ## 1.42.1
 
 `related-routes.js` gaf de uitkomst van het opzoeken (`gevonden`/`niet_gevonden`) door als status van het verzoek aan `aiUsage.record`; alles behalve `ok` telt als mislukt. Nu wordt alleen model en verbruik doorgegeven. `ai-usage.js` behandelt bestaande regels met die twee statussen als gelukt (telling en weergave), zonder migratie. Test: `related-items.test.js` controleert dat alleen de echt mislukte aanvraag meetelt.

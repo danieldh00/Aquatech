@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.42.2',
+      date: '2026-11-26',
+      title: 'Assortiment op de startpagina compacter op de telefoon',
+      items: [
+        { text: 'Op de telefoon staat het assortiment op de startpagina van de webshop nu in een compacte rij die je opzij veegt, in plaats van grote tegels onder elkaar.' },
+      ],
+    },
+    {
       version: '1.42.1',
       date: '2026-11-26',
       title: 'AI-kosten tellen Past bij niet meer als mislukt',
