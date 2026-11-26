@@ -1246,7 +1246,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @returns {{ created: number, skippedProducts: number }} Aantallen.
    */
   function addMissingShop(tenantId, products, matchProduct, { vatRate = 21, priceOf = (product) => product.price } = {}) {
-    const items = prepare('SELECT id, code, shop_product_id, parent_id, has_variants FROM stock_items WHERE tenant_id = ?').all(tenantId);
+    const items = prepare('SELECT id, code, name, shop_product_id, parent_id, has_variants, attributes FROM stock_items WHERE tenant_id = ?').all(tenantId);
     const matchedProducts = new Set();
     const parentItems = new Map();
     const seenCodes = new Set(items.map((item) => item.code));
