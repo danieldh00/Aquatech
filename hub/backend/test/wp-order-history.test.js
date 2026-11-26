@@ -273,12 +273,19 @@ test('kopgegevens voor de lijst: alle echte statussen, bijgewerkt bij opnieuw op
   assert.strictEqual(webOrders.list(scene.tenantId, { source: 'alle', status: 'wp-cancelled' }).items[0].customerName, 'Tuin BV');
   assert.strictEqual(webOrders.list(scene.tenantId, { source: 'alle', status: 'nieuw' }).total, 0, 'een eigen status sluit WordPress uit');
   assert.strictEqual(webOrders.list(scene.tenantId, { source: 'alle', query: 'petra' }).total, 1);
+  assert.strictEqual(webOrders.list(scene.tenantId, { source: 'alle', query: 'WP-1001' }).total, 1, 'zoeken op het nummer zoals de lijst het toont');
   assert.strictEqual(webOrders.list(scene.tenantId, { source: 'alle', archive: 'alleen' }).total, 0, 'WordPress heeft geen archief');
   assert.strictEqual(webOrders.list(scene.tenantId, { source: 'wordpress', limit: 1 }).items.length, 1);
   const detail = webOrders.getWordPress(scene.tenantId, all.items.find((order) => order.statusLabel === 'Terugbetaald').id);
   assert.strictEqual(detail.lines[0].name, 'Onbekend ding');
   assert.strictEqual(webOrders.getWordPress(scene.tenantId, '00000000-0000-4000-8000-000000000000'), null);
   assert.strictEqual(webOrders.getWordPress('00000000-0000-4000-8000-000000000001', all.items[0].id), null, 'andere organisatie');
+  // Een bestelling die in WordPress in de prullenbak belandt, verdwijnt uit de lijst.
+  orders[1].status = 'trash';
+  orders[1].date_modified_gmt = '2026-10-28T08:00:00';
+  scene.db.prepare('UPDATE wp_order_import SET orders_after = NULL WHERE tenant_id = ?').run(scene.tenantId);
+  await scene.history.importOrders(scene.tenantId);
+  assert.strictEqual(Number(scene.db.prepare('SELECT COUNT(*) AS n FROM wp_orders WHERE tenant_id = ?').get(scene.tenantId).n), 1);
   for (const table of ['web_orders', 'invoices', 'stock_movements']) assert.strictEqual(Number(scene.db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE tenant_id = ?`).get(scene.tenantId).n), 0, table);
 });
 

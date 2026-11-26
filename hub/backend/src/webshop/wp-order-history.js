@@ -248,7 +248,9 @@ function createWpOrderHistory({ db, settingsFor, fetchImpl = null, afterImport =
       for (const order of orders) {
         const orderedAt = orderedAtOf(order);
         // Kopgegevens voor de lijst (alle echte bestellingen, ook geannuleerde); een nieuwe ronde werkt status en totaal bij.
-        if (orderedAt && !HIDDEN_STATUSES.has(cleanText(order.status))) {
+        // Een bestelling die in WordPress naar de prullenbak of terug naar concept gaat, verdwijnt ook uit de lijst.
+        if (HIDDEN_STATUSES.has(cleanText(order.status))) prepare('DELETE FROM wp_orders WHERE tenant_id = ? AND wp_order_id = ?').run(tenantId, String(order.id));
+        else if (orderedAt) {
           const head = headerOf(order);
           prepare(`INSERT INTO wp_orders (id, tenant_id, wp_order_id, number, status, ordered_at, customer_name, company, email, phone, total, payment_title)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

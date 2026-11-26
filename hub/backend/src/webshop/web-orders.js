@@ -776,6 +776,8 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
    */
   function listWithWordPress(tenantId, { status, query, limit, offset, archive, source }) {
     const words = String(query || '').replace(/[%_\\]/g, ' ').trim().toLowerCase().slice(0, 80);
+    // Het nummer staat in de lijst als WP-1005; zoeken op die vorm moet ook werken.
+    const wpWords = words.replace(/^wp-/, '');
     const wpStatus = String(status || '').startsWith('wp-') ? String(status).slice(3) : '';
     const systemWhere = ['1 = 1'];
     const systemArgs = [];
@@ -785,7 +787,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
     if (archiveSql) systemWhere.push(archiveSql);
     if (words) {
       systemWhere.push('(lower(number) LIKE ? OR lower(customer_name) LIKE ? OR lower(email) LIKE ?)'); systemArgs.push(`%${words}%`, `%${words}%`, `%${words}%`);
-      wpWhere.push('(lower(number) LIKE ? OR lower(customer_name) LIKE ? OR lower(email) LIKE ?)'); wpArgs.push(`%${words}%`, `%${words}%`, `%${words}%`);
+      wpWhere.push('(lower(number) LIKE ? OR lower(customer_name) LIKE ? OR lower(email) LIKE ?)'); wpArgs.push(`%${wpWords}%`, `%${words}%`, `%${words}%`);
     }
     if (STATUSES[status]) { systemWhere.push('status = ?'); systemArgs.push(status); wpWhere.push('1 = 0'); }
     else if (wpStatus) { wpWhere.push('status = ?'); wpArgs.push(wpStatus); systemWhere.push('1 = 0'); }
