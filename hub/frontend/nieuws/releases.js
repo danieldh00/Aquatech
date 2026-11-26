@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.41.8',
+      date: '2026-11-26',
+      title: 'Werkorderschermen extra beschermd',
+      items: [],
+    },
+    {
       version: '1.41.7',
       date: '2026-11-26',
       title: 'Bovengrens op schrijfacties',

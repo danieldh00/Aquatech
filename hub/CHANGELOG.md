@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.41.8
+
+In `werkorders/werkorders.js` gaan de getallen in de invoervelden van werkstappen (geplande en werkelijke uren) en materialen (aantal) ook door `esc()`, als extra bescherming (CodeQL: client-side XSS). Geen zichtbare verandering.
+
 ## 1.41.7
 
 Algemene limiet op schrijfacties via `/api` (1200 per 15 minuten per ingelogde gebruiker, anders per bezoeker; `/api/public` en lezen blijven buiten de telling; startwaarde overschrijfbaar met `API_WRITE_LIMIT`, voor tests). Routes met een eigen limiet houden die. Dekt de CodeQL-meldingen "missing rate limiting" op ingelogde routes. Test: `api-write-limit.test.js`.
