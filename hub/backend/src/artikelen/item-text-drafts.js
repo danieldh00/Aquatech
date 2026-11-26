@@ -274,8 +274,8 @@ function createItemTextDraftStore(db) {
       LEFT JOIN item_specs s ON s.tenant_id = i.tenant_id AND s.item_id = i.id
       WHERE i.tenant_id = ? AND i.archived = 0 AND i.parent_id IS NULL
         AND NOT EXISTS (SELECT 1 FROM item_text_drafts d WHERE d.tenant_id = i.tenant_id AND d.item_id = i.id)
-        AND (s.specs IS NULL OR s.specs NOT LIKE '${mode === 'specs' ? '%"specsAt"%' : '%"textLog"%'}')
-      ORDER BY i.name, i.code`).all(tenantId);
+        AND (s.specs IS NULL OR s.specs NOT LIKE ?)
+      ORDER BY i.name, i.code`).all(tenantId, mode === 'specs' ? '%"specsAt"%' : '%"textLog"%');
     const wanted = mode === 'specs' ? rows : rows.filter((row) => review || !row.has_text);
     return { ids: wanted.map((row) => row.id), total: wanted.length, withExisting: wanted.filter((row) => row.has_text).length, withoutFeatures: wanted.filter((row) => !row.has_features).length };
   }
@@ -330,7 +330,7 @@ function createItemTextDraftStore(db) {
     const out = stock.update(tenantId, itemId, patch, user);
     if (out.error) return { error: out.error };
     const action = previous.text ? 'overschreven' : 'nieuw';
-    textLog.recordWrite(tenantId, itemId, { action, model: texts.model, reason: texts.reason, previous: previous.text ? previous : undefined });
+    textLog.recordWrite(tenantId, itemId, { action, model: texts.model, reason: texts.reason, textHash: ItemDetails.textHash(texts.description), previous: previous.text ? previous : undefined });
     return { action, seoKept: Boolean(live) };
   }
 
@@ -341,11 +341,12 @@ function createItemTextDraftStore(db) {
    * @param {string} itemId Id van het artikel.
    * @param {{ update: Function }} stock De voorraadopslag.
    * @param {object|null} user Wie de run startte.
-   * @returns {{ status?: string, added?: number, error?: string }} gevuld, aangevuld of geen (niets toe te voegen), of een fout.
+   * @returns {{ status?: string, added?: number, error?: string }} gevuld, aangevuld of geen (niets toe te voegen), overgeslagen (er is nog niet naar kenmerken gezocht: het artikel blijft aan de beurt), of een fout.
    */
   function applySpecs(tenantId, itemId, stock, user) {
     const row = findRow(tenantId, itemId);
     if (!row) return { error: 'not_found' };
+    if (!(textLog.read(tenantId, row.id) || {}).kenmerkenAt) return { status: 'overgeslagen', added: 0 };
     const own = ItemDetails.specificationsOf(row.specifications);
     const known = new Set(own.map((entry) => entry.name.trim().toLowerCase()));
     const features = ((textLog.read(tenantId, row.id) || {}).kenmerken || []).map((feature) => ({ name: feature && feature.name, value: feature && feature.value }));

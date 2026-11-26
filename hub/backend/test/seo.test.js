@@ -337,6 +337,17 @@ test('productpagina: een door de AI geschreven omschrijving wordt niet getoond (
   assert.strictEqual((await admin.get(`/app/api/stock/items/${sproeier.id}`)).body.description, 'Door de AI geschreven tekst.', 'de tekst blijft bewaard');
 });
 
+test('productpagina: een AI-omschrijving met vingerafdruk die niet meer klopt (handmatig aangepast) wordt wel getoond', async () => {
+  const { anonymous, admin, db, main } = await setupShop();
+  const items = (await admin.get('/app/api/stock')).body.items;
+  const sproeier = items.find((item) => item.code === 'SPR-1');
+  await admin.put(`/app/api/stock/items/${sproeier.id}`, { description: 'Handmatig herschreven tekst.' });
+  db.prepare("INSERT INTO item_specs (tenant_id, item_id, status, specs, model, checked_at) VALUES (?, ?, 'niet_gevonden', ?, '', ?)")
+    .run(main, sproeier.id, JSON.stringify({ descOnly: true, textLog: { action: 'nieuw', at: '2026-11-26T10:00:00.000Z', textHash: '0123456789abcdef' } }), '2026-11-26T10:00:00.000Z');
+  const page = await anonymous.get('/product/sproeier-pro-spr-1/');
+  assert.ok(page.text.includes('Handmatig herschreven tekst.'), 'de eigen tekst blijft zichtbaar');
+});
+
 test('productpagina: eigen omschrijving en specificaties, anders die uit de oude webshop; ook in JSON-LD en de meta-omschrijving (12)', async () => {
   const { anonymous, admin, db, main } = await setupShop();
   const items = (await admin.get('/app/api/stock')).body.items;

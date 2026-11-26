@@ -361,5 +361,25 @@ test('specs in bulk: kenmerken worden specificaties, eigen specificaties blijven
     assert.deepStrictEqual(specsOf(empty.id), [{ name: 'Materiaal', value: 'Messing' }]);
     assert.deepStrictEqual(specsOf(own.id), [{ name: 'Materiaal', value: 'Kunststof' }, { name: 'Kleur', value: 'Zwart' }]);
     assert.strictEqual((await baas.get('/app/api/stock/item-texts/bulk/todo')).body.total, 0, 'daarna is alles behandeld');
+    // Rechten: zonder het recht voorraad 403, ook in specs-modus.
+    const klant = await as('klant');
+    assert.strictEqual((await klant.get('/app/api/stock/item-texts/bulk/todo?mode=specs')).status, 403);
+    assert.strictEqual((await klant.post('/app/api/stock/item-texts/bulk/run', { itemIds: [empty.id], mode: 'specs' })).status, 403);
+    assert.strictEqual((await klant.post('/app/api/stock/item-texts/bulk/job', { mode: 'specs' })).status, 403);
+  } finally { server.close(); }
+});
+
+test('specs in bulk: zonder opzoeken blijft een nog niet opgezocht artikel aan de beurt (geen specsAt)', async () => {
+  const { server, calls, as } = await setup(behaviour);
+  try {
+    const baas = await as('baas');
+    const item = (await baas.post('/app/api/stock/items', { code: 'R1', name: 'Klep zonder zoeken', unit: 'st', brand: 'Rainpro' })).body;
+    const run = (await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: [item.id], research: false })).body;
+    assert.strictEqual(run.results[0].status, 'skipped');
+    assert.strictEqual(run.results[0].code, 'no_features');
+    assert.strictEqual(calls.searches, 0);
+    assert.strictEqual((await baas.get('/app/api/stock/item-texts/bulk/todo?research=0')).body.total, 1, 'nog steeds aan de beurt');
+    const again = (await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: [item.id] })).body;
+    assert.strictEqual(again.results[0].status, 'gevuld');
   } finally { server.close(); }
 });

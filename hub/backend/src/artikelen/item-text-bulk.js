@@ -187,7 +187,8 @@ function registerItemTextBulkRoutes(app, ctx) {
           await lookUpFeatures(itemId);
         }
         const applied = drafts.applySpecs(tenantId, itemId, stock, user);
-        results.push(applied.error ? { itemId, status: 'error', code: applied.error, message: 'De specificaties konden niet worden geplaatst.' } : { itemId, status: applied.status, added: applied.added });
+        if (applied.status === 'overgeslagen') results.push({ itemId, status: 'skipped', code: 'no_features', message: 'Er is nog niet naar kenmerken gezocht (opzoeken stond uit).' });
+        else results.push(applied.error ? { itemId, status: 'error', code: applied.error, message: 'De specificaties konden niet worden geplaatst.' } : { itemId, status: applied.status, added: applied.added });
       } catch (error) {
         if (error instanceof AnalyzeError) {
           if (FATAL_CODES.includes(error.code)) aborted = { code: error.code, message: error.message };

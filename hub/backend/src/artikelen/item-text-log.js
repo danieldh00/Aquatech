@@ -80,12 +80,13 @@ function createItemTextLog(db) {
    * Legt vast wat er met de omschrijving van een artikel gebeurd is.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} itemId Id van het artikel.
-   * @param {{ action: string, model?: string, reason?: string, previous?: { text: string, source: string } }} entry nieuw, overschreven, behouden of hersteld; bij overschreven de vorige tekst en waar die stond (eigen of webshop).
+   * @param {{ action: string, model?: string, reason?: string, textHash?: string, previous?: { text: string, source: string } }} entry nieuw, overschreven, behouden of hersteld; bij overschreven de vorige tekst en waar die stond (eigen of webshop); textHash = vingerafdruk van de geschreven tekst (zie ItemDetails.textHash), zodat een latere handmatige wijziging te herkennen is.
    * @returns {void}
    */
   function recordWrite(tenantId, itemId, entry) {
     update(tenantId, itemId, (specs) => {
       specs.textLog = { action: entry.action, at: currentTimestamp(), model: String(entry.model || '').slice(0, 80), reason: String(entry.reason || '').slice(0, 300) };
+      if (/^[0-9a-f]{16}$/.test(String(entry.textHash || ''))) specs.textLog.textHash = entry.textHash;
       if (entry.previous) specs.textLog.previous = { text: String(entry.previous.text || '').slice(0, 20000), source: entry.previous.source === 'webshop' ? 'webshop' : 'eigen' };
     }, entry.model);
   }

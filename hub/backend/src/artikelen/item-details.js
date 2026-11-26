@@ -88,6 +88,15 @@ function sanitizeSpecifications(raw) {
 }
 
 /**
+ * Een korte vingerafdruk van een omschrijving, om te zien of een door de AI geschreven tekst nog dezelfde is.
+ * @param {*} description De omschrijving (wordt eerst opgeschoond).
+ * @returns {string} 16 hexadecimale tekens.
+ */
+function textHash(description) {
+  return require('crypto').createHash('sha256').update(sanitizeDescription(description)).digest('hex').slice(0, 16);
+}
+
+/**
  * Leest de specificaties uit de opgeslagen JSON.
  * @param {*} json De kolom specifications.
  * @returns {{ name: string, value: string }[]} De specificaties (leeg bij onleesbare invoer).
@@ -167,4 +176,4 @@ function shownDetails(row, parent = null) {
   };
 }
 
-module.exports = { sanitizeSeoTitle, sanitizeSeoDescription, sanitizeBrand, sanitizeShortText, MAX_SEO_TITLE, MAX_SEO_DESCRIPTION, MAX_BRAND, sanitizeDescription, sanitizeSpecifications, specificationsOf, plainTextFromHtml, specificationsFromShop, shownDetails, MAX_DESCRIPTION, MAX_SPECIFICATIONS };
+module.exports = { textHash, sanitizeSeoTitle, sanitizeSeoDescription, sanitizeBrand, sanitizeShortText, MAX_SEO_TITLE, MAX_SEO_DESCRIPTION, MAX_BRAND, sanitizeDescription, sanitizeSpecifications, specificationsOf, plainTextFromHtml, specificationsFromShop, shownDetails, MAX_DESCRIPTION, MAX_SPECIFICATIONS };
