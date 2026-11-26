@@ -245,7 +245,7 @@ test('API: werkorder alleen uit een geaccordeerde offerte, alleen voor beheerder
     assert.strictEqual((await kees.del(`/app/api/admin/workorders/${secondOrder.body.id}`)).status, 403);
     assert.strictEqual((await baas.del(`/app/api/admin/workorders/${secondOrder.body.id}`)).status, 200);
     const thirdOrder = await kees.post('/app/api/workorders', { quoteId: savedQuote.id });
-    assert.strictEqual(thirdOrder.body.number, `WO-${year}-0002`, 'na definitief wissen telt alleen het hoogste bestaande nummer');
+    assert.strictEqual(thirdOrder.body.number, `WO-${year}-0003`, 'na definitief wissen komt het nummer nooit terug');
   } finally {
     server.close();
   }

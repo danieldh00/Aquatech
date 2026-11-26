@@ -7,7 +7,7 @@
 // openbare link (openbaar/afspraak.html#t=<token>, zoals de digitale offerte)
 // ziet hij wanneer de klus gepland staat en bevestigt hij die of vraagt hij
 // een ander moment.
-const { floorOf } = require('../platform/number-floors');
+const { floorOf, recordFloor } = require('../platform/number-floors');
 const { archiveModeOf, archiveClause } = require('../platform/archive-filter');
 const { mailStyleOf } = require('../platform/mail-layout');
 const path = require('path');
@@ -713,13 +713,15 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
   }
 
   /**
-   * Definitief wissen (AVG-verzoek): ook al verwijderde werkorders, met foto's, uren, materiaal, uitbesteding en reserveringen.
+   * Definitief wissen (AVG-verzoek): ook al verwijderde werkorders, met foto's, uren, materiaal, uitbesteding en reserveringen. Het nummer wordt vastgelegd en komt nooit terug.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} id Id van de werkorder.
    * @returns {boolean} true als er iets is gewist.
    */
   function purge(tenantId, id) {
     return transaction(db, () => {
+      const row = prepare('SELECT number FROM work_orders WHERE tenant_id = ? AND id = ?').get(tenantId, String(id));
+      if (row) recordFloor(prepare, tenantId, 'werkorders', row.number);
       prepare('DELETE FROM work_order_photos WHERE tenant_id = ? AND work_order_id = ?').run(tenantId, String(id));
       prepare('DELETE FROM work_order_hours WHERE tenant_id = ? AND work_order_id = ?').run(tenantId, String(id));
       prepare('DELETE FROM work_order_materials WHERE tenant_id = ? AND work_order_id = ?').run(tenantId, String(id));

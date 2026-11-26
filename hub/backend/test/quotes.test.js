@@ -182,6 +182,8 @@ test('API: offertes aanmaken, nummeren, afschermen en verwijderen', async () => 
 
     assert.strictEqual((await piet.del(`/app/api/admin/quotes/${third.body.id}`)).status, 403, 'definitief wissen alleen door beheerders');
     assert.strictEqual((await baas.del(`/app/api/admin/quotes/${third.body.id}`)).status, 200);
+    const fourth = await piet.post('/app/api/quotes', { data: { date: `${year}-04-02` } });
+    assert.strictEqual(fourth.body.number, `OF-${year}-0004`, 'ook na definitief wissen (AVG) komt het nummer nooit terug');
   } finally {
     server.close();
   }
