@@ -124,6 +124,8 @@ const FIELDS = {
   descriptionAiModel: { type: 'enum', values: AiModels.SELECTABLE, default: 'claude-sonnet-5-5' },
   // Hoeveel artikelen per dag in een bulkrun voor omschrijvingen mogen worden verwerkt (een rem op de kosten; zie artikelen/item-text-bulk.js).
   descriptionBulkDailyItems: { type: 'int', default: 2000, min: 10, max: 20000 },
+  // Hoeveel artikelen per dag bij Past bij mogen worden opgezocht (rem op de kosten; zie artikelen/related-routes.js).
+  relatedAiDailyItems: { type: 'int', default: 1000, min: 10, max: 20000 },
   modules: { type: 'flags', default: {} },
   // Debugmodus (Beheer > Instellingen > Foutopsporing): beheerders zien bij een fout de details (soort fout,
   // databasecode, plek in de code) in plaats van alleen een algemene melding; zie platform/error-report.js.

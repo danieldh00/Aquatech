@@ -10,6 +10,21 @@ const { RESEARCH_BATCH, RESEARCH_CONCURRENCY, MAX_LINKS } = require('./related-i
 
 /** Fouten waarbij doorgaan zinloos is (sleutel, tegoed, model): de rest van de portie wordt overgeslagen. */
 const FATAL_CODES = ['auth', 'permission', 'not_found', 'no_credit', 'not_configured', 'rate_limited'];
+/** Aantal artikelen dat vandaag per omgeving is opgezocht (sleutel omgeving|datum), als rem op de kosten. */
+const dailyCounts = new Map();
+
+/**
+ * Het aantal artikelen dat een omgeving vandaag al liet opzoeken.
+ * @param {string} tenantId Id van de omgeving.
+ * @returns {{ key: string, count: number }} De sleutel van de teller en de stand.
+ */
+function dailyOf(tenantId) {
+  const day = new Date().toISOString().slice(0, 10);
+  for (const old of dailyCounts.keys()) if (!old.endsWith(`|${day}`)) dailyCounts.delete(old);
+  const key = `${tenantId}|${day}`;
+  return { key, count: dailyCounts.get(key) || 0 };
+}
+
 /** Geschatte kosten per artikel (euro) voor de bevestiging in het scherm; het echte verbruik staat in Beheer > AI-kosten. */
 const ESTIMATE_EUR_PER_ITEM = 0.045;
 
@@ -93,6 +108,9 @@ function registerRelatedRoutes(app, { related, requireRight, requireJson, audit,
     if (!settingsFor(tenantId).get('aiEnabled')) return { refused: { status: 409, error: 'disabled', message: 'AI staat uit (Beheer → Integraties → AI-herkenning). Koppel artikelen dan met de hand.' } };
     const researcher = currentSpecResearcher(tenantId);
     if (!researcher.available) return { refused: { status: 409, error: 'not_configured', message: 'Specificaties opzoeken is niet ingesteld: een beheerder kan de API-sleutel invullen bij Beheer → Integraties → AI-herkenning.' } };
+    const dailyLimit = settingsFor(tenantId).get('relatedAiDailyItems');
+    const today = dailyOf(tenantId);
+    if (today.count >= dailyLimit) return { refused: { status: 429, error: 'daily_limit', message: `Het dagplafond voor opzoeken bij Past bij (${dailyLimit} artikelen) is bereikt. Ga morgen verder of verhoog het plafond (instelling relatedAiDailyItems).` } };
     const results = [];
     let aborted = null;
     let cursor = 0;
@@ -120,6 +138,8 @@ function registerRelatedRoutes(app, { related, requireRight, requireJson, audit,
       const facts = related.factsFor(tenantId, itemId);
       if (!facts) { results.push({ itemId, status: 'error', code: 'not_found', message: 'Artikel niet gevonden.' }); return; }
       if (aborted) { results.push({ itemId, status: 'error', code: aborted.code, message: aborted.message }); return; }
+      if (dailyCounts.get(today.key) >= dailyLimit) { results.push({ itemId, status: 'error', code: 'daily_limit', message: 'Het dagplafond voor opzoeken is bereikt.' }); return; }
+      dailyCounts.set(today.key, (dailyCounts.get(today.key) || 0) + 1);
       const started = Date.now();
       try {
         const found = await researcher.research(facts);
@@ -168,7 +188,7 @@ function registerRelatedRoutes(app, { related, requireRight, requireJson, audit,
    * @returns {string} De sleutel.
    */
   const jobKey = (req) => `pastbij|${tenantOf(req)}`;
-  app.post('/api/stock/related-ai/job', requireJson, requireStock, (req, res) => {
+  app.post('/api/stock/related-ai/job', requireJson, requireStock, heavyLimiter, (req, res) => {
     const tenantId = tenantOf(req);
     const todo = related.researchTodo(tenantId, { again: Boolean(req.body && req.body.again) });
     if (!todo.ids.length) return res.status(409).json({ error: 'nothing_to_do', message: 'Er zijn geen artikelen aan de beurt.' });
@@ -176,6 +196,7 @@ function registerRelatedRoutes(app, { related, requireRight, requireJson, audit,
       ids: todo.ids, size: RESEARCH_BATCH, options: { again: Boolean(req.body && req.body.again) },
       runBatch: (batchIds) => researchBatch(tenantId, req.user, batchIds),
       onDone: (state) => {
+        if (!(state.tally.gevonden > 0)) return;
         const linked = related.linkWithSpecs(tenantId);
         state.extra = { items: linked.items, links: linked.links };
       },

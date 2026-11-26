@@ -58,6 +58,7 @@ function registerItemTextBulkRoutes(app, ctx) {
   const { drafts, related, stock, requireRight, requireJson, audit, settingsFor, aiTenantOf, currentItemTextWriter, currentSpecResearcher, aiUsage } = ctx;
   const requireStock = requireRight('voorraad');
   const jobs = ctx.jobs || createJobs();
+  const startLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 6, keyFn: (req) => `item-text-bulk-start|${req.tenantId}` });
   const limiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 120, keyFn: (req) => `item-text-bulk|${req.tenantId}` });
   /**
    * De actieve omgeving van het verzoek.
@@ -251,7 +252,7 @@ function registerItemTextBulkRoutes(app, ctx) {
   });
 
   // Achtergrondtaak: de server loopt zelf alle artikelen aan de beurt door, ook als de browser dicht gaat. De stand is op te vragen en de taak is te stoppen.
-  app.post('/api/stock/item-texts/bulk/job', requireJson, requireStock, (req, res) => {
+  app.post('/api/stock/item-texts/bulk/job', requireJson, requireStock, startLimiter, (req, res) => {
     const tenantId = tenantOf(req);
     const research = req.body && req.body.research !== false;
     const review = req.body && req.body.review !== false;
