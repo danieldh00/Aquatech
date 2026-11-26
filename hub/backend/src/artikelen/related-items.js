@@ -161,7 +161,7 @@ function createRelatedStore(db) {
         (SELECT COUNT(*) FROM item_related r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id AND r.source = 'handmatig') AS manual_count,
         (SELECT COUNT(*) FROM item_related r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id AND r.source = 'ai') AS ai_count,
         (SELECT COUNT(*) FROM item_together t WHERE t.tenant_id = i.tenant_id AND t.item_id = i.id) AS together_count,
-        (SELECT s.status FROM item_specs s WHERE s.tenant_id = i.tenant_id AND s.item_id = i.id) AS spec_status
+        (SELECT CASE WHEN s.specs LIKE '%"descOnly":true%' THEN '' ELSE s.status END FROM item_specs s WHERE s.tenant_id = i.tenant_id AND s.item_id = i.id) AS spec_status
       FROM stock_items i WHERE i.tenant_id = ? AND i.parent_id IS NULL AND i.archived = 0 AND (lower(i.name) LIKE ? OR lower(i.code) LIKE ?)
       ORDER BY i.name`).all(tenantId, term, term);
     const shaped = rows.map((row) => ({ id: row.id, code: row.code, name: row.name, brand: row.brand || '', manual: Number(row.manual_count), ai: Number(row.ai_count), together: Number(row.together_count), specStatus: row.spec_status || '' }));
@@ -234,7 +234,7 @@ function createRelatedStore(db) {
   function researchTodo(tenantId, { again = false, staleBefore = '' } = {}) {
     const rows = prepare(`SELECT i.id FROM stock_items i LEFT JOIN item_specs s ON s.tenant_id = i.tenant_id AND s.item_id = i.id
       WHERE i.tenant_id = ? AND i.parent_id IS NULL AND i.archived = 0
-        AND (? OR s.item_id IS NULL OR (? <> '' AND s.checked_at < ?::timestamptz))
+        AND (? OR s.item_id IS NULL OR s.specs LIKE '%"descOnly":true%' OR (? <> '' AND s.checked_at < ?::timestamptz))
       ORDER BY i.name`).all(tenantId, again, staleBefore, staleBefore || '1970-01-01T00:00:00Z');
     return { ids: rows.slice(0, MAX_RESEARCH).map((row) => row.id), total: rows.length, capped: rows.length > MAX_RESEARCH };
   }
@@ -262,9 +262,16 @@ function createRelatedStore(db) {
    * @returns {void}
    */
   function saveSpecs(tenantId, itemId, { status, specs, model }) {
+    // Kenmerken en het schrijflogboek van de omschrijving (item-text-log.js) staan in dezelfde kolom en blijven bewaard.
+    const kept = {};
+    const existing = prepare('SELECT specs FROM item_specs WHERE tenant_id = ? AND item_id = ?').get(tenantId, itemId);
+    if (existing) {
+      const old = jsonOf(existing.specs, {});
+      for (const key of ['kenmerken', 'kenmerkenAt', 'textLog']) if (old[key] !== undefined) kept[key] = old[key];
+    }
     prepare(`INSERT INTO item_specs (tenant_id, item_id, status, specs, model, checked_at) VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT (tenant_id, item_id) DO UPDATE SET status = EXCLUDED.status, specs = EXCLUDED.specs, model = EXCLUDED.model, checked_at = EXCLUDED.checked_at`)
-      .run(tenantId, itemId, status, JSON.stringify(specs || {}), String(model || '').slice(0, 80), currentTimestamp());
+      .run(tenantId, itemId, status, JSON.stringify({ ...(specs || {}), ...kept }), String(model || '').slice(0, 80), currentTimestamp());
   }
 
   /**

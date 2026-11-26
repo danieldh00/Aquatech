@@ -5,7 +5,14 @@
 // Praat met /api/stock/item-texts (recht voorraad).
 (function () {
   const context = { api: null, toast: null, esc: null };
-  const state = { data: null, ai: null, selected: new Set(), openId: null, detail: null, busy: false };
+  const state = { data: null, ai: null, selected: new Set(), openId: null, detail: null, busy: false, bulk: null, bulkRunning: false, bulkStop: false, bulkArmed: false };
+  const WRITTEN_LABELS = { nieuw: 'Nieuw geschreven', overschreven: 'Overschreven', behouden: 'Bestaande behouden', hersteld: 'Teruggezet' };
+  /**
+   * Een bedrag in euro's.
+   * @param {number} value Het bedrag.
+   * @returns {string} Bijvoorbeeld "€ 12,40".
+   */
+  const euro = (value) => `€ ${Number(value).toFixed(2).replace('.', ',')}`;
   const FIELDS = ['description', 'seoTitle', 'seoDescription'];
   const FIELD_NAMES = { description: 'Omschrijving', seoTitle: 'Titel voor zoekmachines', seoDescription: 'Omschrijving voor zoekmachines' };
 
@@ -32,6 +39,7 @@
   async function load() {
     state.data = await context.api(`stock/item-texts?${queryOf()}`);
     state.ai = state.data.ai;
+    if (!state.bulk && $('#tx-bulk-summary')) loadBulk().catch((error) => context.toast(error.message, true));
     const present = new Set(state.data.items.map((item) => item.id));
     state.selected = new Set([...state.selected].filter((id) => present.has(id)));
     renderList();
@@ -62,10 +70,11 @@
     $('#t-texts').textContent = drafts ? String(drafts) : '';
     $('#tx-count').textContent = `${data.total} artikel${data.total === 1 ? '' : 'en'}${data.truncated ? ` (eerste ${data.items.length} getoond: verfijn het filter)` : ''} · nog ${data.ai.remainingToday} AI-verzoeken vandaag`;
     $('#tx-table').innerHTML = data.items.length
-      ? `<thead><tr><th><input type="checkbox" id="tx-all" aria-label="Alles kiezen"></th><th>Code</th><th>Naam</th><th>Categorie</th><th>Tekst nu</th><th>Concept</th><th></th></tr></thead><tbody>${data.items.map((item) => `<tr>
+      ? `<thead><tr><th><input type="checkbox" id="tx-all" aria-label="Alles kiezen"></th><th>Code</th><th>Naam</th><th>Categorie</th><th>Tekst nu</th><th>AI-tekst</th><th>Concept</th><th></th></tr></thead><tbody>${data.items.map((item) => `<tr>
           <td><input type="checkbox" data-pick="${context.esc(item.id)}" ${state.selected.has(item.id) ? 'checked' : ''} aria-label="Kies ${context.esc(item.code)}"></td>
           <td>${context.esc(item.code)}</td><td class="wrap">${context.esc(item.name)}</td><td>${context.esc(item.category)}</td>
           <td>${item.hasDescription ? 'Omschrijving' : '<span class="muted">Geen omschrijving</span>'}${item.hasSeo ? '' : ' <span class="muted">· zoektekst ontbreekt</span>'}</td>
+          <td>${item.written ? `<span class="pill ${item.written.action === 'overschreven' ? 'warn' : 'ok'}" title="${context.esc(item.written.reason || '')}">${WRITTEN_LABELS[item.written.action] || context.esc(item.written.action)}</span>` : ''}</td>
           <td>${item.draft ? `<span class="pill ${item.draft.warnings ? 'warn' : 'ok'}">${item.draft.warnings ? `Concept · ${item.draft.warnings} ${item.draft.warnings === 1 ? 'punt' : 'punten'}` : 'Concept'}</span>` : ''}</td>
           <td><button class="linkbtn" data-open="${context.esc(item.id)}" type="button">${item.draft ? 'Beoordelen' : 'Bekijken'}</button></td></tr>`).join('')}</tbody>`
       : '<tbody><tr><td class="empty">Geen artikelen gevonden voor dit filter.</td></tr></tbody>';
@@ -152,6 +161,7 @@
     $('#tx-redo').textContent = detail.draft ? 'Opnieuw schrijven' : 'Concept schrijven';
     $('#tx-redo').disabled = Boolean(aiOff);
     renderWarnings(detail.draft ? detail.draft.warnings : []);
+    renderWritten(detail.written);
   }
 
   /**
@@ -213,6 +223,93 @@
     return out.results;
   }
 
+
+  /**
+   * De opties van de bulkrun uit het scherm.
+   * @returns {{ research: boolean, review: boolean }} Kenmerken opzoeken en bestaande teksten beoordelen.
+   */
+  const bulkOptions = () => ({ research: $('#tx-bulk-research').checked, review: $('#tx-bulk-review').checked });
+
+  /**
+   * Haalt op wat er in een bulkrun aan de beurt is (met de kostenschatting voor de gekozen opties) en tekent de samenvatting.
+   * @returns {Promise<void>}
+   */
+  async function loadBulk() {
+    const options = bulkOptions();
+    const todo = await context.api(`stock/item-texts/bulk/todo?review=${options.review ? 1 : 0}&research=${options.research ? 1 : 0}`);
+    state.bulk = todo;
+    state.bulkArmed = false;
+    const select = $('#tx-bulk-model');
+    if (document.activeElement !== select) {
+      select.innerHTML = todo.ai.models.map((model) => `<option value="${context.esc(model.id)}">${context.esc(model.label)}</option>`).join('');
+      select.value = todo.ai.model;
+    }
+    renderBulk();
+  }
+
+  /** Tekent de samenvatting en de knop van de bulkrun. */
+  function renderBulk() {
+    const todo = state.bulk;
+    if (!todo) return;
+    const ready = todo.ai.enabled && todo.ai.configured;
+    $('#tx-bulk-summary').textContent = !todo.ai.enabled ? 'AI staat uit (Beheer → Integraties → AI-herkenning).'
+      : !todo.ai.configured ? 'Er is geen API-sleutel ingesteld (Beheer → Integraties → AI-herkenning).'
+        : todo.total === 0 ? 'Alles is al behandeld: er zijn geen artikelen meer aan de beurt.'
+          : `${todo.total} artikel${todo.total === 1 ? '' : 'en'} aan de beurt (${todo.withExisting} met een bestaande omschrijving). `
+            + `${todo.research ? `Kenmerken opzoeken voor ${todo.withoutFeatures} (model ${todo.ai.researchModelLabel}). ` : ''}Geschatte kosten ${euro(todo.estimateEur)}; het echte verbruik staat bij AI-kosten.`;
+    const button = $('#tx-bulk-start');
+    button.disabled = !ready || todo.total === 0 || state.bulkRunning;
+    button.textContent = state.bulkArmed ? `Bevestig: ${todo.total} schrijven (± ${euro(todo.estimateEur)})` : 'Alles schrijven';
+    $('#tx-bulk-model').disabled = state.bulkRunning;
+    $('#tx-bulk-stop').hidden = !state.bulkRunning;
+  }
+
+  /**
+   * Verwerkt alle artikelen die aan de beurt zijn in porties, met voortgang. Stoppen kan altijd; een fout die doorgaan zinloos maakt (sleutel, tegoed) stopt de rest.
+   * @returns {Promise<void>}
+   */
+  async function runBulk() {
+    const todo = state.bulk;
+    const options = bulkOptions();
+    const ids = todo.ids;
+    state.bulkRunning = true;
+    state.bulkStop = false;
+    state.bulkArmed = false;
+    renderBulk();
+    const tally = { nieuw: 0, overschreven: 0, behouden: 0, concept: 0, skipped: 0, error: 0 };
+    let stopMessage = '';
+    const size = todo.ai.batchSize || 6;
+    try {
+      for (let start = 0; start < ids.length && !stopMessage && !state.bulkStop; start += size) {
+        $('#tx-bulk-progress').textContent = `Schrijven… ${start} van ${ids.length}`;
+        const out = await context.api('stock/item-texts/bulk/run', { method: 'POST', body: { itemIds: ids.slice(start, start + size), research: options.research, review: options.review } });
+        for (const result of out.results) tally[result.status] = (tally[result.status] || 0) + 1;
+        if (out.aborted) stopMessage = out.aborted.message;
+      }
+    } catch (error) {
+      stopMessage = error.message;
+    }
+    state.bulkRunning = false;
+    const parts = [`${tally.nieuw} nieuw`, `${tally.overschreven} overschreven`, `${tally.behouden} behouden`, `${tally.concept} als concept (waarschuwing)`];
+    if (tally.error) parts.push(`${tally.error} mislukt`);
+    $('#tx-bulk-progress').textContent = `${state.bulkStop ? 'Gestopt. ' : ''}${parts.join(', ')}.${stopMessage ? ` ${stopMessage}` : ''}`;
+    context.toast(stopMessage || 'Klaar met schrijven.', Boolean(stopMessage));
+    await load();
+    await loadBulk();
+  }
+
+  /**
+   * Toont bij een geopend artikel wat de AI met de omschrijving deed, en de knop om de vorige tekst terug te zetten.
+   * @param {?{ action: string, at: string, reason: string }} written Het logboek van het artikel, of null.
+   */
+  function renderWritten(written) {
+    const line = $('#tx-written');
+    line.hidden = !written;
+    $('#tx-restore').hidden = !(written && written.action === 'overschreven');
+    if (!written) return;
+    line.textContent = `AI-tekst: ${(WRITTEN_LABELS[written.action] || written.action).toLowerCase()} op ${new Date(written.at).toLocaleString('nl-NL', { dateStyle: 'short', timeStyle: 'short' })}.${written.reason ? ` ${written.reason}` : ''}`;
+  }
+
   /**
    * Koppelt de knoppen, filters en de tabel.
    * @param {object} options api, toast en esc van de pagina.
@@ -236,6 +333,29 @@
     $('#tx-table').addEventListener('click', (event) => {
       const id = event.target.dataset && event.target.dataset.open;
       if (id) context.openItem(id);
+    });
+
+    $('#tx-bulk-start').addEventListener('click', () => {
+      if (state.bulkRunning) return;
+      if (!state.bulkArmed) { state.bulkArmed = true; renderBulk(); return; }
+      runBulk().catch((error) => context.toast(error.message, true));
+    });
+    $('#tx-bulk-stop').addEventListener('click', () => { state.bulkStop = true; $('#tx-bulk-progress').textContent = 'Stoppen na de lopende portie…'; });
+    for (const id of ['#tx-bulk-research', '#tx-bulk-review']) $(id).addEventListener('change', () => { loadBulk().catch((error) => context.toast(error.message, true)); });
+    $('#tx-bulk-model').addEventListener('change', async (event) => {
+      try {
+        await context.api('stock/item-texts/bulk/model', { method: 'PUT', body: { model: event.target.value } });
+        await loadBulk();
+      } catch (error) { context.toast(error.message, true); await loadBulk().catch(() => {}); }
+    });
+    $('#tx-restore').addEventListener('click', async () => {
+      try {
+        await context.api(`stock/item-texts/${encodeURIComponent(state.openId)}/restore`, { method: 'POST', body: {} });
+        context.toast('Vorige omschrijving teruggezet.');
+        await refreshList();
+        await context.reloadItem();
+        await openDetail(state.openId);
+      } catch (error) { context.toast(error.message, true); }
     });
     $('#tx-write').addEventListener('click', () => { writeSelected(); });
     $('#tx-approve').addEventListener('click', async () => {

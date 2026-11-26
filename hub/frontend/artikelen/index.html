@@ -438,7 +438,22 @@
       </section>
 
       <section id="tab-texts" class="tabpane" hidden>
-        <p class="muted small">De AI schrijft een concept van de omschrijving en de zoekmachineteksten, alleen met de gegevens die bij het artikel staan (naam, merk, specificaties, bestaande omschrijving). Niets gaat vanzelf live: jij controleert elk concept en keurt het goed. Getallen, eenheden en beweringen die niet in de artikelgegevens staan worden gemarkeerd.</p>
+        <p class="muted small">De AI schrijft omschrijvingen en zoekmachineteksten, alleen met gegevens die echt bekend zijn: de artikelgegevens, de specificaties van Past bij en kenmerken uit de bron van de fabrikant. Getallen, eenheden en beweringen die niet in die gegevens staan worden gemarkeerd. Bij een enkel artikel (en bij alles met een waarschuwing) blijft het een concept dat jij goedkeurt.</p>
+        <section class="card-form tx-bulk" aria-labelledby="tx-bulk-title">
+          <h3 id="tx-bulk-title">Alles in één keer schrijven</h3>
+          <p id="tx-bulk-summary" class="muted small" role="status">Gegevens laden…</p>
+          <div class="form-grid">
+            <label class="chk full"><input type="checkbox" id="tx-bulk-research" checked> Eerst de kenmerken opzoeken in de bron van de fabrikant (kost het meeste, maar levert de feiten voor de tekst)</label>
+            <label class="chk full"><input type="checkbox" id="tx-bulk-review" checked> Bestaande omschrijvingen beoordelen: de AI vervangt ze alleen als de nieuwe beter is. De vorige tekst blijft bewaard en kan per artikel terug.</label>
+            <label class="field span-2">Model voor het schrijven<select id="tx-bulk-model"></select></label>
+          </div>
+          <p class="muted small">Zonder waarschuwing gaat de tekst direct live. Met een waarschuwing wordt het een concept. Samengevoegde artikelen krijgen één tekst op het hoofdartikel. Je kunt stoppen en later verder; wat klaar is, wordt overgeslagen.</p>
+          <div class="form-actions tx-actions">
+            <button class="btn primary" id="tx-bulk-start" type="button" disabled>Alles schrijven</button>
+            <button class="btn" id="tx-bulk-stop" type="button" hidden>Stoppen</button>
+            <span id="tx-bulk-progress" class="muted small" role="status"></span>
+          </div>
+        </section>
         <div id="tx-notice" class="notice" hidden></div>
         <div class="filters">
           <input id="tx-search" type="search" placeholder="Zoek op code of naam">
@@ -448,6 +463,11 @@
             <option value="ontbreekt">Tekst ontbreekt</option>
             <option value="zonderconcept">Zonder concept</option>
             <option value="concept">Met concept</option>
+            <option value="zonderai">Nog niet door de AI behandeld</option>
+            <option value="nieuw">AI-tekst: nieuw geschreven</option>
+            <option value="overschreven">AI-tekst: overschreven</option>
+            <option value="behouden">AI-tekst: bestaande behouden</option>
+            <option value="hersteld">AI-tekst: teruggezet</option>
           </select>
           <span class="spacer"></span>
           <span id="tx-count" class="muted small"></span>
@@ -652,6 +672,7 @@
           <label class="field">Concept omschrijving voor zoekmachines (max. 160)<textarea id="tx-seoDescription" rows="2" maxlength="160"></textarea></label>
         </div>
         <p id="tx-notes" class="muted small"></p>
+        <p id="tx-written" class="muted small" hidden></p>
         <label class="chk" id="tx-ack-row" hidden><input type="checkbox" id="tx-ack"> Ik heb de gemarkeerde punten gecontroleerd en de tekst klopt met het artikel</label>
         <label class="chk" id="tx-over-row" hidden><input type="checkbox" id="tx-over"> De huidige tekst is intussen gewijzigd; overschrijf hem toch</label>
         <div class="form-actions">
@@ -659,6 +680,7 @@
           <button class="btn primary" id="tx-publish" type="button">Goedkeuren en plaatsen</button>
           <button class="btn" id="tx-redo" type="button">Opnieuw schrijven</button>
           <button class="btn" id="tx-discard" type="button">Afwijzen</button>
+          <button class="btn" id="tx-restore" type="button" hidden>Vorige omschrijving terugzetten</button>
         </div>
       </section>
       <section class="card-form" id="d-costs">

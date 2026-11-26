@@ -120,6 +120,8 @@ const FIELDS = {
   aiEurCentsPerUsd: { type: 'int', default: 86, min: 50, max: 200 },
   // Model voor het opzoeken van specificaties bij Past bij (Artikelen > Past bij); apart van aiModel omdat het zoekt op internet en veel artikelen in één ronde doet.
   relatedAiModel: { type: 'enum', values: AiModels.SELECTABLE, default: 'claude-sonnet-5-5' },
+  // Model voor het schrijven van productomschrijvingen (Artikelen > Teksten), apart van aiModel zodat de dure standaard niet voor honderden artikelen draait.
+  descriptionAiModel: { type: 'enum', values: AiModels.SELECTABLE, default: 'claude-sonnet-5-5' },
   modules: { type: 'flags', default: {} },
   // Debugmodus (Beheer > Instellingen > Foutopsporing): beheerders zien bij een fout de details (soort fout,
   // databasecode, plek in de code) in plaats van alleen een algemene melding; zie platform/error-report.js.

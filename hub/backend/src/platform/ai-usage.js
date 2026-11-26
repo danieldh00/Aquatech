@@ -24,7 +24,7 @@ const COLS = `a.id, a.tenant_id, a.user_id, a.feature, a.model, a.status, a.inpu
 const SUMS = `COUNT(*) AS requests, COALESCE(SUM(a.input_tokens), 0) AS input_tokens, COALESCE(SUM(a.output_tokens), 0) AS output_tokens,
   COALESCE(SUM(a.cache_read_tokens), 0) AS cache_read_tokens, COALESCE(SUM(a.cache_write_tokens), 0) AS cache_write_tokens,
   COALESCE(SUM(a.duration_ms), 0) AS duration_ms, COALESCE(SUM(a.cost_usd_micro), 0) AS cost_usd_micro,
-  COALESCE(SUM(a.cost_eur_micro), 0) AS cost_eur_micro, COALESCE(SUM(CASE WHEN a.status IN ('ok', 'gevonden', 'niet_gevonden') THEN 0 ELSE 1 END), 0) AS failed`;
+  COALESCE(SUM(a.cost_eur_micro), 0) AS cost_eur_micro, COALESCE(SUM(CASE WHEN a.status IN (${OK_STATUSES.map((status) => `'${status}'`).join(', ')}) THEN 0 ELSE 1 END), 0) AS failed`;
 
 /**
  * Of een waarde een geldige datum is (JJJJ-MM-DD).

@@ -12,12 +12,14 @@ const ItemDetails = require('./item-details');
 const SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['description', 'seoTitle', 'seoDescription', 'notes'],
+  required: ['description', 'seoTitle', 'seoDescription', 'notes', 'verdict', 'verdictReason'],
   properties: {
     description: { type: 'string' },
     seoTitle: { type: 'string' },
     seoDescription: { type: 'string' },
     notes: { type: 'string' },
+    verdict: { type: 'string', enum: ['geen', 'behouden', 'vervangen'] },
+    verdictReason: { type: 'string' },
   },
 };
 
@@ -30,13 +32,23 @@ Harde regels, want de tekst moet feitelijk kloppen:
 - Verzin niets: geen specificaties, maten, certificeringen, normen, garantie, toepassingen, compatibiliteit, voorraad, levertijd, prijzen of eigenschappen die niet in de bronvelden staan. Wat niet bekend is laat je weg, ook als het gebruikelijk is voor zo'n product.
 - Reken niet om en leid niets af. Staat er geen toepassing, noem er dan geen.
 - Geen superlatieven of beloftes (beste, ongeëvenaard, levenslang, supersterk) en geen verwijzingen naar concurrenten, webadressen of e-mailadressen.
-- Is er weinig bekend, schrijf dan kort: een korte omschrijving van één of twee zinnen is goed.
+- Is er weinig bekend, schrijf dan kort: een korte omschrijving van één of twee zinnen is goed. Bij alleen een naam en merk schrijf je één korte, neutrale zin die het artikel benoemt, zonder iets toe te voegen.
+- Velden met "(volgens fabrikantbron)" komen uit de pagina van de fabrikant of leverancier en zijn betrouwbaar. De "Bestaande omschrijving" is eerder geschreven tekst en niet altijd correct: neem er alleen feiten uit over die ook in de andere velden terugkomen of die duidelijk een gegeven van het artikel zijn.
+
+Schrijfstijl, want de tekst mag niet als AI-tekst herkenbaar zijn:
+- Schrijf zoals een vakman het in een winkel zou uitleggen: concreet, nuchter, korte en middellange zinnen, gewone woorden.
+- Geen opsommende openingen of afsluiters zoals "Of je nu...", "Of het nu...", "Kortom", "Ontdek", "Dit product", "Deze hoogwaardige", "ideaal voor", "perfect voor", "de ideale keuze", "een must-have".
+- Geen gedachtestreepjes (—), geen uitroeptekens, geen vraagzinnen, geen aanspreekvorm als "je" of "u" tenzij het niet anders kan.
+- Begin niet elke zin op dezelfde manier en herhaal de productnaam niet steeds. Laat de zinsbouw per artikel verschillen.
+- Gebruik geen lijst met kenmerken als er maar een paar zijn: schrijf dan gewoon zinnen. Bij vijf of meer kenmerken is een korte opsomming goed.
 
 Vorm:
 - description: platte tekst in het Nederlands, zonder HTML. Alinea's gescheiden door een lege regel; een opsomming met regels die beginnen met "• ". Maximaal 1500 tekens.
 - seoTitle: maximaal 60 tekens, met de productnaam.
 - seoDescription: maximaal 155 tekens, één of twee zinnen.
-- notes: korte Nederlandse toelichting voor de controleur: welke gegevens ontbraken of onduidelijk waren. Leeg als er niets is.`;
+- notes: korte Nederlandse toelichting voor de controleur: welke gegevens ontbraken of onduidelijk waren. Leeg als er niets is.
+- verdict: staat er een "Bestaande omschrijving", beoordeel die dan tegen jouw nieuwe description. "behouden" als de bestaande tekst feitelijk klopt met de andere velden, natuurlijk klinkt en minstens zo informatief is als jouw tekst. "vervangen" als jouw tekst beter is: bijvoorbeeld omdat de bestaande leeg of erg kort is, feiten bevat die de bronvelden tegenspreken, reclametaal of opvulling bevat, of onnatuurlijk of als vertaling klinkt. Staat er geen bestaande omschrijving, dan "geen".
+- verdictReason: één korte Nederlandse zin waarom (leeg bij "geen").`;
 
 /** Versie van opdracht en schema. */
 const PROMPT_VERSION = require('crypto').createHash('sha256').update(SYSTEM + JSON.stringify(SCHEMA)).digest('hex').slice(0, 12);
@@ -51,7 +63,7 @@ const stripLinks = (text) => String(text || '').replace(/<[^>]*>/g, ' ').replace
 /**
  * Controleert en schoont het antwoord van de AI op.
  * @param {object} result Het JSON-antwoord volgens SCHEMA.
- * @returns {{ description: string, seoTitle: string, seoDescription: string, notes: string }} De opgeschoonde teksten (omschrijving mag niet leeg zijn, anders een fout bij de aanroeper).
+ * @returns {{ description: string, seoTitle: string, seoDescription: string, notes: string, verdict: string, verdictReason: string }} De opgeschoonde teksten en het oordeel over de bestaande omschrijving (omschrijving mag niet leeg zijn, anders een fout bij de aanroeper).
  */
 function validate(result) {
   const source = result && typeof result === 'object' ? result : {};
@@ -60,6 +72,8 @@ function validate(result) {
     seoTitle: ItemDetails.sanitizeSeoTitle(stripLinks(source.seoTitle)),
     seoDescription: ItemDetails.sanitizeSeoDescription(stripLinks(source.seoDescription)),
     notes: ItemDetails.sanitizeShortText(source.notes, 500),
+    verdict: ['behouden', 'vervangen'].includes(source.verdict) ? source.verdict : 'geen',
+    verdictReason: ItemDetails.sanitizeShortText(source.verdictReason, 300),
   };
 }
 
@@ -75,7 +89,7 @@ function createItemTextWriter({ apiKey, client, model = AiModels.DEFAULT, log = 
   /**
    * Schrijft het concept voor één artikel.
    * @param {{ fields: { label: string, value: string }[] }} facts De bronvelden (buildFacts).
-   * @returns {Promise<object>} description, seoTitle, seoDescription, notes, model en usage.
+   * @returns {Promise<object>} description, seoTitle, seoDescription, notes, verdict (geen, behouden of vervangen: oordeel over de bestaande omschrijving), verdictReason, model en usage.
    */
   async function write({ fields }) {
     if (!anthropic) throw new AnalyzeError('not_configured', 'Teksten schrijven is niet ingesteld: stel de API-sleutel in bij Instellingen.', 409);

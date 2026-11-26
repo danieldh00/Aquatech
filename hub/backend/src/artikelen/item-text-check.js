@@ -60,9 +60,10 @@ function numbersIn(text) {
  * Zet de gegevens van een artikel om naar bronvelden.
  * @param {object} row De artikelrij met name, code, unit, brand, ean, weight_grams, description, specifications, attributes, shop_description, shop_attributes, seo_title, seo_description en categories.
  * @param {string} [categoryName] De categorie in de webshop (leeg = onbekend).
+ * @param {?object} [specs] De opgezochte specificaties van het artikel (item_specs.specs: role, connections, pressureBar, flowLh, kenmerken), of null.
  * @returns {{ fields: { label: string, value: string }[], sourceText: string, thin: boolean }} De bronvelden (alleen gevulde), alle bronnen als één tekst voor de controle, en of er weinig gegevens zijn.
  */
-function buildFacts(row, categoryName = '') {
+function buildFacts(row, categoryName = '', specs = null) {
   const details = ItemDetails.shownDetails(row);
   /**
    * Kort een bron in.
@@ -74,11 +75,25 @@ function buildFacts(row, categoryName = '') {
   try { attributes = JSON.parse(row.attributes || '[]'); } catch { attributes = []; }
   const variantLines = (Array.isArray(attributes) ? attributes : []).filter((attribute) => attribute && attribute.name && Array.isArray(attribute.values) && attribute.values.length)
     .map((attribute) => `${attribute.name}: ${attribute.values.join(', ')}`);
+  const known = specs && typeof specs === 'object' ? specs : {};
+  const connectionLines = (Array.isArray(known.connections) ? known.connections : []).map((connection) => (connection.kind === 'draad' ? `${connection.gender}draad ${connection.size}` : `${connection.kind} ${connection.size}`));
+  /**
+   * Een bereik als tekst ("1,5 tot 4").
+   * @param {?{ min: number, max: number }} range Het bereik.
+   * @returns {string} De tekst, leeg zonder bereik.
+   */
+  const rangeText = (range) => (range && Number.isFinite(range.min) && Number.isFinite(range.max) ? (range.min === range.max ? String(range.min) : `${range.min} tot ${range.max}`).replace(/\./g, ',') : '');
+  const featureLines = (Array.isArray(known.kenmerken) ? known.kenmerken : []).filter((feature) => feature && feature.name && feature.value).map((feature) => `${feature.name}: ${feature.value}`);
   const candidates = [
     ['Naam', row.name], ['Artikelcode', row.code], ['Eenheid', row.unit], ['Merk', details.brand], ['EAN', row.ean],
     ['Gewicht (gram)', row.weight_grams == null ? '' : String(row.weight_grams)], ['Categorie in de webshop', categoryName],
     ['Specificaties', details.specifications.map((specification) => `${specification.name}: ${specification.value}`).join('\n')],
     ['Beschikbaar in (varianten)', variantLines.join('\n')],
+    ['Soort artikel (volgens fabrikantbron)', known.role && known.role !== 'overig' ? known.role : ''],
+    ['Aansluitingen (volgens fabrikantbron)', connectionLines.join('; ')],
+    ['Werkdruk in bar (volgens fabrikantbron)', rangeText(known.pressureBar)],
+    ['Debiet in liter per uur (volgens fabrikantbron)', rangeText(known.flowLh)],
+    ['Kenmerken (volgens fabrikantbron)', featureLines.join('\n')],
     ['Bestaande omschrijving', ItemDetails.sanitizeDescription(row.description) || ItemDetails.sanitizeDescription(row.shop_description)],
   ];
   const fields = candidates.map(([label, value]) => ({ label, value: clip(value) })).filter((field) => field.value);
