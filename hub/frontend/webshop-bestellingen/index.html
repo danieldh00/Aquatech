@@ -44,6 +44,11 @@
       </nav>
       <section id="tab-bestellingen" class="tabpane" role="tabpanel" aria-labelledby="t-bestellingen">
         <div class="filters">
+          <select id="wo-source" aria-label="Bron" hidden>
+            <option value="alle">Alle bronnen</option>
+            <option value="systeem">Eigen webshop</option>
+            <option value="wordpress">WordPress (oud, alleen lezen)</option>
+          </select>
           <select id="wo-status" aria-label="Status"></select>
           <input id="wo-search" type="search" placeholder="Zoek op nummer, naam of e-mail" aria-label="Zoeken">
           <button id="wo-export" class="btn primary">Exporteer naar Excel</button>

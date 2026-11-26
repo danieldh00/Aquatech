@@ -287,6 +287,7 @@ test('testdata vult alle features: klantlinks, akkoord met handtekening, werkord
       item_specs: 'opgezochte specificaties zijn het resultaat van een betaalde AI-aanroep met webzoekopdracht en de eigen sleutel; nep-specificaties zouden als gecontroleerde bron verschijnen',
       item_together: 'vaak samen besteld wordt berekend uit de orderhistorie van de eigen webshop (hoofdtenant); een testomgeving heeft geen webshop',
       wp_order_lines: 'orderhistorie uit de oude WordPress-webshop komt alleen door echt ophalen uit WordPress (liveOnly-koppeling); nep-orders zouden Vaak samen besteld vervalsen',
+      wp_orders: 'kopgegevens van WordPress-bestellingen komen alleen door echt ophalen uit WordPress (liveOnly-koppeling); nep-orders zouden in de lijst als echte oude bestellingen verschijnen',
       wp_order_import: 'de stand van het ophalen uit WordPress hoort bij de echte koppeling; een testomgeving heeft die niet',
     };
     const tables = listTables(db).filter((table) => tableColumns(db, table).some((column) => column.name === 'tenant_id'));
