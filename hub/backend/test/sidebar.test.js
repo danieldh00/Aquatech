@@ -103,3 +103,21 @@ test('navTitle verkort alleen de titel in de zijbalk', () => {
   assert.strictEqual(orders.navTitle, 'Bestellingen');
   assert.strictEqual(orders.title, 'Webshopbestellingen');
 });
+
+test('Artikelen: onderdelen staan als subpagina in de zijbalk, met tussenkoppen en een tabblad/pane in de pagina', () => {
+  const sections = sectionsFor({ role: 'beheerder' });
+  const items = sections.find((section) => section.key === 'artikelen').items;
+  assert.deepStrictEqual(idsOf(items), [
+    'voorraad', 'artikelen-gereserveerd', 'artikelen-telling', 'artikelen-teksten', 'artikelen-afbeeldingen', 'artikelen-pastbij', 'artikelen-import', 'artikelen-eenheden',
+  ]);
+  assert.deepStrictEqual(items.filter((module) => module.navSection).map((module) => module.navSection), ['Voorraad', 'Inhoud', 'Beheer']);
+  const html = require('node:fs').readFileSync(path.join(FRONTEND_DIR, 'artikelen', 'index.html'), 'utf8');
+  for (const module of items.slice(1)) {
+    const tab = new URL(module.href, 'http://x/').hash.slice(1);
+    assert.match(html, new RegExp(`data-tab="${tab}"`), `tabblad ${tab} ontbreekt in Artikelen`);
+    assert.match(html, new RegExp(`id="tab-${tab}"`), `pane ${tab} ontbreekt in Artikelen`);
+  }
+  // Telling en Past bij volgen hun eigen schakelaar.
+  const off = sectionsFor({ role: 'beheerder' }, { voorraadtelling: false, 'gerelateerde-artikelen': false }).find((section) => section.key === 'artikelen').items;
+  assert.ok(!idsOf(off).includes('artikelen-telling') && !idsOf(off).includes('artikelen-pastbij'));
+});

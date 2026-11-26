@@ -142,7 +142,8 @@
       const title = module.navTitle || module.title;
       const label = `<span class="at-nav-ico">${tools.icon(module.icon)}${badge}</span><span class="at-nav-label">${esc(title)}</span>`;
       const currentAttribute = module.id === active ? ' aria-current="page"' : '';
-      return `<a class="at-nav-item" href="${esc(module.href)}" title="${esc(title)}"${currentAttribute}>${label}</a>`;
+      const subhead = module.navSection ? `<div class="at-nav-subhead">${esc(module.navSection)}</div>` : '';
+      return `${subhead}<a class="at-nav-item" href="${esc(module.href)}" title="${esc(title)}"${currentAttribute}>${label}</a>`;
     };
     // Accordeon: hoogstens één groep open. Bij het laden staat dat de groep met de huidige pagina, anders de laatst gekozen.
     if (!userChose) {

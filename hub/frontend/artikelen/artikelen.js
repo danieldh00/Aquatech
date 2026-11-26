@@ -475,7 +475,14 @@
   }
 
   /** De tabbladen, ook als #-adres (de zijbalk onder Inkoop wijst naar moves, reorder, suppliers en orders). */
-  const TABS = ['stock', 'reserved', 'moves', 'reorder', 'suppliers', 'orders', 'pricefactor', 'counts', 'media', 'texts', 'related'];
+  const TABS = ['stock', 'reserved', 'moves', 'reorder', 'suppliers', 'orders', 'pricefactor', 'counts', 'media', 'texts', 'related', 'import', 'units'];
+
+  /** De titel boven de pagina per onderdeel (zonder zijbalk staan de tabbladen er nog; met zijbalk laat de titel zien waar je bent). */
+  const TAB_TITLES = {
+    stock: 'Artikelen', reserved: 'Artikelen · Gereserveerd', moves: 'Artikelen · Mutaties', reorder: 'Artikelen · Bestelvoorstel', suppliers: 'Artikelen · Leveranciers',
+    orders: 'Artikelen · Inkooporders', pricefactor: 'Artikelen · Prijsfactor', counts: 'Artikelen · Telling', media: 'Artikelen · Afbeeldingen',
+    texts: 'Artikelen · Specificaties en teksten', related: 'Artikelen · Past bij', import: 'Artikelen · Import en export', units: 'Artikelen · Eenheden',
+  };
 
   /**
    * De melding bij een bestelvoorstelregel die bij een backupleverancier uitkomt.
@@ -515,6 +522,8 @@
     state.tab = name;
     document.querySelectorAll('.tab').forEach((button) => button.classList.toggle('active', button.dataset.tab === name));
     for (const tabName of TABS) $(`#tab-${tabName}`).hidden = tabName !== name;
+    $('#v-title').textContent = TAB_TITLES[name] || 'Artikelen';
+    if (name === 'units') { $('#units-form').hidden = false; loadUnits().catch((error) => toast(error.message, true)); }
     if (name === 'moves' && !state.moves) loadMoves();
     window.ArtikelenProposals.setTab(name);
     if (name === 'reorder') loadReorder().catch((error) => toast(error.message, true));
@@ -604,13 +613,6 @@
   /** Koppelt het formulier om eenheden aan te maken en te verwijderen. */
   function setupUnits() {
     const formElement = $('#units-form');
-    /** Opent of sluit het scherm met eenheden. */
-    $('#b-units').onclick = () => {
-      formElement.hidden = !formElement.hidden;
-      if (!formElement.hidden) { $('#new-form').hidden = true; $('#import-form').hidden = true; formElement.name.focus(); }
-    };
-    /** Sluit het scherm. */
-    $('[data-cancel]', formElement).onclick = () => { formElement.hidden = true; };
     /**
      * Voegt de ingevulde eenheid toe.
      * @param {SubmitEvent} event het verzenden
