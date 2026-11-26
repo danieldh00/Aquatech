@@ -99,6 +99,35 @@ function validateSpecs(raw, allowedUrls) {
   return { role: role || 'overig', connections, pressureBar, flowLh, evidence: evidence.slice(0, 12) };
 }
 
+/** Hoeveel kenmerken een artikel hoogstens bewaart. */
+const MAX_FEATURES = 15;
+
+/**
+ * Controleert en schoont de kenmerken die de AI uit een bron las (materiaal, afmeting, gewicht, werpstraal enzovoort). Een kenmerk blijft alleen staan als
+ * het adres uit de zoekresultaten komt, de bronzin er is en elk getal van de waarde ook in die zin staat; de rest vervalt.
+ * @param {*} raw De lijst uit het JSON-antwoord van de AI ({ name, value, url, quote }).
+ * @param {Set<string>} allowedUrls De adressen die de zoekopdracht echt teruggaf.
+ * @returns {{ name: string, value: string, url: string, quote: string }[]} De onderbouwde kenmerken (hoogstens MAX_FEATURES, elke naam één keer).
+ */
+function validateFeatures(raw, allowedUrls) {
+  const seen = new Set();
+  const features = [];
+  for (const entry of Array.isArray(raw) ? raw : []) {
+    const name = String((entry && entry.name) || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    const value = String((entry && entry.value) || '').replace(/\s+/g, ' ').trim().slice(0, 150);
+    const url = String((entry && entry.url) || '').slice(0, 500);
+    const quote = String((entry && entry.quote) || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+    if (!name || !value || !quote || !/^https:\/\//.test(url) || !allowedUrls.has(url) || seen.has(name.toLowerCase())) continue;
+    const quoteText = quote.toLowerCase().replace(/,/g, '.');
+    const numbers = value.toLowerCase().replace(/(\d),(\d)/g, '$1.$2').match(/\d+(?:\.\d+)?/g) || [];
+    if (!numbers.every((number) => new RegExp(`(^|[^0-9.])${number.replace('.', '\\.')}($|[^0-9])`).test(quoteText))) continue;
+    seen.add(name.toLowerCase());
+    features.push({ name, value, url, quote });
+    if (features.length >= MAX_FEATURES) break;
+  }
+  return features;
+}
+
 /**
  * Of twee bereiken elkaar overlappen (een ontbrekend bereik telt als verenigbaar: er is niets om op af te keuren).
  * @param {?{ min: number, max: number }} left Het ene bereik.
@@ -185,4 +214,4 @@ function suggestLinks(items, { perItem = 6 } = {}) {
   return result;
 }
 
-module.exports = { normalizeSize, quoteSupportsSize, validateSpecs, compatible, suggestLinks, connectionsFit, KINDS, GENDERS };
+module.exports = { normalizeSize, quoteSupportsSize, validateSpecs, validateFeatures, compatible, suggestLinks, connectionsFit, KINDS, GENDERS };

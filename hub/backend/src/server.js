@@ -101,6 +101,7 @@ const { createOrderReader: createDefaultOrderReader } = require('./artikelen/ord
 const { registerOrderReadRoute } = require('./artikelen/order-read-route');
 const { createItemTextWriter: createDefaultItemTextWriter } = require('./artikelen/item-text-writer');
 const { createItemTextDraftStore, registerItemTextRoutes } = require('./artikelen/item-text-drafts');
+const { registerItemTextBulkRoutes } = require('./artikelen/item-text-bulk');
 const { createRelatedStore } = require('./artikelen/related-items');
 const { registerRelatedRoutes } = require('./artikelen/related-routes');
 const { createSpecResearcher: createDefaultSpecResearcher } = require('./artikelen/related-research');
@@ -636,14 +637,14 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   }
   const itemTextWriters = new Map();
   /**
-   * De AI-schrijver voor producttekst van een omgeving (per model en sleutel onthouden).
+   * De AI-schrijver voor producttekst van een omgeving (per model en sleutel onthouden), met het model uit de instelling descriptionAiModel.
    * @param {string} [tenantId] Id van de omgeving.
    * @returns {object} De schrijver (item-text-writer.js).
    */
   function currentItemTextWriter(tenantId = tenant.id) {
     const aiSettings = settingsFor(aiTenantOf(tenantId));
     const key = aiSettings.get('anthropicApiKey');
-    const model = aiSettings.get('aiModel');
+    const model = settingsFor(tenantId).get('descriptionAiModel');
     const cacheKey = `${model}|${key}`;
     let cached = itemTextWriters.get(cacheKey);
     if (!cached) {
@@ -2690,7 +2691,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Producttekst door de AI: de browser vraagt per portie van 5 artikelen, dus ruimer dan de limiet voor plannen (de dagelijkse limiet telt per artikel).
   const itemTextLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 120, keyFn: (req) => `${req.tenantId || tenant.id}|${clientKey(req)}` });
   registerRelatedRoutes(app, { related: relatedStore, requireRight, requireJson, audit, settingsFor, aiTenantOf, currentSpecResearcher, limiter: itemTextLimiter, aiUsage });
-  registerItemTextRoutes(app, { drafts: createItemTextDraftStore(database), stock: stockStore, requireRight, requireJson, audit, settingsFor, aiTenantOf, currentItemTextWriter, dailyFor, limiter: itemTextLimiter, aiUsage });
+  const itemTextDrafts = createItemTextDraftStore(database);
+  registerItemTextBulkRoutes(app, { drafts: itemTextDrafts, related: relatedStore, stock: stockStore, requireRight, requireJson, audit, settingsFor, aiTenantOf, currentItemTextWriter, currentSpecResearcher, aiUsage });
+  registerItemTextRoutes(app, { drafts: itemTextDrafts, stock: stockStore, requireRight, requireJson, audit, settingsFor, aiTenantOf, currentItemTextWriter, dailyFor, limiter: itemTextLimiter, aiUsage });
   registerOrderReadRoute(app, { stock: stockStore, suppliers: supplierStore, requireRight, audit, settingsFor, aiTenantOf, currentOrderReader, dailyFor, limiter: analyzeLimiter, aiUsage });
   // Verpakkingseenheden per artikel (zie packagings.js).
   registerPackagingRoutes(app, { packagings: packagingStore, requireRight, requireJson, audit });

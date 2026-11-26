@@ -5,20 +5,36 @@ const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const AiModelList = require(path.join(FRONTEND_DIR, 'shared', 'ai-models.js'));
 const { createRateLimiter } = require('../beveiliging/rate-limit');
+const { createJobs } = require('./background-jobs');
 const { RESEARCH_BATCH, RESEARCH_CONCURRENCY, MAX_LINKS } = require('./related-items');
 
 /** Fouten waarbij doorgaan zinloos is (sleutel, tegoed, model): de rest van de portie wordt overgeslagen. */
 const FATAL_CODES = ['auth', 'permission', 'not_found', 'no_credit', 'not_configured', 'rate_limited'];
+/** Aantal artikelen dat vandaag per omgeving is opgezocht (sleutel omgeving|datum), als rem op de kosten. */
+const dailyCounts = new Map();
+
+/**
+ * Het aantal artikelen dat een omgeving vandaag al liet opzoeken.
+ * @param {string} tenantId Id van de omgeving.
+ * @returns {{ key: string, count: number }} De sleutel van de teller en de stand.
+ */
+function dailyOf(tenantId) {
+  const day = new Date().toISOString().slice(0, 10);
+  for (const old of dailyCounts.keys()) if (!old.endsWith(`|${day}`)) dailyCounts.delete(old);
+  const key = `${tenantId}|${day}`;
+  return { key, count: dailyCounts.get(key) || 0 };
+}
+
 /** Geschatte kosten per artikel (euro) voor de bevestiging in het scherm; het echte verbruik staat in Beheer > AI-kosten. */
 const ESTIMATE_EUR_PER_ITEM = 0.045;
 
 /**
  * Koppelt de routes aan de app.
  * @param {object} app Express-app.
- * @param {object} deps related (opslag), requireRight, requireJson, audit, settingsFor, aiTenantOf, currentSpecResearcher, limiter, aiUsage, stock (voor het zoeken van artikelen).
+ * @param {object} deps related (opslag), requireRight, requireJson, audit, settingsFor, aiTenantOf, currentSpecResearcher, limiter, aiUsage, jobs (achtergrondtaken, optioneel), stock (voor het zoeken van artikelen).
  * @returns {void}
  */
-function registerRelatedRoutes(app, { related, requireRight, requireJson, audit, settingsFor, aiTenantOf, currentSpecResearcher, limiter, aiUsage }) {
+function registerRelatedRoutes(app, { related, requireRight, requireJson, audit, settingsFor, aiTenantOf, currentSpecResearcher, limiter, aiUsage, jobs = createJobs() }) {
   const requireStock = requireRight('voorraad');
   // De zware rondes (koppelen, wissen, opnieuw berekenen) lezen en schrijven veel rijen: hoogstens 6 per uur per omgeving.
   const heavyLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 6, keyFn: (req) => `related-heavy|${req.tenantId}` });
@@ -81,13 +97,20 @@ function registerRelatedRoutes(app, { related, requireRight, requireJson, audit,
     return res.json({ ok: true });
   });
 
-  app.post('/api/stock/related-ai/research', requireJson, requireStock, limiter, async (req, res, next) => {
-    const tenantId = tenantOf(req);
-    const ids = Array.isArray(req.body && req.body.itemIds) ? [...new Set(req.body.itemIds.map(String))].slice(0, RESEARCH_BATCH) : [];
-    if (!ids.length) return res.status(400).json({ error: 'invalid', message: `Kies 1 tot ${RESEARCH_BATCH} artikelen per keer.` });
-    if (!settingsFor(tenantId).get('aiEnabled')) return res.status(409).json({ error: 'disabled', message: 'AI staat uit (Beheer → Integraties → AI-herkenning). Koppel artikelen dan met de hand.' });
+  /**
+   * Zoekt de specificaties van één portie artikelen op en bewaart de uitkomsten. Gebruikt door het verzoek per portie én door de achtergrondtaak.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {?object} user De gebruiker voor het kostenoverzicht (of null).
+   * @param {string[]} ids De artikelen van deze portie.
+   * @returns {Promise<{ refused: ?{ status: number, error: string, message: string }, results: object[], aborted: ?object }>} De uitkomsten per artikel, of een weigering van de hele portie.
+   */
+  async function researchBatch(tenantId, user, ids) {
+    if (!settingsFor(tenantId).get('aiEnabled')) return { refused: { status: 409, error: 'disabled', message: 'AI staat uit (Beheer → Integraties → AI-herkenning). Koppel artikelen dan met de hand.' } };
     const researcher = currentSpecResearcher(tenantId);
-    if (!researcher.available) return res.status(409).json({ error: 'not_configured', message: 'Specificaties opzoeken is niet ingesteld: een beheerder kan de API-sleutel invullen bij Beheer → Integraties → AI-herkenning.' });
+    if (!researcher.available) return { refused: { status: 409, error: 'not_configured', message: 'Specificaties opzoeken is niet ingesteld: een beheerder kan de API-sleutel invullen bij Beheer → Integraties → AI-herkenning.' } };
+    const dailyLimit = settingsFor(tenantId).get('relatedAiDailyItems');
+    const today = dailyOf(tenantId);
+    if (today.count >= dailyLimit) return { refused: { status: 429, error: 'daily_limit', message: `Het dagplafond voor opzoeken bij Past bij (${dailyLimit} artikelen) is bereikt. Ga morgen verder of verhoog het plafond (instelling relatedAiDailyItems).` } };
     const results = [];
     let aborted = null;
     let cursor = 0;
@@ -101,7 +124,7 @@ function registerRelatedRoutes(app, { related, requireRight, requireJson, audit,
     const logUsage = (itemId, started, { model, usage, status = 'ok' }) => {
       try {
         const aiSettings = settingsFor(aiTenantOf(tenantId));
-        aiUsage.record({ tenantId, userId: req.user ? req.user.id : null, feature: 'past_bij', model: model || researcher.model, status, usage: usage || {}, durationMs: Date.now() - started, eurCentsPerUsd: aiSettings.get('aiEurCentsPerUsd'), detail: { itemId } });
+        aiUsage.record({ tenantId, userId: user ? user.id : null, feature: 'past_bij', model: model || researcher.model, status, usage: usage || {}, durationMs: Date.now() - started, eurCentsPerUsd: aiSettings.get('aiEurCentsPerUsd'), detail: { itemId } });
       } catch (error) {
         console.warn(`AI-verbruik niet vastgelegd: ${error.message}`);
       }
@@ -115,6 +138,8 @@ function registerRelatedRoutes(app, { related, requireRight, requireJson, audit,
       const facts = related.factsFor(tenantId, itemId);
       if (!facts) { results.push({ itemId, status: 'error', code: 'not_found', message: 'Artikel niet gevonden.' }); return; }
       if (aborted) { results.push({ itemId, status: 'error', code: aborted.code, message: aborted.message }); return; }
+      if (dailyCounts.get(today.key) >= dailyLimit) { results.push({ itemId, status: 'error', code: 'daily_limit', message: 'Het dagplafond voor opzoeken is bereikt.' }); return; }
+      dailyCounts.set(today.key, (dailyCounts.get(today.key) || 0) + 1);
       const started = Date.now();
       try {
         const found = await researcher.research(facts);
@@ -134,16 +159,60 @@ function registerRelatedRoutes(app, { related, requireRight, requireJson, audit,
         results.push({ itemId, status: 'error', code: 'error', message: 'Het opzoeken is mislukt door een interne fout.' });
       }
     };
+    await Promise.all(Array.from({ length: Math.min(RESEARCH_CONCURRENCY, ids.length) }, async () => {
+      while (cursor < ids.length) { const itemId = ids[cursor]; cursor += 1; await handle(itemId); }
+    }));
+    const ordered = ids.map((itemId) => results.find((result) => result.itemId === itemId)).filter(Boolean);
+    return { refused: null, results: ordered, aborted };
+  }
+
+  app.post('/api/stock/related-ai/research', requireJson, requireStock, limiter, async (req, res, next) => {
+    const tenantId = tenantOf(req);
+    const ids = Array.isArray(req.body && req.body.itemIds) ? [...new Set(req.body.itemIds.map(String))].slice(0, RESEARCH_BATCH) : [];
+    if (!ids.length) return res.status(400).json({ error: 'invalid', message: `Kies 1 tot ${RESEARCH_BATCH} artikelen per keer.` });
+    let out;
     try {
-      await Promise.all(Array.from({ length: Math.min(RESEARCH_CONCURRENCY, ids.length) }, async () => {
-        while (cursor < ids.length) { const itemId = ids[cursor]; cursor += 1; await handle(itemId); }
-      }));
+      out = await researchBatch(tenantId, req.user, ids);
     } catch (error) {
       return next(error);
     }
-    const ordered = ids.map((itemId) => results.find((result) => result.itemId === itemId)).filter(Boolean);
-    audit(req, 'gerelateerd_ai_onderzocht', { requested: ids.length, found: ordered.filter((result) => result.status === 'gevonden').length });
-    return res.json({ results: ordered, aborted });
+    if (out.refused) return res.status(out.refused.status).json({ error: out.refused.error, message: out.refused.message });
+    audit(req, 'gerelateerd_ai_onderzocht', { requested: ids.length, found: out.results.filter((result) => result.status === 'gevonden').length });
+    return res.json({ results: out.results, aborted: out.aborted });
+  });
+
+  // Achtergrondtaak: de server zoekt alle artikelen zonder uitkomst zelf op en koppelt daarna met de vaste regels, ook als de browser dicht gaat.
+  /**
+   * De sleutel van de achtergrondtaak van de omgeving.
+   * @param {object} req Het verzoek.
+   * @returns {string} De sleutel.
+   */
+  const jobKey = (req) => `pastbij|${tenantOf(req)}`;
+  app.post('/api/stock/related-ai/job', requireJson, requireStock, heavyLimiter, (req, res) => {
+    const tenantId = tenantOf(req);
+    const todo = related.researchTodo(tenantId, { again: Boolean(req.body && req.body.again) });
+    if (!todo.ids.length) return res.status(409).json({ error: 'nothing_to_do', message: 'Er zijn geen artikelen aan de beurt.' });
+    const started = jobs.start(jobKey(req), {
+      ids: todo.ids, size: RESEARCH_BATCH, options: { again: Boolean(req.body && req.body.again) },
+      runBatch: (batchIds) => researchBatch(tenantId, req.user, batchIds),
+      onDone: (state) => {
+        if (!(state.tally.gevonden > 0)) return;
+        const linked = related.linkWithSpecs(tenantId);
+        state.extra = { items: linked.items, links: linked.links };
+      },
+    });
+    if (!started) return res.status(409).json({ error: 'running', message: 'Er loopt al een taak voor deze omgeving.' });
+    audit(req, 'gerelateerd_ai_taak_gestart', { total: todo.ids.length });
+    return res.status(202).json(jobs.get(jobKey(req)));
+  });
+  app.get('/api/stock/related-ai/job', requireStock, (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(jobs.get(jobKey(req)));
+  });
+  app.post('/api/stock/related-ai/job/stop', requireJson, requireStock, (req, res) => {
+    jobs.stop(jobKey(req));
+    audit(req, 'gerelateerd_ai_taak_gestopt', {});
+    res.json(jobs.get(jobKey(req)));
   });
 
   app.post('/api/stock/related-ai/link', requireJson, requireStock, heavyLimiter, (req, res) => {

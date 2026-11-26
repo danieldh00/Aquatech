@@ -13,6 +13,7 @@ const crypto = require('crypto');
 const { transaction } = require('../database/db');
 const ItemDetails = require('./item-details');
 const { buildFacts, checkText } = require('./item-text-check');
+const { createItemTextLog } = require('./item-text-log');
 const { AnalyzeError } = require('../beregening/plan-analyzer');
 
 /** Hoeveel artikelen één schrijfverzoek hoogstens bevat (de browser verdeelt een grote selectie in porties). */
@@ -74,9 +75,10 @@ const draftOf = (row, warnings) => ({
 /**
  * Maakt de opslag voor concepten van producttekst.
  * @param {object} db De database.
- * @returns {object} factsFor, liveTexts, list, get, save, remove.
+ * @returns {object} list, get, save, edit, remove, forApproval, prepareWrite, hasDraft en voor de bulkrun bulkTodo, applyWritten, recordKept, restorePrevious en saveFeatures.
  */
 function createItemTextDraftStore(db) {
+  const textLog = createItemTextLog(db);
   /**
    * Maakt een query klaar.
    * @param {string} sql De query.
@@ -98,12 +100,13 @@ function createItemTextDraftStore(db) {
 
   /**
    * Bronvelden en live tekst van een artikel.
+   * @param {string} tenantId Id van de omgeving.
    * @param {object} row De rij van findRow.
-   * @returns {{ facts: object, live: object }} De bronvelden (buildFacts) en de eigen live tekst van het artikel.
+   * @returns {{ facts: object, live: object }} De bronvelden (buildFacts, met de opgezochte specificaties en kenmerken) en de eigen live tekst van het artikel.
    */
-  function sourcesOf(row) {
+  function sourcesOf(tenantId, row) {
     const names = (() => { try { const list = JSON.parse(row.categories || '[]'); return Array.isArray(list) ? list : []; } catch { return []; } })();
-    const facts = buildFacts(row, String(names.find(Boolean) || ''));
+    const facts = buildFacts(row, String(names.find(Boolean) || ''), textLog.read(tenantId, row.id));
     const live = { description: ItemDetails.sanitizeDescription(row.description), seoTitle: ItemDetails.sanitizeSeoTitle(row.seo_title), seoDescription: ItemDetails.sanitizeSeoDescription(row.seo_description) };
     return { facts, live };
   }
@@ -111,12 +114,13 @@ function createItemTextDraftStore(db) {
   /**
    * Overzicht van de artikelen waarvoor een tekst geschreven kan worden, met de stand van de tekst en het concept.
    * @param {string} tenantId Id van de omgeving.
-   * @param {{ search?: string, filter?: string, category?: string }} [options] Zoekterm, filter (alle, ontbreekt, concept, zonderconcept) en categorie.
+   * @param {{ search?: string, filter?: string, category?: string }} [options] Zoekterm, filter (alle, ontbreekt, concept, zonderconcept, zonderai, nieuw, overschreven, behouden, hersteld) en categorie.
    * @returns {{ items: object[], total: number, categories: string[], truncated: boolean }} De artikelen (hoogstens MAX_LIST), het totaal en de categorieën.
    */
   function list(tenantId, { search = '', filter = 'alle', category = '' } = {}) {
     const rows = prepare(`SELECT i.id, i.code, i.name, LENGTH(i.description) AS description_length, LENGTH(p.description) AS shop_description_length, i.seo_title, i.seo_description, p.categories,
-        d.updated_at AS draft_updated, d.warnings AS draft_warnings, d.edited AS draft_edited
+        d.updated_at AS draft_updated, d.warnings AS draft_warnings, d.edited AS draft_edited,
+        (SELECT ((s.specs::jsonb -> 'textLog') - 'previous')::text FROM item_specs s WHERE s.tenant_id = i.tenant_id AND s.item_id = i.id) AS text_log
       FROM stock_items i
       LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
       LEFT JOIN item_text_drafts d ON d.tenant_id = i.tenant_id AND d.item_id = i.id
@@ -137,8 +141,12 @@ function createItemTextDraftStore(db) {
       if (filter === 'ontbreekt' && hasDescription && hasSeo) continue;
       if (filter === 'concept' && !hasDraft) continue;
       if (filter === 'zonderconcept' && hasDraft) continue;
+      let written = null;
+      try { written = row.text_log ? JSON.parse(row.text_log) : null; } catch { written = null; }
+      if (['nieuw', 'overschreven', 'behouden', 'hersteld'].includes(filter) && !(written && written.action === filter)) continue;
+      if (filter === 'zonderai' && written) continue;
       const warnings = hasDraft ? warningsOf(row.draft_warnings).length : 0;
-      matching.push({ id: row.id, code: row.code, name: row.name, category: categoryName, hasDescription, hasSeo, draft: hasDraft ? { updatedAt: row.draft_updated, warnings, edited: Boolean(Number(row.draft_edited)) } : null });
+      matching.push({ id: row.id, code: row.code, name: row.name, category: categoryName, hasDescription, hasSeo, written: written ? { action: written.action, at: written.at, reason: written.reason || '' } : null, draft: hasDraft ? { updatedAt: row.draft_updated, warnings, edited: Boolean(Number(row.draft_edited)) } : null });
     }
     return { items: matching.slice(0, MAX_LIST), total: matching.length, categories: [...categories].sort((left, right) => left.localeCompare(right, 'nl')), truncated: matching.length > MAX_LIST };
   }
@@ -152,10 +160,11 @@ function createItemTextDraftStore(db) {
   function get(tenantId, itemId) {
     const row = findRow(tenantId, itemId);
     if (!row) return null;
-    const { facts, live } = sourcesOf(row);
+    const { facts, live } = sourcesOf(tenantId, row);
     const draftRow = prepare(`SELECT ${DRAFT_COLS} FROM item_text_drafts WHERE tenant_id = ? AND item_id = ?`).get(tenantId, row.id);
     const draft = draftRow ? draftOf(draftRow, warningsFor({ description: draftRow.description, seoTitle: draftRow.seo_title, seoDescription: draftRow.seo_description }, facts)) : null;
-    return { item: { id: row.id, code: row.code, name: row.name, variant: Boolean(row.parent_id), archived: Boolean(Number(row.archived)) }, facts: facts.fields, thin: facts.thin, live, draft };
+    const known = textLog.read(tenantId, row.id) || {};
+    return { item: { id: row.id, code: row.code, name: row.name, variant: Boolean(row.parent_id), archived: Boolean(Number(row.archived)) }, facts: facts.fields, thin: facts.thin, live, draft, written: known.textLog || null };
   }
 
   /**
@@ -168,7 +177,7 @@ function createItemTextDraftStore(db) {
   function save(tenantId, itemId, texts) {
     const row = findRow(tenantId, itemId);
     if (!row) return null;
-    const { facts, live } = sourcesOf(row);
+    const { facts, live } = sourcesOf(tenantId, row);
     const clean = { description: ItemDetails.sanitizeDescription(texts.description), seoTitle: ItemDetails.sanitizeSeoTitle(texts.seoTitle), seoDescription: ItemDetails.sanitizeSeoDescription(texts.seoDescription) };
     const warnings = warningsFor(clean, facts);
     const timestamp = currentTimestamp();
@@ -197,7 +206,7 @@ function createItemTextDraftStore(db) {
     if (!draftRow) return null;
     const row = findRow(tenantId, itemId);
     if (!row) return null;
-    const { facts } = sourcesOf(row);
+    const { facts } = sourcesOf(tenantId, row);
     const clean = { description: ItemDetails.sanitizeDescription(texts.description), seoTitle: ItemDetails.sanitizeSeoTitle(texts.seoTitle), seoDescription: ItemDetails.sanitizeSeoDescription(texts.seoDescription) };
     const warnings = warningsFor(clean, facts);
     prepare('UPDATE item_text_drafts SET description = ?, seo_title = ?, seo_description = ?, warnings = ?, edited = 1, updated_at = ? WHERE tenant_id = ? AND id = ?')
@@ -225,7 +234,7 @@ function createItemTextDraftStore(db) {
     const row = findRow(tenantId, itemId);
     const draftRow = row && prepare(`SELECT ${DRAFT_COLS} FROM item_text_drafts WHERE tenant_id = ? AND item_id = ?`).get(tenantId, row.id);
     if (!draftRow) return null;
-    const { facts, live } = sourcesOf(row);
+    const { facts, live } = sourcesOf(tenantId, row);
     const warnings = warningsFor({ description: draftRow.description, seoTitle: draftRow.seo_title, seoDescription: draftRow.seo_description }, facts);
     return { draft: draftOf(draftRow, warnings), warnings, liveChanged: hashOf(live) !== draftRow.base_hash, unavailable: Boolean(row.parent_id) || Boolean(Number(row.archived)) };
   }
@@ -240,7 +249,7 @@ function createItemTextDraftStore(db) {
     const row = findRow(tenantId, itemId);
     if (!row) return { status: 'not_found' };
     if (row.parent_id || Number(row.archived)) return { status: 'unavailable' };
-    return { status: 'ok', facts: sourcesOf(row).facts };
+    return { status: 'ok', facts: sourcesOf(tenantId, row).facts };
   }
 
   /**
@@ -251,7 +260,108 @@ function createItemTextDraftStore(db) {
    */
   const hasDraft = (tenantId, itemId) => Boolean(prepare('SELECT id FROM item_text_drafts WHERE tenant_id = ? AND item_id = ?').get(tenantId, String(itemId || '')));
 
-  return { list, get, save, edit, remove, forApproval, prepareWrite, hasDraft };
+  /**
+   * De hoofdartikelen die in een bulkrun aan de beurt zijn: niet gearchiveerd, geen variant, nog geen concept en nog niet door een eerdere bulkrun behandeld.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ review?: boolean }} [options] review = ook artikelen die al een omschrijving hebben (die wordt beoordeeld en alleen vervangen als de nieuwe beter is); anders alleen artikelen zonder omschrijving.
+   * @returns {{ ids: string[], total: number, withExisting: number, withoutFeatures: number }} De id's (op naam), hoeveel er al een omschrijving hebben en voor hoeveel nog kenmerken moeten worden opgezocht.
+   */
+  function bulkTodo(tenantId, { review = true } = {}) {
+    const rows = prepare(`SELECT i.id, (COALESCE(LENGTH(i.description), 0) > 0 OR COALESCE(LENGTH(p.description), 0) > 0) AS has_text,
+        (s.specs LIKE '%"kenmerkenAt"%') AS has_features
+      FROM stock_items i
+      LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
+      LEFT JOIN item_specs s ON s.tenant_id = i.tenant_id AND s.item_id = i.id
+      WHERE i.tenant_id = ? AND i.archived = 0 AND i.parent_id IS NULL
+        AND NOT EXISTS (SELECT 1 FROM item_text_drafts d WHERE d.tenant_id = i.tenant_id AND d.item_id = i.id)
+        AND (s.specs IS NULL OR s.specs NOT LIKE '%"textLog"%')
+      ORDER BY i.name, i.code`).all(tenantId);
+    const wanted = rows.filter((row) => review || !row.has_text);
+    return { ids: wanted.map((row) => row.id), total: wanted.length, withExisting: wanted.filter((row) => row.has_text).length, withoutFeatures: wanted.filter((row) => !row.has_features).length };
+  }
+
+  /**
+   * De kenmerken die voor een artikel zijn opgezocht (om te zien of opzoeken nog nodig is).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} itemId Id van het artikel.
+   * @returns {boolean} true als er al eens naar kenmerken is gezocht (ook zonder resultaat).
+   */
+  const featuresSearched = (tenantId, itemId) => Boolean((textLog.read(tenantId, String(itemId || '')) || {}).kenmerkenAt);
+
+  /**
+   * De omschrijving die nu in gebruik is (eigen, anders die van het webshopproduct), met waar ze staat.
+   * @param {object} row De rij van findRow.
+   * @returns {{ text: string, source: string }} De tekst en 'eigen', 'webshop' of leeg.
+   */
+  function currentTextOf(row) {
+    const own = ItemDetails.sanitizeDescription(row.description);
+    if (own) return { text: own, source: 'eigen' };
+    const shop = ItemDetails.sanitizeDescription(row.shop_description);
+    return shop ? { text: shop, source: 'webshop' } : { text: '', source: '' };
+  }
+
+  /**
+   * De omschrijving die nu in gebruik is (eigen, anders die van het webshopproduct).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} itemId Id van het artikel.
+   * @returns {string} De tekst, leeg zonder omschrijving of zonder artikel.
+   */
+  const currentText = (tenantId, itemId) => { const row = findRow(tenantId, itemId); return row ? currentTextOf(row).text : ''; };
+
+  /**
+   * Zet een geschreven omschrijving direct live (bulkrun) en legt vast wat er gebeurde. De titel en omschrijving voor zoekmachines worden alleen gevuld als ze leeg zijn.
+   * Een bestaande omschrijving wordt bewaard in het logboek, zodat ze terug kan.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} itemId Id van het artikel.
+   * @param {{ description: string, seoTitle: string, seoDescription: string, model?: string, reason?: string, basis?: string }} texts De geschreven tekst; basis = de omschrijving waarop de AI zijn oordeel baseerde (is ze intussen veranderd, dan wordt niets overschreven).
+   * @param {{ update: Function }} stock De voorraadopslag (voor de wijziging van het artikel).
+   * @param {object|null} user Wie de run startte.
+   * @returns {{ action?: string, error?: string }} nieuw of overschreven, of een fout (changed = de omschrijving is intussen veranderd).
+   */
+  function applyWritten(tenantId, itemId, texts, stock, user) {
+    const row = findRow(tenantId, itemId);
+    if (!row) return { error: 'not_found' };
+    const previous = currentTextOf(row);
+    if (texts.basis !== undefined && texts.basis !== previous.text) return { error: 'changed' };
+    const live = ItemDetails.sanitizeSeoTitle(row.seo_title) && ItemDetails.sanitizeSeoDescription(row.seo_description);
+    const patch = { description: texts.description };
+    if (!ItemDetails.sanitizeSeoTitle(row.seo_title)) patch.seoTitle = texts.seoTitle;
+    if (!ItemDetails.sanitizeSeoDescription(row.seo_description)) patch.seoDescription = texts.seoDescription;
+    const out = stock.update(tenantId, itemId, patch, user);
+    if (out.error) return { error: out.error };
+    const action = previous.text ? 'overschreven' : 'nieuw';
+    textLog.recordWrite(tenantId, itemId, { action, model: texts.model, reason: texts.reason, previous: previous.text ? previous : undefined });
+    return { action, seoKept: Boolean(live) };
+  }
+
+  /**
+   * Legt vast dat de bestaande omschrijving is behouden (het oordeel van de AI), zodat het artikel niet opnieuw aan de beurt komt.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} itemId Id van het artikel.
+   * @param {{ model?: string, reason?: string }} info Model en reden.
+   * @returns {void}
+   */
+  const recordKept = (tenantId, itemId, info) => textLog.recordWrite(tenantId, itemId, { action: 'behouden', model: info.model, reason: info.reason });
+
+  /**
+   * Zet de omschrijving terug naar wat er stond vóór een bulkrun. Stond die in het webshopproduct, dan wordt de eigen omschrijving leeggemaakt (de webshoptekst komt weer tevoorschijn).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} itemId Id van het artikel.
+   * @param {{ update: Function }} stock De voorraadopslag.
+   * @param {object|null} user Wie het terugzet.
+   * @returns {{ ok?: boolean, error?: string }} Uitkomst.
+   */
+  function restorePrevious(tenantId, itemId, stock, user) {
+    const known = textLog.read(tenantId, String(itemId || ''));
+    const entry = known && known.textLog;
+    if (!entry || entry.action !== 'overschreven' || !entry.previous) return { error: 'nothing_to_restore' };
+    const out = stock.update(tenantId, itemId, { description: entry.previous.source === 'webshop' ? '' : entry.previous.text }, user);
+    if (out.error) return { error: out.error };
+    textLog.recordWrite(tenantId, itemId, { action: 'hersteld', reason: 'De vorige omschrijving is teruggezet.' });
+    return { ok: true };
+  }
+
+  return { list, get, save, edit, remove, forApproval, prepareWrite, hasDraft, currentText, bulkTodo, featuresSearched, applyWritten, recordKept, restorePrevious, saveFeatures: textLog.saveFeatures, logOf: textLog.read };
 }
 
 /**
@@ -304,7 +414,7 @@ function registerItemTextRoutes(app, ctx) {
 
   app.get('/api/stock/item-texts', requireStock, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    const filter = ['alle', 'ontbreekt', 'concept', 'zonderconcept'].includes(req.query.filter) ? req.query.filter : 'alle';
+    const filter = ['alle', 'ontbreekt', 'concept', 'zonderconcept', 'zonderai', 'nieuw', 'overschreven', 'behouden', 'hersteld'].includes(req.query.filter) ? req.query.filter : 'alle';
     res.json({
       ...drafts.list(tenantOf(req), { search: String(req.query.q || '').slice(0, 80), filter, category: String(req.query.category || '').slice(0, 120) }),
       ai: aiStateOf(req),

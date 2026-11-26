@@ -144,6 +144,8 @@ body.has-nav .tab[data-purchasing] { display: none; }
 
 /* Producttekst door de AI (tabblad Teksten): overzicht, bronvelden, waarschuwingen en vergelijking live/concept. */
 .tx-actions { margin: 10px 0; align-items: center; }
+.tx-bulk { margin: 12px 0 16px; }
+.tx-bulk h3 { margin: 0 0 6px; font-size: 16px; }
 .tx-detail { margin-top: 16px; border-left: 4px solid var(--at-teal); }
 .tx-detail-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .tx-detail-head h2 { margin: 0; font-size: 18px; }

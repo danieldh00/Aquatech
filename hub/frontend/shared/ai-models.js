@@ -36,6 +36,7 @@
     inkoop_inlezen: 'Inkoopdocument inlezen',
     product_tekst: 'Producttekst schrijven',
     past_bij: 'Past bij: specificaties opzoeken',
+    kenmerken_opzoeken: 'Productkenmerken opzoeken',
   };
 
   /**

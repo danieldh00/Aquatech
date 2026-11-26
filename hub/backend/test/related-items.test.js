@@ -283,3 +283,32 @@ test('webshop: Past bij en Vaak samen besteld op de productpagina, alleen leverb
   assert.strictEqual((openPart.match(/class="product-card/g) || []).length, 4, 'vier direct zichtbaar');
   assert.strictEqual((morePart.match(/class="product-card/g) || []).length, 2, 'twee achter Bekijk meer');
 });
+
+test('AI-ronde als achtergrondtaak: loopt op de server door, koppelt aan het eind en weigert een tweede start', async () => {
+  const calls = { count: 0 };
+  const table = {
+    KOP: raw('sproeikop', [{ kind: 'draad', size: '1/2"', gender: 'binnen' }]),
+    BEH: raw('behuizing', [{ kind: 'draad', size: '1/2"', gender: 'buiten' }]),
+  };
+  const { admin, customer } = await setup({ appOptions: { createSpecResearcher: fakeResearcher(table, calls), anthropicApiKey: 'sk-ant-test-test-test-test' } });
+  await admin.post('/app/api/stock/items', { code: 'KOP', name: 'Sproeikop 1/2', onHand: 5, salePrice: 10 });
+  await admin.post('/app/api/stock/items', { code: 'BEH', name: 'Behuizing 1/2', onHand: 5, salePrice: 10 });
+  if (customer) {
+    assert.strictEqual((await customer.get('/app/api/stock/related-ai/job')).status, 403);
+    assert.strictEqual((await customer.post('/app/api/stock/related-ai/job', {})).status, 403);
+  }
+  assert.strictEqual((await admin.get('/app/api/stock/related-ai/job')).body.running, false);
+  const started = await admin.post('/app/api/stock/related-ai/job', {});
+  assert.strictEqual(started.status, 202, JSON.stringify(started.body));
+  assert.ok(started.body.total >= 2);
+  let job = (await admin.get('/app/api/stock/related-ai/job')).body;
+  for (let round = 0; round < 100 && job.running; round += 1) {
+    await new Promise((resolve) => { setTimeout(resolve, 50); });
+    job = (await admin.get('/app/api/stock/related-ai/job')).body;
+  }
+  assert.strictEqual(job.running, false);
+  assert.strictEqual(job.processed, job.total);
+  assert.strictEqual(job.tally.gevonden, 2);
+  assert.strictEqual(job.extra.links, 2, 'na het opzoeken is automatisch gekoppeld');
+  assert.strictEqual((await admin.post('/app/api/stock/related-ai/job', {})).status, 409, 'niets meer aan de beurt');
+});

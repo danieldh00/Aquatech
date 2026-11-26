@@ -4,7 +4,7 @@
 // Praat met /api/stock/related en /api/stock/related-ai (recht voorraad).
 (function () {
   const context = { api: null, toast: null, esc: null };
-  const state = { data: null, ai: null, openId: null, detail: null, busy: false, stop: false };
+  const state = { data: null, ai: null, openId: null, detail: null, busy: false, polling: false, seen: false };
 
   /**
    * Zoekt het eerste element dat bij de selector past.
@@ -50,6 +50,7 @@
     state.data = await context.api(`stock/related?${queryOf()}`);
     state.ai = state.data.ai;
     renderList();
+    followAi().catch(() => {});
   }
 
   /** Tekent de melding over AI, de knoppen en de tabel. */
@@ -168,43 +169,60 @@
   }
 
   /**
-   * Start de AI-ronde: laat alle artikelen zonder uitkomst opzoeken (in porties, met voortgang) en koppelt daarna met de vaste regels. Vraagt eerst
-   * bevestiging met de geschatte kosten. Een fout die doorgaan zinloos maakt stopt de ronde; wat al gevonden is blijft bewaard.
+   * Volgt de achtergrondtaak op de server: vraagt elke paar seconden de stand op tot de taak klaar is en ververst dan de lijst. Zonder lopende taak gebeurt er niets.
+   * @returns {Promise<void>}
+   */
+  async function followAi() {
+    if (state.polling) return;
+    state.polling = true;
+    let wasRunning = false;
+    try {
+      let job = await context.api('stock/related-ai/job');
+      while (job.running && document.body.contains($('#rl-ai'))) {
+        wasRunning = true;
+        state.busy = true;
+        $('#rl-ai').disabled = true;
+        $('#rl-stop').hidden = false;
+        const tally = job.tally || {};
+        progress(`Loopt op de server (je mag dit venster sluiten): ${job.processed} van ${job.total} artikelen opgezocht, ${tally.gevonden || 0} met specificaties.${job.stopRequested ? ' Stopt na de lopende portie…' : ''}`);
+        await new Promise((resolve) => { setTimeout(resolve, 3000); });
+        job = await context.api('stock/related-ai/job');
+      }
+      if (job.startedAt && (wasRunning || !state.seen)) {
+        const tally = job.tally || {};
+        const extra = job.extra ? ` ${job.extra.links} koppelingen voor ${job.extra.items} artikelen.` : '';
+        progress(`${tally.gevonden || 0} met specificaties gevonden, ${tally.niet_gevonden || 0} zonder bron (niet gekoppeld)${tally.error ? `, ${tally.error} mislukt` : ''}.${extra} ${job.message || ''}`.trim());
+      }
+      state.seen = true;
+      if (wasRunning) context.toast(job.aborted ? job.message : 'Opzoeken klaar.', Boolean(job.aborted));
+    } catch (error) {
+      progress(error.message);
+      context.toast(error.message, true);
+    } finally {
+      state.busy = false;
+      state.polling = false;
+      $('#rl-stop').hidden = true;
+    }
+    if (wasRunning) {
+      await load();
+      if (state.openId) await openItem(state.openId);
+    }
+  }
+
+  /**
+   * Start de AI-ronde als achtergrondtaak op de server: alle artikelen zonder uitkomst worden opgezocht en daarna gekoppeld met de vaste regels, ook als dit venster
+   * sluit. Vraagt eerst bevestiging met de geschatte kosten; wat al gevonden is blijft bewaard.
    * @returns {Promise<void>}
    */
   async function runAi() {
     const again = $('#rl-again').checked;
     const todo = await context.api(`stock/related/ai/todo?again=${again ? '1' : '0'}`);
     if (todo.ids.length) {
-      const question = `De AI zoekt de specificaties van ${todo.ids.length} artikelen op internet (model ${state.ai.modelLabel}). Geschatte kosten ongeveer € ${todo.estimateEur.toFixed(2).replace('.', ',')}; het echte verbruik zie je in Beheer > AI-kosten. Er wordt alleen gekoppeld als een bron de aansluiting noemt. Doorgaan?`;
+      const question = `De AI zoekt de specificaties van ${todo.ids.length} artikelen op internet (model ${state.ai.modelLabel}). Geschatte kosten ongeveer € ${todo.estimateEur.toFixed(2).replace('.', ',')}; het echte verbruik zie je in Beheer > AI-kosten. Er wordt alleen gekoppeld als een bron de aansluiting noemt. Dit loopt op de server door, ook als je het venster sluit. Doorgaan?`;
       if (!window.confirm(question)) return;
     }
-    state.busy = true;
-    state.stop = false;
-    $('#rl-ai').disabled = true;
-    $('#rl-stop').hidden = false;
-    const tally = { gevonden: 0, niet_gevonden: 0, error: 0 };
-    let stopMessage = '';
-    try {
-      const size = state.ai.batchSize || 5;
-      for (let start = 0; start < todo.ids.length && !stopMessage && !state.stop; start += size) {
-        progress(`Specificaties opzoeken… ${start} van ${todo.ids.length}`);
-        const out = await context.api('stock/related-ai/research', { method: 'POST', body: { itemIds: todo.ids.slice(start, start + size) } });
-        for (const result of out.results) tally[result.status] = (tally[result.status] || 0) + 1;
-        if (out.aborted) stopMessage = out.aborted.message;
-      }
-      progress('Artikelen koppelen…');
-      const linked = await context.api('stock/related-ai/link', { method: 'POST', body: {} });
-      progress(`${tally.gevonden} met specificaties gevonden, ${tally.niet_gevonden} zonder bron (niet gekoppeld)${tally.error ? `, ${tally.error} mislukt` : ''}. ${linked.links} koppelingen voor ${linked.items} artikelen.${state.stop ? ' Gestopt op verzoek.' : ''}${stopMessage ? ` ${stopMessage}` : ''}`);
-      context.toast(stopMessage || `${linked.links} koppelingen gemaakt.`, Boolean(stopMessage));
-    } catch (error) {
-      progress(error.message);
-      context.toast(error.message, true);
-    }
-    state.busy = false;
-    $('#rl-stop').hidden = true;
-    await load();
-    if (state.openId) await openItem(state.openId);
+    await context.api('stock/related-ai/job', { method: 'POST', body: { again } });
+    await followAi();
   }
 
   /**
@@ -261,7 +279,7 @@
     $('#rl-search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(guarded(load), 250); });
     $('#rl-filter').addEventListener('change', guarded(load));
     $('#rl-ai').addEventListener('click', guarded(runAi));
-    $('#rl-stop').addEventListener('click', () => { state.stop = true; progress('Stoppen na de lopende portie…'); });
+    $('#rl-stop').addEventListener('click', guarded(async () => { await context.api('stock/related-ai/job/stop', { method: 'POST', body: {} }); }));
     $('#rl-clear').addEventListener('click', guarded(clearAi));
     $('#rl-together-refresh').addEventListener('click', guarded(refreshTogether));
     $('#rl-model').addEventListener('change', guarded(saveModel));
