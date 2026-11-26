@@ -58,13 +58,17 @@
    * Geeft het verzoek dat init() al vooruit heeft gestart (tegelijk met api/me), of start het nu.
    * @param {string} key sleutel van het vooruit gestarte verzoek
    * @param {string} url pad na '../api/' als er niets klaarstaat
+   * @param {string|null} overrideUrl eigen pad (bijvoorbeeld met archiefkeuze); dan wordt het alvast opgehaalde antwoord niet gebruikt
    * @returns {Promise<object>} het antwoord van de API
    */
-  function take(key, url) {
-    const prefetched = state.prefetch && state.prefetch[key];
+  function take(key, url, overrideUrl) {
+    const prefetched = !overrideUrl && state.prefetch && state.prefetch[key];
     if (prefetched) { delete state.prefetch[key]; return prefetched; }
-    return api(url);
+    return api(overrideUrl || url);
   }
+
+  /** Archieffilter van het overzicht (alleen voor beheerders), gezet in init. */
+  let archive = null;
 
   /**
    * Haalt de werkorders op en toont het overzicht.
@@ -72,7 +76,7 @@
    */
   async function loadList() {
     try {
-      const result = await take('list', 'workorders');
+      const result = await take('list', 'workorders', archive && archive.param() ? archive.withParam('workorders') : null);
       state.items = result.items || [];
       if (window.AquatechCommon) window.AquatechCommon.truncationNotice(result, 'werkorders');
     } catch (error) {
@@ -1063,6 +1067,7 @@
       await save({ customerId: null });
     };
     $('#l-new').onclick = pickQuote;
+    archive = window.AquatechArchive.attach({ kind: 'werkorders', filters: $('#l-search').closest('.filters'), table: $('#l-table'), onChange: loadList });
     $('#l-export').onclick = exportListXlsx;
     $('#l-hours').onclick = openHoursExport;
     $('#he-go').onclick = runHoursExport;

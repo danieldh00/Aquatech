@@ -106,13 +106,17 @@
     return body;
   }
 
+  /** Archieffilter van het overzicht (alleen voor beheerders), gezet in init. */
+  let archive = null;
+
   /**
    * Laadt de plannen (eigen, van de organisatie of als beheerder), vult het
    * gebruikersfilter en tekent de tabel.
    * @returns {Promise<void>}
    */
   async function load() {
-    const url = state.admin ? `../api/admin/plans${$('#f-deleted').checked ? '?deleted=1' : ''}` : `../api/plans${state.team ? '?all=1' : ''}`;
+    const baseUrl = state.admin ? `../api/admin/plans${$('#f-deleted').checked ? '?deleted=1' : ''}` : `../api/plans${state.team ? '?all=1' : ''}`;
+    const url = archive ? archive.withParam(baseUrl) : baseUrl;
     try {
       state.plans = (await getJson(url)).items || [];
     } catch (error) {
@@ -458,6 +462,7 @@
     if (wanted && REVIEW[wanted]) $('#f-review').value = wanted;
     $('#f-review').onchange = render;
     $('#f-deleted').onchange = load;
+    archive = window.AquatechArchive.attach({ kind: 'plannen', filters: $('#f-search').closest('.filters'), table: $('#p-table'), onChange: load });
     $('#f-export').onclick = exportXlsx;
     /**
      * Sluit het detailvenster.

@@ -1,0 +1,7 @@
+/* Archief in de overzichten (shared/archive-ui.js): filter, balk met acties en de kolom met vinkjes. */
+.archive-filter { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; color: var(--muted); }
+.archive-message { align-self: center; }
+.archive-message.error { color: var(--at-danger); }
+.archive-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: color-mix(in srgb, var(--at-teal) 10%, var(--at-surface)); }
+.archive-bar[hidden] { display: none; }
+th.c-archive, td.c-archive { width: 36px; text-align: center; }
