@@ -90,7 +90,8 @@ test('startpagina: hero zonder tekst, banners, kolommen, citaat en tabbladen na 
   assert.match(home, /<h2>Speciale producten<\/h2>/);
   assert.doesNotMatch(home, /Uitverkoop/, 'de uitverkoop-sectie is verwijderd');
   assert.match(home, /Binnenkort meer producten/);
-  assert.match(home, /Duurzaamheid door kwaliteit!/);
+  assert.match(home, /Duurzaamheid door <em>kwaliteit!<\/em>/);
+  assert.match(home, /class="home-quote-points"/);
   assert.match(home, /<h2 class="centered">Populaire producten<\/h2>/, 'zonder verkopen geen tabbladen');
   assert.doesNotMatch(home, /Meest verkocht/);
   assert.match(home, /Klantenservice/);
