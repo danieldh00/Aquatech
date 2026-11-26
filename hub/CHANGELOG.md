@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.41.2
+
+Startpagina (`storefront.css`, `storefront-pages.js`): assortimentstegels als flexrij die de band vult (max. 260 px per tegel, op smal scherm twee naast elkaar); plannerblok op dezelfde breedte als de andere blokken (1136 px); quote als kaart met de tekst uit Beheer als kop (laatste woord in accentkleur) en drie vaste kernpunten.
+
 ## 1.41.1
 
 Startpagina (`storefront.css`, `storefront.js`): nieuw ontwerp "navy blokken" met afgeronde kaarten in de stijl van de categoriepagina's (hero als twee kolommen, assortiment in een navy kaart, plannerblok met drie stappen en knop met pijl, voordelen als zachtgroene kaarten, merken en zakelijk blok als kaart, tabbladen als knoppen). De plannerpromotie blijft op categoriepagina's compact zonder stappen. CSS voor de hele startpagina en nieuwe markup voor het plannerblok; de inhoud van de pagina is ongewijzigd.

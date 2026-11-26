@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.41.2',
+      date: '2026-11-26',
+      title: 'Startpagina: uitlijning en nieuwe quote',
+      items: [
+        { text: 'Op de startpagina van de webshop vullen de assortimentstegels nu de volle breedte en loopt het plannerblok even breed als de blokken erboven.' },
+        { text: 'De quote onder Onze merken staat nu in een kaart met drie kernpunten.' },
+      ],
+    },
+    {
       version: '1.41.1',
       date: '2026-11-26',
       title: 'Nieuw ontwerp voor de startpagina van de webshop',
