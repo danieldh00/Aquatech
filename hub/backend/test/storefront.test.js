@@ -257,9 +257,11 @@ test('webshop: assets met versie in het adres, startpagina in de opzet van aquat
   await admin.put('/app/api/admin/settings', { storefront: true, shopClarity: { enabled: false } });
   const { version } = require('../package.json');
   const home = await anonymous.get('/');
-  for (const name of ['winkel.css', 'brand.css', 'aquatechshop-logo.png', 'hero-tuin.jpg', 'merk-dab.webp', 'usp-bezorgd.png', 'betaalmethoden.png']) {
+  for (const name of ['winkel.css', 'brand.css', 'aquatechshop-logo.png', 'hero-tuin.jpg', 'merk-dab.webp', 'usp-bezorgd.png']) {
     assert.ok(home.text.includes(`assets/${name}?v=${version}`), `${name} linkt met de versie`);
   }
+  assert.match(home.text, /class="foot-pay"/, 'de voet toont de betaalmethoden (standaard zonder Bitcoin)');
+  assert.doesNotMatch(home.text, />Bitcoin</);
   const versioned = await anonymous.get(`/assets/winkel.css?v=${version}`);
   assert.match(versioned.headers.get('cache-control'), /max-age=31536000, immutable/);
   const unversioned = await anonymous.get('/assets/winkel.css');
