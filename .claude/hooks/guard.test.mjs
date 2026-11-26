@@ -78,6 +78,15 @@ test('Bash: admin-merge, pkill, raw-URL, develop, force-push, master', () => {
   assert.ok(denied(checkBash('gh api -X PUT repos/o/r/branches/master/protection')));
 });
 
+test('Bash: omleiding naar releasebestanden, kopie ervan en push gevolgd door checkout', () => {
+  assert.ok(denied(checkBash('echo x > hub/CHANGELOG.md')));
+  assert.ok(denied(checkBash('echo x >> hub/CHANGELOG.md')));
+  assert.ok(denied(checkBash('cp /tmp/a hub/frontend/nieuws/releases.js')));
+  assert.ok(!denied(checkBash('cp hub/CHANGELOG.md /tmp/a')));
+  assert.ok(!denied(checkBash('git push -u origin claude/x && git checkout master', { branch: 'claude/x' })));
+  assert.ok(denied(checkBash('echo hoi; git push origin master', { branch: 'claude/x' })));
+});
+
 test('Bash: Co-Authored-By-regel met modelnaam mag, de rest niet', () => {
   const trailer = 'Co-Authored-By: Claude Son' + 'net 5.5 <noreply@anthropic.com>';
   assert.ok(!denied(checkBash(`git commit -m "fix\n\n${trailer}"`, { branch: 'claude/x' })));

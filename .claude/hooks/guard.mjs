@@ -76,6 +76,17 @@ export function checkFile(rel, changes, onMaster) {
   return result;
 }
 
+/** Geeft true als één opdrachtdeel (zonder && ; |) een beschermd releasebestand beschrijft. */
+export function writesReleaseFile(segment) {
+  const protectedFile = /(?:hub\/CHANGELOG\.md|frontend\/nieuws\/releases\.js)(?=$|[\s'"])/;
+  if (!protectedFile.test(segment)) return false;
+  if (/(?:^|\s)(?:sed\s+(?:-\w*\s+)*-i|perl\s+-\w*i|tee\b)/.test(segment)) return true;
+  if (new RegExp(`>>?\\s*["']?\\S*${protectedFile.source}`).test(segment)) return true;
+  const words = segment.trim().split(/\s+/);
+  const last = (words[words.length - 1] || '').replace(/^["']|["']$/g, '');
+  return /^(?:mv|cp|git\s+(?:checkout|restore))\b/.test(segment.trim()) && protectedFile.test(last);
+}
+
 /** Beoordeelt een Bash-opdracht; geeft { deny, ask, warn } met meldingen terug. */
 export function checkBash(command, context = {}) {
   const result = { deny: [], ask: [], warn: [] };
@@ -84,17 +95,19 @@ export function checkBash(command, context = {}) {
     const text = rule.negeerRegel ? command.split(/\r?\n/).filter((line) => !rule.negeerRegel.test(line)).join('\n') : command;
     if (rule.patroon.test(text)) result.deny.push(`[${rule.id}] ${rule.melding}`);
   }
-  if (/\b(?:sed\s+-i|perl\s+-pi|tee|>>?|mv|cp)\b[^|;&]*(?:CHANGELOG\.md|frontend\/nieuws\/releases\.js)/.test(command)) {
+  const segments = command.split(/&&|\|\||;|\||\r?\n/);
+  if (segments.some(writesReleaseFile)) {
     result.deny.push('[releasebestanden] CHANGELOG.md en releases.js nooit zelf aanraken: maak een changes/<naam>.md.');
   }
-  const isPush = /\bgit\s+push\b/.test(command);
+  const pushSegments = segments.filter((segment) => /\bgit\s+push\b/.test(segment));
+  const isPush = pushSegments.length > 0;
   if (/\bgit\s+(?:commit|push)\b/.test(command) && context.branch === 'master') {
     result.deny.push('[master] Nooit rechtstreeks op master committen of pushen: werk in een eigen branch.');
   }
-  if (isPush && /(?:\s|:)(?:refs\/heads\/)?master(?:\s|$)/.test(command)) {
+  if (pushSegments.some((segment) => /(?:\s|:)(?:refs\/heads\/)?master(?:\s|$)/.test(segment))) {
     result.deny.push('[master] Nooit naar master pushen: maak een PR.');
   }
-  if (isPush && /\s(?:--force(?![-\w])|-f)(?:\s|$)/.test(command)) {
+  if (pushSegments.some((segment) => /\s(?:--force(?![-\w])|-f)(?:\s|$)/.test(segment))) {
     result.deny.push('[force-push] Geen force-push (gebruik --force-with-lease alleen op je eigen branch na een merge).');
   }
   if (isPush && context.hubChangedWithoutFragment) {
