@@ -12,7 +12,9 @@ FROM node:22-alpine@sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d
 
 WORKDIR /app/backend
 COPY backend/package*.json ./
-RUN npm ci --omit=dev
+# npm en npx zijn tijdens het draaien niet nodig; zo verdwijnen de bibliotheken van npm zelf (Trivy-meldingen) uit het image.
+RUN npm ci --omit=dev \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 # Alleen wat de server draait: broncode en het hulpscript dat update.sh uit het image haalt.
 # Tests en andere tools (codestijl, bench, minify) blijven buiten het image.
 COPY backend/src ./src
