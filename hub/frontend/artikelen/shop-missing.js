@@ -24,6 +24,7 @@
    */
   function setup(context) {
     ({ api, toast, load } = context);
+    $('#shop-missing-dialog').addEventListener('close', stopPolling);
     /** Sluit het venster; de taak op de server loopt door. */
     $('#sm-close').onclick = () => { stopPolling(); $('#shop-missing-dialog').close(); };
     /**
@@ -47,7 +48,7 @@
   function render(state) {
     last = state;
     const bar = $('#sm-bar');
-    $('#sm-text').textContent = state.message || '';
+    $('#sm-text').textContent = state.message || (state.phase === 'idle' ? 'Geen taak actief (de server is mogelijk herstart). Start hem opnieuw.' : '');
     if (state.phase === 'variaties' && state.variationsTotal) bar.value = state.variationsDone / state.variationsTotal;
     else if (state.phase === 'toevoegen' && state.total) bar.value = state.created / state.total;
     else if (!state.running) bar.value = state.error ? 0 : 1;

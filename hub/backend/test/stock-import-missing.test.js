@@ -46,6 +46,8 @@ test('ontbrekende webshopproducten toevoegen: rechten, tenantgrens en zonder kop
   assert.strictEqual(started.status, 202);
   const noShop = await finished(admin);
   assert.strictEqual(noShop.error.code, 'not_configured', 'zonder webshopkoppeling');
+  assert.strictEqual(noShop.phase, 'mislukt', 'zonder koppeling staat de taak op mislukt');
+  assert.match(noShop.message, /webshop gekoppeld/, 'en de melding staat in message');
   assert.strictEqual((await vreemd.post(url, {})).status, 202);
   assert.strictEqual((await finished(vreemd)).error.code, 'not_configured', 'andere organisatie: eigen stand en eigen koppeling');
 });

@@ -72,8 +72,11 @@ function createShopMissingJob({ syncShop, log = console }) {
     (async () => {
       try {
         const out = await syncShop(tenantId, user, { addMissing: true, onProgress: (event) => apply(state, event) });
-        if (out.skipped) state.error = { code: 'not_configured', message: 'Er is geen webshop gekoppeld (Beheer → Integraties → Webshop).' };
-        else {
+        if (out.skipped) {
+          state.error = { code: 'not_configured', message: 'Er is geen webshop gekoppeld (Beheer → Integraties → Webshop).' };
+          state.phase = 'mislukt';
+          state.message = state.error.message;
+        } else {
           state.created = out.created || 0;
           state.skipped = out.skippedProducts || 0;
           state.phase = 'klaar';
