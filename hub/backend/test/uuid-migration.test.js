@@ -23,7 +23,7 @@ test('migratie 97: bestaande gegevens blijven kloppen, verwijzingen blijven werk
   const schema = `aqt_test_${crypto.randomBytes(8).toString('hex')}`;
   // Migratie 97 en alles erna (latere migraties horen niet in dit scenario): eerst met het oude schema vullen, daarna alles in één keer toepassen.
   const total = PG_MIGRATIONS.length;
-  const removed = PG_MIGRATIONS.splice(-3);
+  const removed = PG_MIGRATIONS.splice(PG_MIGRATIONS.findIndex((sql) => String(sql).includes('DO $uuid$')));
   let db;
   try {
     db = openPg(URL_, { schema });

@@ -71,7 +71,7 @@ const CATALOG = [
      * @returns {{ value: number, unit: string, detail: string }} De waarde, de eenheid (euro of aantal) en de toelichting.
      */
     compute: ({ db, tenantId }) => {
-      const open = db.prepare("SELECT COALESCE(SUM(total), 0) AS amount, COUNT(*) AS count FROM invoices WHERE tenant_id = ? AND status = 'definitief'").get(tenantId);
+      const open = db.prepare("SELECT COALESCE(SUM(total), 0) AS amount, COUNT(*) AS count FROM invoices WHERE tenant_id = ? AND archived_at IS NULL AND status = 'definitief'").get(tenantId);
       return { value: QuoteCore.round2(Number(open.amount)), unit: 'euro', detail: `${Number(open.count)} open ${plural(open.count, 'factuur', 'facturen')} (incl. btw)` };
     },
   },
@@ -83,7 +83,7 @@ const CATALOG = [
      * @returns {{ value: number, unit: string, detail: string }} De waarde, de eenheid (euro of aantal) en de toelichting.
      */
     compute: ({ db, tenantId, today }) => {
-      const overdue = db.prepare("SELECT COALESCE(SUM(total), 0) AS amount, COUNT(*) AS count FROM invoices WHERE tenant_id = ? AND status = 'definitief' AND kind = 'factuur' AND due_date < ?").get(tenantId, today);
+      const overdue = db.prepare("SELECT COALESCE(SUM(total), 0) AS amount, COUNT(*) AS count FROM invoices WHERE tenant_id = ? AND archived_at IS NULL AND status = 'definitief' AND kind = 'factuur' AND due_date < ?").get(tenantId, today);
       return { value: Number(overdue.count), unit: 'aantal', detail: `${euros(overdue.amount)} voorbij de vervaldatum` };
     },
   },
@@ -95,7 +95,7 @@ const CATALOG = [
      * @returns {{ value: number, unit: string, detail: string }} De waarde, de eenheid (euro of aantal) en de toelichting.
      */
     compute: ({ db, tenantId, range, periodLabel }) => {
-      const sum = db.prepare("SELECT COALESCE(SUM(subtotal), 0) AS amount, COUNT(*) AS count FROM invoices WHERE tenant_id = ? AND status IN ('definitief', 'betaald') AND invoice_date >= ? AND invoice_date <= ?").get(tenantId, range.from, range.to);
+      const sum = db.prepare("SELECT COALESCE(SUM(subtotal), 0) AS amount, COUNT(*) AS count FROM invoices WHERE tenant_id = ? AND archived_at IS NULL AND status IN ('definitief', 'betaald') AND invoice_date >= ? AND invoice_date <= ?").get(tenantId, range.from, range.to);
       return { value: QuoteCore.round2(Number(sum.amount)), unit: 'euro', detail: `excl. btw, ${Number(sum.count)} ${plural(sum.count, 'document', 'documenten')} (${periodLabel.toLowerCase()})` };
     },
   },
@@ -107,7 +107,7 @@ const CATALOG = [
      * @returns {{ value: number, unit: string, detail: string }} De waarde, de eenheid (euro of aantal) en de toelichting.
      */
     compute: ({ db, tenantId }) => {
-      const quotes = db.prepare("SELECT COUNT(*) AS count, COALESCE(SUM(total_excl), 0) AS amount FROM quotes WHERE tenant_id = ? AND status = 'verzonden' AND deleted_at IS NULL").get(tenantId);
+      const quotes = db.prepare("SELECT COUNT(*) AS count, COALESCE(SUM(total_excl), 0) AS amount FROM quotes WHERE tenant_id = ? AND status = 'verzonden' AND deleted_at IS NULL AND archived_at IS NULL").get(tenantId);
       return { value: Number(quotes.count), unit: 'aantal', detail: `${euros(quotes.amount)} excl. btw wacht op antwoord` };
     },
   },
@@ -119,7 +119,7 @@ const CATALOG = [
      * @returns {{ value: number, unit: string, detail: string }} De waarde, de eenheid (euro of aantal) en de toelichting.
      */
     compute: ({ db, tenantId, range, periodLabel }) => {
-      const quotes = db.prepare("SELECT COUNT(*) AS count, COALESCE(SUM(total_excl), 0) AS amount FROM quotes WHERE tenant_id = ? AND status = 'akkoord' AND deleted_at IS NULL AND responded_at >= ? AND responded_at < ?").get(tenantId, range.from, QuoteCore.addDays(range.to, 1));
+      const quotes = db.prepare("SELECT COUNT(*) AS count, COALESCE(SUM(total_excl), 0) AS amount FROM quotes WHERE tenant_id = ? AND status = 'akkoord' AND deleted_at IS NULL AND archived_at IS NULL AND responded_at >= ? AND responded_at < ?").get(tenantId, range.from, QuoteCore.addDays(range.to, 1));
       return { value: Number(quotes.count), unit: 'aantal', detail: `${euros(quotes.amount)} excl. btw (${periodLabel.toLowerCase()})` };
     },
   },
@@ -131,7 +131,7 @@ const CATALOG = [
      * @returns {{ value: number, unit: string, detail: string }} De waarde, de eenheid (euro of aantal) en de toelichting.
      */
     compute: ({ db, tenantId }) => {
-      const open = db.prepare("SELECT COUNT(*) AS count, SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) AS unplanned FROM work_orders WHERE tenant_id = ? AND deleted_at IS NULL AND status IN ('open', 'gepland', 'bezig')").get(tenantId);
+      const open = db.prepare("SELECT COUNT(*) AS count, SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) AS unplanned FROM work_orders WHERE tenant_id = ? AND deleted_at IS NULL AND archived_at IS NULL AND status IN ('open', 'gepland', 'bezig')").get(tenantId);
       return { value: Number(open.count), unit: 'aantal', detail: `${Number(open.unplanned || 0)} nog niet ingepland` };
     },
   },
@@ -143,7 +143,7 @@ const CATALOG = [
      * @returns {{ value: number, unit: string, detail: string }} De waarde, de eenheid (euro of aantal) en de toelichting.
      */
     compute: ({ db, tenantId }) => {
-      const orders = db.prepare("SELECT COUNT(*) AS count, COALESCE(SUM(total), 0) AS amount FROM web_orders WHERE tenant_id = ? AND status = 'nieuw'").get(tenantId);
+      const orders = db.prepare("SELECT COUNT(*) AS count, COALESCE(SUM(total), 0) AS amount FROM web_orders WHERE tenant_id = ? AND archived_at IS NULL AND status = 'nieuw'").get(tenantId);
       return { value: Number(orders.count), unit: 'aantal', detail: `${euros(orders.amount)} incl. btw` };
     },
   },
@@ -155,7 +155,7 @@ const CATALOG = [
      * @returns {{ value: number, unit: string, detail: string }} De waarde, de eenheid (euro of aantal) en de toelichting.
      */
     compute: ({ db, tenantId, range, periodLabel }) => {
-      const orders = db.prepare("SELECT COUNT(*) AS count, COALESCE(SUM(total), 0) AS amount FROM web_orders WHERE tenant_id = ? AND status <> 'geannuleerd' AND created_at >= ? AND created_at < ?").get(tenantId, range.from, QuoteCore.addDays(range.to, 1));
+      const orders = db.prepare("SELECT COUNT(*) AS count, COALESCE(SUM(total), 0) AS amount FROM web_orders WHERE tenant_id = ? AND archived_at IS NULL AND status <> 'geannuleerd' AND created_at >= ? AND created_at < ?").get(tenantId, range.from, QuoteCore.addDays(range.to, 1));
       return { value: QuoteCore.round2(Number(orders.amount)), unit: 'euro', detail: `incl. btw, ${Number(orders.count)} ${plural(orders.count, 'bestelling', 'bestellingen')} (${periodLabel.toLowerCase()})` };
     },
   },
@@ -192,7 +192,7 @@ const CATALOG = [
      */
     compute: ({ db, tenantId, today }) => {
       const week = weekOf(today);
-      const planned = db.prepare("SELECT COUNT(*) AS count, COUNT(DISTINCT assignee_id) AS staff FROM work_orders WHERE tenant_id = ? AND deleted_at IS NULL AND status IN ('gepland', 'bezig', 'gereed') AND planned_date >= ? AND planned_date <= ?").get(tenantId, week.from, week.to);
+      const planned = db.prepare("SELECT COUNT(*) AS count, COUNT(DISTINCT assignee_id) AS staff FROM work_orders WHERE tenant_id = ? AND deleted_at IS NULL AND archived_at IS NULL AND status IN ('gepland', 'bezig', 'gereed') AND planned_date >= ? AND planned_date <= ?").get(tenantId, week.from, week.to);
       return { value: Number(planned.count), unit: 'aantal', detail: `werkorders ingepland, ${Number(planned.staff)} uitvoerder${Number(planned.staff) === 1 ? '' : 's'} (${week.from.slice(8)}-${week.to.slice(8)}/${week.to.slice(5, 7)})` };
     },
   },

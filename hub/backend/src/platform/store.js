@@ -1,5 +1,6 @@
 // Gegevenslaag bovenop db.js: gebruikers, plannen en de aanvraaghistorie.
 // Elke functie krijgt de tenant mee; niets leest buiten de eigen tenant.
+const { archiveModeOf, archiveClause } = require('./archive-filter');
 const crypto = require('crypto');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
@@ -1374,7 +1375,7 @@ function createStore(db) {
    * @param {{ search?: string, group?: string, limit?: number, offset?: number, activeOnly?: boolean }} [options] Zie listCustomerPage.
    * @returns {{ countSql: string, countArgs: Array, pageSql: string, pageArgs: Array }|null} De queries, of null als de organisatie geen klantrollen heeft.
    */
-  function customerPageQueries(tenantIds, { search = '', group = '', limit = 50, offset = 0, activeOnly = false } = {}) {
+  function customerPageQueries(tenantIds, { search = '', group = '', limit = 50, offset = 0, activeOnly = false, archive = 'verberg' } = {}) {
     const ids = [...new Set(tenantIds.map(String))];
     const keys = roles.keysOfKind(ids[0], 'klant');
     if (!keys.length) return null;
@@ -1383,6 +1384,8 @@ function createStore(db) {
     const filters = { particulier: "u.customer_group = ''", zakelijk: "u.customer_group = 'zakelijk'", groothandel: 'u.wholesale = 1', aanvraag: "u.business_request = 'aangevraagd'" };
     if (filters[group]) where.push(filters[group]);
     if (activeOnly) where.push('u.disabled = 0');
+    const archiveSql = archiveClause('u.archived_at', archive).replace(/^ AND /, '');
+    if (archiveSql) where.push(archiveSql);
     const words = String(search || '').trim().toLowerCase().split(/\s+/).filter(Boolean).slice(0, 5);
     for (const word of words) {
       const pattern = `%${word.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;

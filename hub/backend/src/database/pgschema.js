@@ -1854,6 +1854,30 @@ const PG_MIGRATIONS = [
   );
   CREATE INDEX item_together_item ON item_together (tenant_id, item_id, score DESC);
   `,
+  // 100: archief. Een gearchiveerd plan, offerte, werkorder, factuur, webshopbestelling of klant blijft bestaan (nummers blijven bezet, planner-leerdata
+  // blijft staan) maar verdwijnt standaard uit de lijsten en KPI's; terughalen = archived_at leegmaken. Gedeeltelijke indexen voor het archiefscherm.
+  `
+  ALTER TABLE plans ADD COLUMN archived_at TIMESTAMPTZ;
+  CREATE INDEX plans_archived ON plans (tenant_id, archived_at) WHERE archived_at IS NOT NULL;
+  ALTER TABLE quotes ADD COLUMN archived_at TIMESTAMPTZ;
+  CREATE INDEX quotes_archived ON quotes (tenant_id, archived_at) WHERE archived_at IS NOT NULL;
+  ALTER TABLE work_orders ADD COLUMN archived_at TIMESTAMPTZ;
+  CREATE INDEX work_orders_archived ON work_orders (tenant_id, archived_at) WHERE archived_at IS NOT NULL;
+  ALTER TABLE invoices ADD COLUMN archived_at TIMESTAMPTZ;
+  CREATE INDEX invoices_archived ON invoices (tenant_id, archived_at) WHERE archived_at IS NOT NULL;
+  ALTER TABLE web_orders ADD COLUMN archived_at TIMESTAMPTZ;
+  CREATE INDEX web_orders_archived ON web_orders (tenant_id, archived_at) WHERE archived_at IS NOT NULL;
+  ALTER TABLE users ADD COLUMN archived_at TIMESTAMPTZ;
+  CREATE INDEX users_archived ON users (tenant_id, archived_at) WHERE archived_at IS NOT NULL;
+  -- Hoogste uitgegeven volgnummer per soort en voorvoegsel; een nummer van een definitief verwijderd stuk komt nooit terug.
+  CREATE TABLE number_floors (
+    tenant_id UUID NOT NULL ${references('tenants(id)')},
+    kind      ${TEXT_TYPE} NOT NULL,
+    head      ${TEXT_TYPE} NOT NULL,
+    floor     BIGINT NOT NULL,
+    PRIMARY KEY (tenant_id, kind, head)
+  );
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS, UUID_COLUMNS, legacyUuid };

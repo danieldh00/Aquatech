@@ -3,6 +3,7 @@
 // bestaan: dan is het gewoon een adresboekregel voor offertes, werkorders en facturen. Lijst met zoeken en
 // pagina's, nieuwe klant (adres via PDOK, op verzoek een uitnodiging per mail), en een klantkaart met de
 // offertes, werkorders en facturen van die klant.
+const { archiveModeOf } = require('../platform/archive-filter');
 const { requireVerifiedAddress } = require('../platform/address-lookup');
 const { sanitizeBusinessProfile } = require('../webshop/business-profile');
 const { createRateLimiter } = require('../beveiliging/rate-limit');
@@ -204,7 +205,7 @@ function registerCustomerRoutes(app, ctx) {
   app.get('/api/customers', requireCustomers, async (req, res) => {
     const limit = Math.min(200, Math.max(1, Number.parseInt(req.query.limit, 10) || PAGE_SIZE));
     const offset = Math.max(0, Number.parseInt(req.query.offset, 10) || 0);
-    res.json({ ...(await store.listCustomerPageAsync(tenantsOf(req), { search: String(req.query.q || '').slice(0, 100), group: String(req.query.group || ''), limit, offset })), limit, offset });
+    res.json({ ...(await store.listCustomerPageAsync(tenantsOf(req), { search: String(req.query.q || '').slice(0, 100), group: String(req.query.group || ''), archive: archiveModeOf(req.query.archief), limit, offset })), limit, offset });
   });
 
   app.post('/api/customers', requireJson, requireCustomers, limitInvitesIfAsked, checkForeignVat, requireVerifiedAddress(addressGuard, addressToVerify), async (req, res) => {

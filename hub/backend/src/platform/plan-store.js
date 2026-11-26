@@ -1,4 +1,5 @@
 // Historie van aanvragen en plannen (opslaan, controle, tekeningen indienen), los van de rest van de gegevenslaag.
+const { archiveModeOf, archiveClause } = require('./archive-filter');
 const crypto = require('crypto');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
@@ -174,7 +175,7 @@ function createPlanStore(db, { insertUser }) {
    * @param {object} [options] ownerId, includeDeleted, withHistory (aantal historieregels, voor beheerders) en reviewStatus.
    * @returns {object[]} De plannen, laatst gewijzigd eerst.
    */
-  function listPlans(tenantId, { ownerId = null, includeDeleted = false, withHistory = false, reviewStatus = null } = {}) {
+  function listPlans(tenantId, { ownerId = null, includeDeleted = false, withHistory = false, reviewStatus = null, archive = 'verberg' } = {}) {
     const args = [tenantId];
     let sql = `SELECT p.id, p.title, p.customer, p.address, p.created_at, p.updated_at, p.deleted_at, p.owner_id,
         ${jsonDigest(db, 'p.data', { values: ['areas'], counts: ['sprinklers', 'zones', 'elements'] })} AS lite,
@@ -182,6 +183,7 @@ function createPlanStore(db, { insertUser }) {
         u.username AS owner_username, u.display_name AS owner_name, u.kind AS owner_kind, u.email AS owner_email, u.phone AS owner_phone,
         ${REVIEW_COLS}
       FROM plans p JOIN users u ON u.id = p.owner_id ${REVIEW_JOIN} WHERE p.tenant_id = ?${includeDeleted ? '' : ' AND p.deleted_at IS NULL'}`;
+    sql += archiveClause('p.archived_at', archive);
     if (ownerId) { sql += ' AND p.owner_id = ?'; args.push(ownerId); }
     if (REVIEW_STATUSES.includes(reviewStatus)) { sql += ' AND p.review_status = ?'; args.push(reviewStatus); }
     return prepare(`${sql} ORDER BY p.updated_at DESC, p.id`).all(...args).map((plan) => planRow(plan, false));

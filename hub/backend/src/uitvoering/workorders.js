@@ -7,6 +7,8 @@
 // openbare link (openbaar/afspraak.html#t=<token>, zoals de digitale offerte)
 // ziet hij wanneer de klus gepland staat en bevestigt hij die of vraagt hij
 // een ander moment.
+const { floorOf } = require('../platform/number-floors');
+const { archiveModeOf, archiveClause } = require('../platform/archive-filter');
 const { mailStyleOf } = require('../platform/mail-layout');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
@@ -171,11 +173,12 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
    * @param {{ quoteId?: string, customerId?: string, limit?: number, offset?: number }} filters Alleen van die offerte; alleen van dat klantaccount; limit en offset voor een pagina.
    * @returns {{ sql: string, countSql: string, args: Array, customerId: string|null }} De query, de telquery met dezelfde parameters en het klantaccount.
    */
-  function listQuery(tenantId, { quoteId = null, customerId = null, limit = LIST_LIMIT, offset = 0 } = {}) {
+  function listQuery(tenantId, { quoteId = null, customerId = null, archive = 'verberg', limit = LIST_LIMIT, offset = 0 } = {}) {
     const args = [tenantId];
     let extra = '';
     if (quoteId) { extra += ' AND w.quote_id = ?'; args.push(String(quoteId)); }
     if (customerId) { extra += OF_CUSTOMER; args.push(String(customerId), String(customerId)); }
+    extra += archiveClause('w.archived_at', archive);
     return {
       sql: `${LIST_SELECT} WHERE w.tenant_id = ? AND w.deleted_at IS NULL${extra} ORDER BY w.updated_at DESC, w.id LIMIT ${pageSize(limit)} OFFSET ${pageOffset(offset)}`,
       countSql: `SELECT COUNT(*) AS n FROM work_orders w WHERE w.tenant_id = ? AND w.deleted_at IS NULL${extra}`, args, customerId,
@@ -292,7 +295,7 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
     // Een klus van MAX_DAYS werkdagen beslaat hooguit zoveel kalenderdagen.
     const from = Core.addDays(date, -(Math.ceil(Core.MAX_DAYS * 7 / 5) + 2));
     const args = [tenantId, from, date];
-    let sql = `${LIST_SELECT} WHERE w.tenant_id = ? AND w.deleted_at IS NULL AND w.status <> 'geannuleerd'
+    let sql = `${LIST_SELECT} WHERE w.tenant_id = ? AND w.deleted_at IS NULL AND w.archived_at IS NULL AND w.status <> 'geannuleerd'
       AND w.planned_date IS NOT NULL AND w.planned_date >= ? AND w.planned_date <= ?`;
     if (userId) { sql += ' AND w.assignee_id = ?'; args.push(String(userId)); }
     const items = [];
@@ -313,7 +316,7 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
     items.sort((left, right) => (left.startTime || '99').localeCompare(right.startTime || '99') || left.number.localeCompare(right.number));
     let next = null;
     if (userId) {
-      const nextRow = prepare(`${LIST_SELECT} WHERE w.tenant_id = ? AND w.deleted_at IS NULL AND w.status IN ('open', 'gepland', 'bezig')
+      const nextRow = prepare(`${LIST_SELECT} WHERE w.tenant_id = ? AND w.deleted_at IS NULL AND w.archived_at IS NULL AND w.status IN ('open', 'gepland', 'bezig')
         AND w.assignee_id = ? AND w.planned_date > ? ORDER BY w.planned_date, w.number LIMIT 1`).get(tenantId, String(userId), date);
       if (nextRow) next = toWorkOrder(nextRow, false);
     }
@@ -328,7 +331,7 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
    */
   function nextNumber(tenantId, year) {
     const head = `${PREFIX}${year}-`;
-    let max = 0;
+    let max = floorOf(prepare, tenantId, 'werkorders', head);
     for (const numberRow of prepare('SELECT number FROM work_orders WHERE tenant_id = ? AND substr(number, 1, ?) = ?').all(tenantId, head.length, head)) {
       const sequence = Number(numberRow.number.slice(head.length));
       if (Number.isInteger(sequence) && sequence > max) max = sequence;
@@ -382,7 +385,7 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
     const out = { linked: 0, ambiguous: 0, unmatched: 0 };
     const scope = customerScopeOf(tenantId);
     if (!scope || !scope.roleKeys.length) return out;
-    const open = prepare("SELECT id, customer FROM work_orders WHERE tenant_id = ? AND deleted_at IS NULL AND customer_id IS NULL AND customer <> ''").all(tenantId);
+    const open = prepare("SELECT id, customer FROM work_orders WHERE tenant_id = ? AND deleted_at IS NULL AND archived_at IS NULL AND customer_id IS NULL AND customer <> ''").all(tenantId);
     if (!open.length) return out;
     const tenantIds = [...new Set(scope.tenantIds.map(String))];
     const candidates = new Map();
@@ -415,7 +418,7 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
    * @returns {number} Het aantal.
    */
   function countUnlinked(tenantId) {
-    return Number(prepare("SELECT COUNT(*) AS n FROM work_orders WHERE tenant_id = ? AND deleted_at IS NULL AND status <> 'geannuleerd' AND customer_id IS NULL").get(tenantId).n);
+    return Number(prepare("SELECT COUNT(*) AS n FROM work_orders WHERE tenant_id = ? AND deleted_at IS NULL AND archived_at IS NULL AND status <> 'geannuleerd' AND customer_id IS NULL").get(tenantId).n);
   }
 
   /**
@@ -475,8 +478,8 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
    * @returns {{ total: number, items: { id: string, number: string, customer: string, title: string, createdAt: string }[] }} Het aantal en de oudste werkorders.
    */
   function listToSchedule(tenantId, limit = 5) {
-    const total = Number(prepare("SELECT COUNT(*) AS n FROM work_orders WHERE tenant_id = ? AND deleted_at IS NULL AND planned_date IS NULL AND status NOT IN ('gereed', 'geannuleerd')").get(tenantId).n);
-    const items = prepare("SELECT id, number, customer, title, created_at FROM work_orders WHERE tenant_id = ? AND deleted_at IS NULL AND planned_date IS NULL AND status NOT IN ('gereed', 'geannuleerd') ORDER BY created_at, id LIMIT ?").all(tenantId, Math.max(1, Math.min(20, Number(limit) || 5)))
+    const total = Number(prepare("SELECT COUNT(*) AS n FROM work_orders WHERE tenant_id = ? AND deleted_at IS NULL AND archived_at IS NULL AND planned_date IS NULL AND status NOT IN ('gereed', 'geannuleerd')").get(tenantId).n);
+    const items = prepare("SELECT id, number, customer, title, created_at FROM work_orders WHERE tenant_id = ? AND deleted_at IS NULL AND archived_at IS NULL AND planned_date IS NULL AND status NOT IN ('gereed', 'geannuleerd') ORDER BY created_at, id LIMIT ?").all(tenantId, Math.max(1, Math.min(20, Number(limit) || 5)))
       .map((workOrderRow) => ({ id: workOrderRow.id, number: workOrderRow.number, customer: workOrderRow.customer || '', title: workOrderRow.title || '', createdAt: workOrderRow.created_at }));
     return { total, items };
   }
@@ -625,7 +628,7 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
    */
   function byToken(token) {
     if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;
-    const workOrderRow = prepare(`SELECT ${PUBLIC_COLS} FROM work_orders WHERE share_hash = ? AND deleted_at IS NULL`).get(sha256(token)) || null;
+    const workOrderRow = prepare(`SELECT ${PUBLIC_COLS} FROM work_orders WHERE share_hash = ? AND deleted_at IS NULL AND archived_at IS NULL`).get(sha256(token)) || null;
     // Verlopen link (G-02): 180 dagen na delen, of 90 dagen na de geplande datum als die later ligt.
     if (workOrderRow && linkExpired({ sharedAt: workOrderRow.shared_at, referenceDate: workOrderRow.planned_date })) return null;
     return workOrderRow;
@@ -885,7 +888,7 @@ function registerWorkOrderRoutes(app, ctx) {
     const marks = outsourcingOf(tenantOf(req));
     // Geboekte uren en materiaalregels per werkorder (één query, zie worklog.js).
     const logged = loggedOf(tenantOf(req));
-    const page = await workorders.listPage(tenantOf(req), { quoteId: req.query.quote || null, ...pageOf(req.query) });
+    const page = await workorders.listPage(tenantOf(req), { quoteId: req.query.quote || null, archive: archiveModeOf(req.query.archief), ...pageOf(req.query) });
     res.json({ ...page, items: page.items.map((workOrder) => ({ ...workOrder, outsourcing: marks[workOrder.id] || null, logged: logged[workOrder.id] || null })) });
   });
 

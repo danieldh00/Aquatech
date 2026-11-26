@@ -138,6 +138,9 @@ const { createRestoreTest } = require('./platform/restore-test');
 const { registerRestoreTestRoutes } = require('./platform/restore-test-routes');
 const { createDriveRestoreTest } = require('./platform/drive-restore-test');
 const { registerDriveRestoreTestRoutes } = require('./platform/drive-restore-test-routes');
+const { createArchive } = require('./platform/archive');
+const { archiveModeOf } = require('./platform/archive-filter');
+const { registerArchiveRoutes } = require('./platform/archive-routes');
 const { createDriveRestoreSource } = require('./platform/drive-restore-source');
 const { createIdempotency, ifBaseOf } = require('./beveiliging/idempotency');
 const { createOAuthGrants } = require('./mcp/oauth-grants');
@@ -1593,7 +1596,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     const user = identify(req);
     if (!user || !Roles.can(user, 'plannen')) return res.json({ items: [] });
     const all = req.query.all === '1' && Roles.can(user, 'plannen.alle');
-    res.json({ items: store.listPlans(req.tenantId, { ownerId: all ? null : user.id, reviewStatus: req.query.review || null }) });
+    res.json({ items: store.listPlans(req.tenantId, { ownerId: all ? null : user.id, reviewStatus: req.query.review || null, archive: archiveModeOf(req.query.archief) }) });
   });
 
   app.get('/api/plans/:id', (req, res) => {
@@ -1648,6 +1651,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       includeDeleted: req.query.deleted === '1',
       withHistory: true,
       reviewStatus: req.query.review || null,
+      archive: archiveModeOf(req.query.archief),
     }) });
   });
 
@@ -1898,6 +1902,10 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const driveRestoreTest = createDriveRestoreTest({ settings, driveBackup, backupDir, vault, database });
   registerDriveRestoreTestRoutes(app, { driveRestoreTest, audit, mainTenantId: tenant.id, canUpdate });
   app.locals.driveRestoreTest = driveRestoreTest;
+  // Archief (platform/archive.js): plannen, offertes, werkorders, facturen, bestellingen en klanten uit het zicht halen, terughalen en definitief verwijderen.
+  const archive = createArchive(db, { customerRoleKeys: (tenantId) => store.roles.keysOfKind(tenantId, 'klant'), purgePlan: (tenantId, id) => store.purgePlan(tenantId, id) });
+  registerArchiveRoutes(app, { archive, audit, confirmIdentity: createIdentityConfirm({ store, loginGuard, twoFactor, audit, auditAction: 'archief_wachtwoord_fout' }), runBackup: backupDir ? runBackup : null });
+  app.locals.archive = archive;
 
   // Terugzetten uit een back-up (volledig of per record/veld): platform/backup-restore.js.
   registerBackupRestoreRoutes(app, { backupDir, driveSource: backupDir ? createDriveRestoreSource({ driveBackup, backupDir }) : null, vault, database, store, audit, runBackup, requireJson, loginGuard, twoFactor, lineDeps: () => ({ QuoteCore: require(path.join(FRONTEND_DIR, 'offertes', 'quote-core.js')), totalsOf: webOrdersModule.totalsOf, stockLinesOf: webOrdersModule.stockLinesOf, stock: stockStore }) });

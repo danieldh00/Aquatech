@@ -1,6 +1,8 @@
 // Offertes: opslag (tabel quotes), het bedrijfsprofiel voor op de offerte
 // (instelling quoteProfile) en de API-routes. De berekening zelf staat in
 // frontend/offertes/quote-core.js en is gedeeld met de browser.
+const { floorOf } = require('../platform/number-floors');
+const { archiveModeOf, archiveClause } = require('../platform/archive-filter');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const crypto = require('crypto');
@@ -294,13 +296,14 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
    * @param {{ tenantId: string, ownerId?: string|null, planId?: string|null, customerId?: string|null, limit?: number, offset?: number }} filters Tenant en filters (customerId: alleen de offertes van dat klantaccount, zonder concepten; limit en offset voor een pagina).
    * @returns {{ sql: string, countSql: string, args: Array, customerId: string|null }} De query, de telquery met dezelfde parameters en het klantfilter.
    */
-  function listQuery({ tenantId, ownerId = null, planId = null, customerId = null, limit = LIST_LIMIT, offset = 0 }) {
+  function listQuery({ tenantId, ownerId = null, planId = null, customerId = null, archive = 'verberg', limit = LIST_LIMIT, offset = 0 }) {
     const args = [tenantId];
     // Het filter staat apart (alleen kolommen van q), zodat de lijst- en de telquery precies dezelfde voorwaarden hebben.
     let filter = '';
     if (ownerId) { filter += ' AND q.owner_id = ?'; args.push(ownerId); }
     if (customerId) { filter += " AND q.customer_id = ? AND q.status <> 'concept'"; args.push(customerId); }
     if (planId) { filter += ' AND q.plan_id = ?'; args.push(String(planId)); }
+    filter += archiveClause('q.archived_at', archive);
     const sql = `SELECT q.id, q.number, q.status, q.title, q.customer, q.plan_id, q.total_excl, q.total_incl, q.created_at, q.updated_at,
         ${jsonField(db, 'q.data', 'validUntil')} AS valid_until, q.owner_id, u.username AS owner_username, u.display_name AS owner_name,
         q.customer_id, c.display_name AS customer_name, q.view_count, q.viewed_at, q.responded_at, q.order_id, q.converted_at, o.number AS order_number
@@ -428,7 +431,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
    */
   function nextNumber(tenantId, prefix, year) {
     const head = `${prefix}${year}-`;
-    let max = 0;
+    let max = floorOf(prepare, tenantId, 'offertes', head);
     for (const existing of prepare('SELECT number FROM quotes WHERE tenant_id = ? AND substr(number, 1, ?) = ?').all(tenantId, head.length, head)) {
       const sequence = Number(existing.number.slice(head.length));
       if (Number.isInteger(sequence) && sequence > max) max = sequence;
@@ -675,7 +678,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
    */
   function byToken(token) {
     if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;
-    const quoteRow = prepare(`${FULL_SQL} WHERE q.share_hash = ? AND q.deleted_at IS NULL`).get(sha256(token)) || null;
+    const quoteRow = prepare(`${FULL_SQL} WHERE q.share_hash = ? AND q.deleted_at IS NULL AND q.archived_at IS NULL`).get(sha256(token)) || null;
     if (!quoteRow) return null;
     // Verlopen link (G-02): 180 dagen na delen, of 90 dagen na de geldigheidsdatum als die later ligt.
     const data = parseJson(quoteRow.data) || {};
@@ -1022,7 +1025,7 @@ function registerQuoteRoutes(app, ctx) {
       return res.json(Roles.can(user, 'offertes.klant') ? await quotes.listPage(user.tenant_id, { customerId: user.id, ...pageOf(req.query) }) : { items: [], total: 0, truncated: false });
     }
     const all = req.query.all === '1' && Roles.can(user, 'offertes.alle');
-    res.json(await quotes.listPage(user.tenant_id, { ownerId: all ? null : user.id, planId: req.query.plan || null, ...pageOf(req.query) }));
+    res.json(await quotes.listPage(user.tenant_id, { ownerId: all ? null : user.id, planId: req.query.plan || null, archive: archiveModeOf(req.query.archief), ...pageOf(req.query) }));
   });
 
   app.get('/api/quotes/:id', (req, res) => {

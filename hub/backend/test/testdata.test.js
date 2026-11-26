@@ -265,6 +265,7 @@ test('testdata vult alle features: klantlinks, akkoord met handtekening, werkord
       sessions: 'ontstaan bij inloggen',
       audit: 'ontstaat vanzelf bij handelingen',
       app_logs: 'logregels ontstaan vanzelf bij fouten en traagheid',
+      number_floors: 'ontstaat alleen bij het definitief verwijderen van het archief',
       settings: 'instellingen kiest de beheerder zelf (alleen de nepwebshop wordt gezet)',
       support_grants: 'meekijken is een handeling, geen data',
       impersonations: 'meekijken is een handeling, geen data',

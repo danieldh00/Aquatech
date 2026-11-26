@@ -20,6 +20,8 @@
 // - Uit de webshop: shop-orders.js maakt van een afgeronde bestelling een
 //   factuur (shop_order_id); de voorraad volgt dan uit de webshopsynchronisatie.
 // Alles per omgeving (req.tenantId); recht 'facturen'.
+const { floorOf } = require('../platform/number-floors');
+const { archiveModeOf, archiveClause } = require('../platform/archive-filter');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const crypto = require('crypto');
@@ -109,9 +111,9 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
    * @param {object} [filters] status, from en to (factuurdatum), workOrderId, customerId (alleen facturen van die klant), kinds ('factuur'/'credit') en statuses (meerdere statussen).
    * @returns {{ sql: string, countSql: string, args: Array }} De query, de telquery met dezelfde parameters en de parameters.
    */
-  function listQuery(tenantId, { status = '', from = '', to = '', workOrderId = '', customerId = '', kinds = null, statuses = null } = {}) {
+  function listQuery(tenantId, { status = '', from = '', to = '', workOrderId = '', customerId = '', kinds = null, statuses = null, archive = 'verberg' } = {}) {
     const args = [tenantId];
-    let filter = '';
+    let filter = archiveClause('archived_at', archive);
     if (Core.STATUSES[status]) { filter += ' AND status = ?'; args.push(status); }
     if (Core.isDate(from)) { filter += ' AND invoice_date >= ?'; args.push(from); }
     if (Core.isDate(to)) { filter += ' AND invoice_date <= ?'; args.push(to); }
@@ -198,7 +200,7 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
    */
   function nextNumber(tenantId, prefix, year) {
     const head = `${prefix}${year}-`;
-    let max = 0;
+    let max = floorOf(prepare, tenantId, 'facturen', head);
     for (const row of prepare('SELECT number FROM invoices WHERE tenant_id = ? AND number IS NOT NULL AND substr(number, 1, ?) = ?').all(tenantId, head.length, head)) {
       const sequence = Number(row.number.slice(head.length));
       if (Number.isInteger(sequence) && sequence > max) max = sequence;
@@ -656,7 +658,7 @@ function registerInvoiceRoutes(app, ctx) {
   const validData = (data) => data && typeof data === 'object' && !Array.isArray(data);
 
   app.get('/api/invoices', requireInvoices, async (req, res) => {
-    const filters = { status: String(req.query.status || ''), from: String(req.query.from || ''), to: String(req.query.to || ''), workOrderId: String(req.query.workOrderId || '') };
+    const filters = { status: String(req.query.status || ''), from: String(req.query.from || ''), to: String(req.query.to || ''), workOrderId: String(req.query.workOrderId || ''), archive: archiveModeOf(req.query.archief) };
     const items = await invoices.listAsync(tenantOf(req), filters);
     // Laatste verstuurde betalingsherinnering erbij (alleen voor facturen over de vervaldatum, één query).
     const overdueIds = items.filter((invoice) => invoice.overdue).map((invoice) => invoice.id);
