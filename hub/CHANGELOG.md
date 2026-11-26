@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.44.2
+
+Een lopende achtergrondtaak staat in de nieuwe interne instelling `backgroundJobs` (geen migratie; `artikelen/background-jobs.js`: `createJobPersistence`, `sanitizeBackgroundJobs`). `startJob` in item-text-bulk.js en related-routes.js bewaart hem bij de start en wist hem als de taak klaar of gestopt is. `app.locals.resumeBackgroundJobs` (server.js) hervat bewaarde taken een halve minuut na het opstarten (tijdens een systeemupdate later opnieuw proberen); een bewaarde taak zonder werk wordt opgeruimd. De velden `descriptionBulkDailyItems` en `relatedAiDailyItems` staan in het AI-formulier van Beheer. Test: `item-text-bulk.test.js`.
+
+## 1.44.1
+
+- `quotes.purge` en `workorders.purge` leggen het volgnummer vast in `number_floors`, zodat de nummergenerator er altijd boven blijft; de test voor werkorders is aangepast.
+
 ## 1.44.0
 
 - Migratie 100: kolom `archived_at` (met gedeeltelijke index) op `plans`, `quotes`, `work_orders`, `invoices`, `web_orders` en `users`, en de tabel `number_floors` (hoogste uitgegeven volgnummer per soort en voorvoegsel).

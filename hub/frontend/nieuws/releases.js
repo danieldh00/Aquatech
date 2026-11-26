@@ -13,6 +13,23 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.44.2',
+      date: '2026-11-26',
+      title: 'Achtergrondtaken met AI gaan na een herstart vanzelf verder',
+      items: [
+        { text: 'Het schrijven van omschrijvingen in bulk en het opzoeken bij Past bij gaan na een herstart van de server (bijvoorbeeld door een update) vanzelf verder met wat nog aan de beurt is. Je hoeft niets opnieuw te starten.', for: ['voorraad'] },
+        { text: 'Bij Beheer > Instellingen > AI staan nu de dagplafonds voor omschrijvingen in bulk en voor Past bij opzoeken.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.44.1',
+      date: '2026-11-26',
+      title: 'Nummers van gewiste offertes en werkorders komen nooit terug',
+      items: [
+        { text: 'Als een offerte of werkorder op verzoek definitief wordt gewist (AVG), krijgt een nieuw document nooit meer dat nummer.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.44.0',
       date: '2026-11-26',
       title: 'Archief voor testgegevens',
