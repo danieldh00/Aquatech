@@ -127,7 +127,7 @@ function clientKey(req) {
  * @returns {Object<string, string>} De cookies.
  */
 function parseCookies(header) {
-  const out = {};
+  const out = Object.create(null);
   for (const part of String(header || '').split(';')) {
     const separatorIndex = part.indexOf('=');
     if (separatorIndex < 0) continue;

@@ -275,10 +275,16 @@ function layoutProblem(raw) {
  */
 function fillParagraphs(template, values) {
   const result = [];
+  /**
+   * Waarde van een invulveld; alleen eigen sleutels (nooit `constructor` of andere geërfde eigenschappen).
+   * @param {string} name Naam van het veld.
+   * @returns {string} De waarde, of leeg.
+   */
+  const valueOf = (name) => (Object.hasOwn(values, name) && values[name] != null ? String(values[name]) : '');
   for (const paragraph of String(template).split(/\n{2,}/)) {
     const names = fieldsIn(paragraph);
-    if (names.length && names.every((name) => !String(values[name] == null ? '' : values[name]).trim())) continue;
-    const filled = paragraph.replace(/\{([a-z_]+)\}/g, (_match, name) => (values[name] == null ? '' : String(values[name])));
+    if (names.length && names.every((name) => !valueOf(name).trim())) continue;
+    const filled = paragraph.replace(/\{([a-z_]+)\}/g, (_match, name) => valueOf(name));
     result.push(...filled.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean));
   }
   return result;
