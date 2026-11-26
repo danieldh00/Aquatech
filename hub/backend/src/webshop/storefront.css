@@ -639,6 +639,7 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
 .home-hero > :not(.home-hero-text) { grid-column: 2; grid-row: 1; width: 100%; height: 100%; min-height: 420px; object-fit: cover; border-radius: 0 0 0 120px; }
 .home-hero > picture { display: block; overflow: hidden; border-radius: 0 0 0 120px; }
 .home-hero > picture img { width: 100%; height: 100%; min-height: 420px; object-fit: cover; }
+.home-hero-text:only-child { grid-column: 1 / -1; }
 .home-hero-text { position: static; grid-column: 1; grid-row: 1; padding: 56px 48px; background: none; justify-content: center; gap: 12px; }
 .home-hero h1 { font-size: 2.6rem; line-height: 1.1; font-weight: 800; }
 .home-hero p { max-width: 30em; margin: 0 0 14px; color: var(--at-band); line-height: 1.5; }
