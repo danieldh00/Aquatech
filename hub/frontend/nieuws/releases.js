@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.45.5',
+      date: '2026-11-26',
+      title: 'Specificaties in één keer vullen in plaats van AI-teksten',
+      items: [
+        { text: 'Artikelen > Teksten: *Specificaties vullen* zoekt technische kenmerken op (bij voorkeur bij bosta.com) en zet ze als overzicht bij het artikel. Eigen specificaties blijven staan.', for: ['voorraad'] },
+        { text: 'Door de AI geschreven omschrijvingen worden in de webshop niet meer getoond; de specificaties staan wel op de productpagina. De teksten blijven bewaard.' },
+      ],
+    },
+    {
       version: '1.45.4',
       date: '2026-11-26',
       title: 'Artikelen overzichtelijker met subpagina\'s in de zijbalk',

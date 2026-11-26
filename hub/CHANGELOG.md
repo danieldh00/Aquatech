@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.45.5
+
+- Bulkrun (`item-text-bulk.js`): standaardmodus `specs` (`mode: 'texts'` houdt het oude schrijven). `drafts.applySpecs` zet de gevalideerde kenmerken uit `item_specs` als `stock_items.specifications` (leeg = alles, anders alleen nieuwe namen; nooit overschrijven) en legt `specsAt` vast (`recordSpecs`); `bulkTodo({ mode: 'specs' })` toont wat nog niet gevuld is. Geen tekst, dus geen schrijver nodig.
+- Zoekopdracht kenmerken (`FEATURES_SYSTEM`): voorkeursbron bosta.com (alleen via het zoekgereedschap, bron per kenmerk met bronzin), technische details met vaste Nederlandse namen. `PROMPT_VERSION` van Past bij blijft gelijk.
+- Webshop (`storefront-data.js` `readDetails`): een omschrijving met `item_specs.textLog.action` nieuw of overschreven wordt niet getoond (ook niet in de feed en JSON-LD); een webshoptekst die ervoor stond komt weer tevoorschijn. Geen migratie.
+
 ## 1.45.4
 
 - Artikelen: tabbladen vervangen door subpagina's in de zijbalk (groep `artikelen`, `navSection` voor tussenkoppen Voorraad/Inhoud/Beheer in `shared/sidebar.js|.css`); de tabbalk blijft zichtbaar voor gebruikers zonder zijbalk.
