@@ -1,7 +1,7 @@
 name: Security scans
 
 # Vindt lekken en kwetsbaarheden vóór productie: geheimen in de code (gitleaks) en een scan van het gebouwde
-# image (Trivy). Codeanalyse doet de Claude security review (claude-review.yml); CodeQL is bewust niet meer in gebruik. Draait bij code-wijzigingen in een PR, op master en wekelijks (nieuwe CVE's in bestaande code).
+# image (Trivy). Codeanalyse doen de Claude security review (claude-review.yml) en CodeQL (codeql.yml). Draait bij code-wijzigingen in een PR, op master en wekelijks (nieuwe CVE's in bestaande code).
 # Secret scanning en push protection van GitHub zelf staan in de repo-instellingen (Settings > Code security), niet hier.
 on:
   push:
