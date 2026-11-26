@@ -5,6 +5,7 @@ const assert = require('node:assert');
 const { setup, order, PERSON } = require('./helpers/webshop-world');
 const { postCheckout, postForm } = require('./helpers/http-client');
 const { LEGAL_SLUGS, WITHDRAWAL_DAYS } = require('../src/webshop/legal-pages');
+const { cookieBody, ALL_SERVICES } = require('../src/webshop/cookie-notice');
 const { RETURN_DAYS } = require('../src/webshop/web-returns');
 
 test('de termijn in de teksten is gelijk aan de retourtermijn', () => {
@@ -55,4 +56,46 @@ test('bestellen kan alleen met akkoord op de voorwaarden', async () => {
   const placed = (await world.admin.get(`/app/api/admin/web-orders/${id}`)).body.order;
   assert.strictEqual(placed.consent.terms, true);
   assert.ok(placed.consent.at, 'tijdstip van het akkoord');
+});
+
+test('cookieverklaring: zonder diensten alleen de noodzakelijke cookies, geen Google of Microsoft', async () => {
+  const world = await setup();
+  const visitor = world.shoppers[0].client;
+  const home = await visitor.get('/');
+  assert.match(home.text, /href="pagina\/cookieverklaring\/"/, 'link in de voet');
+  const page = await visitor.get('/pagina/cookieverklaring/');
+  assert.strictEqual(page.status, 200);
+  assert.match(page.text, /aquatech_winkelwagen/);
+  assert.match(page.text, /geen analytische diensten/);
+  assert.doesNotMatch(page.text, /Google Analytics|Microsoft Clarity|_clck|reCAPTCHA|aquatech_shop_consent/);
+  const privacy = await visitor.get('/pagina/privacyverklaring/');
+  assert.doesNotMatch(privacy.text, /Google Analytics|Microsoft Clarity/);
+  assert.match(privacy.text, /cookieverklaring/);
+});
+
+test('cookieverklaring: Google Analytics en Clarity staan er alleen in als ze aan staan', async () => {
+  const world = await setup();
+  const visitor = world.shoppers[0].client;
+  await world.admin.put('/app/api/admin/settings', { shopAnalytics: { enabled: true, measurementId: 'G-TEST1234' } });
+  let page = await visitor.get('/pagina/cookieverklaring/');
+  assert.match(page.text, /Google Analytics 4/);
+  assert.match(page.text, /policies\.google\.com\/privacy/);
+  assert.match(page.text, /aquatech_shop_consent/);
+  assert.doesNotMatch(page.text, /Microsoft Clarity/);
+  await world.admin.put('/app/api/admin/settings', { shopClarity: { enabled: true, projectId: 'zgjek0q90a' } });
+  page = await visitor.get('/pagina/cookieverklaring/');
+  assert.match(page.text, /Microsoft Clarity/);
+  assert.match(page.text, /_clck/);
+  assert.match(page.text, /privacy\.microsoft\.com/);
+  assert.match((await visitor.get('/pagina/privacyverklaring/')).text, /Google Analytics en Microsoft Clarity/);
+  await world.admin.put('/app/api/admin/settings', { shopAnalytics: { enabled: false, measurementId: 'G-TEST1234' }, shopClarity: { enabled: false, projectId: 'zgjek0q90a' } });
+  assert.doesNotMatch((await visitor.get('/pagina/cookieverklaring/')).text, /Google Analytics|Microsoft Clarity/);
+});
+
+test('cookieverklaring: elke dienst heeft aanbieder, doel, bewaartermijn, doorgifte en privacybeleid', () => {
+  const html = cookieBody({ email: 'info@example.nl' }, ALL_SERVICES);
+  for (const label of ['Aanbieder', 'Doel', 'Bewaartermijn', 'Buiten de EU', 'Privacybeleid', 'Categorie']) assert.ok(html.includes(`<strong>${label}:</strong>`), label);
+  for (const name of ['Google Analytics 4', 'Microsoft Clarity', 'Google reCAPTCHA', 'Mollie', 'aquatech_gastbestelling', '_ga', '_clsk']) assert.ok(html.includes(name), name);
+  assert.match(html, /info@example\.nl/);
+  assert.doesNotMatch(cookieBody({}, {}), /Mollie|reCAPTCHA|aquatech_gastbestelling/);
 });

@@ -1,7 +1,10 @@
+const { cookieBody, ALL_SERVICES } = require('./cookie-notice');
+
 // Standaardteksten van de juridische pagina's van de eigen webshop: algemene
 // voorwaarden, privacyverklaring en herroepingsrecht (met modelformulier).
 // De shop toont deze teksten tot de beheerder in Beheer → Webshop-inhoud een
 // eigen pagina met dezelfde naam in het adres publiceert; die gaat dan voor.
+// De cookieverklaring (cookie-notice.js) volgt wat de shop werkelijk gebruikt.
 // De teksten zijn een gangbare basis voor een Nederlandse webshop en horen
 // door de eigenaar gecontroleerd te worden.
 
@@ -15,9 +18,9 @@ function escapeHtml(value) {
 }
 
 /** Namen in het adres van de juridische pagina's, in de volgorde van de voet. */
-const LEGAL_SLUGS = ['algemene-voorwaarden', 'privacyverklaring', 'herroepingsrecht'];
+const LEGAL_SLUGS = ['algemene-voorwaarden', 'privacyverklaring', 'cookieverklaring', 'herroepingsrecht'];
 /** Titel van elke juridische pagina (ook voor de links in de voet). */
-const LEGAL_TITLES = { 'algemene-voorwaarden': 'Algemene voorwaarden', privacyverklaring: 'Privacyverklaring', herroepingsrecht: 'Herroepingsrecht' };
+const LEGAL_TITLES = { 'algemene-voorwaarden': 'Algemene voorwaarden', privacyverklaring: 'Privacyverklaring', cookieverklaring: 'Cookieverklaring', herroepingsrecht: 'Herroepingsrecht' };
 /** Termijn (dagen) waarbinnen een consument kan herroepen; gelijk aan de retourtermijn in web-returns.js. */
 const WITHDRAWAL_DAYS = 14;
 
@@ -53,9 +56,13 @@ function termsBody(contact) {
 /**
  * De privacyverklaring.
  * @param {object} contact Contactgegevens uit Beheer.
+ * @param {object} services Wat de shop gebruikt (zie cookie-notice.js).
  * @returns {string} HTML van de pagina.
  */
-function privacyBody(contact) {
+function privacyBody(contact, services) {
+  const tools = [services.analytics && 'Google Analytics', services.clarity && 'Microsoft Clarity'].filter(Boolean);
+  const processors = services.analytics && services.clarity ? 'Google en Microsoft verwerken' : services.analytics ? 'Google verwerkt' : 'Microsoft verwerkt';
+  const measuring = tools.length ? `<li><strong>Analytisch</strong> (alleen met jouw toestemming): we meten anoniem hoe de webshop wordt gebruikt, met ${tools.join(' en ')}.${services.clarity ? ' Clarity maakt schermopnames en heatmaps; alles wat je in een invoerveld typt wordt gemaskeerd.' : ''} Zonder toestemming laden we niets van ${tools.length > 1 ? 'deze partijen' : 'deze partij'} en worden er geen analytische cookies geplaatst. Intrekken van je toestemming verwijdert de cookies weer. ${processors} deze gegevens in onze opdracht; gegevens kunnen buiten de EU worden verwerkt. Advertentiecookies gebruiken we niet.</li>` : '<li>We gebruiken op dit moment geen analytische diensten en plaatsen geen analytische of advertentiecookies.</li>';
   return `<p>Aquatechshop.nl gaat zorgvuldig om met je persoonsgegevens. In deze verklaring lees je welke gegevens we gebruiken en waarom.</p>
 <h2>Verwerkingsverantwoordelijke</h2><p>${companyLines(contact)}</p>
 <h2>Welke gegevens en waarvoor</h2>
@@ -64,9 +71,9 @@ function privacyBody(contact) {
 <li><strong>Retouren en klantcontact</strong>: gegevens die je ons stuurt bij een retour of vraag, om die af te handelen.</li>
 <li><strong>Beveiliging</strong>: je IP-adres gebruiken we kortstondig om misbruik en overbelasting van de webshop tegen te gaan. Grondslag: gerechtvaardigd belang.</li></ul>
 <h2>Met wie delen we gegevens</h2><p>Alleen met partijen die nodig zijn voor de bestelling: DPD (bezorging, met je naam, adres en eventueel telefoonnummer en e-mailadres), onze boekhoudsoftware en onze hosting- en e-mailleveranciers. Met hen hebben we afspraken over het beveiligen van je gegevens. We verkopen geen gegevens.</p>
-<h2>Cookies en meten</h2><p>Bij je eerste bezoek vragen we wat we mogen gebruiken. Je kunt je keuze altijd wijzigen of intrekken via <em>Cookie-instellingen</em> onderaan elke pagina; weigeren is net zo makkelijk als accepteren. We bewaren je keuze, met de datum en de versie van deze tekst, in je browser.</p>
+<h2>Cookies en meten</h2><p>Per dienst en per cookie staat alles in onze <a href="../cookieverklaring/">cookieverklaring</a>. Bij je eerste bezoek vragen we wat we mogen gebruiken. Je kunt je keuze altijd wijzigen of intrekken via <em>Cookie-instellingen</em> onderaan elke pagina; weigeren is net zo makkelijk als accepteren. We bewaren je keuze, met de datum en de versie van deze tekst, in je browser.</p>
 <ul><li><strong>Noodzakelijk</strong> (geen toestemming nodig): een cookie met je winkelwagen, een cookie waarmee <em>Verder winkelen</em> naar de laatst bekeken lijst terugkeert (verdwijnt als je de browser sluit), de inlogsessie en, als je als gast bestelt, een cookie waarmee je je bestelling kunt bekijken.</li>
-<li><strong>Analytisch</strong> (alleen met jouw toestemming): we meten anoniem hoe de webshop wordt gebruikt, met Google Analytics en Microsoft Clarity. Clarity maakt schermopnames en heatmaps; alles wat je in een invoerveld typt wordt gemaskeerd. Zonder toestemming laden we niets van deze partijen en worden er geen analytische cookies geplaatst. Intrekken van je toestemming verwijdert deze cookies weer (<code>_ga</code>, <code>_ga_*</code>, <code>_clck</code> en <code>_clsk</code>). Google en Microsoft verwerken deze gegevens in onze opdracht; gegevens kunnen buiten de EU worden verwerkt. Advertentiecookies gebruiken we niet.</li></ul>
+${measuring}</ul>
 <h2>Je rechten</h2><p>Je kunt ons vragen om inzage in, correctie of verwijdering van je gegevens, om beperking van de verwerking, of om overdracht ervan. Verwijderen kan niet voor gegevens die we wettelijk moeten bewaren. Mail ons via ${escapeHtml(contact.email || 'het adres hierboven')}; we reageren binnen een maand. Ben je het niet eens met hoe we met je gegevens omgaan, dan kun je een klacht indienen bij de Autoriteit Persoonsgegevens (autoriteitpersoonsgegevens.nl).</p>`;
 }
 
@@ -98,12 +105,14 @@ function withdrawalBody(contact) {
 /**
  * De standaardpagina's, met de bedrijfsgegevens ingevuld.
  * @param {{ phone?: string, email?: string, kvk?: string, address?: string }} contact Contactgegevens uit Beheer.
+ * @param {object} [services] Wat de shop gebruikt (zie cookie-notice.js); zonder staan alle diensten erin, als voorbeeld voor Beheer.
  * @returns {Object<string, { slug: string, title: string, description: string, body: string }>} Per naam in het adres de pagina.
  */
-function legalDefaults(contact) {
+function legalDefaults(contact, services = ALL_SERVICES) {
   return {
     'algemene-voorwaarden': { slug: 'algemene-voorwaarden', title: 'Algemene voorwaarden', description: 'De algemene voorwaarden van Aquatechshop.nl.', body: termsBody(contact) },
-    privacyverklaring: { slug: 'privacyverklaring', title: 'Privacyverklaring', description: 'Hoe Aquatechshop.nl omgaat met je persoonsgegevens.', body: privacyBody(contact) },
+    privacyverklaring: { slug: 'privacyverklaring', title: 'Privacyverklaring', description: 'Hoe Aquatechshop.nl omgaat met je persoonsgegevens.', body: privacyBody(contact, services) },
+    cookieverklaring: { slug: 'cookieverklaring', title: 'Cookieverklaring', description: 'Welke cookies en diensten Aquatechshop.nl gebruikt, waarvoor en hoe lang.', body: cookieBody(contact, services) },
     herroepingsrecht: { slug: 'herroepingsrecht', title: 'Herroepingsrecht', description: 'Je bedenktijd en het modelformulier voor herroeping bij Aquatechshop.nl.', body: withdrawalBody(contact) },
   };
 }
