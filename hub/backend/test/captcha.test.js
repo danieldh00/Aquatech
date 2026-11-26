@@ -201,7 +201,7 @@ test('webshop: met captcha hebben de formulieren het veld en de vermelding, en d
   const world = await captchaWorld();
   const visitor = createClient(world.base);
   const field = new RegExp(`<input type="hidden" name="captchaToken" value="" data-site-key="${SITE_KEY}" data-captcha-action="`);
-  for (const [urlPath, action] of [['/inloggen/', 'login'], ['/registreren/', 'register'], ['/planner/', 'planner_signup'], ['/wachtwoord-vergeten/', 'forgot_password']]) {
+  for (const [urlPath, action] of [['/inloggen/', 'login'], ['/registreren/', 'register'], ['/planner/?account=1', 'planner_signup'], ['/wachtwoord-vergeten/', 'forgot_password']]) {
     const page = await visitor.get(urlPath);
     assert.strictEqual(page.status, 200, urlPath);
     assert.match(page.text, field, urlPath);

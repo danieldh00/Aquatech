@@ -261,6 +261,7 @@ table.list.missing td { color: var(--danger); }
   .inspector #props h3:first-child { margin-top: 4px; padding-right: 40px; }
 }
 @media (max-width: 760px) {
+  .btn:not(.sm):not(.icon) { min-height: 40px; }
   body { height: 100vh; height: 100dvh; }
   .topbar { gap: 8px; padding: 6px 8px; padding-top: max(6px, env(safe-area-inset-top)); }
   .brand span, .brand-logo, .home-link span { display: none; }

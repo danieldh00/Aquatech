@@ -144,3 +144,15 @@ test('planner → winkelwagen: artikel per rol wordt omgerekend of gemeld als an
   const bad = await admin.post('/app/api/stock/items', { code: 'FOUT', name: 'Fout', unitContent: -1 });
   assert.strictEqual(bad.status, 400);
 });
+
+test('shop /planner: bezoeker zonder account gaat direct de planner in, het aanmeldformulier blijft met ?account=1', async () => {
+  const { base, admin } = await setup();
+  await admin.put('/app/api/admin/settings', { storefront: true });
+  const visitor = createClient(base, { followRedirects: false });
+  const direct = await visitor.get('/planner/');
+  assert.strictEqual(direct.status, 302);
+  assert.strictEqual(direct.location, '../app/beregening/?tekenen');
+  const signup = await visitor.get('/planner/?account=1');
+  assert.strictEqual(signup.status, 200);
+  assert.match(signup.text, /Account maken en naar de planner/);
+});

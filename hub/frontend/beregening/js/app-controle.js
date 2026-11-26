@@ -41,6 +41,13 @@
     _loginHref() {
       return `../login${this.org ? `?org=${encodeURIComponent(this.org)}` : ''}`;
     },
+    /**
+     * Link om het ontwerp te bewaren met een account: registreren in de webshop met doorsturen naar de planner, die het lokale ontwerp overneemt.
+     * @returns {string} het adres
+     */
+    _saveWithAccountHref() {
+      return '../../registreren/?volgende=planner';
+    },
     /** Toont de balk met de controlestatus van het plan en de knoppen die bij de gebruiker passen. */
     _renderReview() {
       const bar = $('#review-bar');
@@ -52,9 +59,9 @@
         bar.className = 'review-bar anon';
         bar.innerHTML = drawing.enabled
           ? `<div class="rv-text"><b>Tekenen zonder account</b><span>Teken je tuin en dien hem in: een installateur${drawing.company ? ` van ${escapeHtml(drawing.company)}` : ''} controleert hem. Tot dan blijft de tekening alleen in deze browser.</span></div>
-             <div class="rv-act"><button id="rv-submit" class="btn primary">Tekening indienen</button><a class="rv-login" href="${escapeHtml(this._loginHref())}">Inloggen</a></div>`
-          : `<div class="rv-text"><b>Tekenen zonder account</b><span>Bij deze organisatie kun je geen tekening indienen zonder account. Log in om je plan te bewaren.</span></div>
-             <div class="rv-act"><a class="btn" href="${escapeHtml(this._loginHref())}">Inloggen</a></div>`;
+             <div class="rv-act"><button id="rv-submit" class="btn primary">Tekening indienen</button><a class="btn" href="${escapeHtml(this._saveWithAccountHref())}">Ontwerp bewaren met account</a><a class="rv-login" href="${escapeHtml(this._loginHref())}">Inloggen</a></div>`
+          : `<div class="rv-text"><b>Tekenen zonder account</b><span>Bij deze organisatie kun je geen tekening indienen zonder account. Maak een account om je plan te bewaren.</span></div>
+             <div class="rv-act"><a class="btn primary" href="${escapeHtml(this._saveWithAccountHref())}">Ontwerp bewaren met account</a><a class="rv-login" href="${escapeHtml(this._loginHref())}">Inloggen</a></div>`;
         return;
       }
       const review = this.review;
