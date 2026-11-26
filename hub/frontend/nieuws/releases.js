@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.41.6',
+      date: '2026-11-26',
+      title: 'Foutlog beter beschermd',
+      items: [],
+    },
+    {
       version: '1.41.5',
       date: '2026-11-26',
       title: 'Kleiner en veiliger image',

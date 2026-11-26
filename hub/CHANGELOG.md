@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.41.6
+
+Het foutlog (`createErrorReport`) geeft regel en detail als `%s`-argumenten aan `console.error` (geen formaattekst uit invoer) en `requestPath` haalt stuurtekens uit het pad (CodeQL: externally-controlled format string, log injection). De Mollie-webhookmeldingen blijven ongewijzigd: het betalings-id is al gecontroleerd op `^tr_[A-Za-z0-9]{4,40}$`.
+
 ## 1.41.5
 
 Het runtime-image bevat geen npm en npx meer (verwijderd na `npm ci --omit=dev`): de Trivy-meldingen over de npm-eigen bibliotheken (sigstore, picomatch, pacote, brace-expansion, ip-address) gaan daarmee weg. De app en de hostscripts gebruiken alleen `node`.
