@@ -87,15 +87,14 @@ function registerArchiveRoutes(app, { archive, audit, confirmIdentity, runBackup
     const selection = selectionOf(body);
     if (!selection.kinds || !selection.kinds.length) return res.status(400).json({ error: 'kinds_required', message: 'Kies welke soorten je definitief wilt verwijderen.' });
     if (!(await confirmIdentity(req, res))) return undefined;
+    if (!runBackup) return res.status(501).json({ error: 'backups_not_configured', message: 'Back-ups zijn niet ingesteld, dus definitief verwijderen staat uit. Stel eerst back-ups in.' });
     let safetyBackup = null;
-    if (runBackup) {
-      try { safetyBackup = (await runBackup(req)).name || true; } catch (error) {
-        return res.status(500).json({ error: 'backup_failed', message: 'De veiligheidsback-up lukte niet, dus er is niets verwijderd. Probeer het opnieuw of maak eerst een back-up in Beheer.' });
-      }
+    try { safetyBackup = (await runBackup(req)).name || true; } catch (error) {
+      return res.status(500).json({ error: 'backup_failed', message: 'De veiligheidsback-up lukte niet, dus er is niets verwijderd. Probeer het opnieuw of maak eerst een back-up in Beheer.' });
     }
     const result = archive.purge(req.tenantId, selection);
     audit(req, 'archief_verwijderd', { ...result.deleted, geblokkeerd: result.blocked.length, voor: selection.before, zoek: selection.query, back_up: Boolean(safetyBackup) });
-    res.json({ ...result, safetyBackup: Boolean(safetyBackup) });
+    res.json({ ...result, safetyBackup: true });
   });
 }
 
