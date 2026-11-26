@@ -13,6 +13,20 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.45.0',
+      date: '2026-11-26',
+      title: 'Bewerken-knop alleen met voorraadrecht',
+      items: [],
+    },
+    {
+      version: '1.44.9',
+      date: '2026-11-26',
+      title: 'Aantal artikelen per pagina kiezen',
+      items: [
+        { text: 'In de artikellijst kies je nu hoeveel artikelen er per pagina staan (25, 50, 100, 300 of alles) en blader je met Vorige en Volgende. Je keuze wordt onthouden.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.44.8',
       date: '2026-11-26',
       title: 'Product bewerken vanuit de webshop',

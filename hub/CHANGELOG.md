@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.45.0
+
+De knop *Bewerken in beheer* op de productpagina verschijnt alleen voor accounts met het recht `voorraad` (of een hoofdbeheerder), niet meer voor elke medewerkersrol. `viewer()` geeft daarvoor `canStock`; de test dekt een planner zonder voorraadrecht.
+
+## 1.44.9
+
+Artikelen (`frontend/artikelen`): het voorraadoverzicht is gepagineerd in de browser (`paginate`, `renderPager`). Keuze per pagina in localStorage `aquatech_artikelen_paginagrootte` (standaard 50, 0 = alles); een hoofdartikel blijft met zijn open varianten op één pagina; zoeken of filteren begint weer op pagina 1. Geen migratie en geen API-wijziging.
+
 ## 1.44.8
 
 `productPage` toont voor `activeShop.staff` een knop naar `app/artikelen/?id=<artikel-id>` (bij een variant de gekozen variant). De catalogus bewaart daarvoor `itemId` per product en variant (alleen in het geheugen, geen extra query; bezoekers zien het id nooit). Test in `storefront.test.js`.
