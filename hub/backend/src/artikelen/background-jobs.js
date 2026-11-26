@@ -19,6 +19,7 @@ function sanitizeBackgroundJobs(raw) {
     if (!entry || typeof entry !== 'object') continue;
     const options = {};
     for (const key of ['research', 'review', 'again']) if (entry.options && typeof entry.options[key] === 'boolean') options[key] = entry.options[key];
+    if (entry.options && entry.options.mode === 'texts') options.mode = 'texts';
     out[kind] = { userId: typeof entry.userId === 'string' && entry.userId.length <= 64 ? entry.userId : null, startedAt: typeof entry.startedAt === 'string' ? entry.startedAt.slice(0, 40) : '', options };
   }
   return out;

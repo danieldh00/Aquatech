@@ -1,5 +1,6 @@
 // Bewaart per hoofdartikel wat de AI-omschrijving nodig heeft in de kolom item_specs.specs (geen eigen tabel, dus geen migratie):
 // - kenmerken: de opgezochte kenmerken met bronadres en bronzin (materiaal, afmetingen, werpstraal), plus kenmerkenAt (wanneer opgezocht, ook als er niets is gevonden);
+// - specsAt: wanneer de kenmerken als specificaties bij het artikel zijn gezet (specs-overzicht in plaats van een tekst);
 // - textLog: wat de bulkrun met de omschrijving deed (nieuw, overschreven, behouden, hersteld), met bij overschreven de vorige tekst zodat die terug kan.
 // Een artikel waarvan alleen dit is opgezocht krijgt een rij met status niet_gevonden en het kenmerk descOnly: Past bij (related-items.js) blijft
 // die artikelen dan nog opzoeken en bewaart kenmerken en textLog bij het opslaan van nieuwe specificaties.
@@ -22,7 +23,7 @@ function parseSpecs(json) {
 /**
  * Maakt de opslag voor kenmerken en het schrijflogboek van omschrijvingen.
  * @param {object} db De database.
- * @returns {{ read: Function, saveFeatures: Function, recordWrite: Function }} De functies.
+ * @returns {{ read: Function, saveFeatures: Function, recordWrite: Function, recordSpecs: Function }} De functies.
  */
 function createItemTextLog(db) {
   /**
@@ -89,7 +90,18 @@ function createItemTextLog(db) {
     }, entry.model);
   }
 
-  return { read, saveFeatures, recordWrite };
+  /**
+   * Legt vast dat de opgezochte kenmerken als specificaties bij het artikel zijn gezet (of dat er niets te zetten was), zodat het artikel niet opnieuw aan de beurt komt.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} itemId Id van het artikel.
+   * @param {{ added: number }} entry Hoeveel specificaties erbij zijn gekomen.
+   * @returns {void}
+   */
+  function recordSpecs(tenantId, itemId, { added }) {
+    update(tenantId, itemId, (specs) => { specs.specsAt = currentTimestamp(); specs.specsAdded = Number(added) || 0; });
+  }
+
+  return { read, saveFeatures, recordWrite, recordSpecs };
 }
 
 module.exports = { createItemTextLog, parseSpecs };

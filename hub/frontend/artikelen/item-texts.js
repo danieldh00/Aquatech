@@ -236,7 +236,7 @@
    */
   async function loadBulk() {
     const options = bulkOptions();
-    const todo = await context.api(`stock/item-texts/bulk/todo?review=${options.review ? 1 : 0}&research=${options.research ? 1 : 0}`);
+    const todo = await context.api(`stock/item-texts/bulk/todo?mode=specs&review=${options.review ? 1 : 0}&research=${options.research ? 1 : 0}`);
     state.bulk = todo;
     state.bulkArmed = false;
     const select = $('#tx-bulk-model');
@@ -256,11 +256,11 @@
     $('#tx-bulk-summary').textContent = !todo.ai.enabled ? 'AI staat uit (Beheer → Integraties → AI-herkenning).'
       : !todo.ai.configured ? 'Er is geen API-sleutel ingesteld (Beheer → Integraties → AI-herkenning).'
         : todo.total === 0 ? 'Alles is al behandeld: er zijn geen artikelen meer aan de beurt.'
-          : `${todo.total} artikel${todo.total === 1 ? '' : 'en'} aan de beurt (${todo.withExisting} met een bestaande omschrijving). `
+          : `${todo.total} artikel${todo.total === 1 ? '' : 'en'} aan de beurt. `
             + `${todo.research ? `Kenmerken opzoeken voor ${todo.withoutFeatures} (model ${todo.ai.researchModelLabel}). ` : ''}Geschatte kosten ${euro(todo.estimateEur)}; het echte verbruik staat bij AI-kosten. Vandaag nog ${todo.remainingToday} artikelen binnen het dagplafond.`;
     const button = $('#tx-bulk-start');
     button.disabled = !ready || todo.total === 0 || state.bulkRunning;
-    button.textContent = state.bulkArmed ? `Bevestig: ${todo.total} schrijven (± ${euro(todo.estimateEur)})` : 'Alles schrijven';
+    button.textContent = state.bulkArmed ? `Bevestig: ${todo.total} artikelen vullen (± ${euro(todo.estimateEur)})` : 'Specificaties vullen';
     $('#tx-bulk-model').disabled = state.bulkRunning;
     $('#tx-bulk-stop').hidden = !state.bulkRunning;
   }
@@ -271,7 +271,7 @@
    */
   function renderJob(job) {
     const tally = job.tally || {};
-    const parts = [`${tally.nieuw || 0} nieuw`, `${tally.overschreven || 0} overschreven`, `${tally.behouden || 0} behouden`, `${tally.concept || 0} als concept (waarschuwing)`];
+    const parts = [`${tally.gevuld || 0} gevuld`, `${tally.aangevuld || 0} aangevuld`, `${tally.geen || 0} zonder nieuwe kenmerken`];
     if (tally.error) parts.push(`${tally.error} mislukt`);
     $('#tx-bulk-progress').textContent = job.running
       ? `Loopt op de server (je mag dit venster sluiten): ${job.processed} van ${job.total}. ${parts.join(', ')}.${job.stopRequested ? ' Stopt na de lopende portie…' : ''}`
@@ -318,7 +318,7 @@
   async function runBulk() {
     const options = bulkOptions();
     state.bulkArmed = false;
-    await context.api('stock/item-texts/bulk/job', { method: 'POST', body: { research: options.research, review: options.review } });
+    await context.api('stock/item-texts/bulk/job', { method: 'POST', body: { research: options.research, review: options.review, mode: 'specs' } });
     state.bulkRunning = true;
     renderBulk();
     await followJob();

@@ -323,6 +323,20 @@ test('shop: zonder ingevuld webadres geen canonical en geen sitemap, ook niet me
   assert.strictEqual((await fetch(`${base}/sitemap.xml`, { headers: { Host: 'evil.example' } })).status, 404);
 });
 
+test('productpagina: een door de AI geschreven omschrijving wordt niet getoond (specs wel), een handmatige wel', async () => {
+  const { anonymous, admin, db, main } = await setupShop();
+  const items = (await admin.get('/app/api/stock')).body.items;
+  const sproeier = items.find((item) => item.code === 'SPR-1');
+  await admin.put(`/app/api/stock/items/${sproeier.id}`, { description: 'Door de AI geschreven tekst.', specifications: 'Worp: 4-6 m' });
+  db.prepare("INSERT INTO item_specs (tenant_id, item_id, status, specs, model, checked_at) VALUES (?, ?, 'niet_gevonden', ?, '', ?)")
+    .run(main, sproeier.id, JSON.stringify({ descOnly: true, textLog: { action: 'nieuw', at: '2026-11-26T10:00:00.000Z' } }), '2026-11-26T10:00:00.000Z');
+  const page = await anonymous.get('/product/sproeier-pro-spr-1/');
+  assert.ok(!page.text.includes('Door de AI geschreven tekst.'), 'de AI-tekst blijft verborgen');
+  assert.match(page.text, /<th scope="row">Worp<\/th><td>4-6 m<\/td>/);
+  assert.strictEqual(jsonLdOf(page.text).find((item) => item['@type'] === 'Product').additionalProperty[0].name, 'Worp');
+  assert.strictEqual((await admin.get(`/app/api/stock/items/${sproeier.id}`)).body.description, 'Door de AI geschreven tekst.', 'de tekst blijft bewaard');
+});
+
 test('productpagina: eigen omschrijving en specificaties, anders die uit de oude webshop; ook in JSON-LD en de meta-omschrijving (12)', async () => {
   const { anonymous, admin, db, main } = await setupShop();
   const items = (await admin.get('/app/api/stock')).body.items;

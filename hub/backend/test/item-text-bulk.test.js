@@ -117,14 +117,14 @@ test('omschrijvingen in bulk: nieuw, behouden, overschreven met terugzetten, con
     assert.strictEqual(split.status, 200, JSON.stringify(split.body));
     const variantId = (await baas.get('/app/api/stock')).body.items.find((item) => item.parentId === parent.id).id;
 
-    const todo = (await baas.get('/app/api/stock/item-texts/bulk/todo')).body;
+    const todo = (await baas.get('/app/api/stock/item-texts/bulk/todo?mode=texts')).body;
     assert.strictEqual(todo.total, 5, 'vijf hoofdartikelen (de variant telt niet)');
     assert.strictEqual(todo.withExisting, 2);
     assert.strictEqual(todo.withoutFeatures, 5);
     assert.ok(todo.estimateEur > 0 && todo.ai.model === 'claude-sonnet-5-5', 'Sonnet is de standaard');
-    assert.strictEqual((await baas.get('/app/api/stock/item-texts/bulk/todo?review=0')).body.total, 3, 'zonder beoordelen alleen artikelen zonder omschrijving');
+    assert.strictEqual((await baas.get('/app/api/stock/item-texts/bulk/todo?mode=texts&review=0')).body.total, 3, 'zonder beoordelen alleen artikelen zonder omschrijving');
 
-    const run = await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: [fresh.id, keep.id, replace.id, wrong.id, parent.id, variantId] });
+    const run = await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: [fresh.id, keep.id, replace.id, wrong.id, parent.id, variantId], mode: 'texts' });
     assert.strictEqual(run.status, 200, JSON.stringify(run.body));
     const byId = Object.fromEntries(run.body.results.map((result) => [result.itemId, result]));
     assert.strictEqual(byId[fresh.id].status, 'nieuw');
@@ -155,10 +155,10 @@ test('omschrijvingen in bulk: nieuw, behouden, overschreven met terugzetten, con
     assert.ok(!JSON.stringify(listed).includes('Slechte oude tekst'));
 
     // Opnieuw draaien slaat behandelde artikelen en concepten over en zoekt niets opnieuw op.
-    const again = (await baas.get('/app/api/stock/item-texts/bulk/todo')).body;
+    const again = (await baas.get('/app/api/stock/item-texts/bulk/todo?mode=texts')).body;
     assert.strictEqual(again.total, 0);
     const before = { searches: calls.searches, writes: calls.writes };
-    const second = await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: [fresh.id, wrong.id] });
+    const second = await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: [fresh.id, wrong.id], mode: 'texts' });
     assert.deepStrictEqual(second.body.results.map((result) => result.status), ['skipped', 'skipped']);
     assert.strictEqual(calls.searches, before.searches, 'kenmerken worden maar één keer opgezocht');
 
@@ -185,15 +185,15 @@ test('omschrijvingen in bulk: rechten, grenzen, modelkeuze en een fout die de po
   try {
     const baas = await as('baas');
     const klant = await as('klant');
-    assert.strictEqual((await klant.get('/app/api/stock/item-texts/bulk/todo')).status, 403);
-    assert.strictEqual((await klant.post('/app/api/stock/item-texts/bulk/run', { itemIds: ['x'] })).status, 403);
-    assert.strictEqual((await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: [] })).status, 400);
-    assert.strictEqual((await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: ['1', '2', '3', '4', '5', '6', '7'] })).status, 400);
+    assert.strictEqual((await klant.get('/app/api/stock/item-texts/bulk/todo?mode=texts')).status, 403);
+    assert.strictEqual((await klant.post('/app/api/stock/item-texts/bulk/run', { itemIds: ['x'], mode: 'texts' })).status, 403);
+    assert.strictEqual((await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: [], mode: 'texts' })).status, 400);
+    assert.strictEqual((await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: ['1', '2', '3', '4', '5', '6', '7'], mode: 'texts' })).status, 400);
     assert.strictEqual((await baas.put('/app/api/stock/item-texts/bulk/model', { model: 'bestaat-niet' })).status, 400);
     assert.strictEqual((await baas.put('/app/api/stock/item-texts/bulk/model', { model: 'claude-haiku-5-5' })).status, 200);
-    assert.strictEqual((await baas.get('/app/api/stock/item-texts/bulk/todo')).body.ai.model, 'claude-haiku-5-5');
+    assert.strictEqual((await baas.get('/app/api/stock/item-texts/bulk/todo?mode=texts')).body.ai.model, 'claude-haiku-5-5');
     const empty = (await baas.post('/app/api/stock/items', { code: 'L1', name: 'Klep LEEG', unit: 'st' })).body;
-    const run = (await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: [empty.id] })).body;
+    const run = (await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: [empty.id], mode: 'texts' })).body;
     assert.strictEqual(run.aborted.code, 'no_credit');
     assert.strictEqual((await baas.get(`/app/api/stock/item-texts/${empty.id}`)).body.live.description, '');
   } finally { server.close(); }
@@ -217,9 +217,9 @@ test('omschrijvingen in bulk: gelijktijdige runs doen niets dubbel, een verander
   try {
     const baas = await as('baas');
     const slow = (await baas.post('/app/api/stock/items', { code: 'T1', name: 'Klep TRAAG', unit: 'st' })).body;
-    const first = baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: [slow.id] });
+    const first = baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: [slow.id], mode: 'texts' });
     await untilWrites(1);
-    const second = (await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: [slow.id] })).body;
+    const second = (await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: [slow.id], mode: 'texts' })).body;
     assert.deepStrictEqual([second.results[0].status, second.results[0].code], ['skipped', 'busy']);
     releases.TRAAG();
     assert.strictEqual((await first).body.results[0].status, 'nieuw');
@@ -228,7 +228,7 @@ test('omschrijvingen in bulk: gelijktijdige runs doen niets dubbel, een verander
     // Verandert iemand de omschrijving terwijl de AI schrijft, dan blijft die staan.
     const waiting = (await baas.post('/app/api/stock/items', { code: 'W1', name: 'Klep WACHT', unit: 'st' })).body;
     await baas.put(`/app/api/stock/items/${waiting.id}`, { description: 'Oude tekst.' });
-    const run = baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: [waiting.id] });
+    const run = baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: [waiting.id], mode: 'texts' });
     await untilWrites(2);
     await baas.put(`/app/api/stock/items/${waiting.id}`, { description: 'Net handmatig aangepast.' });
     releases.WACHT();
@@ -236,7 +236,7 @@ test('omschrijvingen in bulk: gelijktijdige runs doen niets dubbel, een verander
     assert.deepStrictEqual([outcome.status, outcome.code], ['skipped', 'changed']);
     assert.strictEqual((await baas.get(`/app/api/stock/item-texts/${waiting.id}`)).body.live.description, 'Net handmatig aangepast.');
 
-    const todo = (await baas.get('/app/api/stock/item-texts/bulk/todo')).body;
+    const todo = (await baas.get('/app/api/stock/item-texts/bulk/todo?mode=texts')).body;
     assert.ok(Number.isInteger(todo.remainingToday) && todo.remainingToday <= 2000 - 2, 'het dagplafond telt de verwerkte artikelen');
   } finally { server.close(); }
 });
@@ -248,14 +248,14 @@ test('omschrijvingen in bulk: het dagplafond stopt de run', async () => {
     assert.strictEqual((await baas.put('/app/api/admin/settings', { descriptionBulkDailyItems: 10 })).status, 200);
     const ids = [];
     for (let number = 1; number <= 12; number += 1) ids.push((await baas.post('/app/api/stock/items', { code: `D${number}`, name: `Klep ${number}`, unit: 'st' })).body.id);
-    const early = (await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: ids.slice(0, 6) })).body;
+    const early = (await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: ids.slice(0, 6), mode: 'texts' })).body;
     assert.ok(early.results.every((result) => result.status === 'nieuw'));
-    const late = (await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: ids.slice(6, 12) })).body;
+    const late = (await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: ids.slice(6, 12), mode: 'texts' })).body;
     assert.deepStrictEqual(late.results.map((result) => result.code || result.status), ['nieuw', 'nieuw', 'nieuw', 'nieuw', 'daily_limit', 'daily_limit']);
-    const refused = await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: [ids[11]] });
+    const refused = await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: [ids[11]], mode: 'texts' });
     assert.strictEqual(refused.status, 429);
     assert.strictEqual(refused.body.error, 'daily_limit');
-    assert.strictEqual((await baas.get('/app/api/stock/item-texts/bulk/todo')).body.remainingToday, 0);
+    assert.strictEqual((await baas.get('/app/api/stock/item-texts/bulk/todo?mode=texts')).body.remainingToday, 0);
   } finally { server.close(); }
 });
 
@@ -266,9 +266,9 @@ test('omschrijvingen in bulk: de achtergrondtaak loopt op de server door, toont 
     const klant = await as('klant');
     for (let number = 1; number <= 8; number += 1) await baas.post('/app/api/stock/items', { code: `J${number}`, name: `Klep ${number}`, unit: 'st' });
     assert.strictEqual((await klant.get('/app/api/stock/item-texts/bulk/job')).status, 403);
-    assert.strictEqual((await klant.post('/app/api/stock/item-texts/bulk/job', {})).status, 403);
+    assert.strictEqual((await klant.post('/app/api/stock/item-texts/bulk/job', { mode: 'texts' })).status, 403);
     assert.strictEqual((await baas.get('/app/api/stock/item-texts/bulk/job')).body.running, false, 'nog geen taak');
-    const started = await baas.post('/app/api/stock/item-texts/bulk/job', { research: true, review: true });
+    const started = await baas.post('/app/api/stock/item-texts/bulk/job', { research: true, review: true, mode: 'texts' });
     assert.strictEqual(started.status, 202, JSON.stringify(started.body));
     assert.strictEqual(started.body.total, 8);
     let job = (await baas.get('/app/api/stock/item-texts/bulk/job')).body;
@@ -280,8 +280,8 @@ test('omschrijvingen in bulk: de achtergrondtaak loopt op de server door, toont 
     assert.strictEqual(job.processed, 8);
     assert.strictEqual(job.tally.nieuw, 8);
     assert.strictEqual(job.message, 'Klaar.');
-    assert.strictEqual((await baas.post('/app/api/stock/item-texts/bulk/job', {})).status, 409, 'niets meer aan de beurt');
-    assert.strictEqual((await baas.get('/app/api/stock/item-texts/bulk/todo')).body.total, 0);
+    assert.strictEqual((await baas.post('/app/api/stock/item-texts/bulk/job', { mode: 'texts' })).status, 409, 'niets meer aan de beurt');
+    assert.strictEqual((await baas.get('/app/api/stock/item-texts/bulk/todo?mode=texts')).body.total, 0);
   } finally { server.close(); }
 });
 
@@ -297,9 +297,9 @@ test('omschrijvingen in bulk: de taak wordt bewaard en gaat na een herstart vanz
     const baas = await as('baas');
     for (let number = 1; number <= 3; number += 1) await baas.post('/app/api/stock/items', { code: `H${number}`, name: `Klep ${number}`, unit: 'st' });
     const settings = app.locals.settingsFor(tenantId);
-    assert.strictEqual((await baas.post('/app/api/stock/item-texts/bulk/job', { research: true, review: false })).status, 202);
+    assert.strictEqual((await baas.post('/app/api/stock/item-texts/bulk/job', { research: true, review: false, mode: 'texts' })).status, 202);
     const saved = settings.get('backgroundJobs');
-    assert.deepStrictEqual(saved.omschrijvingen.options, { research: true, review: false });
+    assert.deepStrictEqual(saved.omschrijvingen.options, { research: true, review: false, mode: 'texts' });
     assert.ok(saved.omschrijvingen.userId, 'wie de taak startte');
     release();
     let job = (await baas.get('/app/api/stock/item-texts/bulk/job')).body;
@@ -313,7 +313,7 @@ test('omschrijvingen in bulk: de taak wordt bewaard en gaat na een herstart vanz
 
     // Een taak die liep toen de server stopte: de instelling staat er nog, een nieuwe start hervat hem.
     for (let number = 4; number <= 5; number += 1) await baas.post('/app/api/stock/items', { code: `H${number}`, name: `Klep ${number}`, unit: 'st' });
-    settings.update({ backgroundJobs: { omschrijvingen: { userId: null, startedAt: '2026-11-26T10:00:00.000Z', options: { research: true, review: true } } } }, null);
+    settings.update({ backgroundJobs: { omschrijvingen: { userId: null, startedAt: '2026-11-26T10:00:00.000Z', options: { research: true, review: true, mode: 'texts' } } } }, null);
     assert.deepStrictEqual(await app.locals.resumeBackgroundJobs(), [`omschrijvingen|${tenantId}`]);
     job = (await baas.get('/app/api/stock/item-texts/bulk/job')).body;
     for (let round = 0; round < 100 && job.running; round += 1) {
@@ -323,8 +323,43 @@ test('omschrijvingen in bulk: de taak wordt bewaard en gaat na een herstart vanz
     assert.strictEqual(job.tally.nieuw, 2, 'alleen wat nog aan de beurt was');
     assert.deepStrictEqual(settings.get('backgroundJobs'), {});
     // Niets meer aan de beurt: een bewaarde taak wordt opgeruimd in plaats van hervat.
-    settings.update({ backgroundJobs: { omschrijvingen: { userId: null, startedAt: '2026-11-26T10:00:00.000Z', options: {} } } }, null);
+    settings.update({ backgroundJobs: { omschrijvingen: { userId: null, startedAt: '2026-11-26T10:00:00.000Z', options: { mode: 'texts' } } } }, null);
     assert.deepStrictEqual(await app.locals.resumeBackgroundJobs(), []);
     assert.deepStrictEqual(settings.get('backgroundJobs'), {});
   } finally { release(); server.close(); }
+});
+
+test('specs in bulk: kenmerken worden specificaties, eigen specificaties blijven, geen tekst geschreven en AI-teksten verdwijnen uit de shop', async () => {
+  const { server, calls, as, db, tenantId } = await setup(behaviour);
+  try {
+    const baas = await as('baas');
+    /**
+     * Maakt een artikel aan.
+     * @param {string} code Artikelcode.
+     * @param {string} name Naam.
+     * @param {object} [extra] Extra velden.
+     * @returns {Promise<object>} Het artikel.
+     */
+    const make = async (code, name, extra = {}) => (await baas.post('/app/api/stock/items', { code, name, unit: 'st', brand: 'Rainpro', ...extra })).body;
+    const empty = await make('S1', 'Klep 25 mm');
+    const own = await make('S2', 'Klep eigen', { specifications: [{ name: 'Materiaal', value: 'Kunststof' }, { name: 'Kleur', value: 'Zwart' }] });
+    const todo = (await baas.get('/app/api/stock/item-texts/bulk/todo')).body;
+    assert.strictEqual(todo.mode, 'specs');
+    assert.strictEqual(todo.total, 2);
+    const run = await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: [empty.id, own.id] });
+    assert.strictEqual(run.status, 200, JSON.stringify(run.body));
+    const byId = Object.fromEntries(run.body.results.map((result) => [result.itemId, result]));
+    assert.strictEqual(byId[empty.id].status, 'gevuld');
+    assert.strictEqual(byId[own.id].status, 'geen', 'Materiaal staat er al: niets overschreven');
+    assert.strictEqual(calls.writes, 0, 'in specs-modus wordt geen tekst geschreven');
+    /**
+     * De opgeslagen specificaties van een artikel.
+     * @param {string} id Artikel-id.
+     * @returns {object[]} De specificaties.
+     */
+    const specsOf = (id) => JSON.parse(db.prepare('SELECT specifications FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, id).specifications);
+    assert.deepStrictEqual(specsOf(empty.id), [{ name: 'Materiaal', value: 'Messing' }]);
+    assert.deepStrictEqual(specsOf(own.id), [{ name: 'Materiaal', value: 'Kunststof' }, { name: 'Kleur', value: 'Zwart' }]);
+    assert.strictEqual((await baas.get('/app/api/stock/item-texts/bulk/todo')).body.total, 0, 'daarna is alles behandeld');
+  } finally { server.close(); }
 });
