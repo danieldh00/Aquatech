@@ -344,9 +344,10 @@
         if (!raw) return;
         data = JSON.parse(raw);
       } catch (error) { return; }
+      // Het ontwerp zonder account wordt na de eerste login altijd gewist: een volgend account in deze browser krijgt het nooit.
+      try { localStorage.removeItem(ANON_STORAGE_KEY); } catch (error) { /* geen opslag */ }
       const current = this.state;
       if (!data || current.serverId || current.areas.length || current.sprinklers.length) return;
-      try { localStorage.removeItem(ANON_STORAGE_KEY); } catch (error) { /* geen opslag */ }
       if (!Array.isArray(data.areas) || !data.areas.length) return;
       this._apply(data);
       this.step = Math.min(STEPS.length - 1, data.step || 0);
