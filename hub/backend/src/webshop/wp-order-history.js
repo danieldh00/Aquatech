@@ -335,7 +335,7 @@ function createWpOrderHistory({ db, settingsFor, fetchImpl = null, afterImport =
   async function runAll(tenantIds) {
     const out = {};
     if (!tenantIds.length) return out;
-    const enabled = prepare(`SELECT tenant_id FROM wp_order_import WHERE enabled = 1 AND tenant_id = ANY(?::uuid[])`).all(tenantIds.map(String)).map((row) => String(row.tenant_id));
+    const enabled = tenantIds.filter((tenantId) => { const state = prepare('SELECT enabled FROM wp_order_import WHERE tenant_id = ?').get(tenantId); return state && Number(state.enabled) === 1; });
     for (const tenantId of enabled) {
       try { out[tenantId] = await round(tenantId); } catch (error) { out[tenantId] = { error: error.message }; }
     }
