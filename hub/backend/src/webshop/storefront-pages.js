@@ -10,6 +10,7 @@ const { version: SHOP_VERSION } = require('../../package.json');
 const { DEFAULT_SITE } = require('./shop-content');
 const { LEGAL_SLUGS, LEGAL_TITLES } = require('./legal-pages');
 const Seo = require('./seo');
+const { FOOTER_METHODS } = require('./mollie');
 const { blocksOf, faqEntriesOfBlocks } = require('./page-blocks');
 const Analytics = require('./shop-analytics');
 
@@ -42,7 +43,7 @@ function formatPrice(amount) {
 /** De inhoud (blokken en pagina's uit Beheer) waarmee de pagina's die nu worden opgebouwd, worden getekend. */
 let activeContent = { site: DEFAULT_SITE, pages: [] };
 /** Of bestellen aan staat, hoeveel regels er in de winkelwagen van de bezoeker zitten en of hij een groothandelsklant is, met het kopje Groothandel (voor de pagina's die nu worden opgebouwd). */
-let activeShop = { indexing: false, ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '', analytics: '', clarity: '', captcha: '' };
+let activeShop = { indexing: false, ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '', analytics: '', clarity: '', captcha: '', footerMethods: null };
 
 /**
  * De velden die een formulier nodig heeft voor de onzichtbare captcha: het verborgen veld waar het script een token in zet en de
@@ -57,6 +58,19 @@ function captchaFields(action) {
 }
 
 /**
+ * De betaalmethoden in de voet: de ingestelde methoden als kaartjes, of (nog niet ingesteld) het vaste plaatje.
+ * @param {string} root Relatief pad naar de shop-startpagina.
+ * @returns {string} De HTML, leeg als de beheerder geen enkele methode aanvinkte.
+ */
+function footerPayments(root) {
+  const keys = activeShop.footerMethods;
+  if (!Array.isArray(keys)) return `<img src="${assetUrl(root, 'betaalmethoden.png')}" alt="Betaalmethoden" width="286" height="26" loading="lazy">`;
+  const names = new Map(FOOTER_METHODS);
+  if (!keys.length) return '';
+  return `<ul class="foot-pay" aria-label="Betaalmethoden">${keys.filter((key) => names.has(key)).map((key) => `<li class="foot-pay-${key}">${escapeHtml(names.get(key))}</li>`).join('')}</ul>`;
+}
+
+/**
  * Bouwt pagina's op met de inhoud uit Beheer. Het opbouwen is synchroon, dus
  * zolang `render` loopt hoort elke pagina bij deze inhoud; daarna geldt weer de vorige.
  * @param {{ site: object, pages: object[] }} content De inhoud (zie shop-content.js, publicContent).
@@ -64,7 +78,7 @@ function captchaFields(action) {
  * @param {{ ordering: boolean, cartCount: number, business?: boolean, wholesale?: boolean, baseUrl?: string }} [shop] Het volledige webadres van de shop (met slash achteraan; leeg = geen canonical-link en OpenGraph), of bestellen aan staat, het aantal regels in de winkelwagen, of de bezoeker een zakelijke klant is (prijzen excl. btw) en of hij groothandelsklant is (kopje Groothandel).
  * @returns {*} Wat `render` teruggeeft.
  */
-function renderWith(content, render, shop = { indexing: false, ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '', analytics: '', clarity: '', captcha: '' }) {
+function renderWith(content, render, shop = { indexing: false, ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '', analytics: '', clarity: '', captcha: '', footerMethods: null }) {
   const previous = activeContent;
   const previousShop = activeShop;
   activeContent = content;
@@ -351,7 +365,7 @@ ${body}
     <div><strong>Over ons</strong><p>${escapeHtml(site.footer.about)}</p><p><a href="${root}over-ons/">Lees ons verhaal</a></p>${footerPages.length ? `<ul>${footerPages.map((page) => `<li><a href="${root}pagina/${escapeHtml(page.slug)}/">${escapeHtml(page.title)}</a></li>`).join('')}</ul>` : ''}</div>
   </div>
   <nav class="foot-legal" aria-label="Voorwaarden">${legalLinks}${activeShop.analytics || activeShop.clarity ? '<button type="button" class="link-button" data-consent-settings>Cookie-instellingen</button>' : ''}</nav>
-  <div class="foot-note"><span>${activeShop.business ? 'Je ziet zakelijke prijzen: alle prijzen zijn exclusief btw.' : 'Alle prijzen zijn inclusief btw.'}</span><img src="${assetUrl(root, 'betaalmethoden.png')}" alt="Betaalmethoden" width="286" height="26" loading="lazy"></div>
+  <div class="foot-note"><span>${activeShop.business ? 'Je ziet zakelijke prijzen: alle prijzen zijn exclusief btw.' : 'Alle prijzen zijn inclusief btw.'}</span>${footerPayments(root)}</div>
 </footer>
 </body>
 </html>

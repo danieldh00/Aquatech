@@ -260,6 +260,9 @@ a.shop-action.shop-admin:hover { background: var(--at-shop-navy); }
 .business-request { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--at-line); border-radius: 8px; }
 .business-request summary { cursor: pointer; font-weight: 600; }
 .business-request form { margin-top: 12px; }
+.foot-pay { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.foot-pay li { padding: 4px 10px; border: 1px solid var(--at-foot-line); border-radius: 6px; background: #fff; color: var(--at-navy, #172f5e); font-size: 0.75rem; font-weight: 600; line-height: 1.4; }
+.foot-pay .foot-pay-bitcoin { color: #b45f06; }
 .foot-note img { display: block; max-width: 100%; height: auto; }
 .button:disabled { background: var(--at-muted); cursor: not-allowed; }
 .shop-foot a[href^="tel:"], .shop-foot a[href^="mailto:"] { text-decoration: none; }
