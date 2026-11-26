@@ -26,13 +26,13 @@ test('plannerpromotie: startpagina en beregeningsgroep en -categorie tonen het b
   const home = await visitor.get('/');
   assert.match(home.text, PROMO);
   assert.match(home.text, /Ontwerp je beregening gratis/);
-  assert.match(home.text, /href="planner\/">Naar de planner</);
+  assert.match(home.text, /href="planner\/">Naar de planner /);
   assert.ok(!/<!--planner-promo/.test(home.text), 'geen merkteken in de pagina');
   const groupSlug = /groep\/([^/"]*beregening[^/"]*)\//.exec(home.text)[1];
   const group = await visitor.get(`/groep/${groupSlug}/`);
   assert.strictEqual(group.status, 200);
   assert.match(group.text, PROMO);
-  assert.match(group.text, /href="\.\.\/\.\.\/planner\/">Naar de planner</);
+  assert.match(group.text, /href="\.\.\/\.\.\/planner\/">Naar de planner /);
   const categorySlug = /categorie\/([^/"]+)\//.exec(group.text)[1];
   const category = await visitor.get(`/categorie/${categorySlug}/`);
   assert.strictEqual(category.status, 200);
