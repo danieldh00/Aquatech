@@ -107,7 +107,7 @@ function createArchive(db, { customerRoleKeys, purgePlan, today = () => new Date
    * Bouwt de voorwaarden van een selectie.
    * @param {string} tenantId Id van de tenant.
    * @param {string} kind Soortnaam.
-   * @param {{ state?: string, ids?: string[], before?: string, query?: string, onlyArchivable?: boolean }} selection state `actief` of `archief`, ids, `before` (aangemaakt vóór deze datum JJJJ-MM-DD), een zoekterm op nummer, titel en klant en onlyArchivable (alleen wat in het archief mag).
+   * @param {{ state?: string, ids?: string[], before?: string, query?: string, onlyArchivable?: boolean }} selection state `actief`, `archief` of `alle`, ids, `before` (aangemaakt vóór deze datum JJJJ-MM-DD), een zoekterm op nummer, titel en klant en onlyArchivable (alleen wat in het archief mag).
    * @returns {{ spec: object, from: string, where: string, args: Array }|null} De delen van de query, of null.
    */
   function selectionOf(tenantId, kind, { state = 'actief', ids = null, before = '', query = '', onlyArchivable = false } = {}) {
@@ -116,7 +116,7 @@ function createArchive(db, { customerRoleKeys, purgePlan, today = () => new Date
     const base = baseOf(spec, tenantId, kind);
     if (!base) return null;
     const { where, args } = base;
-    where.push(state === 'archief' ? `${spec.alias}.archived_at IS NOT NULL` : `${spec.alias}.archived_at IS NULL`);
+    if (state !== 'alle') where.push(state === 'archief' ? `${spec.alias}.archived_at IS NOT NULL` : `${spec.alias}.archived_at IS NULL`);
     if (onlyArchivable && ARCHIVABLE[kind]) where.push(ARCHIVABLE[kind].sql);
     if (Array.isArray(ids)) {
       if (!ids.length) return null;
@@ -274,9 +274,10 @@ function createArchive(db, { customerRoleKeys, purgePlan, today = () => new Date
    * @param {string} tenantId Id van de tenant.
    * @param {string} kind Soortnaam.
    * @param {object} row Rij uit de selectie (id, number, invoice_date, status voor facturen).
+   * @param {boolean} [anyState] True = ook een stuk dat nog niet gearchiveerd is (een gerichte verwijdering, geen archiefopruiming).
    * @returns {{ deleted: boolean, reason?: string }} Of het gelukt is, anders de reden.
    */
-  function purgeOne(tenantId, kind, row) {
+  function purgeOne(tenantId, kind, row, anyState = false) {
     const spec = KINDS[kind];
     if (kind === 'facturen' && row.status !== 'concept' && String(row.invoice_date) > retentionCutoff()) {
       return { deleted: false, reason: `Bewaarplicht: een definitieve factuur wordt ${INVOICE_RETENTION_YEARS} jaar bewaard (tot ${String(Number(String(row.invoice_date).slice(0, 4)) + INVOICE_RETENTION_YEARS)}).` };
@@ -288,7 +289,7 @@ function createArchive(db, { customerRoleKeys, purgePlan, today = () => new Date
         const numberKind = { offertes: 'offertes', werkorders: 'werkorders', facturen: 'facturen', bestellingen: 'bestellingen' }[kind];
         if (numberKind && row.number) recordFloor(prepare, tenantId, numberKind, row.number);
         if (kind === 'plannen') purgePlan(tenantId, row.id);
-        else prepare(`DELETE FROM ${spec.table} WHERE tenant_id = ? AND id = ? AND archived_at IS NOT NULL`).run(tenantId, row.id);
+        else prepare(`DELETE FROM ${spec.table} WHERE tenant_id = ? AND id = ?${anyState ? '' : ' AND archived_at IS NOT NULL'}`).run(tenantId, row.id);
       });
       return { deleted: true };
     } catch (error) {
@@ -328,7 +329,35 @@ function createArchive(db, { customerRoleKeys, purgePlan, today = () => new Date
     return { deleted, blocked, truncated: budget <= 0 };
   }
 
-  return { kinds: KINDS, archive, restore, preview, archiveMatching, list, counts, purge, retentionCutoff };
+  /**
+   * Verwijdert gekozen stukken definitief, gearchiveerd of niet, maar alleen als ze in het archief mogen (zie ARCHIVABLE) en er niets meer naar verwijst
+   * (een klant met offertes, werkorders, facturen of bestellingen blijft staan; archiveren kan wel). Geen veiligheidsback-up: dat doet de aanroeper.
+   * @param {string} tenantId Id van de tenant.
+   * @param {string} kind Soortnaam.
+   * @param {string[]} ids Id's.
+   * @returns {{ deleted: number, blocked: { id: string, reason: string }[] }} Aantal verwijderd en de geweigerde stukken met reden.
+   */
+  function removeSelected(tenantId, kind, ids) {
+    const all = selectionOf(tenantId, kind, { state: 'alle', ids });
+    if (!all) return { deleted: 0, blocked: [] };
+    const alias = all.spec.alias;
+    const extra = kind === 'facturen' ? ', i.invoice_date AS invoice_date, i.status AS status' : '';
+    const rows = prepare(`SELECT ${alias}.id AS id, ${all.spec.number} AS number${extra} FROM ${all.from} WHERE ${all.where} LIMIT ${MAX_PER_REQUEST}`).all(...all.args);
+    const allowed = new Set();
+    const part = selectionOf(tenantId, kind, { state: 'alle', ids, onlyArchivable: true });
+    if (part) for (const row of prepare(`SELECT ${alias}.id AS id FROM ${part.from} WHERE ${part.where} LIMIT ${MAX_PER_REQUEST}`).all(...part.args)) allowed.add(String(row.id));
+    let deleted = 0;
+    const blocked = [];
+    for (const row of rows) {
+      if (!allowed.has(String(row.id))) { blocked.push({ id: row.id, reason: (ARCHIVABLE[kind] || {}).reason || 'Dit stuk mag niet verwijderd worden.' }); continue; }
+      const result = purgeOne(tenantId, kind, row, true);
+      if (result.deleted) deleted += 1;
+      else blocked.push({ id: row.id, reason: result.reason });
+    }
+    return { deleted, blocked };
+  }
+
+  return { kinds: KINDS, archive, restore, preview, archiveMatching, list, counts, purge, removeSelected, retentionCutoff };
 }
 
 module.exports = { createArchive, KINDS, INVOICE_RETENTION_YEARS };

@@ -30,3 +30,10 @@ table.grid td.wrap { white-space: normal; min-width: 160px; }
 .fact-list dd { margin: 0; }
 table.grid a { color: var(--primary-dark); text-decoration: none; }
 table.grid a:hover { text-decoration: underline; }
+.klanten-bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; margin-bottom: 10px; background: var(--at-surface-alt, #f1f6f8); border: 1px solid var(--line); border-radius: 6px; }
+.klanten-bulk b { margin-right: 4px; }
+.klanten-delete { margin-bottom: 10px; }
+.klanten-result { margin-bottom: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; }
+.klanten-result ul { margin: 6px 0 0; padding-left: 18px; }
+table.grid th.pick, table.grid td.pick { width: 32px; text-align: center; }
+table.grid td.pick input { width: 18px; height: 18px; }

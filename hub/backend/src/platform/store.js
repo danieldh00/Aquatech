@@ -96,7 +96,7 @@ function createStore(db) {
   // ---------- Gebruikers ----------
   // Wat publicUser nodig heeft (zonder wachtwoord-hash en voorkeuren).
   const PUBLIC_USER_COLUMNS = ['id', 'tenant_id', 'username', 'display_name', 'role', 'kind', 'disabled', 'platform_admin',
-    'must_change_password', 'created_at', 'last_seen_at', 'email', 'phone', 'customer_group', 'company_name', 'kvk_number', 'vat_number', 'business_request', 'wholesale', 'wholesale_discount', 'address', 'payment_days', 'document_language', 'reminders_off'].map((column) => `u.${column}`).join(', ');
+    'must_change_password', 'created_at', 'last_seen_at', 'email', 'phone', 'customer_group', 'company_name', 'kvk_number', 'vat_number', 'business_request', 'wholesale', 'wholesale_discount', 'address', 'payment_days', 'document_language', 'reminders_off', 'archived_at'].map((column) => `u.${column}`).join(', ');
 
   /**
    * Een gebruiker zoals de API hem toont (zonder wachtwoord-hash en voorkeuren).
@@ -112,7 +112,7 @@ function createStore(db) {
       companyName: user.company_name || '', kvkNumber: user.kvk_number || '', vatNumber: user.vat_number || '', businessRequest: user.business_request || '',
       wholesale: Boolean(Number(user.wholesale)), wholesaleDiscount: Number(user.wholesale_discount) || 0,
       paymentDays: user.payment_days === null || user.payment_days === undefined ? null : Number(user.payment_days),
-      documentLanguage: DocText.clean(user.document_language), remindersOff: Boolean(Number(user.reminders_off)) };
+      documentLanguage: DocText.clean(user.document_language), remindersOff: Boolean(Number(user.reminders_off)), archivedAt: user.archived_at ? String(user.archived_at) : null };
   }
 
   /**

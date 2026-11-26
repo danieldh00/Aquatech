@@ -208,6 +208,50 @@ function registerCustomerRoutes(app, ctx) {
     res.json({ ...(await store.listCustomerPageAsync(tenantsOf(req), { search: String(req.query.q || '').slice(0, 100), group: String(req.query.group || ''), archive: archiveModeOf(req.query.archief), limit, offset })), limit, offset });
   });
 
+  const bulkLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 60, keyFn: (req) => `klanten-bulk:${req.user ? req.user.id : ''}` });
+  const BULK_ACTIONS = ['archiveren', 'terughalen', 'verwijderen'];
+  const BULK_MAX = 100;
+  const LOGIN_REASON = 'Heeft een actieve inlog: schakel het account eerst uit in Beheer > Gebruikers.';
+
+  /**
+   * Bulkactie op een selectie klanten uit het overzicht: archiveren, terughalen uit het archief of definitief verwijderen. Verwijderen kan alleen voor klanten
+   * zonder inlog (of uitgeschakeld) en zonder offertes, werkorders, facturen, bestellingen, plannen of meldingen (bewaarplicht); de rest blijft staan met een reden
+   * per klant en archiveren is dan het alternatief. Verwijderen vraagt een beheerder en het wachtwoord opnieuw.
+   */
+  app.post('/api/customers/bulk', requireJson, requireCustomers, bulkLimiter, async (req, res) => {
+    const body = req.body || {};
+    const action = BULK_ACTIONS.find((candidate) => candidate === body.action);
+    const ids = Array.isArray(body.ids) ? [...new Set(body.ids.map(String))] : [];
+    if (!action || !ids.length || ids.length > BULK_MAX) return res.status(400).json({ error: 'invalid_request', message: `Kies een actie en één tot ${BULK_MAX} klanten.` });
+    if (action === 'verwijderen') {
+      if (!mayPrice(req)) return res.status(403).json({ error: 'forbidden', message: 'Alleen een beheerder verwijdert klanten.' });
+      if (!(await ctx.confirmIdentity(req, res))) return undefined;
+    }
+    const blocked = [];
+    const byTenant = new Map();
+    for (const id of ids) {
+      const customer = store.getCustomer(tenantsOf(req), id);
+      if (!customer) { blocked.push({ id, name: '', reason: 'Klant niet gevonden.' }); continue; }
+      if (action !== 'terughalen' && customer.hasLogin && !customer.disabled) { blocked.push({ id, name: customer.displayName, reason: LOGIN_REASON }); continue; }
+      if (!byTenant.has(customer.tenantId)) byTenant.set(customer.tenantId, []);
+      byTenant.get(customer.tenantId).push(customer);
+    }
+    let done = 0;
+    for (const [tenantId, list] of byTenant) {
+      const tenantIds = list.map((customer) => customer.id);
+      if (action === 'archiveren') done += ctx.archive.archive(tenantId, 'klanten', tenantIds).changed;
+      else if (action === 'terughalen') done += ctx.archive.restore(tenantId, 'klanten', tenantIds);
+      else {
+        const out = ctx.archive.removeSelected(tenantId, 'klanten', tenantIds);
+        done += out.deleted;
+        const names = new Map(list.map((customer) => [String(customer.id), customer.displayName]));
+        for (const item of out.blocked) blocked.push({ id: item.id, name: names.get(String(item.id)) || '', reason: item.reason, canArchive: true });
+      }
+    }
+    audit(req, { archiveren: 'klanten_gearchiveerd', terughalen: 'klanten_teruggehaald', verwijderen: 'klanten_verwijderd' }[action], { aantal: done, geblokkeerd: blocked.length });
+    res.json({ action, done, blocked });
+  });
+
   app.post('/api/customers', requireJson, requireCustomers, limitInvitesIfAsked, checkForeignVat, requireVerifiedAddress(addressGuard, addressToVerify), async (req, res) => {
     const body = req.body || {};
     const contact = sanitizeContact({ email: body.email, phone: body.phone, address: body.address });
