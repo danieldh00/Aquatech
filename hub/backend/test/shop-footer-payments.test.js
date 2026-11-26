@@ -15,8 +15,8 @@ function pageWith(footerMethods) {
   return renderWith(content, () => layout({ root: './', title: 'Test', description: '', body: '', groups: [] }), { ordering: false, cartCount: 0, footerMethods });
 }
 
-test('footerMethods: onbekende sleutels vallen weg, niet ingesteld blijft null', () => {
-  assert.strictEqual(sanitizePayment({}).footerMethods, null);
+test('footerMethods: onbekende sleutels vallen weg, niet ingesteld = alles behalve Bitcoin', () => {
+  assert.deepStrictEqual(sanitizePayment({}).footerMethods, ['ideal', 'creditcard', 'bancontact', 'paypal', 'applepay', 'banktransfer']);
   assert.deepStrictEqual(sanitizePayment({ footerMethods: ['bitcoin', 'nep', 'ideal'] }).footerMethods, ['ideal', 'bitcoin']);
   assert.deepStrictEqual(sanitizePayment({ footerMethods: [] }).footerMethods, []);
 });

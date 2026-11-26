@@ -55,10 +55,13 @@ function cleanPublicUrl(raw) {
 /** Betaalmethoden die in de voet van de webshop getoond kunnen worden (sleutel, naam), in vaste volgorde. */
 const FOOTER_METHODS = [['ideal', 'iDEAL'], ['creditcard', 'Creditcard'], ['bancontact', 'Bancontact'], ['paypal', 'PayPal'], ['applepay', 'Apple Pay'], ['banktransfer', 'Overboeking'], ['bitcoin', 'Bitcoin']];
 
+/** Standaard in de voet zolang er niets is ingesteld: alles behalve Bitcoin. */
+const DEFAULT_FOOTER_METHODS = FOOTER_METHODS.map(([key]) => key).filter((key) => key !== 'bitcoin');
+
 /**
  * Saneert de instelling `shopPayment`. Lege of onbruikbare invoer geeft de standaardwaarden.
  * @param {*} raw De ingevoerde instelling.
- * @returns {{ online: boolean, publicUrl: string, onAccount: string, holdHours: number, accountHoldDays: number, guestCheckout: boolean, footerMethods: ?string[], paymentReminder: boolean, quoteRequest: boolean, quoteRequestMin: number }} De gesaneerde instelling (footerMethods: sleutels van de betaalmethoden die in de voet staan, null = nog niet ingesteld (dan het vaste plaatje); quoteRequest: knop Offerte aanvragen voor zakelijke klanten, standaard aan; quoteRequestMin: vanaf welk bedrag excl. btw die knop verschijnt, 1 tot 1.000.000 euro, standaard 500; paymentReminder: één herinneringsmail na een uur bij een niet afgeronde online betaling, standaard aan; guestCheckout: bestellen zonder account, standaard aan; werkt alleen als online betalen werkt).
+ * @returns {{ online: boolean, publicUrl: string, onAccount: string, holdHours: number, accountHoldDays: number, guestCheckout: boolean, footerMethods: string[], paymentReminder: boolean, quoteRequest: boolean, quoteRequestMin: number }} De gesaneerde instelling (footerMethods: sleutels van de betaalmethoden die in de voet staan, niet ingesteld = alles behalve Bitcoin; quoteRequest: knop Offerte aanvragen voor zakelijke klanten, standaard aan; quoteRequestMin: vanaf welk bedrag excl. btw die knop verschijnt, 1 tot 1.000.000 euro, standaard 500; paymentReminder: één herinneringsmail na een uur bij een niet afgeronde online betaling, standaard aan; guestCheckout: bestellen zonder account, standaard aan; werkt alleen als online betalen werkt).
  */
 function sanitizePayment(raw) {
   const input = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
@@ -73,7 +76,7 @@ function sanitizePayment(raw) {
     holdHours: Number.isFinite(hours) && hours >= 1 && hours <= 168 ? hours : DEFAULT_HOLD_HOURS,
     accountHoldDays: Number.isInteger(days) && days >= 0 && days <= 90 ? days : DEFAULT_ACCOUNT_HOLD_DAYS,
     guestCheckout: input.guestCheckout !== false,
-    footerMethods: Array.isArray(input.footerMethods) ? FOOTER_METHODS.map(([key]) => key).filter((key) => input.footerMethods.includes(key)) : null,
+    footerMethods: Array.isArray(input.footerMethods) ? FOOTER_METHODS.map(([key]) => key).filter((key) => input.footerMethods.includes(key)) : DEFAULT_FOOTER_METHODS,
     paymentReminder: input.paymentReminder !== false,
     quoteRequest: input.quoteRequest !== false,
     quoteRequestMin: Number.isFinite(minimum) && minimum >= 1 && minimum <= 1000000 ? Math.round(minimum * 100) / 100 : DEFAULT_QUOTE_REQUEST_MIN,
