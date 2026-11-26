@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.44.6',
+      date: '2026-11-26',
+      title: 'Betere vindbaarheid van productteksten',
+      items: [
+        { text: 'AI-omschrijvingen beginnen met wat het artikel is, het merk en het belangrijkste gegeven, en krijgen een eigen zoekmachine-omschrijving per artikel.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.44.5',
       date: '2026-11-26',
       title: 'Archief in de overzichten',

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.44.6
+
+- Schrijfprompt (`item-text-writer.js`): vindbaarheidsregels (soort product en merk in de eerste zin, geen trefwoordenstapeling, uniek per artikel, unieke seoDescription). Geen hidden tekst.
+- Productpagina: de zichtbare specificaties staan ook als Schema.org `additionalProperty` (PropertyValue) in de Product-JSON-LD (`Seo.productJsonLd({ specifications })`), zodat zoekmachines en AI-assistenten de kenmerken kunnen lezen. De shop blijft noindex tot go-live.
+
 ## 1.44.5
 
 - Nieuw gedeeld onderdeel `shared/archive-ui.js` (+ `.css`): archieffilter (`?archief=toon|alleen`), vinkjes en de acties Archiveren en Terughalen via `/api/admin/archive/archive|restore`, alleen met het recht beheer. Offertes en facturen gebruiken hun bestaande selectie en bulkbalk; het klantenoverzicht blijft buiten deze wijziging.
