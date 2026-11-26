@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.42.0',
+      date: '2026-11-26',
+      title: 'Cookies en mailvelden veiliger uitlezen',
+      items: [],
+    },
+    {
       version: '1.41.9',
       date: '2026-11-26',
       title: 'Planner zonder account: nettere balk en rondleiding',
