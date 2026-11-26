@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.41.3
+
+- `relatedSections` (storefront-pages.js): de eerste vier producten van elk blok staan open, de rest in een `<details class="related-more">` met knop *Bekijk meer (n)*; zonder script en zonder nieuwe CSP-uitzondering. Test in `related-items.test.js`.
+
 ## 1.41.2
 
 Startpagina (`storefront.css`, `storefront-pages.js`): assortimentstegels als flexrij die de band vult (max. 260 px per tegel, op smal scherm twee naast elkaar); plannerblok op dezelfde breedte als de andere blokken (1136 px); quote als kaart met de tekst uit Beheer als kop (laatste woord in accentkleur) en drie vaste kernpunten.

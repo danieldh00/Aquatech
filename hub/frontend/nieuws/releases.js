@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.41.3',
+      date: '2026-11-26',
+      title: 'Gerelateerde artikelen: maximaal vier zichtbaar',
+      items: [
+        { text: 'In de webshop toont het blok "Past bij" (en "Vaak samen besteld") voortaan vier artikelen. De rest staat achter de knop *Bekijk meer*.' },
+      ],
+    },
+    {
       version: '1.41.2',
       date: '2026-11-26',
       title: 'Startpagina: uitlijning en nieuwe quote',
