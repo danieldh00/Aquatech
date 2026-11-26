@@ -168,10 +168,10 @@ function breadcrumbJsonLd(crumbs, baseUrl) {
 /**
  * Een product met aanbieding (prijs incl. btw voor consumenten, voorraad) als Schema.org Product.
  * Een hoofdartikel met varianten krijgt een AggregateOffer (laagste en hoogste prijs).
- * @param {{ product: object, baseUrl: string, canonicalPath: string, shopName: string, description: string, brand?: string, ean?: string }} input product = uit de catalogus (code, name, priceIncl, inStock, image, categoryName, optioneel variants), canonicalPath = pad van de pagina, description = de tekst van de pagina, brand = het merk van het artikel (leeg = geen merk in de gegevens) en ean = de EAN van het getoonde artikel (alleen bij een enkel artikel of variant, nooit bij een prijsbereik).
+ * @param {{ product: object, baseUrl: string, canonicalPath: string, shopName: string, description: string, brand?: string, ean?: string, specifications?: { name: string, value: string }[] }} input product = uit de catalogus (code, name, priceIncl, inStock, image, categoryName, optioneel variants), canonicalPath = pad van de pagina, description = de tekst van de pagina, brand = het merk van het artikel (leeg = geen merk in de gegevens) en ean = de EAN van het getoonde artikel (alleen bij een enkel artikel of variant, nooit bij een prijsbereik) en specifications = de specificaties die de pagina zichtbaar toont (komen als additionalProperty mee, nooit iets wat niet op de pagina staat).
  * @returns {object} Het Schema.org-object.
  */
-function productJsonLd({ product, baseUrl, canonicalPath, shopName, description, brand = '', ean = '' }) {
+function productJsonLd({ product, baseUrl, canonicalPath, shopName, description, brand = '', ean = '', specifications = [] }) {
   const url = absoluteUrl(baseUrl, canonicalPath);
   const seller = { '@type': 'Organization', name: shopName };
   const variants = product.variants || [];
@@ -186,6 +186,8 @@ function productJsonLd({ product, baseUrl, canonicalPath, shopName, description,
       '@type': 'Offer', priceCurrency: 'EUR', price: Number(product.priceIncl).toFixed(2), url,
       availability: product.inStock ? AVAILABILITY.in : AVAILABILITY.out, itemCondition: 'https://schema.org/NewCondition', seller,
     };
+  const properties = (Array.isArray(specifications) ? specifications : []).filter((entry) => entry && entry.name && entry.value).slice(0, 40)
+    .map((entry) => ({ '@type': 'PropertyValue', name: String(entry.name), value: String(entry.value) }));
   const gtin = !variants.length && /^(\d{8}|\d{13})$/.test(String(ean)) ? String(ean) : '';
   return {
     '@context': 'https://schema.org', '@type': 'Product', name: product.name, sku: product.code, description,
@@ -193,6 +195,7 @@ function productJsonLd({ product, baseUrl, canonicalPath, shopName, description,
     ...(gtin ? { [gtin.length === 13 ? 'gtin13' : 'gtin8']: gtin } : {}),
     ...(image ? { image: [image] } : {}),
     ...(product.categoryName ? { category: product.categoryName } : {}),
+    ...(properties.length ? { additionalProperty: properties } : {}),
     url, offers,
   };
 }

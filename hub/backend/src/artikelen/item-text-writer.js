@@ -42,10 +42,16 @@ Schrijfstijl, want de tekst mag niet als AI-tekst herkenbaar zijn:
 - Begin niet elke zin op dezelfde manier en herhaal de productnaam niet steeds. Laat de zinsbouw per artikel verschillen.
 - Gebruik geen lijst met kenmerken als er maar een paar zijn: schrijf dan gewoon zinnen. Bij vijf of meer kenmerken is een korte opsomming goed.
 
+Vindbaarheid (zoekmachines en AI-assistenten), zonder dat de tekst onnatuurlijk wordt:
+- De eerste zin benoemt wat het artikel is (soort product, zoals een vakman het noemt) en het merk als dat in de bronvelden staat, plus het belangrijkste gegeven (maat, type of werking). Zo kan de eerste zin los worden aangehaald.
+- Gebruik de gewone zoektermen van het product één keer of twee keer waar ze vanzelf passen. Geen herhaling om te scoren en geen opsomming van trefwoorden.
+- De specificaties staan zichtbaar op de pagina en in de productgegevens; herhaal in de tekst alleen de gegevens die het artikel onderscheiden.
+- Elke tekst is uniek voor dit artikel: schrijf niet met een vast sjabloon en kopieer geen zinnen uit de fabrikantpagina.
+
 Vorm:
 - description: platte tekst in het Nederlands, zonder HTML. Alinea's gescheiden door een lege regel; een opsomming met regels die beginnen met "• ". Maximaal 1500 tekens.
 - seoTitle: maximaal 60 tekens, met de productnaam.
-- seoDescription: maximaal 155 tekens, één of twee zinnen.
+- seoDescription: maximaal 155 tekens, één of twee zinnen, uniek voor dit artikel: begin met wat het is en noem merk en het belangrijkste gegeven. Geen herhaling van de seoTitle en geen oproep tot kopen.
 - notes: korte Nederlandse toelichting voor de controleur: welke gegevens ontbraken of onduidelijk waren. Leeg als er niets is.
 - verdict: staat er een "Bestaande omschrijving", beoordeel die dan tegen jouw nieuwe description. "behouden" als de bestaande tekst feitelijk klopt met de andere velden, natuurlijk klinkt en minstens zo informatief is als jouw tekst. "vervangen" als jouw tekst beter is: bijvoorbeeld omdat de bestaande leeg of erg kort is, feiten bevat die de bronvelden tegenspreken, reclametaal of opvulling bevat, of onnatuurlijk of als vertaling klinkt. Staat er geen bestaande omschrijving, dan "geen".
 - verdictReason: één korte Nederlandse zin waarom (leeg bij "geen").`;
