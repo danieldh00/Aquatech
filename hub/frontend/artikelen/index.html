@@ -32,8 +32,8 @@
 
     <!-- Overzicht -->
     <div id="v-list" hidden>
-      <section class="intro">
-        <h1>Artikelen</h1>
+      <section class="intro" id="v-intro">
+        <h1 id="v-title">Artikelen</h1>
         <p class="muted">Wat er op voorraad ligt, met dezelfde artikelcodes als de stuklijst, de offerte en de werkorder. Een werkorder reserveert zijn materialen zolang hij open staat; bij Gereed (of bij het geregistreerde verbruik) worden ze afgeboekt. Ontvangsten, tellingen en correcties boek je hier.</p>
       </section>
       <div id="v-stats" class="stats"></div>
@@ -50,45 +50,11 @@
         <button class="tab" data-tab="media" role="tab">Afbeeldingen</button>
         <button class="tab" data-tab="texts" role="tab">Teksten <span id="t-texts" class="count"></span></button>
         <button class="tab" data-tab="related" data-feature="gerelateerde-artikelen" role="tab">Past bij</button>
+        <button class="tab" data-tab="import" role="tab">Import &amp; export</button>
+        <button class="tab" data-tab="units" role="tab">Eenheden</button>
       </nav>
 
-      <section id="tab-stock" class="tabpane">
-        <div class="filters">
-          <input id="f-search" type="search" placeholder="Zoek op code, omschrijving of locatie">
-          <label class="chk"><input type="checkbox" id="f-low"> Alleen onder minimum</label>
-          <label class="chk"><input type="checkbox" id="f-archived"> Ook gearchiveerd</label>
-          <span class="spacer"></span>
-          <button class="btn primary" id="b-new">+ Artikel</button>
-          <button class="btn" id="b-import">Uit catalogus</button>
-          <button class="btn" id="b-shop" title="Neemt alle producten uit de webshop over; artikelen die niet in de webshop staan worden gearchiveerd">Alles uit webshop</button>
-          <button class="btn" id="b-shop-missing" title="Tijdelijk, zolang WooCommerce nog draait: voegt alleen de webshopproducten toe die nog geen artikel hebben. Er wordt niets gearchiveerd, gewijzigd of teruggeschreven naar de webshop">Ontbrekende uit webshop toevoegen</button>
-          <button class="btn" id="b-images" title="Neemt de afbeeldingen van de webshopproducten over in dit systeem, zodat ze hier staan en niet meer van de oude webshop komen, en maakt miniaturen voor snelle kaartjes in de webshop">Afbeeldingen en miniaturen</button>
-          <button class="btn" id="b-merge" title="Losse artikelen die eigenlijk maten of kleuren van één product zijn omzetten naar één variabel artikel">Samenvoegen tot variabel artikel</button>
-          <button class="btn" id="b-units" title="Eenheden (st, m, rol, …) aanmaken of verwijderen">Eenheden</button>
-          <button class="btn" id="b-export">Excel-export</button>
-          <button class="btn" id="b-import-excel" title="Artikelen uit een Excel-bestand toevoegen of bijwerken, met eerst een controle">Importeren uit Excel</button>
-        </div>
-
-        <div id="s-bulk" class="bulk-bar" hidden>
-          <b id="s-bulk-count"></b>
-          <button id="s-bulk-archive" class="btn small" type="button">Archiveren</button>
-          <label class="inline" data-feature="etiketten">Etiketten per artikel <input id="s-bulk-qty" type="number" min="1" max="500" value="1" step="1"></label>
-          <select id="s-bulk-template" data-feature="etiketten" aria-label="Etiketsjabloon"></select>
-          <button id="s-bulk-labels" class="btn small primary" type="button" data-feature="etiketten">Etiketten printen</button>
-          <button id="s-bulk-clear" class="btn small ghost" type="button">Selectie wissen</button>
-        </div>
-
-        <form id="units-form" class="card-form" hidden novalidate>
-          <h3>Eenheden</h3>
-          <p class="muted small">Eenheden waaruit je bij een artikel kiest. Een eenheid die nog door een artikel wordt gebruikt kan niet worden verwijderd.</p>
-          <div id="u-list" class="chips"></div>
-          <div class="row">
-            <label>Nieuwe eenheid<input name="name" maxlength="12" placeholder="Bijv. rol" autocomplete="off"></label>
-            <button class="btn primary" type="submit">Toevoegen</button>
-            <button class="btn" type="button" data-cancel>Sluiten</button>
-          </div>
-          <div class="err" role="alert"></div>
-        </form>
+      <div id="v-forms">
 
         <form id="new-form" class="card-form" hidden novalidate>
           <h3>Nieuw voorraadartikel</h3>
@@ -229,6 +195,26 @@
           <div id="images-failed" class="small muted" hidden></div>
           <div class="row actions"><button class="btn primary" id="images-start" type="button">Overnemen</button><button class="btn" id="images-close" type="button">Sluiten</button></div>
         </dialog>
+      </div>
+
+      <section id="tab-stock" class="tabpane">
+        <div class="filters">
+          <input id="f-search" type="search" placeholder="Zoek op code, omschrijving of locatie">
+          <label class="chk"><input type="checkbox" id="f-low"> Alleen onder minimum</label>
+          <label class="chk"><input type="checkbox" id="f-archived"> Ook gearchiveerd</label>
+          <span class="spacer"></span>
+          <button class="btn primary" id="b-new">+ Artikel</button>
+          <button class="btn" id="b-export">Excel-export</button>
+        </div>
+
+        <div id="s-bulk" class="bulk-bar" hidden>
+          <b id="s-bulk-count"></b>
+          <button id="s-bulk-archive" class="btn small" type="button">Archiveren</button>
+          <label class="inline" data-feature="etiketten">Etiketten per artikel <input id="s-bulk-qty" type="number" min="1" max="500" value="1" step="1"></label>
+          <select id="s-bulk-template" data-feature="etiketten" aria-label="Etiketsjabloon"></select>
+          <button id="s-bulk-labels" class="btn small primary" type="button" data-feature="etiketten">Etiketten printen</button>
+          <button id="s-bulk-clear" class="btn small ghost" type="button">Selectie wissen</button>
+        </div>
 
         <div class="pager" id="s-pager-top"></div>
         <div class="tablewrap"><table class="grid" id="s-table"></table></div>
@@ -238,6 +224,34 @@
       <section id="tab-reserved" class="tabpane" hidden>
         <p class="muted small">Materialen die open werkorders (Nieuw, Gepland, In uitvoering) nog nodig hebben. Klopt een reservering niet meer, bijvoorbeeld na een nieuw voorraadartikel, <button class="linkbtn" id="b-resync">bereken ze opnieuw</button>.</p>
         <div class="tablewrap"><table class="grid" id="r-table"></table></div>
+      </section>
+
+      <section id="tab-import" class="tabpane" hidden>
+        <p class="muted">Artikelen en afbeeldingen binnenhalen, opschonen en exporteren. Wat je hier start, loopt zo nodig op de server door.</p>
+        <div class="card-grid">
+          <div class="card"><h3>Toevoegen</h3>
+            <p class="muted small">Nieuwe artikelen uit de standaardcatalogus of een Excel-bestand.</p>
+            <div class="form-actions"><button class="btn" id="b-import">Uit catalogus</button><button class="btn" id="b-import-excel" title="Artikelen uit een Excel-bestand toevoegen of bijwerken, met eerst een controle">Importeren uit Excel</button></div></div>
+          <div class="card"><h3>Webshop <span class="pill">tijdelijk</span></h3>
+            <p class="muted small">Zolang de oude webshop (WooCommerce) nog draait.</p>
+            <div class="form-actions"><button class="btn" id="b-shop-missing" title="Tijdelijk, zolang WooCommerce nog draait: voegt alleen de webshopproducten toe die nog geen artikel hebben. Er wordt niets gearchiveerd, gewijzigd of teruggeschreven naar de webshop">Ontbrekende uit webshop toevoegen</button><button class="btn" id="b-shop" title="Neemt alle producten uit de webshop over; artikelen die niet in de webshop staan worden gearchiveerd">Alles uit webshop</button><button class="btn" id="b-images" title="Neemt de afbeeldingen van de webshopproducten over in dit systeem, zodat ze hier staan en niet meer van de oude webshop komen, en maakt miniaturen voor snelle kaartjes in de webshop">Afbeeldingen en miniaturen</button></div></div>
+          <div class="card"><h3>Opschonen</h3>
+            <p class="muted small">Losse artikelen die eigenlijk maten of kleuren van één product zijn, in één artikelgroep zetten.</p>
+            <div class="form-actions"><button class="btn" id="b-merge" title="Losse artikelen die eigenlijk maten of kleuren van één product zijn onder één artikelgroep zetten">Artikelen groeperen (subartikelen)</button></div></div>
+        </div>
+      </section>
+
+      <section id="tab-units" class="tabpane" hidden>
+        <form id="units-form" class="card-form" novalidate>
+          <h3>Eenheden</h3>
+          <p class="muted small">Eenheden waaruit je bij een artikel kiest. Een eenheid die nog door een artikel wordt gebruikt kan niet worden verwijderd.</p>
+          <div id="u-list" class="chips"></div>
+          <div class="row">
+            <label>Nieuwe eenheid<input name="name" maxlength="12" placeholder="Bijv. rol" autocomplete="off"></label>
+            <button class="btn primary" type="submit">Toevoegen</button>
+          </div>
+          <div class="err" role="alert"></div>
+        </form>
       </section>
 
       <section id="tab-orders" class="tabpane" hidden>

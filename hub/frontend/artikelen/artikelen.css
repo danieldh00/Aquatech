@@ -106,6 +106,8 @@ table.grid .toggle:hover { color: var(--at-teal); }
 
 /* Met de zijbalk staan Mutaties, Bestelvoorstel, Leveranciers en Inkooporders onder Inkoop; de tabbladen zijn dan dubbel. */
 body.has-nav .tab[data-purchasing] { display: none; }
+/* Met de zijbalk staan alle onderdelen van Artikelen daar; de tabbladen zijn dan dubbel. */
+body.has-nav .tabs[role="tablist"] { display: none; }
 
 /* Prijsfactor: regels met categorie/leverancier en factor, en de margeaanduiding in het artikelformulier. */
 .pf-lists { margin-top: 14px; }
