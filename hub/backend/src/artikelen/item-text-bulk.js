@@ -88,10 +88,11 @@ function registerItemTextBulkRoutes(app, ctx) {
     const tenantId = tenantOf(req);
     const review = req.query.review !== '0';
     const research = req.query.research !== '0';
-    const todo = drafts.bulkTodo(tenantId, { review });
-    const estimateEur = todo.total * ESTIMATE_WRITE_EUR + (research ? todo.withoutFeatures * ESTIMATE_RESEARCH_EUR : 0);
+    const mode = req.query.mode === 'texts' ? 'texts' : 'specs';
+    const todo = drafts.bulkTodo(tenantId, { review, mode });
+    const estimateEur = (mode === 'texts' ? todo.total * ESTIMATE_WRITE_EUR : 0) + (research ? todo.withoutFeatures * ESTIMATE_RESEARCH_EUR : 0);
     const remainingToday = Math.max(0, settingsFor(tenantId).get('descriptionBulkDailyItems') - dailyOf(tenantId).count);
-    res.json({ ...todo, review, research, remainingToday, estimateEur: Math.round(estimateEur * 100) / 100, ai: stateOf(tenantId) });
+    res.json({ ...todo, review, research, mode, remainingToday, estimateEur: Math.round(estimateEur * 100) / 100, ai: stateOf(tenantId) });
   });
 
   app.put('/api/stock/item-texts/bulk/model', requireJson, requireRight('beheer'), (req, res) => {
@@ -115,14 +116,15 @@ function registerItemTextBulkRoutes(app, ctx) {
    * @param {string} tenantId Id van de omgeving.
    * @param {?object} user De gebruiker voor het kostenoverzicht en het logboek (of null).
    * @param {string[]} ids De artikelen van deze portie.
-   * @param {{ research: boolean, review: boolean }} options Kenmerken opzoeken en bestaande teksten beoordelen.
+   * @param {{ research: boolean, review: boolean, mode?: string }} options Kenmerken opzoeken, bestaande teksten beoordelen en de soort run (specs = alleen de kenmerken als specificaties zetten, standaard; texts = ook een tekst schrijven).
    * @returns {Promise<{ refused: ?{ status: number, error: string, message: string }, results: object[], aborted: ?object }>} De uitkomsten per artikel, of een weigering van de hele portie.
    */
-  async function processBatch(tenantId, user, ids, { research, review }) {
+  async function processBatch(tenantId, user, ids, { research, review, mode = 'specs' }) {
+    const specsOnly = mode !== 'texts';
     if (!settingsFor(tenantId).get('aiEnabled')) return { refused: { status: 409, error: 'disabled', message: 'AI staat uit (Beheer → Integraties → AI-herkenning).' } };
     const writer = currentItemTextWriter(tenantId);
     const researcher = currentSpecResearcher(tenantId);
-    if (!writer.available || !researcher.available) return { refused: { status: 409, error: 'not_configured', message: 'Er is geen API-sleutel ingesteld: een beheerder kan hem invullen bij Beheer → Integraties → AI-herkenning.' } };
+    if (!researcher.available || (!specsOnly && !writer.available)) return { refused: { status: 409, error: 'not_configured', message: 'Er is geen API-sleutel ingesteld: een beheerder kan hem invullen bij Beheer → Integraties → AI-herkenning.' } };
     const dailyLimit = settingsFor(tenantId).get('descriptionBulkDailyItems');
     const today = dailyOf(tenantId);
     if (today.count >= dailyLimit) return { refused: { status: 429, error: 'daily_limit', message: `Het dagplafond voor omschrijvingen in bulk (${dailyLimit} artikelen) is bereikt. Ga morgen verder of verhoog het plafond (instelling descriptionBulkDailyItems).` } };
@@ -166,12 +168,47 @@ function registerItemTextBulkRoutes(app, ctx) {
       }
     };
     /**
+     * Specs-run voor één artikel: kenmerken opzoeken (als dat nog niet gebeurd is) en als specificaties bij het artikel zetten. Er wordt geen tekst geschreven.
+     * @param {string} itemId Het artikel.
+     * @param {{ status?: string }} first Uitkomst van prepareWrite (niet gevonden of niet beschikbaar).
+     * @returns {Promise<void>}
+     */
+    const handleSpecs = async (itemId, first) => {
+      if (first.status === 'not_found') { results.push({ itemId, status: 'error', code: 'not_found', message: 'Artikel niet gevonden.' }); return; }
+      if (first.status === 'unavailable') { results.push({ itemId, status: 'skipped', code: 'unavailable', message: 'Varianten en gearchiveerde artikelen krijgen geen eigen specificaties.' }); return; }
+      if (aborted) { results.push({ itemId, status: 'error', code: aborted.code, message: aborted.message }); return; }
+      const flightKey = `${tenantId}:${itemId}`;
+      if (inFlight.has(flightKey)) { results.push({ itemId, status: 'skipped', code: 'busy', message: 'Dit artikel wordt al verwerkt.' }); return; }
+      inFlight.add(flightKey);
+      try {
+        if (research && !drafts.featuresSearched(tenantId, itemId)) {
+          if (dailyCounts.get(today.key) >= dailyLimit) { results.push({ itemId, status: 'error', code: 'daily_limit', message: 'Het dagplafond voor bulkrondes is bereikt.' }); return; }
+          dailyCounts.set(today.key, (dailyCounts.get(today.key) || 0) + 1);
+          await lookUpFeatures(itemId);
+        }
+        const applied = drafts.applySpecs(tenantId, itemId, stock, user);
+        if (applied.status === 'overgeslagen') results.push({ itemId, status: 'skipped', code: 'no_features', message: 'Er is nog niet naar kenmerken gezocht (opzoeken stond uit).' });
+        else results.push(applied.error ? { itemId, status: 'error', code: applied.error, message: 'De specificaties konden niet worden geplaatst.' } : { itemId, status: applied.status, added: applied.added });
+      } catch (error) {
+        if (error instanceof AnalyzeError) {
+          if (FATAL_CODES.includes(error.code)) aborted = { code: error.code, message: error.message };
+          results.push({ itemId, status: 'error', code: error.code, message: error.message });
+          return;
+        }
+        console.warn(`Specificaties vullen mislukt: ${error.message}`);
+        results.push({ itemId, status: 'error', code: 'error', message: 'Het vullen is mislukt door een interne fout.' });
+      } finally {
+        inFlight.delete(flightKey);
+      }
+    };
+    /**
      * Verwerkt één artikel en zet de uitkomst in results.
      * @param {string} itemId Het artikel.
      * @returns {Promise<void>}
      */
     const handle = async (itemId) => {
       const first = drafts.prepareWrite(tenantId, itemId);
+      if (specsOnly) { await handleSpecs(itemId, first); return; }
       if (first.status === 'not_found') { results.push({ itemId, status: 'error', code: 'not_found', message: 'Artikel niet gevonden.' }); return; }
       if (first.status === 'unavailable') { results.push({ itemId, status: 'skipped', code: 'unavailable', message: 'Varianten en gearchiveerde artikelen krijgen geen eigen tekst.' }); return; }
       if (drafts.hasDraft(tenantId, itemId)) { results.push({ itemId, status: 'skipped', code: 'has_draft', message: 'Er staat al een concept.' }); return; }
@@ -243,7 +280,7 @@ function registerItemTextBulkRoutes(app, ctx) {
     if (!ids.length || ids.length > BULK_BATCH) return res.status(400).json({ error: 'invalid', message: `Kies 1 tot ${BULK_BATCH} artikelen per keer.` });
     let out;
     try {
-      out = await processBatch(tenantId, req.user, ids, { research: req.body.research !== false, review: req.body.review !== false });
+      out = await processBatch(tenantId, req.user, ids, { research: req.body.research !== false, review: req.body.review !== false, mode: req.body.mode === 'texts' ? 'texts' : 'specs' });
     } catch (error) {
       return next(error);
     }
@@ -267,7 +304,7 @@ function registerItemTextBulkRoutes(app, ctx) {
    * @returns {{ error?: string, total?: number }} nothing_to_do of running als het niet kan, anders het aantal artikelen.
    */
   function startJob(tenantId, user, options) {
-    const todo = drafts.bulkTodo(tenantId, { review: options.review });
+    const todo = drafts.bulkTodo(tenantId, { review: options.review, mode: options.mode });
     if (!todo.ids.length) return { error: 'nothing_to_do' };
     const started = jobs.start(jobKeyOf(tenantId), {
       ids: todo.ids, size: BULK_BATCH, options,
@@ -286,13 +323,13 @@ function registerItemTextBulkRoutes(app, ctx) {
    * @returns {boolean} true als de taak weer loopt.
    */
   app.locals.resumeItemTextJob = (tenantId, entry) => {
-    const out = startJob(tenantId, entry.userId ? { id: entry.userId } : null, { research: entry.options.research !== false, review: entry.options.review !== false });
+    const out = startJob(tenantId, entry.userId ? { id: entry.userId } : null, { research: entry.options.research !== false, review: entry.options.review !== false, mode: entry.options.mode === 'texts' ? 'texts' : 'specs' });
     if (out.error === 'nothing_to_do') persistence.clear(tenantId, 'omschrijvingen');
     return !out.error;
   };
   app.post('/api/stock/item-texts/bulk/job', requireJson, requireStock, startLimiter, (req, res) => {
     const tenantId = tenantOf(req);
-    const options = { research: !(req.body && req.body.research === false), review: !(req.body && req.body.review === false) };
+    const options = { research: !(req.body && req.body.research === false), review: !(req.body && req.body.review === false), mode: req.body && req.body.mode === 'texts' ? 'texts' : 'specs' };
     const out = startJob(tenantId, req.user, options);
     if (out.error === 'nothing_to_do') return res.status(409).json({ error: out.error, message: 'Er zijn geen artikelen aan de beurt.' });
     if (out.error === 'running') return res.status(409).json({ error: out.error, message: 'Er loopt al een taak voor deze omgeving.' });

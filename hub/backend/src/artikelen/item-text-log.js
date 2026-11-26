@@ -1,5 +1,6 @@
 // Bewaart per hoofdartikel wat de AI-omschrijving nodig heeft in de kolom item_specs.specs (geen eigen tabel, dus geen migratie):
 // - kenmerken: de opgezochte kenmerken met bronadres en bronzin (materiaal, afmetingen, werpstraal), plus kenmerkenAt (wanneer opgezocht, ook als er niets is gevonden);
+// - specsAt: wanneer de kenmerken als specificaties bij het artikel zijn gezet (specs-overzicht in plaats van een tekst);
 // - textLog: wat de bulkrun met de omschrijving deed (nieuw, overschreven, behouden, hersteld), met bij overschreven de vorige tekst zodat die terug kan.
 // Een artikel waarvan alleen dit is opgezocht krijgt een rij met status niet_gevonden en het kenmerk descOnly: Past bij (related-items.js) blijft
 // die artikelen dan nog opzoeken en bewaart kenmerken en textLog bij het opslaan van nieuwe specificaties.
@@ -22,7 +23,7 @@ function parseSpecs(json) {
 /**
  * Maakt de opslag voor kenmerken en het schrijflogboek van omschrijvingen.
  * @param {object} db De database.
- * @returns {{ read: Function, saveFeatures: Function, recordWrite: Function }} De functies.
+ * @returns {{ read: Function, saveFeatures: Function, recordWrite: Function, recordSpecs: Function }} De functies.
  */
 function createItemTextLog(db) {
   /**
@@ -79,17 +80,29 @@ function createItemTextLog(db) {
    * Legt vast wat er met de omschrijving van een artikel gebeurd is.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} itemId Id van het artikel.
-   * @param {{ action: string, model?: string, reason?: string, previous?: { text: string, source: string } }} entry nieuw, overschreven, behouden of hersteld; bij overschreven de vorige tekst en waar die stond (eigen of webshop).
+   * @param {{ action: string, model?: string, reason?: string, textHash?: string, previous?: { text: string, source: string } }} entry nieuw, overschreven, behouden of hersteld; bij overschreven de vorige tekst en waar die stond (eigen of webshop); textHash = vingerafdruk van de geschreven tekst (zie ItemDetails.textHash), zodat een latere handmatige wijziging te herkennen is.
    * @returns {void}
    */
   function recordWrite(tenantId, itemId, entry) {
     update(tenantId, itemId, (specs) => {
       specs.textLog = { action: entry.action, at: currentTimestamp(), model: String(entry.model || '').slice(0, 80), reason: String(entry.reason || '').slice(0, 300) };
+      if (/^[0-9a-f]{16}$/.test(String(entry.textHash || ''))) specs.textLog.textHash = entry.textHash;
       if (entry.previous) specs.textLog.previous = { text: String(entry.previous.text || '').slice(0, 20000), source: entry.previous.source === 'webshop' ? 'webshop' : 'eigen' };
     }, entry.model);
   }
 
-  return { read, saveFeatures, recordWrite };
+  /**
+   * Legt vast dat de opgezochte kenmerken als specificaties bij het artikel zijn gezet (of dat er niets te zetten was), zodat het artikel niet opnieuw aan de beurt komt.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} itemId Id van het artikel.
+   * @param {{ added: number }} entry Hoeveel specificaties erbij zijn gekomen.
+   * @returns {void}
+   */
+  function recordSpecs(tenantId, itemId, { added }) {
+    update(tenantId, itemId, (specs) => { specs.specsAt = currentTimestamp(); specs.specsAdded = Number(added) || 0; });
+  }
+
+  return { read, saveFeatures, recordWrite, recordSpecs };
 }
 
 module.exports = { createItemTextLog, parseSpecs };

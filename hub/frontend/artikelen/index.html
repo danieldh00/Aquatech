@@ -464,18 +464,18 @@
       </section>
 
       <section id="tab-texts" class="tabpane" hidden>
-        <p class="muted small">De AI schrijft omschrijvingen en zoekmachineteksten, alleen met gegevens die echt bekend zijn: de artikelgegevens, de specificaties van Past bij en kenmerken uit de bron van de fabrikant. Getallen, eenheden en beweringen die niet in die gegevens staan worden gemarkeerd. Bij een enkel artikel (en bij alles met een waarschuwing) blijft het een concept dat jij goedkeurt.</p>
+        <p class="muted small">De AI schrijft omschrijvingen en zoekmachineteksten, alleen met gegevens die echt bekend zijn: de artikelgegevens, de specificaties van Past bij en kenmerken uit de bron van de fabrikant. Getallen, eenheden en beweringen die niet in die gegevens staan worden gemarkeerd. Bij een enkel artikel (en bij alles met een waarschuwing) blijft het een concept dat jij goedkeurt. In de webshop worden door de AI geschreven omschrijvingen niet getoond: de winkel laat de specificaties zien, en de bulkrun hieronder vult alleen die.</p>
         <section class="card-form tx-bulk" aria-labelledby="tx-bulk-title">
-          <h3 id="tx-bulk-title">Alles in één keer schrijven</h3>
+          <h3 id="tx-bulk-title">Specificaties in één keer vullen</h3>
           <p id="tx-bulk-summary" class="muted small" role="status">Gegevens laden…</p>
           <div class="form-grid">
-            <label class="chk full"><input type="checkbox" id="tx-bulk-research" checked> Eerst de kenmerken opzoeken in de bron van de fabrikant (kost het meeste, maar levert de feiten voor de tekst)</label>
-            <label class="chk full"><input type="checkbox" id="tx-bulk-review" checked> Bestaande omschrijvingen beoordelen: de AI vervangt ze alleen als de nieuwe beter is. De vorige tekst blijft bewaard en kan per artikel terug.</label>
-            <label class="field span-2">Model voor het schrijven<select id="tx-bulk-model"></select></label>
+            <label class="chk full"><input type="checkbox" id="tx-bulk-research" checked> Technische kenmerken opzoeken (bij voorkeur bij bosta.com, anders de fabrikant) en als specificaties bij het artikel zetten. Elke waarde heeft een bronadres en bronzin.</label>
+            <label class="chk full" hidden><input type="checkbox" id="tx-bulk-review" checked> Bestaande omschrijvingen beoordelen: de AI vervangt ze alleen als de nieuwe beter is. De vorige tekst blijft bewaard en kan per artikel terug.</label>
+            <label class="field span-2" hidden>Model voor het schrijven<select id="tx-bulk-model"></select></label>
           </div>
-          <p class="muted small">Zonder waarschuwing gaat de tekst direct live. Met een waarschuwing wordt het een concept. Samengevoegde artikelen krijgen één tekst op het hoofdartikel. Je kunt stoppen en later verder; wat klaar is, wordt overgeslagen.</p>
+          <p class="muted small">Eigen specificaties worden nooit overschreven; er komen alleen kenmerken bij waarvan de naam er nog niet staat. Samengevoegde artikelen krijgen de specificaties op het hoofdartikel. Door de AI geschreven omschrijvingen worden niet meer in de webshop getoond (ze blijven bewaard). Je kunt stoppen en later verder; wat klaar is, wordt overgeslagen.</p>
           <div class="form-actions tx-actions">
-            <button class="btn primary" id="tx-bulk-start" type="button" disabled>Alles schrijven</button>
+            <button class="btn primary" id="tx-bulk-start" type="button" disabled>Specificaties vullen</button>
             <button class="btn" id="tx-bulk-stop" type="button" hidden>Stoppen</button>
             <span id="tx-bulk-progress" class="muted small" role="status"></span>
           </div>

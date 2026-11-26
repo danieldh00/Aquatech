@@ -237,6 +237,9 @@ function variantValuesOf(valuesJson) {
   } catch { return {}; }
 }
 
+/** De acties in het schrijflogboek (item_specs.textLog) waarbij de eigen omschrijving van het artikel door de AI is geschreven. */
+const AI_TEXT_ACTIONS = ['nieuw', 'overschreven'];
+
 /**
  * Leest de kenmerken van een hoofdartikel uit het JSON-veld en geeft de namen.
  * @param {*} attributesJson De opgeslagen tekst, bijv. '[{"name":"Maat","values":["16 mm"]}]'.
@@ -609,11 +612,20 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
    */
   function readDetails(tenantId, wanted) {
     const filter = wanted ? ` AND (i.code IN (${wanted.map(() => '?').join(',')}) OR i.id IN (SELECT v.parent_id FROM stock_items v WHERE v.tenant_id = ? AND v.code IN (${wanted.map(() => '?').join(',')})))` : '';
-    const rows = db.prepare(`SELECT i.id, i.code, i.parent_id, i.description, i.specifications, i.seo_title, i.seo_description, i.brand, i.ean, p.description AS shop_description, p.attributes AS shop_attributes
+    const rows = db.prepare(`SELECT i.id, i.code, i.parent_id, i.description, i.specifications, i.seo_title, i.seo_description, i.brand, i.ean, p.description AS shop_description, p.attributes AS shop_attributes,
+        (SELECT CASE WHEN s.specs LIKE '%"textLog":{"action":"nieuw"%' THEN 'nieuw' WHEN s.specs LIKE '%"textLog":{"action":"overschreven"%' THEN 'overschreven' END FROM item_specs s WHERE s.tenant_id = i.tenant_id AND s.item_id = i.id) AS text_action,
+        (SELECT SUBSTRING(s.specs FROM '"textHash":"([0-9a-f]{16})"') FROM item_specs s WHERE s.tenant_id = i.tenant_id AND s.item_id = i.id) AS text_hash
       FROM stock_items i LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
       WHERE i.tenant_id = ? AND i.archived = 0${filter}`).all(tenantId, ...(wanted ? [...wanted, tenantId, ...wanted] : []));
-    const parents = new Map(rows.filter((row) => !row.parent_id).map((row) => [row.id, ItemDetails.shownDetails(row)]));
-    return new Map(rows.map((row) => [row.code, row.parent_id ? ItemDetails.shownDetails(row, parents.get(row.parent_id) || null) : parents.get(row.id)]));
+    // Een door de AI geschreven omschrijving (bulkrun, Teksten) toont de shop niet meer (zolang ze nog gelijk is aan wat de AI schreef: een handmatig aangepaste tekst blijft staan; oudere logregels zonder vingerafdruk gelden als AI-tekst): de winkel laat alleen de specificaties zien. De tekst blijft in de database (terugzetten kan); een webshoptekst die ervoor stond komt weer tevoorschijn.
+    /**
+     * De rij zoals de shop haar toont: zonder de eigen omschrijving als de AI die schreef.
+     * @param {object} row De rij van het artikel.
+     * @returns {object} De rij.
+     */
+    const shown = (row) => (AI_TEXT_ACTIONS.includes(row.text_action) && (!row.text_hash || row.text_hash === ItemDetails.textHash(row.description)) ? { ...row, description: '' } : row);
+    const parents = new Map(rows.filter((row) => !row.parent_id).map((row) => [row.id, ItemDetails.shownDetails(shown(row))]));
+    return new Map(rows.map((row) => [row.code, row.parent_id ? ItemDetails.shownDetails(shown(row), parents.get(row.parent_id) || null) : parents.get(row.id)]));
   }
 }
 
