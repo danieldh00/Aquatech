@@ -13,6 +13,22 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.44.5',
+      date: '2026-11-26',
+      title: 'Archief in de overzichten',
+      items: [
+        { text: 'In de overzichten van offertes, werkorders, facturen, webshopbestellingen en plannen kun je met het filter Archief het archief ook tonen of alleen het archief bekijken. Vink stukken aan en kies Archiveren of Terughalen.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.44.4',
+      date: '2026-11-26',
+      title: 'Orderhistorie uit WordPress voor Vaak samen besteld',
+      items: [
+        { text: 'Vaak samen besteld is meteen gevuld: onder Artikelen > Past bij haal je de orders van de oude WordPress-webshop op. Ze worden aan je artikelen gekoppeld, ook aan varianten van samengevoegde producten, en daarna werkt AquaTech Hub ze elk uur zelf bij. Er gaat niets terug naar WordPress en het zijn geen echte bestellingen (geen voorraad, factuur of mail, niet in omzet of marge).', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.44.3',
       date: '2026-11-26',
       title: 'Klanten archiveren en verwijderen vanuit het overzicht',

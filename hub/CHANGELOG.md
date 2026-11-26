@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.44.5
+
+- Nieuw gedeeld onderdeel `shared/archive-ui.js` (+ `.css`): archieffilter (`?archief=toon|alleen`), vinkjes en de acties Archiveren en Terughalen via `/api/admin/archive/archive|restore`, alleen met het recht beheer. Offertes en facturen gebruiken hun bestaande selectie en bulkbalk; het klantenoverzicht blijft buiten deze wijziging.
+
+## 1.44.4
+
+- Migratie 101: `wp_order_lines` (orderhistorie, uniek per WP-bestelling en regel) en `wp_order_import` (stand per omgeving).
+- `webshop/wp-order-history.js`: serverjob die via `fetchOrders` (alleen GET, alle statussen, filter op afgerond en in behandeling) de regels wegschrijft en koppelt: variatie-id, product-id, oud product-id uit `stock_merges`, SKU, `shop_products`, unieke naam. Idempotent; handmatige koppelingen blijven staan.
+- Routes `/api/stock/related/wp-orders` (stand, start, stop, link), recht `voorraad`; paneel in Artikelen > Past bij met lijst van producten zonder artikel.
+- `refreshTogether` neemt de gekoppelde WP-regels mee (bestelnummers met voorvoegsel `wp:`); het uurlijkse onderhoud haalt eerst de WP-orders op en berekent daarna Vaak samen besteld.
+- Klanten uit de oude orders: op uitdrukkelijk verzoek van de eigenaar worden de eigen klanten van de oude webshop (bestaande klantrelatie, voor offertes, werkorders en facturen) als klantrecord aangemaakt; het scherm zegt dat vooraf en er komt geen inlog of mail. Bestaande klanten blijven ongemoeid.
+
 ## 1.44.3
 
 - `POST /api/customers/bulk` {action archiveren|terughalen|verwijderen, ids ≤ 100} (recht `klanten`; verwijderen alleen recht `beheer` + wachtwoord/tweestapscode via `createIdentityConfirm`, audit `klanten_gearchiveerd|teruggehaald|verwijderd`, 60 per kwartier). Een klant met actieve inlog wordt bij archiveren en verwijderen overgeslagen.
