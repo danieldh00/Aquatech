@@ -684,7 +684,9 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
   .home-hero-text { padding: 28px 20px; }
   .home-hero h1 { font-size: 1.9rem; }
   .assortment-inner { padding: 20px 14px; }
-  .assortment-tile { flex-basis: calc(50% - 8px); }
+  /* Smal scherm: één swipe-rij met compacte tegels, zodat er nooit een losse reuzentegel overblijft. */
+  .assortment-strip { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; scroll-snap-type: x proximity; gap: 12px; padding-bottom: 6px; }
+  .assortment-tile { flex: 0 0 132px; max-width: none; padding: 8px; font-size: 0.85rem; scroll-snap-align: start; }
   .business { margin-inline: 16px; }
   .business.with-form { padding: 0 16px; }
   .tab-labels label { font-size: 0.85rem; padding: 8px 14px; }
