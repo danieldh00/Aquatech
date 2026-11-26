@@ -288,33 +288,36 @@ test('webshop: een ronde zonder verschillen kost een vast aantal queries, ook bi
   assert.strictEqual(Number(stored), 59);
 });
 
-test('webshop: ontbrekende producten toevoegen archiveert niets en koppelt WC-<id>-artikelen', async () => {
+test('webshop: ontbrekende producten toevoegen schrijft niets terug, archiveert niets en wijzigt niets', async () => {
   const products = new Map([product(21, 'BESTAAT', '12.10', 4), product(22, '', '24.20', null), product(23, '110-12', '99.96', 2), product(24, '10,62', '1.00', 1)]);
-  const { tid, stock, sync, db } = setup(products, { url: 'http://shop.test', mode: 'rest', push: false, mirror: false, pricesIncludeTax: true, vatRate: 21 });
+  const source = { url: 'http://shop.test', mode: 'rest', push: true, pushStock: true, mirror: false, pricesIncludeTax: true, vatRate: 21 };
+  const { tid, stock, sync, db, fake, settings } = setup(products, source);
   const user = { id: null, display_name: 'Test' };
-  const existing = stock.create(tid, user, { code: 'BESTAAT', name: 'Bestaand artikel', salePrice: 5 }).item;
+  const existing = stock.create(tid, user, { code: 'BESTAAT', name: 'Bestaand artikel', salePrice: 5, onHand: 9 }).item;
   // Een eerder overgenomen product zonder sku (code WC-<id>) waarvan de koppeling weg is.
   const wooCoded = stock.create(tid, user, { code: 'WC-22', name: 'Zonder sku', salePrice: 7 }).item;
   // Een eigen artikel dat niet in de webshop staat: mag niet gearchiveerd worden.
   const own = stock.create(tid, user, { code: 'EIGEN', name: 'Eigen artikel', salePrice: 3 }).item;
 
-  // Zonder addMissing en met spiegelen uit verandert er niets aan de lijst.
-  const plain = await sync.run(tid);
-  assert.strictEqual(plain.created, 0);
-  assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_items WHERE tenant_id = ?').get(tid).n, 3);
-
   const out = await sync.run(tid, { addMissing: true });
   assert.strictEqual(out.created, 1, '110-12 is nieuw');
   assert.strictEqual(out.skippedProducts, 1, 'de sku met een komma kan geen artikelcode zijn');
-  assert.strictEqual(stock.get(tid, existing.id).shop.productId, '21');
-  assert.strictEqual(stock.get(tid, wooCoded.id).shop.productId, '22', 'WC-<id> wordt weer gekoppeld in plaats van dubbel aangemaakt');
+  assert.ok(fake.calls.every((call) => call.method === 'GET'), 'er wordt niets naar de webshop geschreven, ook niet met terugschrijven aan');
+  assert.strictEqual(products.get('21').regular_price, '12.10');
+  assert.strictEqual(products.get('21').stock_quantity, 4);
+  assert.strictEqual(stock.get(tid, existing.id).salePrice, 5, 'bestaande prijs blijft');
+  assert.strictEqual(stock.get(tid, existing.id).onHand, 9, 'bestaande voorraad blijft');
   assert.strictEqual(stock.get(tid, own.id).archived, false);
   const added = db.prepare('SELECT code, archived, shop_product_id FROM stock_items WHERE tenant_id = ? AND code = ?').get(tid, '110-12');
   assert.ok(added);
   assert.strictEqual(String(added.shop_product_id), '23');
-  assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_items WHERE tenant_id = ?').get(tid).n, 4);
+  assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_items WHERE tenant_id = ?').get(tid).n, 4, 'WC-22 is niet dubbel aangemaakt');
 
   // Opnieuw draaien maakt niets dubbel.
-  const again = await sync.run(tid, { addMissing: true });
-  assert.strictEqual(again.created, 0);
+  assert.strictEqual((await sync.run(tid, { addMissing: true })).created, 0);
+
+  // Een gewone ronde (zonder terugschrijven) koppelt het WC-<id>-artikel weer aan zijn product.
+  settings.set('shopSource', sanitizeShop({ ...source, push: false }));
+  await sync.run(tid);
+  assert.strictEqual(stock.get(tid, wooCoded.id).shop.productId, '22');
 });

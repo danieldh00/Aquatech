@@ -207,7 +207,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
   /**
    * Eén synchronisatie: voorraad en prijs uit de webshop verwerken en terugschrijven wat er veranderd is.
    * @param {string} tenantId Id van de omgeving.
-   * @param {{ full?: boolean, user?: object, addMissing?: boolean }} [options] full: alle producten ophalen (en de catalogus bijwerken), anders alleen de gewijzigde, gekoppelde artikelen; user voor de voorraadboekingen; addMissing: ook de producten die nog geen artikel hebben aanmaken, zonder iets te archiveren (ook met spiegelen uit).
+   * @param {{ full?: boolean, user?: object, addMissing?: boolean }} [options] full: alle producten ophalen (en de catalogus bijwerken), anders alleen de gewijzigde, gekoppelde artikelen; user voor de voorraadboekingen; addMissing: alleen de producten die nog geen artikel hebben aanmaken en dan stoppen (geen boekingen, prijzen of terugschrijven; bij spiegelen aan loopt de gewone ronde).
    * @returns {Promise<object>} Samenvatting (created, restored, archived, skippedProducts, mirror, linked, unlinked, soldInShop, pricesFromShop, updated, failed) of { skipped }.
    */
   async function sync(tenantId, { full = true, user = null, addMissing = false } = {}) {
@@ -215,7 +215,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
     if (!shopConfig.url) return { skipped: 'not_configured' };
     if (!full && !shopConfig.push) return { skipped: 'no_push' };
     // Eerst ontbrekende variaties aanmaken, dan zitten ze meteen in deze ronde.
-    const createdVariations = shopConfig.push && shopConfig.mode === 'rest' ? await createMissingVariations(tenantId, shopConfig) : 0;
+    const createdVariations = !addMissing && shopConfig.push && shopConfig.mode === 'rest' ? await createMissingVariations(tenantId, shopConfig) : 0;
     const dirtyItems = full ? null : itemsOf(tenantId, true);
     if (!full && !dirtyItems.length) return createdVariations ? { createdVariations } : { skipped: 'nothing' };
     const products = full
@@ -228,17 +228,21 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
     if (full) shop.replaceProducts(tenantId, products, new Date().toISOString());
     const match = matcher(products, shopConfig.mapping);
     const mirrorOn = shopConfig.mirror !== false;
+    /**
+     * De verkoopprijs (excl. btw) van een webshopproduct.
+     * @param {object} product Het webshopproduct.
+     * @returns {number|null} De prijs excl. btw.
+     */
+    const productPrice = (product) => (product.rawRegular != null ? exclOf(product.rawRegular, shopConfig.vatRate, shopConfig) : product.price);
+    // Alleen ontbrekende artikelen toevoegen (ook bij spiegelen aan): verder niets doen, dus geen boekingen,
+    // geen prijzen overnemen, niets archiveren en niets naar de webshop schrijven.
+    if (full && addMissing) {
+      const added = stock.addMissingShop(tenantId, products, match, { vatRate: shopConfig.vatRate, priceOf: productPrice });
+      return { created: added.created, skippedProducts: added.skippedProducts, linked: 0 };
+    }
     const mirrored = full && mirrorOn
-      ? stock.mirrorShop(tenantId, products, match, {
-        vatRate: shopConfig.vatRate,
-        priceOf: (product) => (product.rawRegular != null ? exclOf(product.rawRegular, shopConfig.vatRate, shopConfig) : product.price),
-      })
-      : (full && addMissing
-        ? stock.addMissingShop(tenantId, products, match, {
-          vatRate: shopConfig.vatRate,
-          priceOf: (product) => (product.rawRegular != null ? exclOf(product.rawRegular, shopConfig.vatRate, shopConfig) : product.price),
-        })
-        : null);
+      ? stock.mirrorShop(tenantId, products, match, { vatRate: shopConfig.vatRate, priceOf: productPrice })
+      : null;
     const items = full ? itemsOf(tenantId, false) : dirtyItems;
     const byId = new Map(products.map((product) => [String(product.id), product]));
     const pushStockOn = Boolean(shopConfig.push && shopConfig.pushStock !== false && shopConfig.mode === 'rest');
