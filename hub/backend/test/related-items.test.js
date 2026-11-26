@@ -189,6 +189,8 @@ test('AI-ronde: onderzoeken, koppelen met reden en bron, handmatig blijft, wisse
   // Verbruik, inclusief zoekopdrachten, staat in het kostenoverzicht.
   const usage = JSON.stringify((await admin.get('/app/api/admin/ai-usage')).body);
   assert.ok(usage.includes('past_bij'));
+  // Alleen de echt mislukte aanvraag (broken) telt als mislukt; 'gevonden' en 'niet_gevonden' zijn gewoon gelukte verzoeken.
+  assert.strictEqual((await admin.get('/app/api/admin/ai-usage')).body.totals.failed, 1);
   assert.ok(AiModels.costUsd('claude-sonnet-5-5', { webSearches: 2, inputTokens: 0, outputTokens: 0 }).usd >= 0.02, 'een zoekopdracht kost geld');
   // Het todo-lijstje bevat daarna alleen nog wat niet is opgezocht of mislukte.
   assert.ok(!(await admin.get('/app/api/stock/related/ai/todo')).body.ids.includes(head.id));

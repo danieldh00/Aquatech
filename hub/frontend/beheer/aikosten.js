@@ -166,7 +166,7 @@
     if (summary.byTenant) groupTable($('#ai-by-tenant'), summary.byTenant, 'Organisatie', (row) => tenantName(row.tenant));
     $('#ai-note').textContent = `Elk verzoek aan de AI-dienst (zoals een plan laten herkennen) met het verbruik in tokens, de duur en de geschatte kosten. `
       + `Kosten zijn berekend met de prijzen van Anthropic op het moment van het verzoek en omgerekend met ${summary.eurCentsPerUsd} eurocent per dollar (Instellingen); `
-      + `de factuur van Anthropic is leidend. Huidig model: ${AiModels.label(summary.model)}. Regels blijven ${summary.retentionDays} dagen bewaard.`;
+      + `de factuur van Anthropic is leidend. Standaardmodel (plan herkennen, inkoop inlezen, producttekst): ${AiModels.label(summary.model)}; Past bij heeft een eigen model (Artikelen > Past bij). Het model per verzoek staat in de tabel per model. Regels blijven ${summary.retentionDays} dagen bewaard.`;
     // Keuzelijsten: gebruikers en functies uit de periode (zonder filter erop).
     fillSelect($('#ai-user'), 'Alle gebruikers', summary.byUser.filter((row) => row.key).map((row) => [row.key, userName(row.user)]));
     fillSelect($('#ai-feature'), 'Alle functies', Object.entries(AiModels.FEATURES));

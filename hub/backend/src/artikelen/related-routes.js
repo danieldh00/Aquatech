@@ -118,7 +118,8 @@ function registerRelatedRoutes(app, { related, requireRight, requireJson, audit,
       const started = Date.now();
       try {
         const found = await researcher.research(facts);
-        logUsage(itemId, started, found);
+        // Alleen het verbruik doorgeven: found.status ('gevonden' of 'niet_gevonden') is de uitkomst van het zoeken, niet de status van het verzoek.
+        logUsage(itemId, started, { model: found.model, usage: found.usage });
         related.saveSpecs(tenantId, itemId, found);
         results.push({ itemId, status: found.status });
       } catch (error) {
