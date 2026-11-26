@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.41.7
+
+Algemene limiet op schrijfacties via `/api` (1200 per 15 minuten per ingelogde gebruiker, anders per bezoeker; `/api/public` en lezen blijven buiten de telling; startwaarde overschrijfbaar met `API_WRITE_LIMIT`, voor tests). Routes met een eigen limiet houden die. Dekt de CodeQL-meldingen "missing rate limiting" op ingelogde routes. Test: `api-write-limit.test.js`.
+
 ## 1.41.6
 
 Het foutlog (`createErrorReport`) geeft regel en detail als `%s`-argumenten aan `console.error` (geen formaattekst uit invoer) en `requestPath` haalt stuurtekens uit het pad (CodeQL: externally-controlled format string, log injection). De Mollie-webhookmeldingen blijven ongewijzigd: het betalings-id is al gecontroleerd op `^tr_[A-Za-z0-9]{4,40}$`.
