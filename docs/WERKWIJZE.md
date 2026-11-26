@@ -58,6 +58,7 @@ Algemene afspraken voor samenwerken met Claude in een project met een coördinat
 - UI controleren op 1440 en 375 px via DOM/CSS-meting; geen screenshots tenzij gevraagd.
 - Eén diepe beveiligingsscan vóór go-live.
 - Geen modelnamen of -ID's in commits, PR's, code of docs. Nooit secrets, wachtwoorden of persoonsgegevens in repo, chat of geheugen (zeker niet in een publieke repo).
+- **Verboden afdwingen met hooks, niet alleen als tekst**: mechanisch controleerbare "niet doen"-regels staan in `.claude/hooks/rules.mjs` en worden door één Node-script (`guard.mjs`, `PreToolUse` in `.claude/settings.json`) geblokkeerd; alleen nieuwe regels in een wijziging tellen. Een nieuw verbod dat zich laat vangen met een patroon: één regel in `rules.mjs` + een test in `guard.test.mjs` (`node --test .claude/hooks/`). Wat oordeel vraagt (merge-voorwaarden, parallelle threads, bedrijfsregels) blijft tekst, CI of branch-protectie. Override alleen door de mens: `AQUATECH_HOOKS_OFF=1`.
 - Een nieuwe externe koppeling: instelling in de app, status en logboek zichtbaar, nooit tokens in de uitvoer.
 
 ## Standaardvoorkeuren (pas aan per gebruiker)
