@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.45.3
+
+- `POST /api/stock/import-shop-missing` start een taak (202) en `GET` geeft de voortgang (`artikelen/shop-missing-job.js`, stand in het geheugen per omgeving); de gewone aanroep duurde met 888 producten en 96 variabele producten langer dan een verzoek mag en gaf een foutmelding. `fetchProducts` en `addMissingShop` melden voortgang (`onProgress`), toevoegen gaat in porties van 50. Een interne fout geeft in de browser alleen een melding met de code; de details staan in het serverlog.
+- Frontend: `artikelen/shop-missing.js` (tijdelijk, samen met de WooCommerce-koppeling weg).
+
 ## 1.45.2
 
 - Nieuwe juridische pagina `cookieverklaring` (`webshop/cookie-notice.js`, `legal-pages.js`): noodzakelijke cookies (`aquatech_winkelwagen`, `aquatech_laatste_lijst`, sessie, gastbestelling, cookiekeuze), analytisch (GA4, Clarity, alleen met toestemming) en diensten van derden (reCAPTCHA, Mollie), afgeleid van wat de shop werkelijk laadt (`cookieServicesOf` in storefront.js). De privacyverklaring noemt Google en Microsoft nu ook alleen als ze aan staan en verwijst naar de cookieverklaring. De cookiebanner is ongewijzigd (noemt geen diensten, niets laadt vóór toestemming). Een eigen pagina met de naam `cookieverklaring` in Beheer gaat voor; de standaardtekst in Beheer toont alle diensten als voorbeeld. Geen migratie.

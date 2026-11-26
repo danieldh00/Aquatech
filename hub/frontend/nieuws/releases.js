@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.45.3',
+      date: '2026-11-26',
+      title: 'Ontbrekende webshopproducten toevoegen met voortgang',
+      items: [
+        { text: '*Ontbrekende uit webshop toevoegen* loopt nu op de achtergrond: je ziet de voortgang (ophalen, variaties, toevoegen) en een lijst van de binnengehaalde artikelen, ook als Excel. Het werk gaat door als je het venster sluit.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.45.2',
       date: '2026-11-26',
       title: 'Cookieverklaring met alle gebruikte diensten',
