@@ -569,6 +569,8 @@
     ai.planCorpus.checked = view.planCorpus.value;
     ai.aiDailyLimit.value = view.aiDailyLimit.value;
     ai.aiHourlyPerIp.value = view.aiHourlyPerIp.value;
+    ai.descriptionBulkDailyItems.value = view.descriptionBulkDailyItems.value;
+    ai.relatedAiDailyItems.value = view.relatedAiDailyItems.value;
     ai.aiEurCentsPerUsd.value = view.aiEurCentsPerUsd.value;
     const AiModels = window.AquatechAiModels;
     ai.aiModel.innerHTML = AiModels.SELECTABLE.map((key) => `<option value="${esc(key)}"${key === view.aiModel.value ? ' selected' : ''}>${esc(AiModels.MODELS[key].label)}${key === AiModels.DEFAULT ? ' (aanbevolen)' : ''}</option>`).join('');
@@ -862,6 +864,7 @@
     aiForm.onsubmit = (event) => {
       event.preventDefault();
       const patch = { aiEnabled: aiForm.aiEnabled.checked, planCorpus: aiForm.planCorpus.checked, aiDailyLimit: Number(aiForm.aiDailyLimit.value), aiHourlyPerIp: Number(aiForm.aiHourlyPerIp.value),
+        descriptionBulkDailyItems: Number(aiForm.descriptionBulkDailyItems.value), relatedAiDailyItems: Number(aiForm.relatedAiDailyItems.value),
         aiModel: aiForm.aiModel.value, aiEurCentsPerUsd: Number(aiForm.aiEurCentsPerUsd.value) };
       if (aiForm.anthropicApiKey.value.trim()) patch.anthropicApiKey = aiForm.anthropicApiKey.value.trim();
       saveSettings(aiForm, patch, 'Instellingen opgeslagen');

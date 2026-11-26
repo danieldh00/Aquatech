@@ -5,7 +5,7 @@ const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
 const AiModelList = require(path.join(FRONTEND_DIR, 'shared', 'ai-models.js'));
 const { createRateLimiter } = require('../beveiliging/rate-limit');
-const { createJobs } = require('./background-jobs');
+const { createJobs, createJobPersistence } = require('./background-jobs');
 const { RESEARCH_BATCH, RESEARCH_CONCURRENCY, MAX_LINKS } = require('./related-items');
 
 /** Fouten waarbij doorgaan zinloos is (sleutel, tegoed, model): de rest van de portie wordt overgeslagen. */
@@ -36,6 +36,7 @@ const ESTIMATE_EUR_PER_ITEM = 0.045;
  */
 function registerRelatedRoutes(app, { related, requireRight, requireJson, audit, settingsFor, aiTenantOf, currentSpecResearcher, limiter, aiUsage, jobs = createJobs() }) {
   const requireStock = requireRight('voorraad');
+  const persistence = createJobPersistence(settingsFor);
   // De zware rondes (koppelen, wissen, opnieuw berekenen) lezen en schrijven veel rijen: hoogstens 6 per uur per omgeving.
   const heavyLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 6, keyFn: (req) => `related-heavy|${req.tenantId}` });
   /**
@@ -182,37 +183,64 @@ function registerRelatedRoutes(app, { related, requireRight, requireJson, audit,
   });
 
   // Achtergrondtaak: de server zoekt alle artikelen zonder uitkomst zelf op en koppelt daarna met de vaste regels, ook als de browser dicht gaat.
+  // De taak wordt bewaard (instelling backgroundJobs) en na een herstart van de server automatisch hervat.
   /**
-   * De sleutel van de achtergrondtaak van de omgeving.
-   * @param {object} req Het verzoek.
+   * De sleutel van de achtergrondtaak van een omgeving.
+   * @param {string} tenantId Id van de omgeving.
    * @returns {string} De sleutel.
    */
-  const jobKey = (req) => `pastbij|${tenantOf(req)}`;
-  app.post('/api/stock/related-ai/job', requireJson, requireStock, heavyLimiter, (req, res) => {
-    const tenantId = tenantOf(req);
-    const todo = related.researchTodo(tenantId, { again: Boolean(req.body && req.body.again) });
-    if (!todo.ids.length) return res.status(409).json({ error: 'nothing_to_do', message: 'Er zijn geen artikelen aan de beurt.' });
-    const started = jobs.start(jobKey(req), {
-      ids: todo.ids, size: RESEARCH_BATCH, options: { again: Boolean(req.body && req.body.again) },
-      runBatch: (batchIds) => researchBatch(tenantId, req.user, batchIds),
+  const jobKeyOf = (tenantId) => `pastbij|${tenantId}`;
+  /**
+   * Start de achtergrondtaak voor alle artikelen die aan de beurt zijn en bewaart hem, zodat hij een herstart overleeft.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {?object} user Wie de taak startte.
+   * @param {{ again: boolean }} options Ook artikelen opnieuw opzoeken.
+   * @returns {{ error?: string, total?: number }} nothing_to_do of running als het niet kan, anders het aantal artikelen.
+   */
+  function startJob(tenantId, user, options) {
+    const todo = related.researchTodo(tenantId, { again: options.again });
+    if (!todo.ids.length) return { error: 'nothing_to_do' };
+    const started = jobs.start(jobKeyOf(tenantId), {
+      ids: todo.ids, size: RESEARCH_BATCH, options,
+      runBatch: (batchIds) => researchBatch(tenantId, user, batchIds),
       onDone: (state) => {
         if (!(state.tally.gevonden > 0)) return;
         const linked = related.linkWithSpecs(tenantId);
         state.extra = { items: linked.items, links: linked.links };
       },
+      onFinish: () => persistence.clear(tenantId, 'pastbij'),
     });
-    if (!started) return res.status(409).json({ error: 'running', message: 'Er loopt al een taak voor deze omgeving.' });
-    audit(req, 'gerelateerd_ai_taak_gestart', { total: todo.ids.length });
-    return res.status(202).json(jobs.get(jobKey(req)));
+    if (!started) return { error: 'running' };
+    persistence.save(tenantId, 'pastbij', { userId: user ? user.id : null, options });
+    return { total: todo.ids.length };
+  }
+  /**
+   * Hervat een bewaarde taak van een omgeving.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ userId: ?string, options: object }} entry De bewaarde taak.
+   * @returns {boolean} true als de taak weer loopt.
+   */
+  app.locals.resumeRelatedJob = (tenantId, entry) => {
+    const out = startJob(tenantId, entry.userId ? { id: entry.userId } : null, { again: Boolean(entry.options.again) });
+    if (out.error === 'nothing_to_do') persistence.clear(tenantId, 'pastbij');
+    return !out.error;
+  };
+  app.post('/api/stock/related-ai/job', requireJson, requireStock, heavyLimiter, (req, res) => {
+    const tenantId = tenantOf(req);
+    const out = startJob(tenantId, req.user, { again: Boolean(req.body && req.body.again) });
+    if (out.error === 'nothing_to_do') return res.status(409).json({ error: out.error, message: 'Er zijn geen artikelen aan de beurt.' });
+    if (out.error === 'running') return res.status(409).json({ error: out.error, message: 'Er loopt al een taak voor deze omgeving.' });
+    audit(req, 'gerelateerd_ai_taak_gestart', { total: out.total });
+    return res.status(202).json(jobs.get(jobKeyOf(tenantId)));
   });
   app.get('/api/stock/related-ai/job', requireStock, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    res.json(jobs.get(jobKey(req)));
+    res.json(jobs.get(jobKeyOf(tenantOf(req))));
   });
   app.post('/api/stock/related-ai/job/stop', requireJson, requireStock, (req, res) => {
-    jobs.stop(jobKey(req));
+    jobs.stop(jobKeyOf(tenantOf(req)));
     audit(req, 'gerelateerd_ai_taak_gestopt', {});
-    res.json(jobs.get(jobKey(req)));
+    res.json(jobs.get(jobKeyOf(tenantOf(req))));
   });
 
   app.post('/api/stock/related-ai/link', requireJson, requireStock, heavyLimiter, (req, res) => {
