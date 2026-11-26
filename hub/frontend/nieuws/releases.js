@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.41.1',
+      date: '2026-11-26',
+      title: 'Nieuw ontwerp voor de startpagina van de webshop',
+      items: [
+        { text: 'De startpagina van de webshop heeft een nieuw ontwerp: gesplitste kop met foto, assortiment in een navy blok, een plannerblok met drie stappen, afgeronde kaarten voor voordelen en merken.' },
+      ],
+    },
+    {
       version: '1.41.0',
       date: '2026-11-25',
       title: 'Gerelateerde artikelen op de productpagina',

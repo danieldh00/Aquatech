@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.41.1
+
+Startpagina (`storefront.css`, `storefront.js`): nieuw ontwerp "navy blokken" met afgeronde kaarten in de stijl van de categoriepagina's (hero als twee kolommen, assortiment in een navy kaart, plannerblok met drie stappen en knop met pijl, voordelen als zachtgroene kaarten, merken en zakelijk blok als kaart, tabbladen als knoppen). De plannerpromotie blijft op categoriepagina's compact zonder stappen. CSS voor de hele startpagina en nieuwe markup voor het plannerblok; de inhoud van de pagina is ongewijzigd.
+
 ## 1.41.0
 
 - Migratie 99: `item_related` (koppelingen met bron en bewijs), `item_specs` (opgezochte specificaties per artikel) en `item_together` (berekende partners uit `web_sale_lines`).
