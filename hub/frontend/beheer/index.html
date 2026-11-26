@@ -143,6 +143,11 @@
             <label>Maximaal per uur per IP-adres <span class="src" data-origin="aiHourlyPerIp"></span><input name="aiHourlyPerIp" type="number" min="1" max="100" step="1" required></label>
           </div>
           <div class="row">
+            <label>Omschrijvingen in bulk: maximaal artikelen per dag <span class="src" data-origin="descriptionBulkDailyItems"></span><input name="descriptionBulkDailyItems" type="number" min="10" max="20000" step="1" required></label>
+            <label>Past bij opzoeken: maximaal artikelen per dag <span class="src" data-origin="relatedAiDailyItems"></span><input name="relatedAiDailyItems" type="number" min="10" max="20000" step="1" required></label>
+          </div>
+          <p class="muted small">Rem op de kosten van de achtergrondtaken in Artikelen (Teksten en Past bij); ze tellen niet mee voor het maximum per dag hierboven.</p>
+          <div class="row">
             <label class="chk"><input type="checkbox" name="planCorpus"> Tekeningen bewaren om de herkenning te verbeteren <span class="src" data-origin="planCorpus"></span></label>
           </div>
           <p class="muted small">Alleen bij een door een medewerker goedgekeurd plan bewaart de app de tekening (versleuteld) en het eindplan. Dat wordt gebruikt om de herkenning zonder AI te meten en te verbeteren. Het verdwijnt als het plan definitief wordt gewist; staat standaard uit.</p>

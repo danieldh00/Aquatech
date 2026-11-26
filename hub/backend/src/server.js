@@ -102,6 +102,7 @@ const { registerOrderReadRoute } = require('./artikelen/order-read-route');
 const { createItemTextWriter: createDefaultItemTextWriter } = require('./artikelen/item-text-writer');
 const { createItemTextDraftStore, registerItemTextRoutes } = require('./artikelen/item-text-drafts');
 const { registerItemTextBulkRoutes } = require('./artikelen/item-text-bulk');
+const { sanitizeBackgroundJobs } = require('./artikelen/background-jobs');
 const { createRelatedStore } = require('./artikelen/related-items');
 const { registerRelatedRoutes } = require('./artikelen/related-routes');
 const { createSpecResearcher: createDefaultSpecResearcher } = require('./artikelen/related-research');
@@ -3250,6 +3251,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.use(errorReport.handler);
 
   app.locals.settings = settings;
+  app.locals.settingsFor = settingsFor;
   /**
    * Is er al een beheerder met een eigen account?
    * @returns {boolean} true als het instelscherm niet meer nodig is.
@@ -3387,6 +3389,27 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
       }
     }
     return summary;
+  });
+  /**
+   * Hervat na een herstart van de server de achtergrondtaken met AI (omschrijvingen in bulk, Past bij) die liepen: ze staan in de instelling
+   * `backgroundJobs` en gaan verder met wat nog aan de beurt is. Een omgeving zonder bewaarde taak doet niets; een fout in één omgeving stopt de rest niet.
+   * @returns {Promise<string[]>} De hervatte taken als "soort|omgeving".
+   */
+  app.locals.resumeBackgroundJobs = () => asSystem(async () => {
+    const resumed = [];
+    const activeIds = inScopeOnly(store.listTenants()).filter((live) => !live.disabled)
+      .flatMap((live) => [live, ...live.environments.filter((environment) => !environment.disabled)])
+      .map((environment) => environment.id);
+    for (const tenantId of activeIds) {
+      try {
+        const saved = sanitizeBackgroundJobs(settingsFor(tenantId).get('backgroundJobs'));
+        if (saved.omschrijvingen && app.locals.resumeItemTextJob(tenantId, saved.omschrijvingen)) resumed.push(`omschrijvingen|${tenantId}`);
+        if (saved.pastbij && app.locals.resumeRelatedJob(tenantId, saved.pastbij)) resumed.push(`pastbij|${tenantId}`);
+      } catch (error) {
+        console.error(`Achtergrondtaak hervatten voor omgeving ${tenantId} mislukt:`, error.message);
+      }
+    }
+    return resumed;
   });
   /**
    * Zet de verkoopprijs van artikelen met prijs volgens factor goed in elke actieve omgeving (vangt wijzigingen van leverancier,
@@ -3558,6 +3581,18 @@ if (require.main === module) {
   };
   runMaintenance();
   setInterval(runMaintenance, 60 * 60 * 1000).unref();
+  // Een achtergrondtaak met AI die liep toen de server stopte (update, herstart) gaat na een halve minuut vanzelf verder; tijdens een update later opnieuw proberen.
+  /**
+   * Hervat de bewaarde achtergrondtaken, of probeert het over een minuut opnieuw als er een systeemupdate loopt.
+   * @returns {void}
+   */
+  const resumeJobs = () => {
+    if (app.locals.systemUpdate.maintenance().active) { setTimeout(resumeJobs, 60 * 1000).unref(); return; }
+    slowLog.trackTask('achtergrondtaken hervatten', () => app.locals.resumeBackgroundJobs())
+      .then((resumed) => { if (resumed && resumed.length) console.log(`Achtergrondtaken hervat: ${resumed.join(', ')}`); })
+      .catch((error) => console.error('Achtergrondtaken hervatten mislukt:', error.message));
+  };
+  setTimeout(resumeJobs, 30 * 1000).unref();
   // Bewaking: elke 5 minuten (de monitor slaat zelf de eerste twee minuten na het starten en onderhoudsmodus over).
   setInterval(() => (app.locals.systemUpdate.maintenance().active ? Promise.resolve() : slowLog.trackTask('bewaking', () => app.locals.monitorRun())
     .catch((error) => console.error('Bewaking mislukt:', error.message))), 5 * 60 * 1000).unref();

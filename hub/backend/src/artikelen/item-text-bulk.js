@@ -18,7 +18,7 @@ const { FRONTEND_DIR } = require('../paths');
 const AiModelList = require(path.join(FRONTEND_DIR, 'shared', 'ai-models.js'));
 const { createRateLimiter } = require('../beveiliging/rate-limit');
 const { checkText } = require('./item-text-check');
-const { createJobs } = require('./background-jobs');
+const { createJobs, createJobPersistence } = require('./background-jobs');
 
 /** Hoeveel artikelen één verzoek hoogstens bevat. */
 const BULK_BATCH = 6;
@@ -58,6 +58,7 @@ function registerItemTextBulkRoutes(app, ctx) {
   const { drafts, related, stock, requireRight, requireJson, audit, settingsFor, aiTenantOf, currentItemTextWriter, currentSpecResearcher, aiUsage } = ctx;
   const requireStock = requireRight('voorraad');
   const jobs = ctx.jobs || createJobs();
+  const persistence = createJobPersistence(settingsFor);
   const startLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 6, keyFn: (req) => `item-text-bulk-start|${req.tenantId}` });
   const limiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 120, keyFn: (req) => `item-text-bulk|${req.tenantId}` });
   /**
@@ -252,28 +253,60 @@ function registerItemTextBulkRoutes(app, ctx) {
   });
 
   // Achtergrondtaak: de server loopt zelf alle artikelen aan de beurt door, ook als de browser dicht gaat. De stand is op te vragen en de taak is te stoppen.
+  /**
+   * De sleutel van de achtergrondtaak van een omgeving.
+   * @param {string} tenantId Id van de omgeving.
+   * @returns {string} De sleutel.
+   */
+  const jobKeyOf = (tenantId) => `omschrijvingen|${tenantId}`;
+  /**
+   * Start de achtergrondtaak voor alle artikelen die aan de beurt zijn en bewaart hem, zodat hij een herstart overleeft.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {?object} user Wie de taak startte (voor het kostenoverzicht en het logboek).
+   * @param {{ research: boolean, review: boolean }} options Kenmerken opzoeken en bestaande teksten beoordelen.
+   * @returns {{ error?: string, total?: number }} nothing_to_do of running als het niet kan, anders het aantal artikelen.
+   */
+  function startJob(tenantId, user, options) {
+    const todo = drafts.bulkTodo(tenantId, { review: options.review });
+    if (!todo.ids.length) return { error: 'nothing_to_do' };
+    const started = jobs.start(jobKeyOf(tenantId), {
+      ids: todo.ids, size: BULK_BATCH, options,
+      runBatch: (batchIds) => processBatch(tenantId, user, batchIds, options),
+      onFinish: () => persistence.clear(tenantId, 'omschrijvingen'),
+    });
+    if (!started) return { error: 'running' };
+    persistence.save(tenantId, 'omschrijvingen', { userId: user ? user.id : null, options });
+    return { total: todo.ids.length };
+  }
+  // Na een herstart van de server (de update-timer herstart de container bij elke release) gaat een bewaarde taak vanzelf verder met wat nog aan de beurt is.
+  /**
+   * Hervat een bewaarde taak van een omgeving.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {{ userId: ?string, options: object }} entry De bewaarde taak.
+   * @returns {boolean} true als de taak weer loopt.
+   */
+  app.locals.resumeItemTextJob = (tenantId, entry) => {
+    const out = startJob(tenantId, entry.userId ? { id: entry.userId } : null, { research: entry.options.research !== false, review: entry.options.review !== false });
+    if (out.error === 'nothing_to_do') persistence.clear(tenantId, 'omschrijvingen');
+    return !out.error;
+  };
   app.post('/api/stock/item-texts/bulk/job', requireJson, requireStock, startLimiter, (req, res) => {
     const tenantId = tenantOf(req);
-    const research = req.body && req.body.research !== false;
-    const review = req.body && req.body.review !== false;
-    const todo = drafts.bulkTodo(tenantId, { review });
-    if (!todo.ids.length) return res.status(409).json({ error: 'nothing_to_do', message: 'Er zijn geen artikelen aan de beurt.' });
-    const started = jobs.start(`omschrijvingen|${tenantId}`, {
-      ids: todo.ids, size: BULK_BATCH, options: { research, review },
-      runBatch: (batchIds) => processBatch(tenantId, req.user, batchIds, { research, review }),
-    });
-    if (!started) return res.status(409).json({ error: 'running', message: 'Er loopt al een taak voor deze omgeving.' });
-    audit(req, 'omschrijving_bulk_gestart', { total: todo.ids.length, research, review });
-    return res.status(202).json(jobs.get(`omschrijvingen|${tenantId}`));
+    const options = { research: !(req.body && req.body.research === false), review: !(req.body && req.body.review === false) };
+    const out = startJob(tenantId, req.user, options);
+    if (out.error === 'nothing_to_do') return res.status(409).json({ error: out.error, message: 'Er zijn geen artikelen aan de beurt.' });
+    if (out.error === 'running') return res.status(409).json({ error: out.error, message: 'Er loopt al een taak voor deze omgeving.' });
+    audit(req, 'omschrijving_bulk_gestart', { total: out.total, ...options });
+    return res.status(202).json(jobs.get(jobKeyOf(tenantId)));
   });
   app.get('/api/stock/item-texts/bulk/job', requireStock, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
-    res.json(jobs.get(`omschrijvingen|${tenantOf(req)}`));
+    res.json(jobs.get(jobKeyOf(tenantOf(req))));
   });
   app.post('/api/stock/item-texts/bulk/job/stop', requireJson, requireStock, (req, res) => {
-    jobs.stop(`omschrijvingen|${tenantOf(req)}`);
+    jobs.stop(jobKeyOf(tenantOf(req)));
     audit(req, 'omschrijving_bulk_gestopt', {});
-    res.json(jobs.get(`omschrijvingen|${tenantOf(req)}`));
+    res.json(jobs.get(jobKeyOf(tenantOf(req))));
   });
 }
 

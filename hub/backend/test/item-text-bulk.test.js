@@ -75,8 +75,9 @@ async function setup(behave) {
      */
     async researchFeatures() { calls.searches += 1; return { status: 'gevonden', features: [{ name: 'Materiaal', value: 'Messing', url: SOURCE, quote: 'Materiaal: messing' }], model: 'claude-sonnet-5-5', usage: { input_tokens: 500, output_tokens: 100, server_tool_use: { web_search_requests: 2 } } }; },
   });
-  const { server, base } = await listen(createApp({ env: { MULTITENANCY: '1' }, addressFetch: createPdokFake().fetchImpl, secret: SECRET, db, anthropicApiKey: 'sk-ant-test-test-test-test', createItemTextWriter, createSpecResearcher }));
-  return { server, calls, db, as: createLogin(base, { password: PW }) };
+  const app = createApp({ env: { MULTITENANCY: '1' }, addressFetch: createPdokFake().fetchImpl, secret: SECRET, db, anthropicApiKey: 'sk-ant-test-test-test-test', createItemTextWriter, createSpecResearcher });
+  const { server, base } = await listen(app);
+  return { server, app, tenantId: main, calls, db, as: createLogin(base, { password: PW }) };
 }
 
 /**
@@ -282,4 +283,48 @@ test('omschrijvingen in bulk: de achtergrondtaak loopt op de server door, toont 
     assert.strictEqual((await baas.post('/app/api/stock/item-texts/bulk/job', {})).status, 409, 'niets meer aan de beurt');
     assert.strictEqual((await baas.get('/app/api/stock/item-texts/bulk/todo')).body.total, 0);
   } finally { server.close(); }
+});
+
+test('omschrijvingen in bulk: de taak wordt bewaard en gaat na een herstart vanzelf verder', async () => {
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  let first = true;
+  const { server, app, tenantId, as } = await setup(async (input) => {
+    if (first) { first = false; await gate; }
+    return behaviour(input);
+  });
+  try {
+    const baas = await as('baas');
+    for (let number = 1; number <= 3; number += 1) await baas.post('/app/api/stock/items', { code: `H${number}`, name: `Klep ${number}`, unit: 'st' });
+    const settings = app.locals.settingsFor(tenantId);
+    assert.strictEqual((await baas.post('/app/api/stock/item-texts/bulk/job', { research: true, review: false })).status, 202);
+    const saved = settings.get('backgroundJobs');
+    assert.deepStrictEqual(saved.omschrijvingen.options, { research: true, review: false });
+    assert.ok(saved.omschrijvingen.userId, 'wie de taak startte');
+    release();
+    let job = (await baas.get('/app/api/stock/item-texts/bulk/job')).body;
+    for (let round = 0; round < 100 && job.running; round += 1) {
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      job = (await baas.get('/app/api/stock/item-texts/bulk/job')).body;
+    }
+    assert.strictEqual(job.tally.nieuw, 3);
+    assert.deepStrictEqual(settings.get('backgroundJobs'), {}, 'een afgeronde taak wordt niet meer hervat');
+    assert.deepStrictEqual(await app.locals.resumeBackgroundJobs(), []);
+
+    // Een taak die liep toen de server stopte: de instelling staat er nog, een nieuwe start hervat hem.
+    for (let number = 4; number <= 5; number += 1) await baas.post('/app/api/stock/items', { code: `H${number}`, name: `Klep ${number}`, unit: 'st' });
+    settings.update({ backgroundJobs: { omschrijvingen: { userId: null, startedAt: '2026-11-26T10:00:00.000Z', options: { research: true, review: true } } } }, null);
+    assert.deepStrictEqual(await app.locals.resumeBackgroundJobs(), [`omschrijvingen|${tenantId}`]);
+    job = (await baas.get('/app/api/stock/item-texts/bulk/job')).body;
+    for (let round = 0; round < 100 && job.running; round += 1) {
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      job = (await baas.get('/app/api/stock/item-texts/bulk/job')).body;
+    }
+    assert.strictEqual(job.tally.nieuw, 2, 'alleen wat nog aan de beurt was');
+    assert.deepStrictEqual(settings.get('backgroundJobs'), {});
+    // Niets meer aan de beurt: een bewaarde taak wordt opgeruimd in plaats van hervat.
+    settings.update({ backgroundJobs: { omschrijvingen: { userId: null, startedAt: '2026-11-26T10:00:00.000Z', options: {} } } }, null);
+    assert.deepStrictEqual(await app.locals.resumeBackgroundJobs(), []);
+    assert.deepStrictEqual(settings.get('backgroundJobs'), {});
+  } finally { release(); server.close(); }
 });

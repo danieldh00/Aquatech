@@ -6,6 +6,7 @@ const { sanitizeAppAddress } = require('./app-address');
 const { sanitizeShop } = require('../webshop/woocommerce');
 const { sanitizeShipping } = require('../webshop/shipping');
 const { sanitizePayment } = require('../webshop/mollie');
+const { sanitizeBackgroundJobs } = require('../artikelen/background-jobs');
 const { sanitizeAnalytics, sanitizeClarity } = require('../webshop/shop-analytics');
 const { sanitizeSeoSettings } = require('../webshop/seo');
 const { sanitizeCaptcha } = require('../beveiliging/captcha');
@@ -126,6 +127,8 @@ const FIELDS = {
   descriptionBulkDailyItems: { type: 'int', default: 2000, min: 10, max: 20000 },
   // Hoeveel artikelen per dag bij Past bij mogen worden opgezocht (rem op de kosten; zie artikelen/related-routes.js).
   relatedAiDailyItems: { type: 'int', default: 1000, min: 10, max: 20000 },
+  // Lopende achtergrondtaken met AI (omschrijvingen in bulk, Past bij): zo hervat de server ze na een herstart (artikelen/background-jobs.js). Alleen intern.
+  backgroundJobs: { type: 'object', default: {}, sanitize: sanitizeBackgroundJobs, internal: true, liveOnly: true },
   modules: { type: 'flags', default: {} },
   // Debugmodus (Beheer > Instellingen > Foutopsporing): beheerders zien bij een fout de details (soort fout,
   // databasecode, plek in de code) in plaats van alleen een algemene melding; zie platform/error-report.js.
