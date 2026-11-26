@@ -841,6 +841,11 @@ html:not(.js-on) .address-block[hidden], html:not(.js-on) [data-billing-country]
 .related { margin: 32px 0; }
 .related h2 { margin: 0 0 4px; }
 .related-sub { margin: 0 0 12px; color: var(--at-muted, #5a6475); font-size: 0.9rem; }
+.related-more { margin-top: 16px; }
+.related-more > summary { list-style: none; cursor: pointer; display: inline-block; }
+.related-more > summary::-webkit-details-marker { display: none; }
+.related-more[open] > summary { display: none; }
+.related-more .product-grid { margin-top: 0; }
 .related-bundle { display: flex; align-items: center; gap: 12px 20px; flex-wrap: wrap; margin-top: 16px; padding: 16px; border: 1px solid var(--at-line); border-radius: 12px; background: var(--at-bg, #f5f7fa); }
 .related-bundle p { margin: 0; }
 .related-bundle-names { flex: 1 1 260px; font-weight: 600; }

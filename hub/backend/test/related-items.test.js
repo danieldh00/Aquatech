@@ -268,4 +268,16 @@ test('webshop: Past bij en Vaak samen besteld op de productpagina, alleen leverb
   assert.match(html, /Alles in winkelwagen/);
   // Het artikel zelf staat nooit in zijn eigen blok.
   assert.doesNotMatch(html.split('id="related-fits"')[1].split('id="related-together"')[0], /Artikel HOOFD/);
+  // Meer dan vier: de eerste vier staan open, de rest achter *Bekijk meer* (details-blok, zonder script).
+  const extra = [];
+  for (const code of ['EXTRA1', 'EXTRA2', 'EXTRA3', 'EXTRA4', 'EXTRA5']) extra.push((await make(code, 5, 5)).id);
+  assert.strictEqual((await admin.put(`/app/api/stock/related/${main.id}`, { relatedIds: [fits.id, ...extra] })).status, 200);
+  assert.strictEqual((await admin.put('/app/api/admin/category-discounts', { rules: [{ categorySlug: 'beregeningscomputers-en-regensensors', discountPct: 2 }] })).status, 200);
+  const many = (await visitor.get('/product/artikel-hoofd-hoofd/')).text;
+  const fitsHtml = many.split('id="related-fits"')[1].split('id="related-together"')[0];
+  const [openPart, morePart] = fitsHtml.split('<details class="related-more">');
+  assert.ok(morePart, 'zes artikelen geven een Bekijk meer-blok');
+  assert.match(morePart, /Bekijk meer \(2\)/);
+  assert.strictEqual((openPart.match(/class="product-card/g) || []).length, 4, 'vier direct zichtbaar');
+  assert.strictEqual((morePart.match(/class="product-card/g) || []).length, 2, 'twee achter Bekijk meer');
 });
