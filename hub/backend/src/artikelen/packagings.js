@@ -5,7 +5,7 @@
 // - Een verpakking heeft een korte code (bijvoorbeeld PAL, in de winkelwagen CODE@PAL), een naam, een eigen prijs
 //   (leeg = factor × de prijs van het artikel), een eigen zakelijke prijs en een eigen EAN voor de streepjescode.
 // - `audience` bepaalt voor welke klantcategorie de verpakking zichtbaar is: iedereen, zakelijk of groothandel.
-// - Een hoofdartikel (met varianten) heeft zelf geen verpakkingen: die horen bij de varianten.
+// - Een artikelgroep (met subartikelen) heeft zelf geen verpakkingen: die horen bij de subartikelen.
 // - De EAN is uniek over artikelen én verpakkingen, gecontroleerd vóór het schrijven; de unieke indexen vangen alleen een
 //   botsing binnen één tabel op. Een artikel en een verpakking die gelijktijdig dezelfde EAN krijgen kan dus (heel zelden)
 //   allebei slagen; wie later op EAN zoekt behandelt een dubbele treffer als fout.
@@ -147,10 +147,10 @@ function createPackagingStore(db) {
     if (checked.error) return checked;
     try {
       return transaction(db, () => {
-        const item = prepare('SELECT id, has_variants, archived FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, String(itemId || ''));
+        const item = prepare('SELECT id, is_group, archived FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, String(itemId || ''));
         if (!item) return { error: 'not_found', status: 404 };
         if (Number(item.archived)) return { error: 'Dit artikel is gearchiveerd; zet het eerst terug om de verpakkingen te wijzigen.', field: 'packagings', status: 409 };
-        if (Number(item.has_variants) && checked.value.length) return { error: 'Een hoofdartikel heeft geen eigen verpakkingen; stel die in bij de varianten.', field: 'packagings', status: 409 };
+        if (Number(item.is_group) && checked.value.length) return { error: 'Een artikelgroep heeft geen eigen verpakkingen; stel die in bij de subartikelen.', field: 'packagings', status: 409 };
         // Valideer alles vóór de eerste schrijfactie: een fout die als waarde terugkomt wordt door transaction() niet teruggedraaid.
         for (const entry of checked.value.filter((candidate) => candidate.ean)) {
           const stockOwner = prepare('SELECT code FROM stock_items WHERE tenant_id = ? AND ean = ?').get(tenantId, entry.ean);

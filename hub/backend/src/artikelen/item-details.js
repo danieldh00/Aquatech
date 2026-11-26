@@ -157,23 +157,23 @@ function specificationsFromShop(attributesJson) {
 
 /**
  * Kiest wat de shop toont: de eigen omschrijving en specificaties van het artikel, anders die van het
- * webshopproduct, anders die van het hoofdartikel (bij een variant).
+ * webshopproduct, anders die van de artikelgroep (bij een subartikel).
  * @param {{ description?: string, specifications?: string, shop_description?: string, shop_attributes?: string }} row De rij van het artikel (met de kolommen van het webshopproduct).
- * @param {{ description: string, specifications: object[] }|null} [parent] Wat het hoofdartikel toont (bij een variant).
- * @returns {{ description: string, specifications: { name: string, value: string }[], seoTitle: string, seoDescription: string, brand: string, ean: string }} De omschrijving, specificaties, eigen zoekmachineteksten en merk (bij een variant die van het hoofdartikel zolang de variant er zelf geen heeft) en de eigen EAN.
+ * @param {{ description: string, specifications: object[] }|null} [articleGroup] Wat de artikelgroep toont (bij een subartikel).
+ * @returns {{ description: string, specifications: { name: string, value: string }[], seoTitle: string, seoDescription: string, brand: string, ean: string }} De omschrijving, specificaties, eigen zoekmachineteksten en merk (bij een subartikel die van de artikelgroep zolang het subartikel er zelf geen heeft) en de eigen EAN.
  */
-function shownDetails(row, parent = null) {
+function shownDetails(row, articleGroup = null) {
   const own = sanitizeDescription(row.description);
   const shop = sanitizeDescription(row.shop_description);
   const ownSpecs = specificationsOf(row.specifications);
-  const parentSeo = parent || { seoTitle: '', seoDescription: '', brand: '' };
+  const groupSeo = articleGroup || { seoTitle: '', seoDescription: '', brand: '' };
   const shopSpecs = specificationsFromShop(row.shop_attributes);
   return {
-    description: own || shop || (parent ? parent.description : ''),
-    specifications: ownSpecs.length ? ownSpecs : shopSpecs.length ? shopSpecs : parent ? parent.specifications : [],
-    seoTitle: sanitizeSeoTitle(row.seo_title) || parentSeo.seoTitle || '',
-    seoDescription: sanitizeSeoDescription(row.seo_description) || parentSeo.seoDescription || '',
-    brand: sanitizeBrand(row.brand) || parentSeo.brand || '',
+    description: own || shop || (articleGroup ? articleGroup.description : ''),
+    specifications: ownSpecs.length ? ownSpecs : shopSpecs.length ? shopSpecs : articleGroup ? articleGroup.specifications : [],
+    seoTitle: sanitizeSeoTitle(row.seo_title) || groupSeo.seoTitle || '',
+    seoDescription: sanitizeSeoDescription(row.seo_description) || groupSeo.seoDescription || '',
+    brand: sanitizeBrand(row.brand) || groupSeo.brand || '',
     ean: String(row.ean || ''),
   };
 }

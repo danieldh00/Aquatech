@@ -176,10 +176,10 @@ function applyLines(scene, { kind, id, keys }, deps, { dryRun = false } = {}) {
     const stored = nowData.totals && Number(nowData.totals.total);
     const recomputed = deps.totalsOf([...(nowData.lines || []), ...extra]).total;
     if (!(Math.abs(stored - recomputed) <= 0.005)) throw Object.assign(new Error('De totalen van deze bestelling kloppen niet met de regels; die zijn niet automatisch aan te passen.'), { status: 409 });
-    // Een teruggezette regel mag alleen naar een artikel verwijzen dat nog bestaat (niet gearchiveerd, geen hoofdartikel).
+    // Een teruggezette regel mag alleen naar een artikel verwijzen dat nog bestaat (niet gearchiveerd, geen artikelgroep).
     const itemIds = [...new Set(chosen.map((key) => lines.find((line) => spec.keyOf(line) === key)).filter((line) => line && line.itemId).map((line) => line.itemId))];
     if (itemIds.length) {
-      const found = new Set(current.prepare(`SELECT id FROM stock_items WHERE tenant_id = ? AND archived = 0 AND has_variants = 0 AND id IN (${itemIds.map(() => '?').join(', ')})`).all(context.tenantId, ...itemIds).map((row) => row.id));
+      const found = new Set(current.prepare(`SELECT id FROM stock_items WHERE tenant_id = ? AND archived = 0 AND is_group = 0 AND id IN (${itemIds.map(() => '?').join(', ')})`).all(context.tenantId, ...itemIds).map((row) => row.id));
       if (itemIds.some((itemId) => !found.has(itemId))) throw Object.assign(new Error('Een van de regels verwijst naar een artikel dat niet meer bestaat of gearchiveerd is. Er is niets teruggezet.'), { status: 409 });
     }
     const stockLines = deps.stockLinesOf(lines.filter((line) => line.itemId));

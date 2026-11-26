@@ -37,11 +37,11 @@
   const archivable = (item) => !item.archived;
 
   /**
-   * Of er etiketten voor een artikel kunnen worden afgedrukt (geen hoofdartikel en niet gearchiveerd).
+   * Of er etiketten voor een artikel kunnen worden afgedrukt (geen artikelgroep en niet gearchiveerd).
    * @param {object} item Het artikel.
    * @returns {boolean} true als het artikel een eigen etiket kan krijgen.
    */
-  const labelable = (item) => !item.hasVariants && !item.archived;
+  const labelable = (item) => !item.isGroup && !item.archived;
 
   /**
    * Geeft de koppcel van de selectiekolom (alles selecteren voor de zichtbare rijen).
@@ -145,9 +145,9 @@
     if (!items.length) return;
     if (items.length > MAX_ARCHIVE) { context.toast(`Hoogstens ${MAX_ARCHIVE} artikelen per keer archiveren; je hebt er ${items.length} gekozen.`, true); return; }
     const selectedIds = new Set(items.map((item) => item.id));
-    const variantCount = context.items().filter((item) => item.parentId && !item.archived && !selectedIds.has(item.id) && selectedIds.has(item.parentId)).length;
-    const variantText = variantCount ? ` Van de gekozen hoofdartikelen worden ook ${variantCount} ${variantCount === 1 ? 'variant' : 'varianten'} gearchiveerd.` : '';
-    if (!confirm(`${items.length} ${items.length === 1 ? 'artikel' : 'artikelen'} archiveren?${variantText} Het logboek blijft bewaard en je kunt een artikel per stuk weer terugzetten. Een artikel op een open bestelling of werkorder blijft staan.`)) return;
+    const subItemCount = context.items().filter((item) => item.groupId && !item.archived && !selectedIds.has(item.id) && selectedIds.has(item.groupId)).length;
+    const subItemText = subItemCount ? ` Van de gekozen artikelgroepen worden ook ${subItemCount} ${subItemCount === 1 ? 'subartikel' : 'subartikelen'} gearchiveerd.` : '';
+    if (!confirm(`${items.length} ${items.length === 1 ? 'artikel' : 'artikelen'} archiveren?${subItemText} Het logboek blijft bewaard en je kunt een artikel per stuk weer terugzetten. Een artikel op een open bestelling of werkorder blijft staan.`)) return;
     const button = byId('s-bulk-archive');
     button.disabled = true;
     const skipped = [];

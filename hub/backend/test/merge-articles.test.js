@@ -5,7 +5,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { randomUUID } = require('node:crypto');
 const { createApp } = require('../src/server');
-const { suggestGroups, splitName, commonCodePrefix } = require('../src/artikelen/variant-suggestions');
+const { suggestGroups, splitName, commonCodePrefix } = require('../src/artikelen/group-suggestions');
 const { createLogin, listen } = require('./helpers/http-client');
 const { openDb } = require('../src/database/db');
 const { createStore } = require('../src/platform/store');
@@ -103,7 +103,7 @@ test('samenvoegen via de API: voorraad, prijs, afbeelding en reserveringen blijv
     assert.strictEqual((await baas.post('/app/api/stock/merge', { ...body, ids: [...body.ids.slice(0, 2), other.id], values: { ...body.values, [other.id]: '30 mm' } })).status, 409, 'andere eenheid');
     assert.strictEqual((await baas.post('/app/api/stock/merge', { ...body, ids: [...body.ids.slice(0, 2), 'bestaat-niet'], values: { ...body.values, 'bestaat-niet': '30 mm' } })).status, 404);
     assert.strictEqual((await baas.post('/app/api/stock/merge', { ...body, attributeName: '' })).status, 400);
-    assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_items WHERE parent_id IS NOT NULL').get().n, 0, 'afgewezen verzoeken veranderen niets');
+    assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_items WHERE group_id IS NOT NULL').get().n, 0, 'afgewezen verzoeken veranderen niets');
 
     const merged = await baas.post('/app/api/stock/merge', body);
     assert.strictEqual(merged.status, 201, JSON.stringify(merged.body));
@@ -111,34 +111,34 @@ test('samenvoegen via de API: voorraad, prijs, afbeelding en reserveringen blijv
     assert.strictEqual(merged.body.unlinked, 1);
     const parent = merged.body.item;
     assert.strictEqual(parent.code, 'PEB');
-    assert.strictEqual(parent.hasVariants, true);
+    assert.strictEqual(parent.isGroup, true);
     assert.strictEqual(parent.imageId, IMAGE_ID);
-    assert.strictEqual(parent.onHand, 150, 'het hoofdartikel telt de varianten op');
+    assert.strictEqual(parent.onHand, 150, 'de artikelgroep telt de subartikelen op');
     assert.deepStrictEqual(parent.attributes, [{ name: 'Maat', values: ['16 mm', '20 mm', '25 mm'] }]);
 
-    // Dezelfde artikelen (id, code, voorraad, prijs, minimum) zijn nu varianten.
+    // Dezelfde artikelen (id, code, voorraad, prijs, minimum) zijn nu subartikelen.
     for (const [index, [code, size, costPrice, salePrice, onHand]] of sizes.entries()) {
-      const variant = (await baas.get(`/app/api/stock/items/${made[index].id}`)).body;
-      assert.strictEqual(variant.code, code);
-      assert.strictEqual(variant.parentId, parent.id);
-      assert.deepStrictEqual(variant.values, { Maat: size });
-      assert.strictEqual(variant.onHand, onHand);
-      assert.strictEqual(variant.costPrice, costPrice);
-      assert.strictEqual(variant.salePrice, salePrice);
-      assert.strictEqual(variant.minQty, 10);
-      assert.strictEqual(variant.shop.productId, null);
+      const subItem = (await baas.get(`/app/api/stock/items/${made[index].id}`)).body;
+      assert.strictEqual(subItem.code, code);
+      assert.strictEqual(subItem.groupId, parent.id);
+      assert.deepStrictEqual(subItem.values, { Maat: size });
+      assert.strictEqual(subItem.onHand, onHand);
+      assert.strictEqual(subItem.costPrice, costPrice);
+      assert.strictEqual(subItem.salePrice, salePrice);
+      assert.strictEqual(subItem.minQty, 10);
+      assert.strictEqual(subItem.shop.productId, null);
     }
     assert.strictEqual((await baas.get(`/app/api/stock/items/${made[1].id}`)).body.reserved, 5, 'reservering van de werkorder blijft');
     assert.strictEqual((await baas.get(`/app/api/stock/items/${made[1].id}`)).body.imageId, IMAGE_ID);
     assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_movements WHERE item_id = ?').get(made[0].id).n, 1, 'boekingen blijven');
     const workOrderStock = (await baas.get(`/app/api/stock/workorders/${workOrder.id}`)).body;
     assert.deepStrictEqual(workOrderStock.lines.map((line) => [line.code, line.reserved]), [['PEB-20', 5]]);
-    assert.deepStrictEqual(workOrderStock.chooseVariant, []);
+    assert.deepStrictEqual(workOrderStock.chooseSubItem, []);
 
-    // Nog een keer samenvoegen kan niet: het zijn nu varianten.
+    // Nog een keer samenvoegen kan niet: het zijn nu subartikelen.
     assert.strictEqual((await baas.post('/app/api/stock/merge', { ...body, code: 'PEB-NIEUW' })).status, 409);
     const listed = (await baas.get('/app/api/stock')).body.items;
-    assert.strictEqual(listed.filter((item) => item.hasVariants).length, 1);
+    assert.strictEqual(listed.filter((item) => item.isGroup).length, 1);
     assert.deepStrictEqual((await baas.get('/app/api/stock/merge-suggestions')).body.groups, []);
 
     // Andere organisatie ziet de artikelen niet en kan ze niet samenvoegen.
@@ -151,16 +151,16 @@ test('samenvoegen via de API: voorraad, prijs, afbeelding en reserveringen blijv
   } finally { server.close(); }
 });
 
-test('samenvoegen: een los webshopproduct met dezelfde sku wordt niet weer aan een variant gekoppeld', () => {
+test('samenvoegen: een los webshopproduct met dezelfde sku wordt niet weer aan een subartikel gekoppeld', () => {
   const db = openDb();
   const { createShopStore } = require('../src/webshop/shop');
   const { createShopSync } = require('../src/webshop/shop-sync');
   const { createStockStore } = require('../src/artikelen/stock');
   const sync = createShopSync({ db, shop: createShopStore(db), stock: createStockStore(db), settingsFor: () => ({ get: () => undefined }), fetchImpl: async () => ({}), log: { warn() {} } });
   const match = sync.matcher([{ id: '1', sku: 'PEB-16' }, { id: '2', sku: 'PEB-20', parentId: '9' }]);
-  assert.strictEqual(match({ code: 'PEB-16', parent_id: null }).id, '1', 'een los artikel blijft koppelen');
-  assert.strictEqual(match({ code: 'PEB-16', parent_id: 'p1' }), null, 'een variant koppelt niet aan een los product');
-  assert.strictEqual(match({ code: 'PEB-20', parent_id: 'p1' }).id, '2', 'een variant koppelt wel aan een variatie');
+  assert.strictEqual(match({ code: 'PEB-16', group_id: null }).id, '1', 'een los artikel blijft koppelen');
+  assert.strictEqual(match({ code: 'PEB-16', group_id: 'p1' }), null, 'een subartikel koppelt niet aan een los product');
+  assert.strictEqual(match({ code: 'PEB-20', group_id: 'p1' }).id, '2', 'een subartikel koppelt wel aan een variatie');
 });
 
 test('samenvoegen: bepaalt de webshop de artikellijst, dan worden aan een webshopproduct gekoppelde artikelen geweigerd', () => {
@@ -174,14 +174,14 @@ test('samenvoegen: bepaalt de webshop de artikellijst, dan worden aan een websho
   const third = stock.create(tenantId, user, { code: 'A-25', name: 'Buis 25 mm', unit: 'm' }).item;
   db.prepare('UPDATE stock_items SET shop_product_id = ? WHERE id = ?').run('55', first.id);
   const input = { ids: [first.id, second.id], code: 'A', name: 'Buis', attributeName: 'Maat', values: { [first.id]: '16 mm', [second.id]: '20 mm' } };
-  const refused = stock.mergeIntoVariants(tenantId, input, { refuseLinked: true });
+  const refused = stock.mergeIntoGroup(tenantId, input, { refuseLinked: true });
   assert.strictEqual(refused.status, 409);
   assert.match(refused.error, /A-16/);
-  assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_items WHERE parent_id IS NOT NULL').get().n, 0);
-  const looseMatch = stock.mergeIntoVariants(tenantId, { ...input, ids: [second.id, third.id], values: { [second.id]: '20 mm', [third.id]: '25 mm' } }, { refuseLinked: true, shopMatchOf: (row) => (row.code === 'A-25' ? { id: 9 } : null) });
+  assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_items WHERE group_id IS NOT NULL').get().n, 0);
+  const looseMatch = stock.mergeIntoGroup(tenantId, { ...input, ids: [second.id, third.id], values: { [second.id]: '20 mm', [third.id]: '25 mm' } }, { refuseLinked: true, shopMatchOf: (row) => (row.code === 'A-25' ? { id: 9 } : null) });
   assert.strictEqual(looseMatch.status, 409, 'een artikel dat met een los webshopproduct samenvalt wordt geweigerd');
   assert.match(looseMatch.error, /A-25/);
-  assert.strictEqual(stock.mergeIntoVariants(tenantId, input).merged, 2, 'zonder spiegelen mag het wel');
+  assert.strictEqual(stock.mergeIntoGroup(tenantId, input).merged, 2, 'zonder spiegelen mag het wel');
 });
 
 test('samenvoeging terugdraaien via de API: artikelen weer los met hun voorraad, webshopkoppeling terug, rechten en andere organisatie', async () => {
@@ -210,22 +210,22 @@ test('samenvoeging terugdraaien via de API: artikelen weer los met hun voorraad,
     assert.strictEqual(preview.status, 200);
     assert.strictEqual(preview.body.logged, true);
     assert.strictEqual(preview.body.restoresLinks, 1);
-    assert.deepStrictEqual(preview.body.variants.map((variant) => variant.code), ['KR-16', 'KR-20']);
-    assert.strictEqual((await baas.get(`/app/api/stock/items/${made[0].id}/unmerge`)).status, 409, 'een los artikel is geen hoofdartikel');
+    assert.deepStrictEqual(preview.body.subItems.map((subItem) => subItem.code), ['KR-16', 'KR-20']);
+    assert.strictEqual((await baas.get(`/app/api/stock/items/${made[0].id}/unmerge`)).status, 409, 'een los artikel is geen artikelgroep');
     assert.strictEqual((await pien.get(`/app/api/stock/items/${merged.item.id}/unmerge`)).status, 403);
     assert.strictEqual((await pien.post(`/app/api/stock/items/${merged.item.id}/unmerge`, {})).status, 403);
 
-    // Een andere organisatie kan het hoofdartikel niet terugdraaien (404).
+    // Een andere organisatie kan de artikelgroep niet terugdraaien (404).
     assert.strictEqual((await baas.post('/app/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', displayName: 'Piet', password: PW, mustChangePassword: false } })).status, 201);
     const piet = await as('piet', 'groen');
     assert.strictEqual((await piet.post(`/app/api/stock/items/${merged.item.id}/unmerge`, {})).status, 404);
 
-    // Een variant die na het samenvoegen een nieuwe koppeling kreeg, houdt die; de preview telt hem niet mee.
+    // Een subartikel die na het samenvoegen een nieuwe koppeling kreeg, houdt die; de preview telt hem niet mee.
     db.prepare('UPDATE stock_items SET shop_product_id = ? WHERE id = ?').run('555', made[0].id);
     assert.strictEqual((await baas.get(`/app/api/stock/items/${merged.item.id}/unmerge`)).body.restoresLinks, 0);
     db.prepare('UPDATE stock_items SET shop_product_id = NULL WHERE id = ?').run(made[0].id);
 
-    // Is het hoofdartikel inmiddels aan een webshopproduct gekoppeld, dan blijft het staan.
+    // Is de artikelgroep inmiddels aan een webshopproduct gekoppeld, dan blijft het staan.
     db.prepare('UPDATE stock_items SET shop_product_id = ? WHERE id = ?').run('99', merged.item.id);
     assert.strictEqual((await baas.post(`/app/api/stock/items/${merged.item.id}/unmerge`, {})).status, 409);
     db.prepare('UPDATE stock_items SET shop_product_id = NULL WHERE id = ?').run(merged.item.id);
@@ -234,17 +234,17 @@ test('samenvoeging terugdraaien via de API: artikelen weer los met hun voorraad,
     assert.strictEqual(undone.status, 200, JSON.stringify(undone.body));
     assert.strictEqual(undone.body.restored, 2);
     assert.strictEqual(undone.body.linksRestored, 1);
-    assert.strictEqual((await baas.get(`/app/api/stock/items/${merged.item.id}`)).status, 404, 'het hoofdartikel is weg');
+    assert.strictEqual((await baas.get(`/app/api/stock/items/${merged.item.id}`)).status, 404, 'de artikelgroep is weg');
     const first = (await baas.get(`/app/api/stock/items/${made[0].id}`)).body;
-    assert.strictEqual(first.parentId, null);
+    assert.strictEqual(first.groupId, null);
     assert.strictEqual(first.name, 'Kraan 16 mm');
     assert.strictEqual(first.shop.productId, '88', 'de webshopkoppeling is terug');
     const second = (await baas.get(`/app/api/stock/items/${made[1].id}`)).body;
-    assert.strictEqual(second.parentId, null);
+    assert.strictEqual(second.groupId, null);
     assert.strictEqual(second.onHand, 10, 'de ontvangst na het samenvoegen blijft');
     assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_movements WHERE item_id = ?').get(made[1].id).n, 2);
     const listed = (await baas.get('/app/api/stock')).body.items;
-    assert.strictEqual(listed.filter((item) => item.hasVariants || item.parentId).length, 0);
+    assert.strictEqual(listed.filter((item) => item.isGroup || item.groupId).length, 0);
     assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_merges WHERE undone_at IS NOT NULL').get().n, 1);
     assert.strictEqual((await baas.post(`/app/api/stock/items/${merged.item.id}/unmerge`, {})).status, 404, 'nog een keer kan niet');
     // Opnieuw samenvoegen met dezelfde code kan weer.
@@ -252,7 +252,7 @@ test('samenvoeging terugdraaien via de API: artikelen weer los met hun voorraad,
   } finally { server.close(); }
 });
 
-test('samenvoeging terugdraaien zonder logboek (samengevoegd voor 1.5.9) en met een later bijgemaakte variant', () => {
+test('samenvoeging terugdraaien zonder logboek (samengevoegd voor 1.5.9) en met een later bijgemaakt subartikel', () => {
   const db = openDb();
   const tenantId = createStore(db).ensureTenant().id;
   const { createStockStore } = require('../src/artikelen/stock');
@@ -262,36 +262,36 @@ test('samenvoeging terugdraaien zonder logboek (samengevoegd voor 1.5.9) en met 
   const second = stock.create(tenantId, user, { code: 'B-20', name: 'Buis 20 mm', unit: 'm' }).item;
   const input = { ids: [first.id, second.id], code: 'B', name: 'Buis', attributeName: 'Maat', values: { [first.id]: '16 mm', [second.id]: '20 mm' } };
 
-  // Zonder logboekregel worden alleen de varianten losgemaakt.
-  const legacy = stock.mergeIntoVariants(tenantId, input, { user });
+  // Zonder logboekregel worden alleen de subartikelen losgemaakt.
+  const legacy = stock.mergeIntoGroup(tenantId, input, { user });
   db.prepare('DELETE FROM stock_merges').run();
-  assert.strictEqual(stock.unmergePreview(tenantId, legacy.parentId).logged, false);
-  const reconstructed = stock.unmergeVariants(tenantId, legacy.parentId);
+  assert.strictEqual(stock.unmergePreview(tenantId, legacy.groupId).logged, false);
+  const reconstructed = stock.unmergeSubItems(tenantId, legacy.groupId);
   assert.strictEqual(reconstructed.restored, 2);
   assert.strictEqual(reconstructed.reconstructed, true);
-  assert.strictEqual(stock.get(tenantId, first.id).parentId, null);
+  assert.strictEqual(stock.get(tenantId, first.id).groupId, null);
 
-  // Met logboek: een variant die erna is bijgemaakt gaat weg.
-  const again = stock.mergeIntoVariants(tenantId, input, { user });
-  const added = stock.setVariants(tenantId, again.parentId, [{ name: 'Maat', values: ['16 mm', '20 mm', '25 mm', '30 mm'] }]);
+  // Met logboek: een subartikel die erna is bijgemaakt gaat weg.
+  const again = stock.mergeIntoGroup(tenantId, input, { user });
+  const added = stock.setSubItems(tenantId, again.groupId, [{ name: 'Maat', values: ['16 mm', '20 mm', '25 mm', '30 mm'] }]);
   assert.strictEqual(added.created, 2);
-  const withMoves = added.item.variants.find((variant) => variant.values.Maat === '30 mm');
+  const withMoves = added.item.subItems.find((subItem) => subItem.values.Maat === '30 mm');
   stock.move(tenantId, user, withMoves.id, { kind: 'ontvangst', qty: 3, note: 'Pakbon' });
-  assert.deepStrictEqual(stock.unmergePreview(tenantId, again.parentId).variants.map((variant) => variant.outcome), ['los', 'los', 'weg', 'gearchiveerd']);
-  // Een reservering op een later bijgemaakte variant blokkeert het terugdraaien.
-  const plain = added.item.variants.find((variant) => variant.values.Maat === '25 mm');
+  assert.deepStrictEqual(stock.unmergePreview(tenantId, again.groupId).subItems.map((subItem) => subItem.outcome), ['los', 'los', 'weg', 'gearchiveerd']);
+  // Een reservering op een later bijgemaakte subartikel blokkeert het terugdraaien.
+  const plain = added.item.subItems.find((subItem) => subItem.values.Maat === '25 mm');
   const owner = createStore(db).createCustomer(tenantId, { displayName: 'Eigenaar' }).user;
   db.prepare("INSERT INTO work_orders (id, tenant_id, owner_id, number, status, data, created_at, updated_at) VALUES ('00000000-0000-4000-8000-0000000000d1', ?, ?, 'W-1', 'open', '{}', ?, ?)").run(tenantId, owner.id, '2026-11-04T10:00:00Z', '2026-11-04T10:00:00Z');
   db.prepare('INSERT INTO stock_reservations (tenant_id, work_order_id, item_id, qty, updated_at) VALUES (?, ?, ?, 1, ?)').run(tenantId, '00000000-0000-4000-8000-0000000000d1', plain.id, '2026-11-04T10:00:00Z');
-  assert.ok(stock.unmergePreview(tenantId, again.parentId).blocked);
-  assert.strictEqual(stock.unmergeVariants(tenantId, again.parentId).status, 409);
+  assert.ok(stock.unmergePreview(tenantId, again.groupId).blocked);
+  assert.strictEqual(stock.unmergeSubItems(tenantId, again.groupId).status, 409);
   db.prepare('DELETE FROM stock_reservations').run();
-  const out = stock.unmergeVariants(tenantId, again.parentId);
+  const out = stock.unmergeSubItems(tenantId, again.groupId);
   assert.strictEqual(out.restored, 2);
   assert.strictEqual(out.removed, 2);
   assert.deepStrictEqual(stock.list(tenantId).map((item) => item.code).sort(), ['B-16', 'B-20']);
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_items WHERE id = ?').get(plain.id).n, 0, 'zonder boekingen echt verwijderd');
-  const archived = db.prepare('SELECT archived, parent_id FROM stock_items WHERE id = ?').get(withMoves.id);
-  assert.deepStrictEqual([Number(archived.archived), archived.parent_id], [1, null], 'met boekingen gearchiveerd en losgemaakt');
+  const archived = db.prepare('SELECT archived, group_id FROM stock_items WHERE id = ?').get(withMoves.id);
+  assert.deepStrictEqual([Number(archived.archived), archived.group_id], [1, null], 'met boekingen gearchiveerd en losgemaakt');
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_movements WHERE item_id = ?').get(withMoves.id).n, 1, 'boekingen blijven');
 });

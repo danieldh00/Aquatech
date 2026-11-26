@@ -112,19 +112,19 @@ test('omschrijvingen in bulk: nieuw, behouden, overschreven met terugzetten, con
     const parent = await make('P1', 'Samengevoegd artikel');
     await baas.put(`/app/api/stock/items/${keep.id}`, { description: 'Goede oude tekst.' });
     await baas.put(`/app/api/stock/items/${replace.id}`, { description: 'Slechte oude tekst.' });
-    // Een variant krijgt geen eigen tekst.
-    const split = await baas.put(`/app/api/stock/items/${parent.id}/variants`, { attributes: [{ name: 'Maat', values: ['S', 'M'] }] });
+    // Een subartikel krijgt geen eigen tekst.
+    const split = await baas.put(`/app/api/stock/items/${parent.id}/sub-items`, { attributes: [{ name: 'Maat', values: ['S', 'M'] }] });
     assert.strictEqual(split.status, 200, JSON.stringify(split.body));
-    const variantId = (await baas.get('/app/api/stock')).body.items.find((item) => item.parentId === parent.id).id;
+    const subItemId = (await baas.get('/app/api/stock')).body.items.find((item) => item.groupId === parent.id).id;
 
     const todo = (await baas.get('/app/api/stock/item-texts/bulk/todo?mode=texts')).body;
-    assert.strictEqual(todo.total, 5, 'vijf hoofdartikelen (de variant telt niet)');
+    assert.strictEqual(todo.total, 5, 'vijf artikelgroepen (het subartikel telt niet)');
     assert.strictEqual(todo.withExisting, 2);
     assert.strictEqual(todo.withoutFeatures, 5);
     assert.ok(todo.estimateEur > 0 && todo.ai.model === 'claude-sonnet-5-5', 'Sonnet is de standaard');
     assert.strictEqual((await baas.get('/app/api/stock/item-texts/bulk/todo?mode=texts&review=0')).body.total, 3, 'zonder beoordelen alleen artikelen zonder omschrijving');
 
-    const run = await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: [fresh.id, keep.id, replace.id, wrong.id, parent.id, variantId], mode: 'texts' });
+    const run = await baas.post('/app/api/stock/item-texts/bulk/run', { itemIds: [fresh.id, keep.id, replace.id, wrong.id, parent.id, subItemId], mode: 'texts' });
     assert.strictEqual(run.status, 200, JSON.stringify(run.body));
     const byId = Object.fromEntries(run.body.results.map((result) => [result.itemId, result]));
     assert.strictEqual(byId[fresh.id].status, 'nieuw');
@@ -132,8 +132,8 @@ test('omschrijvingen in bulk: nieuw, behouden, overschreven met terugzetten, con
     assert.strictEqual(byId[replace.id].status, 'overschreven');
     assert.strictEqual(byId[wrong.id].status, 'concept');
     assert.strictEqual(byId[parent.id].status, 'nieuw');
-    assert.strictEqual(byId[variantId].status, 'skipped', 'een variant erft de tekst van het hoofdartikel');
-    // De kenmerken zijn één keer opgezocht per hoofdartikel en gaan als bronveld mee naar de schrijver.
+    assert.strictEqual(byId[subItemId].status, 'skipped', 'een subartikel erft de tekst van de artikelgroep');
+    // De kenmerken zijn één keer opgezocht per artikelgroep en gaan als bronveld mee naar de schrijver.
     assert.strictEqual(calls.searches, 5);
     assert.ok(calls.seen[0].some((field) => field.label === 'Kenmerken (volgens fabrikantbron)' && field.value === 'Materiaal: Messing'));
 

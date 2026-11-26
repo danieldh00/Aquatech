@@ -1,5 +1,5 @@
 // Gedeelde hulpfuncties en constanten van het artikelenbestand (stock.js): invoer saneren,
-// kenmerken en varianten, codes normaliseren en de materiaalbehoefte van een werkorder.
+// kenmerken en subartikelen, codes normaliseren en de materiaalbehoefte van een werkorder.
 // Letterlijk uit stock.js verplaatst; geen eigen toestand.
 const Wholesale = require('../webshop/wholesale');
 const ItemDetails = require('./item-details');
@@ -70,10 +70,10 @@ const isDate = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.tes
 const sumQty = (rows) => rows.reduce((sum, row) => sum + row.qty, 0);
 /** Eenheden die een nieuwe omgeving meekrijgt. */
 const DEFAULT_UNITS = ['st', 'm', 'm²', 'rol', 'set', 'zak', 'kg', 'l', 'uur'];
-/** Hoogstens zoveel kenmerken per hoofdartikel, waarden per kenmerk en varianten. */
+/** Hoogstens zoveel kenmerken per artikelgroep, waarden per kenmerk en subartikelen. */
 const MAX_ATTRIBUTES = 3;
 const MAX_VALUES = 30;
-const MAX_VARIANTS = 200;
+const MAX_SUB_ITEMS = 200;
 
 /**
  * Leest JSON uit een tekstkolom.
@@ -87,7 +87,7 @@ function parseJson(text, fallback) {
 }
 
 /**
- * Schoont de kenmerken van een hoofdartikel op: hooguit drie kenmerken met
+ * Schoont de kenmerken van een artikelgroep op: hooguit drie kenmerken met
  * een naam en een of meer unieke waarden.
  * @param {*} raw De invoer: [{ name, values }] (values als lijst of tekst met komma's).
  * @returns {{ value?: { name: string, values: string[] }[], error?: string, field?: string }} De kenmerken, of een fout.
@@ -116,7 +116,7 @@ function sanitizeAttributes(raw) {
     out.push({ name, values });
   }
   if (out.length > MAX_ATTRIBUTES) return { error: `Hooguit ${MAX_ATTRIBUTES} kenmerken per artikel.`, field: 'attributes' };
-  if (out.reduce((total, attribute) => total * attribute.values.length, out.length ? 1 : 0) > MAX_VARIANTS) return { error: `Dat worden meer dan ${MAX_VARIANTS} varianten.`, field: 'attributes' };
+  if (out.reduce((total, attribute) => total * attribute.values.length, out.length ? 1 : 0) > MAX_SUB_ITEMS) return { error: `Dat worden meer dan ${MAX_SUB_ITEMS} subartikelen.`, field: 'attributes' };
   return { value: out };
 }
 
@@ -131,7 +131,7 @@ function combinations(attributes) {
 
 /**
  * De kenmerken van een variabel webshopproduct (alleen die voor variaties) in
- * het formaat van het hoofdartikel.
+ * het formaat van de artikelgroep.
  * @param {{ attributes?: { name: string, options?: string[], variation?: boolean }[] }} product Het webshopproduct.
  * @returns {{ name: string, values: string[] }[]} De kenmerken.
  */
@@ -143,7 +143,7 @@ function shopAttributesOf(product) {
 }
 
 /**
- * Voegt de waarden van kenmerken uit de webshop toe aan die van het hoofdartikel (niets valt weg).
+ * Voegt de waarden van kenmerken uit de webshop toe aan die van de artikelgroep (niets valt weg).
  * @param {{ name: string, values: string[] }[]} current De kenmerken in Aquatech.
  * @param {{ name: string, values: string[] }[]} incoming De kenmerken uit de webshop.
  * @returns {{ name: string, values: string[] }[]} De samengevoegde kenmerken.
@@ -164,7 +164,7 @@ function mergeAttributes(current, incoming) {
 }
 
 /**
- * Een vaste sleutel voor de waarden van een variant (hoofdletterongevoelig, op naam van het kenmerk).
+ * Een vaste sleutel voor de waarden van een subartikel (hoofdletterongevoelig, op naam van het kenmerk).
  * @param {Object<string, string>} values Waarde per kenmerk.
  * @returns {string} De sleutel.
  */
@@ -180,12 +180,12 @@ function valuesKey(values) {
 const codePart = (value) => String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9./+]/g, '') || 'X';
 
 /**
- * De omschrijving van een variant: hoofdartikel met de waarden erachter.
- * @param {string} parentName Omschrijving van het hoofdartikel.
+ * De omschrijving van een subartikel: artikelgroep met de waarden erachter.
+ * @param {string} groupName Omschrijving van de artikelgroep.
  * @param {Object<string, string>} values Waarde per kenmerk.
  * @returns {string} Bijv. 'PE-buis 16 mm'.
  */
-const variantName = (parentName, values) => cleanText(`${parentName} ${Object.values(values).join(' / ')}`, 200);
+const subItemName = (groupName, values) => cleanText(`${groupName} ${Object.values(values).join(' / ')}`, 200);
 
 /**
  * Vraagtekens voor een SQL IN (...)-lijst.
@@ -356,7 +356,7 @@ module.exports = {
   DEFAULT_UNITS,
   MAX_ATTRIBUTES,
   MAX_VALUES,
-  MAX_VARIANTS,
+  MAX_SUB_ITEMS,
   parseJson,
   sanitizeAttributes,
   combinations,
@@ -364,7 +364,7 @@ module.exports = {
   mergeAttributes,
   valuesKey,
   codePart,
-  variantName,
+  subItemName,
   placeholders,
   sanitizeItem,
   needsOf,

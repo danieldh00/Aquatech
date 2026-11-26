@@ -80,7 +80,7 @@ function registerDeliveryPreviewRoutes(app, { db, requireRight, settingsFor, del
     const parentRules = info ? DeliveryRules.sanitizeRules(info.parentRules) : [];
     const categoryRules = deliveryRulesOf(req.tenantId).get(item.code) || [];
     const rules = DeliveryRules.effectiveRules(itemRules, parentRules, categoryRules);
-    const rulesSource = itemRules.length ? 'regels van dit artikel' : parentRules.length ? 'regels van het hoofdartikel' : categoryRules.length ? 'regels van de categorie' : 'geen beperkingen';
+    const rulesSource = itemRules.length ? 'regels van dit artikel' : parentRules.length ? 'regels van de artikelgroep' : categoryRules.length ? 'regels van de categorie' : 'geen beperkingen';
     const shipping = Shipping.sanitizeShipping(settingsFor(req.tenantId).get('shopShipping'));
     res.json(previewOf(item, { shipping, rules, rulesSource, info }));
   });

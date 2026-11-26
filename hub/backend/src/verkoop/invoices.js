@@ -393,8 +393,8 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
         if (!wantCredit || (original && Number(original.stock_booked))) {
           for (const line of data.lines) {
             const item = line.code ? stock.findCode(tenantId, line.code) : null;
-            // Een hoofdartikel heeft geen eigen voorraad; alleen gewone artikelen en varianten afboeken.
-            if (!item || item.archived || Number(item.has_variants) || !line.qty) continue;
+            // Een artikelgroep heeft geen eigen voorraad; alleen gewone artikelen en subartikelen afboeken.
+            if (!item || item.archived || Number(item.is_group) || !line.qty) continue;
             stock.book(tenantId, item.id, -line.qty, {
               kind: line.qty > 0 ? 'afboeking' : 'retour', source: `factuur:${row.id}`, user,
               note: `${wantCredit ? 'Creditfactuur' : 'Factuur'} ${number}`,

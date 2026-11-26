@@ -68,7 +68,7 @@ function world(orders) {
   const pe20 = make('PE-20', 'PE-buis 20 mm');
   db.prepare('UPDATE stock_items SET shop_product_id = ? WHERE id = ?').run('55', pe16.id);
   db.prepare('UPDATE stock_items SET shop_product_id = ? WHERE id = ?').run('56', pe20.id);
-  const merged = stock.mergeIntoVariants(tenantId, { ids: [pe16.id, pe20.id], code: 'PE', name: 'PE-buis', attributeName: 'Maat', values: { [pe16.id]: '16 mm', [pe20.id]: '20 mm' } });
+  const merged = stock.mergeIntoGroup(tenantId, { ids: [pe16.id, pe20.id], code: 'PE', name: 'PE-buis', attributeName: 'Maat', values: { [pe16.id]: '16 mm', [pe20.id]: '20 mm' } });
   const sproeier = make('SP-1', 'Sproeier');
   const kraan = make('KR-1', 'Kraan');
   const filter = make('FI-1', 'Filter');
@@ -78,7 +78,7 @@ function world(orders) {
   const settings = { get: (key) => ({ shopSource: { url: 'http://wp.test', mode: 'rest' }, shopConsumerKey: 'ck_test_1234567890', shopConsumerSecret: 'cs_test_1234567890' })[key] };
   const related = createRelatedStore(db);
   const history = createWpOrderHistory({ db, settingsFor: () => settings, fetchImpl: wordpress.fetchImpl, afterImport: (id) => related.refreshTogether(id), customers: store });
-  return { store, db, tenantId, history, stock, related, wordpress, pe16, pe20, parentId: merged.parentId, sproeier, kraan, filter, other };
+  return { store, db, tenantId, history, stock, related, wordpress, pe16, pe20, groupId: merged.groupId, sproeier, kraan, filter, other };
 }
 
 /**
@@ -108,7 +108,7 @@ test('koppelen: variatie, nieuw en oud product-id (na het samenvoegen), sku, en 
   const outcome = await scene.history.importOrders(scene.tenantId);
   assert.strictEqual(outcome.orders, 1, 'alleen afgeronde en lopende bestellingen tellen');
   const byKey = Object.fromEntries(scene.db.prepare('SELECT product_id, item_id, matched_by FROM wp_order_lines WHERE tenant_id = ?').all(scene.tenantId).map((row) => [row.product_id || 'sku', row]));
-  assert.strictEqual(String(byKey['55'].item_id), String(scene.pe16.id), 'oud product-id naar de variant');
+  assert.strictEqual(String(byKey['55'].item_id), String(scene.pe16.id), 'oud product-id naar het subartikel');
   assert.strictEqual(byKey['55'].matched_by, 'oud-product');
   assert.strictEqual(byKey['900'].matched_by, 'product');
   assert.strictEqual(byKey.sku.matched_by, 'sku');
@@ -136,8 +136,8 @@ test('opnieuw ophalen geeft geen dubbelingen en een handmatige koppeling blijft 
   assert.strictEqual(scene.history.rematch(scene.tenantId), 1);
 });
 
-test('serverjob: start geeft meteen antwoord, zet uurlijks bijwerken aan en Vaak samen besteld telt de historie mee (varianten als hoofdartikel)', async () => {
-  // 7 bestellingen met buis (variant) + sproeier samen, en losse bestellingen van kraan en filter: een duidelijk paar.
+test('serverjob: start geeft meteen antwoord, zet uurlijks bijwerken aan en Vaak samen besteld telt de historie mee (subartikelen als artikelgroep)', async () => {
+  // 7 bestellingen met buis (subartikel) + sproeier samen, en losse bestellingen van kraan en filter: een duidelijk paar.
   const orders = [];
   for (let id = 1; id <= 7; id++) orders.push(wcOrder(id, [{ product_id: id % 2 ? 55 : 56, name: 'PE-buis' }, { sku: 'SP-1', name: 'Sproeier' }]));
   for (let id = 8; id <= 12; id++) orders.push(wcOrder(id, [{ product_id: 900, name: 'Kraan' }]));
@@ -154,7 +154,7 @@ test('serverjob: start geeft meteen antwoord, zet uurlijks bijwerken aan en Vaak
   assert.strictEqual(status.orders, 17);
   assert.strictEqual(status.unmatched, 0);
   const partners = scene.db.prepare('SELECT item_id, other_id, orders_both FROM item_together WHERE tenant_id = ?').all(scene.tenantId);
-  assert.ok(partners.some((row) => String(row.item_id) === String(scene.parentId) && String(row.other_id) === String(scene.sproeier.id) && Number(row.orders_both) === 7), 'buis (hoofdartikel) en sproeier horen bij elkaar');
+  assert.ok(partners.some((row) => String(row.item_id) === String(scene.groupId) && String(row.other_id) === String(scene.sproeier.id) && Number(row.orders_both) === 7), 'buis (artikelgroep) en sproeier horen bij elkaar');
   // De uurlijkse ronde slaat omgevingen over waar het uit staat.
   scene.history.stop(scene.tenantId);
   assert.deepStrictEqual(await scene.history.runAll([scene.tenantId]), {});

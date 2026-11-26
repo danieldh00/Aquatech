@@ -29,17 +29,17 @@
 // artikelen, enkele seconden later, schedule()), alles volgens de instelling
 // `syncSchedule` (standaard één keer per nacht; runAll() vanuit server.js) en met de knop in Beheer > Webshop.
 //
-// Varianten (stock.js): een hoofdartikel hoort bij een variabel product, elke
-// variant bij een variatie daaronder (shop_product_id = id van de variatie).
-// Prijs en voorraad gaan per variatie heen en weer; het hoofdartikel zelf
+// Subartikelen (stock.js): een artikelgroep hoort bij een variabel product, elke
+// subartikel bij een variatie daaronder (shop_product_id = id van de variatie).
+// Prijs en voorraad gaan per variatie heen en weer; de artikelgroep zelf
 // heeft geen prijs of voorraad. Met push aan maakt Aquatech ontbrekende
-// variaties van een gekoppeld hoofdartikel aan (createMissingVariations) en
-// zet publish() een nieuw artikel (met varianten) in de webshop.
+// variaties van een gekoppeld artikelgroep aan (createMissingVariations) en
+// zet publish() een nieuw artikel (met subartikelen) in de webshop.
 const { transaction } = require('../database/db');
 const { fetchProducts, fetchProductWithVariations, updateProducts, patchProducts, createProduct, updateAttributes, createVariations, SourceError } = require('./woocommerce');
 
 // Melding bij een gewoon artikel dat in de webshop een product met variaties is (zie stock.promoteToParent).
-const VARIABLE_ON_PLAIN = 'In de webshop is dit een product met variaties, maar dit artikel heeft voorraad of boekingen. Maak een nieuw hoofdartikel en zet de varianten daaronder.';
+const VARIABLE_ON_PLAIN = 'In de webshop is dit een product met variaties, maar dit artikel heeft voorraad of boekingen. Maak een nieuw artikelgroep en zet de subartikelen daaronder.';
 
 const DEBOUNCE_MS = 3000;
 const SYNC_SCHEDULES = ['night', 'hourly', 'tenmin'];
@@ -82,7 +82,7 @@ const round2 = (value) => Math.round(value * 100) / 100;
  */
 const normalizeKey = (value) => String(value || '').trim().toUpperCase();
 /**
- * Leest JSON uit een tekstkolom (waarden van een variant, kenmerken).
+ * Leest JSON uit een tekstkolom (waarden van een subartikel, kenmerken).
  * @param {string} text De opgeslagen tekst.
  * @param {*} [fallback] Wat terugkomt bij lege of ongeldige tekst.
  * @returns {*} De gelezen waarde.
@@ -91,7 +91,7 @@ const parseValues = (text, fallback = {}) => {
   try { return text ? JSON.parse(text) : fallback; } catch { return fallback; }
 };
 /**
- * Een vaste sleutel voor de waarden van een variant of variatie (hoofdletterongevoelig).
+ * Een vaste sleutel voor de waarden van een subartikel of variatie (hoofdletterongevoelig).
  * @param {Object<string, string>} values Waarde per kenmerk.
  * @returns {string} De sleutel.
  */
@@ -151,11 +151,11 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
    * @returns {object[]} De artikelrijen.
    */
   const itemsOf = (tenantId, onlyDirty) => prepare(`SELECT i.id, i.code, i.on_hand, i.sale_price, i.vat_rate, i.price_mode, i.shop_product_id, i.shop_dirty,
-      i.shop_price_seen, i.shop_stock_seen, i.has_variants, i.parent_id, parent.shop_product_id AS shop_parent_id,
+      i.shop_price_seen, i.shop_stock_seen, i.is_group, i.group_id, parent.shop_product_id AS shop_group_id,
       ${onlyDirty ? 'COALESCE((SELECT SUM(r.qty) FROM stock_reservations r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id), 0)' : 'COALESCE(r.qty, 0)'} AS reserved,
       EXISTS (SELECT 1 FROM stock_movements m WHERE m.tenant_id = i.tenant_id AND m.item_id = i.id) AS moved
     FROM stock_items i
-    LEFT JOIN stock_items parent ON parent.tenant_id = i.tenant_id AND parent.id = i.parent_id
+    LEFT JOIN stock_items parent ON parent.tenant_id = i.tenant_id AND parent.id = i.group_id
     ${onlyDirty ? '' : 'LEFT JOIN (SELECT item_id, SUM(qty) AS qty FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id'}
     WHERE i.tenant_id = ? AND i.archived = 0 AND i.shop_sync = 1${onlyDirty ? ' AND i.shop_dirty = 1 AND i.shop_product_id IS NOT NULL' : ''}`)
     .all(...(onlyDirty ? [tenantId] : [tenantId, tenantId]));
@@ -182,8 +182,8 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
       // Een product zonder sku kreeg bij het overnemen de code WC-<id>; zo vindt de koppeling het terug als die weg is.
       const wooId = /^WC-(\d{1,20})$/.exec(String(item.code || ''));
       const found = (mappedSku && bySku.get(mappedSku)) || byCode.get(item.code) || bySku.get(item.code) || (wooId && byId.get(wooId[1])) || null;
-      // Een variant hoort bij een variatie: een los product (ook met dezelfde sku) komt er niet voor in aanmerking.
-      return found && item.parent_id && !found.parentId ? null : found;
+      // Een subartikel hoort bij een variatie: een los product (ook met dezelfde sku) komt er niet voor in aanmerking.
+      return found && item.group_id && !found.parentId ? null : found;
     };
   }
 
@@ -222,8 +222,8 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
       ? await fetchProducts(shopConfig, { fetchImpl, onProgress: addMissing ? onProgress : null })
       : await fetchProducts(shopConfig, {
         fetchImpl,
-        ids: dirtyItems.filter((item) => !item.shop_parent_id).map((item) => item.shop_product_id),
-        variations: dirtyItems.filter((item) => item.shop_parent_id).map((item) => ({ id: item.shop_product_id, parentId: item.shop_parent_id })),
+        ids: dirtyItems.filter((item) => !item.shop_group_id).map((item) => item.shop_product_id),
+        variations: dirtyItems.filter((item) => item.shop_group_id).map((item) => ({ id: item.shop_product_id, parentId: item.shop_group_id })),
       });
     if (full) shop.replaceProducts(tenantId, products, new Date().toISOString());
     const match = matcher(products, shopConfig.mapping);
@@ -267,14 +267,14 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
         }
         const first = String(item.shop_product_id || '') !== String(product.id);
         if (first) summary.linked++;
-        if (Number(item.has_variants)) {
-          // Hoofdartikel: alleen de koppeling; prijs en voorraad zitten bij de variaties.
+        if (Number(item.is_group)) {
+          // Artikelgroep: alleen de koppeling; prijs en voorraad zitten bij de variaties.
           links.push({ itemId: item.id, productId: String(product.id), error: '' });
           updates.push({ id: String(product.id), itemId: item.id, priceSeen: null, stockSeen: null });
           continue;
         }
         if (product.type === 'variable') {
-          // Gewoon artikel bij een product met variaties (van vóór de varianten, met voorraad): alleen koppelen, geen prijs of stand.
+          // Gewoon artikel bij een product met variaties (van vóór de subartikelen, met voorraad): alleen koppelen, geen prijs of stand.
           links.push({ itemId: item.id, productId: String(product.id), error: VARIABLE_ON_PLAIN });
           continue;
         }
@@ -329,7 +329,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
         }
 
         // 3. Wat de webshop moet krijgen.
-        const update = { id: String(product.id), itemId: item.id, parentId: product.parentId || item.shop_parent_id || null };
+        const update = { id: String(product.id), itemId: item.id, parentId: product.parentId || item.shop_group_id || null };
         if (shopConfig.push && salePrice != null) {
           const want = rawOf(salePrice, item.vat_rate, shopConfig);
           if (raw == null || Math.abs(want - raw) >= 0.005) { update.price = salePrice; update.vatRate = item.vat_rate; }
@@ -414,20 +414,20 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
   });
 
   /**
-   * Varianten van gekoppelde hoofdartikelen die nog geen variatie in de
+   * Subartikelen van gekoppelde artikelgroepen die nog geen variatie in de
    * webshop hebben: een bestaande variatie met dezelfde sku of waarden wordt
    * gekoppeld, de rest aangemaakt (kenmerken van het product eerst aangevuld
    * met de nieuwe waarden). Alleen met push aan (Aquatech is de bron).
    * @param {string} tenantId Id van de omgeving.
    * @param {object} shopConfig De koppelinstelling.
-   * @param {{ parentItemId?: string|null, errors?: string[]|null }} [options] Alleen de varianten van dit hoofdartikel; lijst om fouten in te verzamelen.
+   * @param {{ parentItemId?: string|null, errors?: string[]|null }} [options] Alleen de subartikelen van deze artikelgroep; lijst om fouten in te verzamelen.
    * @returns {Promise<number>} Aantal aangemaakte of gekoppelde variaties.
    */
   async function createMissingVariations(tenantId, shopConfig, { parentItemId = null, errors = null } = {}) {
-    const rows = prepare(`SELECT v.id, v.code, v.sale_price, v.vat_rate, v.on_hand, v.variant_values, parent.id AS parent_item_id, parent.shop_product_id AS parent_product_id,
+    const rows = prepare(`SELECT v.id, v.code, v.sale_price, v.vat_rate, v.on_hand, v.sub_values, parent.id AS parent_item_id, parent.shop_product_id AS parent_product_id,
         parent.attributes, COALESCE(r.qty, 0) AS reserved
       FROM stock_items v
-      JOIN stock_items parent ON parent.tenant_id = v.tenant_id AND parent.id = v.parent_id
+      JOIN stock_items parent ON parent.tenant_id = v.tenant_id AND parent.id = v.group_id
       LEFT JOIN (SELECT item_id, SUM(qty) AS qty FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = v.id
       WHERE v.tenant_id = ? AND v.archived = 0 AND v.shop_sync = 1 AND v.shop_product_id IS NULL
         AND parent.archived = 0 AND parent.shop_sync = 1 AND parent.shop_product_id IS NOT NULL${parentItemId ? ' AND parent.id = ?' : ''}`)
@@ -439,15 +439,15 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
       byParent.get(row.parent_product_id).push(row);
     }
     let done = 0;
-    for (const [productId, variants] of byParent) {
+    for (const [productId, subItems] of byParent) {
       try {
-        done += await createVariationsOf(tenantId, shopConfig, productId, variants, errors);
+        done += await createVariationsOf(tenantId, shopConfig, productId, subItems, errors);
       } catch (error) {
         // Eén product dat niet lukt (weg uit de webshop, geen schrijfrechten) houdt de rest van de ronde niet tegen.
         if (!(error instanceof SourceError)) throw error;
         const message = `Variatie niet aangemaakt: ${error.message}`.slice(0, 300);
         if (errors) errors.push(message);
-        for (const variant of variants) prepare('UPDATE stock_items SET shop_error = ? WHERE tenant_id = ? AND id = ?').run(message, tenantId, variant.id);
+        for (const subItem of subItems) prepare('UPDATE stock_items SET shop_error = ? WHERE tenant_id = ? AND id = ?').run(message, tenantId, subItem.id);
       }
     }
     return done;
@@ -460,29 +460,29 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
    * @param {string} tenantId Id van de omgeving.
    * @param {object} shopConfig De koppelinstelling.
    * @param {number} productId Id van het product in de webshop.
-   * @param {object[]} variants De varianten zonder variatie-id (rijen uit createMissingVariations).
+   * @param {object[]} subartikelen De subartikelen zonder variatie-id (rijen uit createMissingVariations).
    * @param {string[]|null} [errors] Lijst om fouten per variatie in te verzamelen.
    * @returns {Promise<number>} Aantal aangemaakte of gekoppelde variaties.
    */
-  async function createVariationsOf(tenantId, shopConfig, productId, variants, errors = null) {
+  async function createVariationsOf(tenantId, shopConfig, productId, subItems, errors = null) {
     let done = 0;
     const { product, variations } = await fetchProductWithVariations(shopConfig, productId, { fetchImpl });
     const timestamp = new Date().toISOString();
     const bySku = new Map(variations.filter((variation) => variation.sku).map((variation) => [normalizeKey(variation.sku), variation]));
     const byValues = new Map(variations.map((variation) => [valuesKeyOf(Object.fromEntries(variation.attributes.map((attribute) => [attribute.name, attribute.option]))), variation]));
     const toCreate = [];
-    for (const variant of variants) {
-      const values = parseValues(variant.variant_values);
-      const existing = bySku.get(normalizeKey(variant.code)) || byValues.get(valuesKeyOf(values));
+    for (const subItem of subItems) {
+      const values = parseValues(subItem.sub_values);
+      const existing = bySku.get(normalizeKey(subItem.code)) || byValues.get(valuesKeyOf(values));
       if (existing) {
-        prepare(`UPDATE stock_items SET shop_product_id = ?, shop_dirty = 1, shop_error = '', shop_synced_at = ? WHERE tenant_id = ? AND id = ?`).run(existing.id, timestamp, tenantId, variant.id);
+        prepare(`UPDATE stock_items SET shop_product_id = ?, shop_dirty = 1, shop_error = '', shop_synced_at = ? WHERE tenant_id = ? AND id = ?`).run(existing.id, timestamp, tenantId, subItem.id);
         done++;
       } else {
-        toCreate.push({ variant, values });
+        toCreate.push({ subItem, values });
       }
     }
     if (!toCreate.length) return done;
-    // Kenmerken van het product aanvullen met de waarden van de nieuwe varianten.
+    // Kenmerken van het product aanvullen met de waarden van de nieuwe subartikelen.
     const attributes = product.attributes.map((attribute) => ({ ...attribute, options: [...attribute.options] }));
     let changed = false;
     for (const { values } of toCreate) {
@@ -494,19 +494,19 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
       }
     }
     if (changed) await updateAttributes(shopConfig, productId, attributes.map(({ id, name, options, visible, variation, position }) => ({ ...(id ? { id } : { name }), name, options, visible, variation, position })), { fetchImpl });
-    const results = await createVariations(shopConfig, productId, toCreate.map(({ variant, values }) => ({ sku: variant.code, code: variant.code, values, ...offerOf(variant, shopConfig) })), { fetchImpl });
+    const results = await createVariations(shopConfig, productId, toCreate.map(({ subItem, values }) => ({ sku: subItem.code, code: subItem.code, values, ...offerOf(subItem, shopConfig) })), { fetchImpl });
     transaction(db, () => {
-      toCreate.forEach(({ variant }, index) => {
+      toCreate.forEach(({ subItem }, index) => {
         const result = results[index];
-        const offer = offerOf(variant, shopConfig);
+        const offer = offerOf(subItem, shopConfig);
         if (result && result.ok) {
           prepare(`UPDATE stock_items SET shop_product_id = ?, shop_price_seen = ?, shop_stock_seen = ?, shop_dirty = 0, shop_error = '', shop_synced_at = ?
-            WHERE tenant_id = ? AND id = ?`).run(result.id, offer.price == null ? null : rawOf(offer.price, offer.vatRate, shopConfig), offer.stockQty, timestamp, tenantId, variant.id);
+            WHERE tenant_id = ? AND id = ?`).run(result.id, offer.price == null ? null : rawOf(offer.price, offer.vatRate, shopConfig), offer.stockQty, timestamp, tenantId, subItem.id);
           done++;
         } else {
-          const message = `Variatie ${variant.code} niet aangemaakt: ${(result && result.error) || 'onbekende fout'}`.slice(0, 300);
+          const message = `Variatie ${subItem.code} niet aangemaakt: ${(result && result.error) || 'onbekende fout'}`.slice(0, 300);
           if (errors) errors.push(message);
-          prepare('UPDATE stock_items SET shop_error = ? WHERE tenant_id = ? AND id = ?').run(message, tenantId, variant.id);
+          prepare('UPDATE stock_items SET shop_error = ? WHERE tenant_id = ? AND id = ?').run(message, tenantId, subItem.id);
         }
       });
     });
@@ -536,7 +536,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
   /**
    * Zet een artikel dat nog niet gekoppeld is als nieuw product in de webshop:
    * een gewoon artikel als enkelvoudig product met prijs en voorraad, een
-   * hoofdartikel als variabel product met zijn kenmerken, daarna de varianten
+   * artikelgroep als variabel product met zijn kenmerken, daarna de subartikelen
    * als variaties. Code = sku, plus het productveld aquatech_code.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} itemId Id van het artikel.
@@ -546,22 +546,22 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
     const shopConfig = configOf(tenantId);
     const problem = publishProblem(shopConfig);
     if (problem) return problem;
-    const item = prepare(`SELECT i.id, i.code, i.name, i.sale_price, i.vat_rate, i.on_hand, i.archived, i.shop_sync, i.shop_product_id, i.parent_id, i.has_variants, i.attributes,
+    const item = prepare(`SELECT i.id, i.code, i.name, i.sale_price, i.vat_rate, i.on_hand, i.archived, i.shop_sync, i.shop_product_id, i.group_id, i.is_group, i.attributes,
         COALESCE((SELECT SUM(r.qty) FROM stock_reservations r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id), 0) AS reserved
       FROM stock_items i
       WHERE i.tenant_id = ? AND i.id = ?`).get(tenantId, String(itemId));
     if (!item) return { error: 'not_found', status: 404 };
-    if (item.parent_id) return { error: 'Een variant gaat mee met zijn hoofdartikel: zet het hoofdartikel in de webshop.', status: 409 };
+    if (item.group_id) return { error: 'Een subartikel gaat mee met zijn artikelgroep: zet de artikelgroep in de webshop.', status: 409 };
     if (item.archived) return { error: 'Dit artikel is gearchiveerd.', status: 409 };
     if (!Number(item.shop_sync)) return { error: 'Zet eerst "Naar de webshop" aan bij dit artikel.', status: 409 };
     if (item.shop_product_id) return { error: 'Dit artikel is al gekoppeld aan een webshopproduct.', status: 409 };
     const meta = [{ key: 'aquatech_code', value: item.code }];
     const timestamp = new Date().toISOString();
-    if (Number(item.has_variants)) {
+    if (Number(item.is_group)) {
       const attributes = parseValues(item.attributes, []).map((attribute, position) => ({ name: attribute.name, options: attribute.values, visible: true, variation: true, position }));
       const product = await createProduct(shopConfig, { name: item.name, type: 'variable', status: 'publish', sku: item.code, attributes, meta_data: meta }, { fetchImpl });
       prepare(`UPDATE stock_items SET shop_product_id = ?, shop_dirty = 0, shop_error = '', shop_synced_at = ? WHERE tenant_id = ? AND id = ?`).run(product.id, timestamp, tenantId, item.id);
-      // Alleen de varianten van dit hoofdartikel; wat niet lukt komt als waarschuwing terug.
+      // Alleen de subartikelen van deze artikelgroep; wat niet lukt komt als waarschuwing terug.
       const errors = [];
       const variations = await createMissingVariations(tenantId, shopConfig, { parentItemId: item.id, errors });
       return { productId: product.id, variations, warning: errors.length ? `Niet alle variaties zijn aangemaakt: ${errors.join('; ')}`.slice(0, 600) : null };
@@ -577,18 +577,18 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
   }
 
   /**
-   * Zet een net samengevoegd hoofdartikel in de webshop en haalt de oude losse producten weg uit de winkel.
+   * Zet een net samengevoegd artikelgroep in de webshop en haalt de oude losse producten weg uit de winkel.
    * Volgorde: (1) de sku van de oude producten leeg zetten (anders is de sku van de nieuwe variatie dubbel),
-   * (2) het hoofdartikel als variabel product aanmaken, (3) de oude producten op concept zetten (verborgen,
+   * (2) de artikelgroep als variabel product aanmaken, (3) de oude producten op concept zetten (verborgen,
    * niet verwijderd). Mislukt (1) of (2), dan zet deze functie de sku's terug (ook bij een onverwachte fout, die daarna doorgegooid wordt) en geeft `revert: true`:
    * de aanroeper draait de samenvoeging dan terug, zodat er niets half blijft staan. Mislukt alleen (3),
    * dan komt dat als waarschuwing terug.
    * @param {string} tenantId Id van de omgeving.
-   * @param {string} parentId Id van het nieuwe hoofdartikel.
+   * @param {string} groupId Id van de nieuwe artikelgroep.
    * @param {string[]} productIds Id's van de oude webshopproducten van de samengevoegde artikelen.
    * @returns {Promise<object>} { productId, variations, hidden, warning }, of { error, revert: true, status }.
    */
-  async function publishMergedNow(tenantId, parentId, productIds) {
+  async function publishMergedNow(tenantId, groupId, productIds) {
     const shopConfig = configOf(tenantId);
     const problem = publishProblem(shopConfig);
     if (problem) return { ...problem, revert: true };
@@ -613,7 +613,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
           return { error: `Het oude webshopproduct ${failed.id} kon niet worden aangepast: ${failed.error}`, revert: true, status: 502 };
         }
       }
-      const published = await publishNow(tenantId, parentId);
+      const published = await publishNow(tenantId, groupId);
       if (published.error) { await restoreSkus(); return { ...published, revert: true }; }
       let hidden = 0;
       let warning = published.warning || null;
@@ -623,7 +623,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
           hidden = results.filter((result) => result.ok).length;
           if (hidden < ids.length) warning = `${warning ? `${warning} ` : ''}${ids.length - hidden} oud webshopproduct staat nog zichtbaar in de webshop; zet het daar op concept.`;
         } catch (error) {
-          // Het hoofdartikel staat dan al in de webshop: nooit meer terugdraaien, alleen waarschuwen (welke fout ook).
+          // De artikelgroep staat dan al in de webshop: nooit meer terugdraaien, alleen waarschuwen (welke fout ook).
           log.warn(`Webshop (${tenantId}): oude producten op concept zetten mislukt: ${error.code || error.message}`);
           warning = `${warning ? `${warning} ` : ''}De oude webshopproducten zijn niet op concept gezet${error instanceof SourceError ? ` (${error.message})` : ''}; doe dat in de webshop.`;
         }
@@ -639,7 +639,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
   /**
    * Voert werk uit in de wachtrij van de omgeving, zodat er geen synchronisatie tussendoor loopt.
    * Gebruikt voor het samenvoegen: de samenvoeging in de database en het zetten in de webshop zijn
-   * één taak, anders kan een synchronisatie de nieuwe varianten tussendoor archiveren of de oude producten opnieuw koppelen.
+   * één taak, anders kan een synchronisatie de nieuwe subartikelen tussendoor archiveren of de oude producten opnieuw koppelen.
    * Roep binnen het werk publishMergedNow aan; `exclusive` opnieuw aanroepen zou op dezelfde wachtrij wachten (deadlock).
    * @param {string} tenantId Id van de omgeving.
    * @param {Function} work Het werk (async).

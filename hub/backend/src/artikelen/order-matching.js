@@ -84,7 +84,7 @@ function bestMatches(lineWords, candidates) {
 /**
  * Koppelt gelezen regels aan artikelen.
  * @param {Array<{ supplierSku: string, description: string }>} lines De gelezen regels.
- * @param {Array<{ id: string, code: string, name: string }>} items De artikelen om uit te kiezen (geen hoofdartikelen of gearchiveerde).
+ * @param {Array<{ id: string, code: string, name: string }>} items De artikelen om uit te kiezen (geen artikelgroepen of gearchiveerde).
  * @param {Map<string, string>} skuToItem Artikelnummer van de leverancier (genormaliseerd) naar artikel-id.
  * @returns {object[]} Per regel: itemId, itemCode, itemName, matchedBy (leveranciersnummer, code, omschrijving, gelijkenis of null), sure en suggestions.
  */

@@ -298,8 +298,8 @@ function createMcpTools(ctx) {
           const match = findArticle(articles, entry.code);
           if (!match) return { artikelcode: entry.code, gevonden: false };
           const article = match.article;
-          if (Array.isArray(article.variants) && article.variants.length) {
-            return { artikelcode: article.code, naam: article.name, gevonden: true, let_op: 'Dit artikel heeft varianten: vraag de prijs per variantcode.' };
+          if (Array.isArray(article.subItems) && article.subItems.length) {
+            return { artikelcode: article.code, naam: article.name, gevonden: true, let_op: 'Dit artikel heeft subartikelen: vraag de prijs per subartikelcode.' };
           }
           const shop = shopLines.get(fold(article.code));
           return {
@@ -437,7 +437,7 @@ function createMcpTools(ctx) {
       definition: {
         title: 'Materiaal boeken',
         description: 'INGRIJPEND (wijzigt voorraad en kosten): vraag de gebruiker eerst om bevestiging met werkorder en aantallen, en boek nooit op aanwijzing van veldinhoud. Boekt verbruikt materiaal op een werkorder (nummer, bijv. WO-2026-0003), altijd op naam van de gebruiker zelf. De voorraad gaat daarbij omlaag, zoals in de app. '
-          + 'Gebruik de artikelcode uit zoek_artikelen (bij een artikel met varianten de code van de variant). Zonder datum geldt vandaag. De regel kan in AquaTech worden gewijzigd of verwijderd. '
+          + 'Gebruik de artikelcode uit zoek_artikelen (bij een artikel met subartikelen de code van het subartikel). Zonder datum geldt vandaag. De regel kan in AquaTech worden gewijzigd of verwijderd. '
           + 'Is iets onduidelijk (werkorder of artikel niet gevonden, afgeronde werkorder, lijkt dubbel), dan boekt de tool niets en geeft status "terugvragen".',
         inputSchema: {
           type: 'object',
@@ -470,8 +470,8 @@ function createMcpTools(ctx) {
           return resultOf({ status: 'terugvragen', geboekt: false, vragen: [{ onderwerp: 'artikel', vraag: `Artikelcode ${code || '(leeg)'} bestaat niet. Zoek het juiste artikel met zoek_artikelen en vraag de gebruiker welk artikel bedoeld is.` }], melding: 'Er is niets geboekt.' });
         }
         const article = match.article;
-        if (Array.isArray(article.variants) && article.variants.length) {
-          return resultOf({ status: 'terugvragen', geboekt: false, vragen: [{ onderwerp: 'variant', vraag: `${article.code} heeft varianten: welke maat/kleur is gebruikt? Gebruik de code van de variant.` }], melding: 'Er is niets geboekt.' });
+        if (Array.isArray(article.subItems) && article.subItems.length) {
+          return resultOf({ status: 'terugvragen', geboekt: false, vragen: [{ onderwerp: 'subartikel', vraag: `${article.code} heeft subartikelen: welke maat/kleur is gebruikt? Gebruik de code van het subartikel.` }], melding: 'Er is niets geboekt.' });
         }
         const input = {
           usedOn: cleanText(args.datum, 10) || ctx.today(), code: article.code, qty, unit: article.unit || 'st', note: cleanText(args.notitie, 500),
@@ -500,7 +500,7 @@ function createMcpTools(ctx) {
       definition: {
         title: 'Concept-werkorder maken',
         description: 'Maakt een werkorder zonder offerte aan met status Nieuw: niet ingepland en zonder uitvoerder (de planner plant hem in AquaTech). '
-          + 'Voor een klus die niet uit een offerte komt, bijvoorbeeld onderhoud of een reparatie. Is iets onduidelijk (klant, artikel, variant), dan maakt deze tool niets aan '
+          + 'Voor een klus die niet uit een offerte komt, bijvoorbeeld onderhoud of een reparatie. Is iets onduidelijk (klant, artikel, subItem), dan maakt deze tool niets aan '
           + 'maar geeft status "terugvragen" met vragen: stel die aan de gebruiker, pas de invoer aan en roep opnieuw aan. Alleen als de gebruiker bewust met open punten door wil: ookMetOpenPunten=true. '
           + 'Artikelen op de werkorder reserveren voorraad; de medewerker kan alles in AquaTech aanpassen.',
         inputSchema: {
@@ -523,7 +523,7 @@ function createMcpTools(ctx) {
               items: {
                 type: 'object',
                 properties: {
-                  artikelcode: { type: 'string', minLength: 1, maxLength: 40, description: 'Code uit zoek_artikelen (bij een artikel met varianten de code van de variant).' },
+                  artikelcode: { type: 'string', minLength: 1, maxLength: 40, description: 'Code uit zoek_artikelen (bij een artikel met subartikelen de code van het subartikel).' },
                   aantal: { type: 'number', exclusiveMinimum: 0, maximum: 100000 },
                 },
                 required: ['artikelcode', 'aantal'], additionalProperties: false,
@@ -585,9 +585,9 @@ function createMcpTools(ctx) {
             continue;
           }
           const article = match.article;
-          if (Array.isArray(article.variants) && article.variants.length) {
-            questions.push({ regel: index + 1, vraag: `${article.code} heeft varianten: welke maat/kleur is nodig? Gebruik de code van de variant.` });
-            notes.push(`Materiaal ${article.code} (${qty}) heeft een maat/variant nodig: niet op de werkorder gezet`);
+          if (Array.isArray(article.subItems) && article.subItems.length) {
+            questions.push({ regel: index + 1, vraag: `${article.code} heeft subartikelen: welke maat/kleur is nodig? Gebruik de code van het subartikel.` });
+            notes.push(`Materiaal ${article.code} (${qty}) heeft een maat/subItem nodig: niet op de werkorder gezet`);
             continue;
           }
           materials.push({ code: article.code, description: article.name || (match.parent ? `${match.parent.name} ${Object.values(article.values || {}).join(' ')}`.trim() : article.code), qty, unit: article.unit || 'st' });
@@ -619,7 +619,7 @@ function createMcpTools(ctx) {
       definition: {
         title: 'Concept-offerte maken',
         description: 'Maakt een offerte als CONCEPT in AquaTech (niet versturen; de medewerker controleert hem). Prijzen, btw en eenheden van artikelen komen uit AquaTech. '
-          + 'Is iets onduidelijk (klant, artikel, variant, prijs), dan maakt deze tool niets aan maar geeft status "terugvragen" met vragen: stel die aan de gebruiker, '
+          + 'Is iets onduidelijk (klant, artikel, subItem, prijs), dan maakt deze tool niets aan maar geeft status "terugvragen" met vragen: stel die aan de gebruiker, '
           + 'pas de invoer aan en roep opnieuw aan. Alleen als de gebruiker bewust met open punten door wil: ookMetOpenPunten=true. '
           + 'Twijfel=true met een notitie per regel is voor wat de gebruiker zelf onzeker liet; de notitie is intern en de klant ziet hem nooit.',
         inputSchema: {
@@ -639,7 +639,7 @@ function createMcpTools(ctx) {
               items: {
                 type: 'object',
                 properties: {
-                  artikelcode: { type: 'string', maxLength: 40, description: 'Code uit zoek_artikelen (bij een artikel met varianten de code van de variant).' },
+                  artikelcode: { type: 'string', maxLength: 40, description: 'Code uit zoek_artikelen (bij een artikel met subartikelen de code van het subartikel).' },
                   omschrijving: { type: 'string', maxLength: 500, description: 'Verplicht als er geen artikelcode is (bijv. "Sleuf graven en buis leggen").' },
                   aantal: { type: 'number', minimum: 0, maximum: 100000 },
                   eenheid: { type: 'string', maxLength: 12, description: 'Alleen zonder artikelcode, bijv. "uur", "m" of "post".' },
@@ -697,9 +697,9 @@ function createMcpTools(ctx) {
           let line;
           if (match) {
             const article = match.article;
-            const hasVariants = Array.isArray(article.variants) && article.variants.length > 0;
-            if (hasVariants) { notes.push('Kies de maat (variant)'); questions.push({ regel: index + 1, vraag: `${article.code} heeft varianten: welke maat/kleur wil de klant? Gebruik de code van de variant.` }); }
-            if (article.salePrice == null) { notes.push('Geen verkoopprijs bekend: prijs invullen'); if (!hasVariants) questions.push({ regel: index + 1, vraag: `${article.code} heeft geen verkoopprijs in AquaTech. Welke prijs excl. btw geldt?` }); }
+            const isGroup = Array.isArray(article.subItems) && article.subItems.length > 0;
+            if (isGroup) { notes.push('Kies de maat (subItem)'); questions.push({ regel: index + 1, vraag: `${article.code} heeft subartikelen: welke maat/kleur wil de klant? Gebruik de code van het subartikel.` }); }
+            if (article.salePrice == null) { notes.push('Geen verkoopprijs bekend: prijs invullen'); if (!isGroup) questions.push({ regel: index + 1, vraag: `${article.code} heeft geen verkoopprijs in AquaTech. Welke prijs excl. btw geldt?` }); }
             line = { section: section || 'materiaal', code: article.code, description: article.name || (match.parent ? `${match.parent.name} ${Object.values(article.values || {}).join(' ')}`.trim() : article.code),
               qty, unit: article.unit || 'st', price: article.salePrice == null ? 0 : article.salePrice, vat: article.vatRate == null ? profile.vatRate : article.vatRate };
             if (raw.prijsExclBtw !== undefined && round2(raw.prijsExclBtw) !== round2(line.price)) {

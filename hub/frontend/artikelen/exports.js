@@ -96,8 +96,8 @@
       worksheet.columns = [
         { header: 'Artikelcode', key: 'code', width: 16 },
         { header: 'Omschrijving', key: 'name', width: 44 },
-        { header: 'Hoofdartikel', key: 'parent', width: 16 },
-        { header: 'Variant', key: 'variant', width: 22 },
+        { header: 'Artikelgroep', key: 'articleGroup', width: 16 },
+        { header: 'Subartikel', key: 'subItem', width: 22 },
         { header: 'Eenheid', key: 'unit', width: 9 },
         { header: 'Locatie', key: 'location', width: 18 },
         { header: 'Op voorraad', key: 'onHand', width: 13, style: quantityStyle },
@@ -116,17 +116,17 @@
         { header: 'Notities', key: 'notes', width: 30 },
       ];
       const GROUPS = { producten: 'Producten', arbeid: 'Arbeid', overig: 'Overig' };
-      // Hoofdartikelen hebben geen eigen voorraad: alleen de varianten (met hun hoofdartikel) komen erin.
+      // Artikelgroepen hebben geen eigen voorraad: alleen de subartikelen (met hun artikelgroep) komen erin.
       const codeOf = new Map(state.items.map((item) => [item.id, item.code]));
-      // Past het hoofdartikel bij de zoekterm, dan gaan al zijn varianten mee (zoals in het overzicht).
+      // Past de artikelgroep bij de zoekterm, dan gaan al zijn subartikelen mee (zoals in het overzicht).
       const matched = visible();
-      const matchedParents = new Set(matched.filter((item) => item.hasVariants).map((item) => item.id));
+      const matchedGroup = new Set(matched.filter((item) => item.isGroup).map((item) => item.id));
       const matchedIds = new Set(matched.map((item) => item.id));
-      // Met "Alleen onder minimum" telt per variant het eigen minimum (zoals in het overzicht).
+      // Met "Alleen onder minimum" telt per subartikel het eigen minimum (zoals in het overzicht).
       const lowOnly = $('#f-low').checked;
-      const items = state.items.filter((item) => !item.hasVariants && (matchedIds.has(item.id) || (item.parentId && matchedParents.has(item.parentId) && (!lowOnly || item.low))));
+      const items = state.items.filter((item) => !item.isGroup && (matchedIds.has(item.id) || (item.groupId && matchedGroup.has(item.groupId) && (!lowOnly || item.low))));
       for (const item of items) {
-        worksheet.addRow({ ...item, parent: item.parentId ? codeOf.get(item.parentId) || '' : '', variant: valuesText(item), low: item.low ? 'ja' : '', archived: item.archived ? 'ja' : '', costPrice: item.costPrice, value: item.value, salePrice: item.salePrice,
+        worksheet.addRow({ ...item, articleGroup: item.groupId ? codeOf.get(item.groupId) || '' : '', subItem: valuesText(item), low: item.low ? 'ja' : '', archived: item.archived ? 'ja' : '', costPrice: item.costPrice, value: item.value, salePrice: item.salePrice,
           vat: `${item.vatRate}%`, group: GROUPS[item.revenueGroup] || item.revenueGroup,
           shop: !item.shopSync ? 'niet' : item.shop.error ? 'fout' : item.shop.productId ? `product ${item.shop.productId}` : 'niet gekoppeld' });
       }

@@ -1,4 +1,4 @@
-// Omschrijvingen in bulk door de AI (Artikelen > Teksten > "Alles schrijven"): per hoofdartikel eerst de kenmerken opzoeken in de bron van de fabrikant
+// Omschrijvingen in bulk door de AI (Artikelen > Teksten > "Alles schrijven"): per artikelgroep eerst de kenmerken opzoeken in de bron van de fabrikant
 // (alleen wat letterlijk in de bron staat, met adres en zin; bewaard in item_specs, zie item-text-log.js) en daarna de omschrijving schrijven uit alleen die
 // bekende gegevens (item-text-writer.js, met de specificaties van Past bij).
 //
@@ -7,7 +7,7 @@
 //   zo ja dan wordt hij overschreven ("overschreven", de vorige tekst blijft bewaard en kan terug), zo nee dan blijft hij staan ("behouden").
 // - Een tekst met waarschuwingen van de feitencontrole (getal, eenheid of bewering die niet in de gegevens staat) gaat nooit live maar wordt een concept
 //   voor handmatige beoordeling, zoals bij het schrijven per artikel.
-// - Samengevoegde (variabele) artikelen krijgen één tekst op het hoofdartikel; varianten en gearchiveerde artikelen worden overgeslagen.
+// - Samengevoegde (variabele) artikelen krijgen één tekst op de artikelgroep; subartikelen en gearchiveerde artikelen worden overgeslagen.
 // - Een bulkrun telt niet mee voor het dagelijkse maximum van AI-verzoeken (dat is bedoeld voor losse verzoeken). In plaats daarvan geldt een eigen dagplafond
 //   (instelling descriptionBulkDailyItems, in het geheugen geteld: één container) en een uurlimiet; de schatting en de bevestiging in het scherm komen daar nog bij.
 // - Een artikel dat al in behandeling is (tweede tabblad, dubbelklik) wordt overgeslagen, en een tekst wordt alleen overschreven als de bestaande omschrijving
@@ -175,7 +175,7 @@ function registerItemTextBulkRoutes(app, ctx) {
      */
     const handleSpecs = async (itemId, first) => {
       if (first.status === 'not_found') { results.push({ itemId, status: 'error', code: 'not_found', message: 'Artikel niet gevonden.' }); return; }
-      if (first.status === 'unavailable') { results.push({ itemId, status: 'skipped', code: 'unavailable', message: 'Varianten en gearchiveerde artikelen krijgen geen eigen specificaties.' }); return; }
+      if (first.status === 'unavailable') { results.push({ itemId, status: 'skipped', code: 'unavailable', message: 'Subartikelen en gearchiveerde artikelen krijgen geen eigen specificaties.' }); return; }
       if (aborted) { results.push({ itemId, status: 'error', code: aborted.code, message: aborted.message }); return; }
       const flightKey = `${tenantId}:${itemId}`;
       if (inFlight.has(flightKey)) { results.push({ itemId, status: 'skipped', code: 'busy', message: 'Dit artikel wordt al verwerkt.' }); return; }
@@ -210,7 +210,7 @@ function registerItemTextBulkRoutes(app, ctx) {
       const first = drafts.prepareWrite(tenantId, itemId);
       if (specsOnly) { await handleSpecs(itemId, first); return; }
       if (first.status === 'not_found') { results.push({ itemId, status: 'error', code: 'not_found', message: 'Artikel niet gevonden.' }); return; }
-      if (first.status === 'unavailable') { results.push({ itemId, status: 'skipped', code: 'unavailable', message: 'Varianten en gearchiveerde artikelen krijgen geen eigen tekst.' }); return; }
+      if (first.status === 'unavailable') { results.push({ itemId, status: 'skipped', code: 'unavailable', message: 'Subartikelen en gearchiveerde artikelen krijgen geen eigen tekst.' }); return; }
       if (drafts.hasDraft(tenantId, itemId)) { results.push({ itemId, status: 'skipped', code: 'has_draft', message: 'Er staat al een concept.' }); return; }
       const earlier = (drafts.logOf(tenantId, itemId) || {}).textLog;
       if (earlier && ['nieuw', 'overschreven', 'behouden'].includes(earlier.action)) { results.push({ itemId, status: 'skipped', code: 'done', message: 'Dit artikel is al behandeld.' }); return; }

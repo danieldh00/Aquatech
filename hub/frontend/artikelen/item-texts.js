@@ -165,7 +165,7 @@
   }
 
   /**
-   * Toont het blok Producttekst voor het geopende artikel. Een variant (die erft de tekst van het hoofdartikel) en een
+   * Toont het blok Producttekst voor het geopende artikel. Een subartikel (die erft de tekst van de artikelgroep) en een
    * gearchiveerd artikel krijgen het blok niet.
    * @param {object} item Het artikel uit het artikelscherm.
    * @returns {Promise<void>}
@@ -174,7 +174,7 @@
     state.openId = item.id;
     state.detail = null;
     $('#tx-detail').hidden = true;
-    if (item.archived || item.parentId) return;
+    if (item.archived || item.groupId) return;
     await openDetail(item.id);
   }
 

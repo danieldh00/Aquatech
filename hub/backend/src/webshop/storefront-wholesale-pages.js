@@ -1,6 +1,6 @@
 // HTML van het groothandelsvenster van de eigen webshop (storefront.js,
 // /groothandel/): voor groothandelsklanten een snelbestellijst met alle
-// artikelen en varianten (een aantal per regel, één knop voor de hele lijst), een
+// artikelen en subartikelen (een aantal per regel, één knop voor de hele lijst), een
 // vak om artikelcodes met aantallen te plakken (bijvoorbeeld uit Excel) en de
 // laatste bestellingen om opnieuw te bestellen. Server-side opgebouwd; het script
 // groothandel.js filtert de lijst en rondt aantallen af, zonder script werkt alles ook.
@@ -22,12 +22,12 @@ function compareRows(left, right) {
 }
 
 /**
- * Alle bestelbare artikelen voor de lijst: losse artikelen en elke variant apart (een hoofdartikel zelf is niet te bestellen).
- * @param {{ products: object[], variantProducts: object[] }} catalog De catalogus (storefront-data.js).
+ * Alle bestelbare artikelen voor de lijst: losse artikelen en elk subartikel apart (een artikelgroep zelf is niet te bestellen).
+ * @param {{ products: object[], subItemProducts: object[] }} catalog De catalogus (storefront-data.js).
  * @returns {object[]} De artikelen op naam.
  */
 function orderableProducts(catalog) {
-  return [...catalog.products.filter((product) => !product.variants), ...catalog.variantProducts].sort(compareRows);
+  return [...catalog.products.filter((product) => !product.subItems), ...catalog.subItemProducts].sort(compareRows);
 }
 
 /**

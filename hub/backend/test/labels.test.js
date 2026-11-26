@@ -107,7 +107,7 @@ test('sjablonen: standaard, opschonen en een PDF op etiketformaat', () => {
   assert.match(buildLabelPdf({ ...template, barcode: 'ean' }, [{ item: { ...item, ean: null }, qty: 1 }]).error, /geen geldige EAN/);
 });
 
-test('EAN per artikel: opslaan, ongeldig, uniek per omgeving en niet op een hoofdartikel', async () => {
+test('EAN per artikel: opslaan, ongeldig, uniek per omgeving en niet op een artikelgroep', async () => {
   const { admin, outsider } = await setup();
   const made = await admin.post('/app/api/stock/items', { code: 'SPR-1', name: 'Sproeier', unit: 'st', salePrice: 10, vatRate: 21, ean: '8712 3456 78906' });
   assert.strictEqual(made.status, 201, JSON.stringify(made.body));
@@ -171,22 +171,22 @@ test('etiketten afdrukken: PDF, sjabloon uit Beheer, rechten, andere organisatie
   }
   assert.strictEqual((await outsider.post('/app/api/stock/labels', { items: [{ id: item.id, qty: 1 }] })).status, 404);
 
-  // Grenzen: geen artikelen, te veel etiketten, hoofdartikel met varianten.
+  // Grenzen: geen artikelen, te veel etiketten, artikelgroep met subartikelen.
   assert.strictEqual((await installer.post('/app/api/stock/labels', { items: [] })).status, 400);
   assert.strictEqual((await installer.post('/app/api/stock/labels', { items: [{ id: item.id, qty: 0 }] })).status, 400);
   const tooMany = await installer.post('/app/api/stock/labels', { items: [{ id: item.id, qty: 501 }] });
   assert.strictEqual(tooMany.body && tooMany.body.error, 'too_many', `${tooMany.status} ${tooMany.text}`);
   const parent = (await admin.post('/app/api/stock/items', { code: 'HOOFD', name: 'Hoofd', unit: 'st' })).body;
-  assert.strictEqual((await admin.put(`/app/api/stock/items/${parent.id}/variants`, { attributes: [{ name: 'Maat', values: ['S', 'M'] }] })).status, 200);
-  assert.strictEqual((await installer.post('/app/api/stock/labels', { items: [{ id: parent.id, qty: 1 }] })).body.error, 'has_variants');
+  assert.strictEqual((await admin.put(`/app/api/stock/items/${parent.id}/sub-items`, { attributes: [{ name: 'Maat', values: ['S', 'M'] }] })).status, 200);
+  assert.strictEqual((await installer.post('/app/api/stock/labels', { items: [{ id: parent.id, qty: 1 }] })).body.error, 'is_group');
   assert.strictEqual((await admin.put(`/app/api/stock/items/${parent.id}`, { name: 'Hoofd nieuw', ean: '96385074' })).status, 400);
-  // Een artikel met EAN dat een hoofdartikel wordt verliest zijn EAN, zodat een variant die EAN kan krijgen.
+  // Een artikel met EAN dat een artikelgroep wordt verliest zijn EAN, zodat een subartikel die EAN kan krijgen.
   const wasSimple = (await admin.post('/app/api/stock/items', { code: 'LOS-1', name: 'Los artikel', unit: 'st', ean: '4006381333931' })).body;
   assert.strictEqual(wasSimple.ean, '4006381333931');
-  const split = await admin.put(`/app/api/stock/items/${wasSimple.id}/variants`, { attributes: [{ name: 'Maat', values: ['S', 'M'] }] });
+  const split = await admin.put(`/app/api/stock/items/${wasSimple.id}/sub-items`, { attributes: [{ name: 'Maat', values: ['S', 'M'] }] });
   assert.strictEqual(split.status, 200, JSON.stringify(split.body));
   assert.strictEqual((await admin.get(`/app/api/stock/items/${wasSimple.id}`)).body.ean, null);
-  const variants = (await admin.get(`/app/api/stock/items/${wasSimple.id}`)).body.variants;
-  assert.strictEqual((await admin.put(`/app/api/stock/items/${variants[0].id}`, { ean: '4006381333931' })).status, 200);
+  const subItems = (await admin.get(`/app/api/stock/items/${wasSimple.id}`)).body.subItems;
+  assert.strictEqual((await admin.put(`/app/api/stock/items/${subItems[0].id}`, { ean: '4006381333931' })).status, 200);
   assert.strictEqual((await admin.get(`/app/api/stock/items/${parent.id}`)).body.name, 'Hoofd');
 });

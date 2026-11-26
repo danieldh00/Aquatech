@@ -110,17 +110,17 @@ function withinDistance(left, right, limit) {
 }
 
 /**
- * Bereidt één zoekbare eenheid voor (een product, of een product met één variant): genormaliseerde naam, code en woorden.
- * @param {object} product Het hoofdartikel (code, name, categoryName).
- * @param {?object} variant De variant (code, label) of null.
+ * Bereidt één zoekbare eenheid voor (een product, of een product met één subartikel): genormaliseerde naam, code en woorden.
+ * @param {object} product De artikelgroep (code, name, categoryName).
+ * @param {?object} subartikel Het subartikel (code, label) of null.
  * @returns {{ code: string, compactCode: string, haystack: string, tokens: string[], inStock: boolean }} De eenheid.
  */
-function candidateOf(product, variant) {
-  const code = normalize(variant ? variant.code : product.code);
+function candidateOf(product, subItem) {
+  const code = normalize(subItem ? subItem.code : product.code);
   // Een code met streepje of spatie (SPR-10) is ook zonder te vinden (SPR10): de samengevoegde code is een eigen woord.
   const compactCode = code.replace(/ /g, '');
-  const haystack = normalize(`${product.name} ${product.code} ${product.categoryName || ''} ${variant ? `${variant.code} ${variant.label}` : ''} ${compactCode}`);
-  return { code, compactCode, haystack, tokens: haystack.split(' ').filter(Boolean), inStock: variant ? Boolean(variant.inStock) : Boolean(product.inStock) };
+  const haystack = normalize(`${product.name} ${product.code} ${product.categoryName || ''} ${subItem ? `${subItem.code} ${subItem.label}` : ''} ${compactCode}`);
+  return { code, compactCode, haystack, tokens: haystack.split(' ').filter(Boolean), inStock: subItem ? Boolean(subItem.inStock) : Boolean(product.inStock) };
 }
 
 /**
@@ -154,7 +154,7 @@ function wordScore(word, candidate, wide, forms = []) {
 const INDEX_CACHE = new WeakMap();
 
 /**
- * De zoekeenheden van een catalogus: per product de genormaliseerde naam en per variant (of het product zelf) één kandidaat.
+ * De zoekeenheden van een catalogus: per product de genormaliseerde naam en per subartikel (of het product zelf) één kandidaat.
  * Wordt één keer per catalogus berekend, zodat een zoekopdracht alleen nog scoort.
  * @param {object[]} products De producten van de catalogus.
  * @returns {{ product: object, productName: string, candidates: object[] }[]} De index.
@@ -163,8 +163,8 @@ function indexOf(products) {
   let index = INDEX_CACHE.get(products);
   if (!index) {
     index = products.map((product) => {
-      const variants = product.variants || [];
-      return { product, productName: normalize(product.name), candidates: variants.length ? variants.map((variant) => candidateOf(product, variant)) : [candidateOf(product, null)] };
+      const subItems = product.subItems || [];
+      return { product, productName: normalize(product.name), candidates: subItems.length ? subItems.map((subItem) => candidateOf(product, subItem)) : [candidateOf(product, null)] };
     });
     INDEX_CACHE.set(products, index);
   }
@@ -172,7 +172,7 @@ function indexOf(products) {
 }
 
 /**
- * Zoekt één tier: elk zoekwoord moet bij dezelfde eenheid (het hoofdartikel of één variant) passen.
+ * Zoekt één tier: elk zoekwoord moet bij dezelfde eenheid (de artikelgroep of één subartikel) passen.
  * @param {{ product: object, productName: string, candidates: object[] }[]} index De zoekeenheden van de catalogus (uit indexOf).
  * @param {string[]} words De genormaliseerde zoekwoorden.
  * @param {string} phrase Alle woorden achter elkaar, genormaliseerd.
@@ -212,7 +212,7 @@ function searchTier(index, words, phrase, onlyInStock, wide, formsByWord) {
 /**
  * Zoekt in de catalogus en rangschikt op relevantie. Eerst precies (woorden, begin van woorden en delen van woorden); komt daar
  * niets uit, dan ruimer met meervouden, verwante woorden (sproeier = sprinkler) en kleine tikfouten.
- * @param {object[]} products De producten van de catalogus (code, name, categoryName, inStock, variants).
+ * @param {object[]} products De producten van de catalogus (code, name, categoryName, inStock, subartikelen).
  * @param {string} query De zoekterm van de bezoeker.
  * @param {{ onlyInStock?: boolean, limit?: number }} [options] onlyInStock: alleen wat op voorraad is; limit: hoogstens zoveel resultaten.
  * @returns {{ products: object[], widened: boolean }} De gevonden producten, beste eerst, en of er ruimer is gezocht.

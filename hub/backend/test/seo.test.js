@@ -38,7 +38,7 @@ test('bedrijf: Store met adres, KvK en zoekfunctie op de website', () => {
   assert.strictEqual(website.potentialAction.target.urlTemplate, `${BASE}zoeken/?q={search_term_string}`);
 });
 
-test('product: aanbieding met prijs, voorraad en afbeelding; hoofdartikel krijgt een prijsbereik', () => {
+test('product: aanbieding met prijs, voorraad en afbeelding; artikelgroep krijgt een prijsbereik', () => {
   const single = Seo.productJsonLd({ product: PRODUCT, baseUrl: BASE, canonicalPath: 'product/sproeier-spr-1/', shopName: 'Aquatechshop.nl', description: 'Tekst' });
   assert.strictEqual(single.offers['@type'], 'Offer');
   assert.strictEqual(single.offers.price, '12.10');
@@ -46,7 +46,7 @@ test('product: aanbieding met prijs, voorraad en afbeelding; hoofdartikel krijgt
   assert.strictEqual(single.offers.availability, 'https://schema.org/InStock');
   assert.deepStrictEqual(single.image, [`${BASE}artikelfoto/11111111-1111-1111-1111-111111111111`]);
   const group = Seo.productJsonLd({
-    product: { ...PRODUCT, variants: [{ priceIncl: 5, inStock: false }, { priceIncl: 9.5, inStock: true }] },
+    product: { ...PRODUCT, subItems: [{ priceIncl: 5, inStock: false }, { priceIncl: 9.5, inStock: true }] },
     baseUrl: BASE, canonicalPath: 'product/x/', shopName: 'Aquatechshop.nl', description: 'Tekst',
   });
   assert.strictEqual(group.offers['@type'], 'AggregateOffer');
@@ -83,7 +83,7 @@ test('sitemap en llms.txt: pagina’s met lastmod en een samenvatting in Markdow
   const catalog = {
     groups: [{ slug: 'beregening', name: 'Beregening', count: 2, intro: '<p>Alles voor <b>beregening</b>.</p>', categories: [] }],
     categories: [{ slug: 'sproeiers', hidden: false, count: 2 }, { slug: 'leeg', hidden: false, count: 0 }, { slug: 'oud', hidden: true, count: 3 }],
-    products: [PRODUCT], variantProducts: [],
+    products: [PRODUCT], subItemProducts: [],
   };
   const pages = [{ slug: 'over-ons', title: 'Over ons' }, { slug: 'privacyverklaring', title: 'Privacyverklaring' }];
   const xml = Seo.sitemapXml(Seo.sitemapEntriesOf({ catalog, pages }), BASE);
@@ -100,14 +100,14 @@ test('sitemap en llms.txt: pagina’s met lastmod en een samenvatting in Markdow
   assert.match(llms, /\[Productfeed\]\(https:\/\/shop\.example\.nl\/productfeed\.xml\)/);
 });
 
-test('productfeed: prijs, voorraad en afbeelding; varianten apart; zonder foto niet', () => {
+test('productfeed: prijs, voorraad en afbeelding; subartikelen apart; zonder foto niet', () => {
   const feed = Seo.merchantFeedXml({
     shopName: 'Aquatechshop.nl', baseUrl: BASE,
     groups: [{ slug: 'beregening', name: 'Beregening' }],
     products: [
       PRODUCT,
       { ...PRODUCT, code: 'GEEN-FOTO', slug: 'geen-foto', image: '' },
-      { ...PRODUCT, code: 'HOOFD', slug: 'hoofd', name: 'Slang', variants: [{ code: 'HOOFD-25', slug: 'slang-25', label: '25 mm', priceIncl: 3, inStock: false, image: 'https://img.example.nl/s.jpg' }] },
+      { ...PRODUCT, code: 'HOOFD', slug: 'hoofd', name: 'Slang', subItems: [{ code: 'HOOFD-25', slug: 'slang-25', label: '25 mm', priceIncl: 3, inStock: false, image: 'https://img.example.nl/s.jpg' }] },
     ],
   });
   assert.match(feed, /<g:id>SPR-1<\/g:id>/);
@@ -235,7 +235,7 @@ test('product-JSON-LD: merk en EAN alleen als ze bestaan; een prijsbereik krijgt
   assert.ok(!('brand' in short));
   const bad = Seo.productJsonLd({ product: PRODUCT, baseUrl: BASE, canonicalPath: 'product/x/', shopName: 'Shop', description: 'd', ean: '12345' });
   assert.ok(!('gtin13' in bad) && !('gtin8' in bad));
-  const range = Seo.productJsonLd({ product: { ...PRODUCT, variants: [{ code: 'A', priceIncl: 1, inStock: true }, { code: 'B', priceIncl: 2, inStock: false }] }, baseUrl: BASE, canonicalPath: 'product/x/', shopName: 'Shop', description: 'd', ean: '4006381333931' });
+  const range = Seo.productJsonLd({ product: { ...PRODUCT, subItems: [{ code: 'A', priceIncl: 1, inStock: true }, { code: 'B', priceIncl: 2, inStock: false }] }, baseUrl: BASE, canonicalPath: 'product/x/', shopName: 'Shop', description: 'd', ean: '4006381333931' });
   assert.ok(!('gtin13' in range));
 });
 
@@ -246,7 +246,7 @@ test('product-JSON-LD: specificaties van de pagina komen als additionalProperty 
   assert.ok(!('additionalProperty' in without));
 });
 
-test('artikel: eigen zoekmachinetitel, -omschrijving en merk komen in de pagina en de JSON-LD; leeg = automatisch; variant erft van het hoofdartikel', async () => {
+test('artikel: eigen zoekmachinetitel, -omschrijving en merk komen in de pagina en de JSON-LD; leeg = automatisch; subItem erft van de artikelgroep', async () => {
   const { anonymous, admin } = await setupShop();
   const items = (await admin.get('/app/api/stock')).body.items;
   const sproeier = items.find((item) => item.code === 'SPR-1');

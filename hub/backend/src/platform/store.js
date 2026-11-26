@@ -1370,7 +1370,7 @@ function createStore(db) {
   }
 
   /**
-   * Bouwt de twee queries (totaal en pagina) voor een klantenpagina; gedeeld door de synchrone en de asynchrone variant.
+   * Bouwt de twee queries (totaal en pagina) voor een klantenpagina; gedeeld door de synchrone en de asynchrone subartikel.
    * @param {string[]} tenantIds De tenants (live-tenant en eventueel de testomgeving).
    * @param {{ search?: string, group?: string, limit?: number, offset?: number, activeOnly?: boolean }} [options] Zie listCustomerPage.
    * @returns {{ countSql: string, countArgs: Array, pageSql: string, pageArgs: Array }|null} De queries, of null als de organisatie geen klantrollen heeft.

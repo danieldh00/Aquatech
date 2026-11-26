@@ -265,12 +265,12 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
     const codes = [...unique.keys()].slice(0, MAX_LINES);
     // Een artikelcode die zelf een @ bevat blijft werken: de volledige code gaat voor, anders wordt gesplitst in artikel en verpakking.
     const baseCodes = [...new Set(codes.flatMap((code) => [code, splitCartCode(code).baseCode]))];
-    const rows = baseCodes.length ? prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.stock_managed, i.sale_price, i.business_price, i.vat_rate, i.weight_grams, i.variant_values, i.order_pack_size, i.order_min_qty, i.price_tiers, i.unit_content, i.delivery_rules, i.lead_days_min, i.lead_days_max, p.delivery_rules AS parent_delivery_rules, p.name AS parent_name,
+    const rows = baseCodes.length ? prepare(`SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.stock_managed, i.sale_price, i.business_price, i.vat_rate, i.weight_grams, i.sub_values, i.order_pack_size, i.order_min_qty, i.price_tiers, i.unit_content, i.delivery_rules, i.lead_days_min, i.lead_days_max, p.delivery_rules AS parent_delivery_rules, p.name AS group_name,
         (SELECT sp.in_stock FROM shop_products sp WHERE sp.tenant_id = i.tenant_id AND sp.id = i.shop_product_id) AS shop_in_stock,
         COALESCE((SELECT SUM(r.qty) FROM stock_reservations r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id), 0) AS reserved
       FROM stock_items i
-      LEFT JOIN stock_items p ON p.tenant_id = i.tenant_id AND p.id = i.parent_id
-      WHERE i.tenant_id = ? AND i.archived = 0 AND i.has_variants = 0 AND i.shop_sync = 1 AND i.sale_price IS NOT NULL
+      LEFT JOIN stock_items p ON p.tenant_id = i.tenant_id AND p.id = i.group_id
+      WHERE i.tenant_id = ? AND i.archived = 0 AND i.is_group = 0 AND i.shop_sync = 1 AND i.sale_price IS NOT NULL
         AND i.code IN (${baseCodes.map(() => '?').join(', ')})`).all(tenantId, ...baseCodes) : [];
     const byCode = new Map(rows.map((row) => [row.code, row]));
     // Verpakkingen (doos, pallet) van de artikelen waarvoor een verpakking is gevraagd: één query voor de hele wagen.
@@ -295,9 +295,9 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
       // Een onbekende, uitgezette of voor deze klant verborgen verpakking is niet meer te koop.
       if (packCode && (!packaging || !packagingVisibleFor(packaging.audience, { group, wholesale: Boolean(wholesaleTerms) }))) { missing.push(cartCode); continue; }
       let values = {};
-      try { values = JSON.parse(row.variant_values || '{}') || {}; } catch { values = {}; }
+      try { values = JSON.parse(row.sub_values || '{}') || {}; } catch { values = {}; }
       const label = Object.values(values).join(' / ');
-      const itemName = row.parent_name && label ? `${row.parent_name} (${label})` : row.name;
+      const itemName = row.group_name && label ? `${row.group_name} (${label})` : row.name;
       const qty = unique.get(cartCode);
       const vatRate = Number(row.vat_rate ?? 21);
       const hasOwnBusinessPrice = business && row.business_price != null;
@@ -342,7 +342,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
       delete line.availableBase;
       delete line.managed;
     }
-    // Levermethoderegels (artikel > hoofdartikel > categorie) en de eigen levertijd per regel, in de volgorde van de regels; blijft buiten de bestelregels.
+    // Levermethoderegels (artikel > artikelgroep > categorie) en de eigen levertijd per regel, in de volgorde van de regels; blijft buiten de bestelregels.
     const categoryRules = lines.length ? deliveryRulesOf(tenantId) : new Map();
     const delivery = {
       blocked: DeliveryRules.blockedMethods(lines.map((line, index) => ({
@@ -571,7 +571,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
 
   /**
    * Zoekt bij offerteregels het voorraadartikel (en de verpakking) op de code en vult itemId, baseCode, stockPer en itemName in.
-   * Een regel zonder code, met een onbekende code, een hoofdartikel (met varianten), een negatief aantal of een onbekende verpakking is
+   * Een regel zonder code, met een onbekende code, een artikelgroep (met subartikelen), een negatief aantal of een onbekende verpakking is
    * een vrije regel (itemId leeg): die telt mee in het bedrag maar raakt de voorraad niet. Twee queries voor alle regels.
    * @param {string} tenantId Id van de omgeving.
    * @param {object[]} lines De regels (code, name, unit, qty, unitExcl, vatRate, unitIncl, lineExcl, lineTotal).
@@ -580,7 +580,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
   function resolveQuoteLines(tenantId, lines) {
     const parts = lines.map((line) => splitCartCode(String(line.code || '').trim().toUpperCase()));
     const codes = [...new Set(parts.map((part) => part.baseCode).filter(Boolean))];
-    const items = codes.length ? prepare(`SELECT id, code, name, unit FROM stock_items WHERE tenant_id = ? AND has_variants = 0 AND archived = 0 AND UPPER(code) IN (${codes.map(() => '?').join(', ')})`).all(tenantId, ...codes) : [];
+    const items = codes.length ? prepare(`SELECT id, code, name, unit FROM stock_items WHERE tenant_id = ? AND is_group = 0 AND archived = 0 AND UPPER(code) IN (${codes.map(() => '?').join(', ')})`).all(tenantId, ...codes) : [];
     const itemOf = new Map(items.map((item) => [String(item.code).toUpperCase(), item]));
     const packagedIds = [...new Set(parts.filter((part) => part.packCode && itemOf.has(part.baseCode)).map((part) => itemOf.get(part.baseCode).id))];
     const packagings = packagedIds.length ? prepare(`SELECT item_id, code, name, factor FROM item_packagings WHERE tenant_id = ? AND active = 1 AND item_id IN (${packagedIds.map(() => '?').join(', ')})`).all(tenantId, ...packagedIds) : [];

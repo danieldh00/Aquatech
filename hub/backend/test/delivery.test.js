@@ -1,4 +1,4 @@
-// Levermethode en levertijd per artikel: de regels (artikel, hoofdartikel, categorie, gemengde wagen), de aantalstaffel van pallet,
+// Levermethode en levertijd per artikel: de regels (artikel, artikelgroep, categorie, gemengde wagen), de aantalstaffel van pallet,
 // de levertijd (kalender- en werkdagen, onbekend, inkoop, leverancier) en de uitkomst in de winkelwagen, bij het afrekenen,
 // op de productpagina en in de beheerroutes.
 const test = require('node:test');
@@ -52,7 +52,7 @@ test('gemengde wagen: de zwaarste methode neemt de hele bestelling mee', () => {
   assert.match(nothing.pallet, /contact/);
 });
 
-test('regels per artikel, hoofdartikel en categorie: de diepste categorie wint en het artikel gaat voor', () => {
+test('regels per artikel, artikelgroep en categorie: de diepste categorie wint en het artikel gaat voor', () => {
   const flat = flatten(DEFAULT_TREE);
   const config = { categories: [
     { categorySlug: PARENT.slug, rules: [{ method: 'dpd', minQty: 1, maxQty: 9 }, { method: 'pallet', minQty: 10 }] },
@@ -68,7 +68,7 @@ test('regels per artikel, hoofdartikel en categorie: de diepste categorie wint e
   const categoryRules = resolve(CHILD.slug);
   const own = [{ method: 'dpd', minQty: 1, maxQty: null }];
   assert.deepStrictEqual(Rules.effectiveRules(own, '[]', categoryRules), own, 'eigen regels gaan voor');
-  assert.deepStrictEqual(Rules.effectiveRules('[]', JSON.stringify(own), categoryRules), own, 'een variant erft van het hoofdartikel');
+  assert.deepStrictEqual(Rules.effectiveRules('[]', JSON.stringify(own), categoryRules), own, 'een subartikel erft van de artikelgroep');
   assert.deepStrictEqual(Rules.effectiveRules('[]', '[]', categoryRules), categoryRules);
   assert.strictEqual(Rules.effectiveRules('[]', '[]', []), null);
   assert.strictEqual(Rules.checkCategoryRules(config, new Set([PARENT.slug, CHILD.slug])), 'Een gekozen categorie staat niet (meer) in het menu van de webshop.');
@@ -301,7 +301,7 @@ test('beheerroutes: lezen, controleren, opslaan, rechten en tenantgrens', async 
   assert.ok(!other.body.categories || other.body.categories.length === 0, 'een andere organisatie ziet de regels niet');
 });
 
-test('artikel: regels en levertijd bewaren, controleren en bij een variant erven; leveranciertijd', async () => {
+test('artikel: regels en levertijd bewaren, controleren en bij een subartikel erven; leveranciertijd', async () => {
   const world = await setup();
   const { admin } = world;
   const made = await admin.post('/app/api/stock/items', { code: 'LEV', name: 'Levering', onHand: 5, salePrice: 5, deliveryRules: [{ method: 'pallet', minQty: 10 }], leadDays: { min: 4, max: 6 } });

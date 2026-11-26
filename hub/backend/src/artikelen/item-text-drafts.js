@@ -8,7 +8,7 @@
 //   veranderd zijn); met waarschuwingen moet de gebruiker dat uitdrukkelijk bevestigen.
 // - Niets gaat vanzelf live: goedkeuren is altijd een handeling van een gebruiker met recht `voorraad`. Is de live tekst sinds het
 //   schrijven veranderd, dan wordt hij alleen overschreven na een expliciete keuze (overwrite).
-// - Varianten krijgen geen eigen concept (ze erven de tekst van het hoofdartikel), gearchiveerde artikelen ook niet.
+// - Subartikelen krijgen geen eigen concept (ze erven de tekst van de artikelgroep), gearchiveerde artikelen ook niet.
 const crypto = require('crypto');
 const { transaction } = require('../database/db');
 const ItemDetails = require('./item-details');
@@ -94,7 +94,7 @@ function createItemTextDraftStore(db) {
    * @returns {object|undefined} De rij (artikel plus webshopproduct), of niets.
    */
   const findRow = (tenantId, itemId) => prepare(`SELECT i.id, i.code, i.name, i.unit, i.brand, i.ean, i.weight_grams, i.description, i.specifications, i.attributes, i.seo_title, i.seo_description,
-      i.archived, i.parent_id, p.description AS shop_description, p.attributes AS shop_attributes, p.categories
+      i.archived, i.group_id, p.description AS shop_description, p.attributes AS shop_attributes, p.categories
     FROM stock_items i LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
     WHERE i.tenant_id = ? AND i.id = ?`).get(tenantId, String(itemId || ''));
 
@@ -124,7 +124,7 @@ function createItemTextDraftStore(db) {
       FROM stock_items i
       LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
       LEFT JOIN item_text_drafts d ON d.tenant_id = i.tenant_id AND d.item_id = i.id
-      WHERE i.tenant_id = ? AND i.archived = 0 AND i.parent_id IS NULL ORDER BY i.name, i.code`).all(tenantId);
+      WHERE i.tenant_id = ? AND i.archived = 0 AND i.group_id IS NULL ORDER BY i.name, i.code`).all(tenantId);
     const term = String(search || '').trim().toLowerCase();
     const categories = new Set();
     const matching = [];
@@ -164,7 +164,7 @@ function createItemTextDraftStore(db) {
     const draftRow = prepare(`SELECT ${DRAFT_COLS} FROM item_text_drafts WHERE tenant_id = ? AND item_id = ?`).get(tenantId, row.id);
     const draft = draftRow ? draftOf(draftRow, warningsFor({ description: draftRow.description, seoTitle: draftRow.seo_title, seoDescription: draftRow.seo_description }, facts)) : null;
     const known = textLog.read(tenantId, row.id) || {};
-    return { item: { id: row.id, code: row.code, name: row.name, variant: Boolean(row.parent_id), archived: Boolean(Number(row.archived)) }, facts: facts.fields, thin: facts.thin, live, draft, written: known.textLog || null };
+    return { item: { id: row.id, code: row.code, name: row.name, subItem: Boolean(row.group_id), archived: Boolean(Number(row.archived)) }, facts: facts.fields, thin: facts.thin, live, draft, written: known.textLog || null };
   }
 
   /**
@@ -236,11 +236,11 @@ function createItemTextDraftStore(db) {
     if (!draftRow) return null;
     const { facts, live } = sourcesOf(tenantId, row);
     const warnings = warningsFor({ description: draftRow.description, seoTitle: draftRow.seo_title, seoDescription: draftRow.seo_description }, facts);
-    return { draft: draftOf(draftRow, warnings), warnings, liveChanged: hashOf(live) !== draftRow.base_hash, unavailable: Boolean(row.parent_id) || Boolean(Number(row.archived)) };
+    return { draft: draftOf(draftRow, warnings), warnings, liveChanged: hashOf(live) !== draftRow.base_hash, unavailable: Boolean(row.group_id) || Boolean(Number(row.archived)) };
   }
 
   /**
-   * De artikelen die klaar zijn om een tekst voor te schrijven (bestaan, geen variant, niet gearchiveerd) met hun bronvelden.
+   * De artikelen die klaar zijn om een tekst voor te schrijven (bestaan, geen subartikel, niet gearchiveerd) met hun bronvelden.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} itemId Id van het artikel.
    * @returns {{ status: string, facts?: object }} status ok (met facts), not_found of unavailable.
@@ -248,7 +248,7 @@ function createItemTextDraftStore(db) {
   function prepareWrite(tenantId, itemId) {
     const row = findRow(tenantId, itemId);
     if (!row) return { status: 'not_found' };
-    if (row.parent_id || Number(row.archived)) return { status: 'unavailable' };
+    if (row.group_id || Number(row.archived)) return { status: 'unavailable' };
     return { status: 'ok', facts: sourcesOf(tenantId, row).facts };
   }
 
@@ -261,7 +261,7 @@ function createItemTextDraftStore(db) {
   const hasDraft = (tenantId, itemId) => Boolean(prepare('SELECT id FROM item_text_drafts WHERE tenant_id = ? AND item_id = ?').get(tenantId, String(itemId || '')));
 
   /**
-   * De hoofdartikelen die in een bulkrun aan de beurt zijn: niet gearchiveerd, geen variant, nog geen concept en nog niet door een eerdere bulkrun behandeld.
+   * De artikelgroepen die in een bulkrun aan de beurt zijn: niet gearchiveerd, geen subartikel, nog geen concept en nog niet door een eerdere bulkrun behandeld.
    * @param {string} tenantId Id van de omgeving.
    * @param {{ review?: boolean, mode?: string }} [options] mode 'specs' = artikelen waarvan de kenmerken nog niet als specificaties zijn gezet (de tekst telt dan niet mee); anders review = ook artikelen die al een omschrijving hebben (die wordt beoordeeld en alleen vervangen als de nieuwe beter is); anders alleen artikelen zonder omschrijving.
    * @returns {{ ids: string[], total: number, withExisting: number, withoutFeatures: number }} De id's (op naam), hoeveel er al een omschrijving hebben en voor hoeveel nog kenmerken moeten worden opgezocht.
@@ -272,7 +272,7 @@ function createItemTextDraftStore(db) {
       FROM stock_items i
       LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
       LEFT JOIN item_specs s ON s.tenant_id = i.tenant_id AND s.item_id = i.id
-      WHERE i.tenant_id = ? AND i.archived = 0 AND i.parent_id IS NULL
+      WHERE i.tenant_id = ? AND i.archived = 0 AND i.group_id IS NULL
         AND NOT EXISTS (SELECT 1 FROM item_text_drafts d WHERE d.tenant_id = i.tenant_id AND d.item_id = i.id)
         AND (s.specs IS NULL OR s.specs NOT LIKE ?)
       ORDER BY i.name, i.code`).all(tenantId, mode === 'specs' ? '%"specsAt"%' : '%"textLog"%');
@@ -499,7 +499,7 @@ function registerItemTextRoutes(app, ctx) {
     const handle = async (itemId) => {
       const prepared = drafts.prepareWrite(tenantId, itemId);
       if (prepared.status === 'not_found') { results.push({ itemId, status: 'error', code: 'not_found', message: 'Artikel niet gevonden.' }); return; }
-      if (prepared.status === 'unavailable') { results.push({ itemId, status: 'skipped', code: 'unavailable', message: 'Varianten en gearchiveerde artikelen krijgen geen eigen tekst.' }); return; }
+      if (prepared.status === 'unavailable') { results.push({ itemId, status: 'skipped', code: 'unavailable', message: 'Subartikelen en gearchiveerde artikelen krijgen geen eigen tekst.' }); return; }
       if (skipExisting && drafts.hasDraft(tenantId, itemId)) { results.push({ itemId, status: 'skipped', code: 'has_draft', message: 'Er staat al een concept.' }); return; }
       if (aborted) { results.push({ itemId, status: 'error', code: aborted.code, message: aborted.message }); return; }
       if (daily.count >= dailyLimit) { results.push({ itemId, status: 'error', code: 'daily_limit', message: 'Het dagelijkse maximum voor AI-verzoeken is bereikt.' }); return; }

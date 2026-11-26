@@ -163,7 +163,7 @@ test('inkooporders: annuleren, weggooien en gearchiveerde leverancier of artikel
     // Een bestaand concept van die leverancier blijft wijzigbaar.
     assert.strictEqual((await kees.put(`/app/api/purchase-orders/${loneOrder.id}`, { supplierId: lone.id, lines: [{ itemId: pipe.id, qty: 2 }] })).status, 200);
 
-    // Een artikel op een order wordt gearchiveerd in plaats van verwijderd; een hoofdartikel of onbekend artikel kan niet.
+    // Een artikel op een order wordt gearchiveerd in plaats van verwijderd; een artikelgroep of onbekend artikel kan niet.
     assert.deepStrictEqual((await kees.del(`/app/api/stock/items/${pipe.id}`)).body.archived, true);
     assert.strictEqual((await kees.post('/app/api/purchase-orders', { supplierId: supplier.id, lines: [{ itemId: pipe.id, qty: 1 }] })).status, 409);
     assert.strictEqual((await kees.post('/app/api/purchase-orders', { supplierId: supplier.id, lines: [{ itemId: 'onbekend', qty: 1 }] })).status, 404);

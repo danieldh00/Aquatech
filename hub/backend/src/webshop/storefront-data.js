@@ -166,11 +166,11 @@ function assignCategorySlugs(categories) {
  * staat. Zet `categorySlug` op elk product en haalt de tijdelijke velden `categoryKey` en
  * `treeSlug` weg.
  * @param {object[]} products De producten (met categoryKey, categoryName, groupSlug en eventueel treeSlug).
- * @param {object[]} variantProducts De varianten als product (zelfde velden als hun hoofdartikel).
+ * @param {object[]} subItemProducts De subartikelen als product (zelfde velden als hun artikelgroep).
  * @param {object[]} tree De categorieboom.
  * @returns {{ categoryList: object[], groups: object[] }} Alle categorieën plat (op naam) en de hoofdcategorieën met hun bovenste categorieën.
  */
-function arrangeCategories(products, variantProducts, tree) {
+function arrangeCategories(products, subItemProducts, tree) {
   const flat = new Map();
   const ownCounts = new Map();
   for (const product of products) {
@@ -180,7 +180,7 @@ function arrangeCategories(products, variantProducts, tree) {
     flat.set(product.categoryKey, category);
   }
   assignCategorySlugs(flat);
-  for (const product of [...products, ...variantProducts]) {
+  for (const product of [...products, ...subItemProducts]) {
     product.categorySlug = product.treeSlug || flat.get(product.categoryKey).slug;
     delete product.categoryKey;
     delete product.treeSlug;
@@ -226,11 +226,11 @@ function arrangeCategories(products, variantProducts, tree) {
 }
 
 /**
- * Leest de waarden van een variant (bijv. { Maat: '25 mm' }) uit het JSON-veld.
+ * Leest de waarden van een subartikel (bijv. { Maat: '25 mm' }) uit het JSON-veld.
  * @param {*} valuesJson De opgeslagen tekst.
  * @returns {Object<string, string>} Kenmerknaam → waarde, leeg bij ongeldige invoer.
  */
-function variantValuesOf(valuesJson) {
+function subItemValuesOf(valuesJson) {
   try {
     const values = JSON.parse(valuesJson || '{}');
     return values && typeof values === 'object' && !Array.isArray(values) ? values : {};
@@ -241,7 +241,7 @@ function variantValuesOf(valuesJson) {
 const AI_TEXT_ACTIONS = ['nieuw', 'overschreven'];
 
 /**
- * Leest de kenmerken van een hoofdartikel uit het JSON-veld en geeft de namen.
+ * Leest de kenmerken van een artikelgroep uit het JSON-veld en geeft de namen.
  * @param {*} attributesJson De opgeslagen tekst, bijv. '[{"name":"Maat","values":["16 mm"]}]'.
  * @returns {string[]} De kenmerknamen.
  */
@@ -254,14 +254,14 @@ function attributeNamesOf(attributesJson) {
 
 /**
  * Bouwt de catalogus uit rijen van de database: unieke slugs voor producten
- * en categorieën, categorie-indeling en prijs inclusief btw. Varianten van een
- * hoofdartikel (parent_id) komen als één regel in `products`, met hun keuzes
- * in `variants`; elke variant blijft los bereikbaar via `variantProducts`.
- * @param {object[]} rows Rijen met id, code, name, unit, on_hand, updated_at, sale_price, business_price, vat_rate, categories en image (en optioneel order_pack_size, order_min_qty en price_tiers: de groothandelsvoorwaarden); bij varianten parent_id en variant_values, bij hoofdartikelen has_variants=1 en attributes.
+ * en categorieën, categorie-indeling en prijs inclusief btw. Subartikelen van een
+ * artikelgroep (group_id) komen als één regel in `products`, met hun keuzes
+ * in `subartikelen`; elk subartikel blijft los bereikbaar via `subItemProducts`.
+ * @param {object[]} rows Rijen met id, code, name, unit, on_hand, updated_at, sale_price, business_price, vat_rate, categories en image (en optioneel order_pack_size, order_min_qty en price_tiers: de groothandelsvoorwaarden); bij subartikelen group_id en sub_values, bij artikelgroepen is_group=1 en attributes.
  * @param {Map<string, number>} [soldByCode] Het verkochte aantal per artikelcode (webshopverkopen), voor de meest verkochte producten.
  * @param {object[]} [tree] De categorieboom (standaard die van Aquatechshop.nl); producten waarvan een categorienaam in de boom staat komen in de diepste passende categorie.
  * @param {{ rules?: object[] }} [discountConfig] De instelling categoryDiscounts: korting per categorie voor zakelijke klanten. Een artikel met een eigen zakelijke prijs krijgt geen categoriekorting; `priceBusiness` is de prijs na korting, `priceBusinessList` die ervoor en `categoryDiscountPct` de korting.
- * @returns {{ products: object[], variantProducts: object[], categories: object[], groups: object[], featured: object[], bestsellers: object[] }} products (slug, code, name, unit, categorySlug, categoryName, groupSlug, priceExcl, priceIncl, vatRate, inStock, image; bij een hoofdartikel met varianten ook `variants` [{ slug, code, label, meta, priceIncl, inStock, image }] en `attributeName`, met de laagste prijs en op voorraad als een variant dat is) en categories (alle categorieën plat: slug, name, count = producten inclusief subcategorieën, ownCount, groupSlug, parentSlug, depth, intro, image, hidden en children = de subcategorieën als objecten) op naam gesorteerd; variantProducts = de varianten als gewoon product (met parentSlug en parentName); groups = hoofdcategorieën met hun bovenste categorieën (slug, name, categories, count, intro, image); featured = uitgelichte producten; bestsellers = de meest verkochte producten met foto (leeg zonder verkopen).
+ * @returns {{ products: object[], subItemProducts: object[], categories: object[], groups: object[], featured: object[], bestsellers: object[] }} products (slug, code, name, unit, categorySlug, categoryName, groupSlug, priceExcl, priceIncl, vatRate, inStock, image; bij een artikelgroep met subartikelen ook `subartikelen` [{ slug, code, label, meta, priceIncl, inStock, image }] en `attributeName`, met de laagste prijs en op voorraad als een subartikel dat is) en categories (alle categorieën plat: slug, name, count = producten inclusief subcategorieën, ownCount, groupSlug, parentSlug, depth, intro, image, hidden en children = de subcategorieën als objecten) op naam gesorteerd; subItemProducts = de subartikelen als gewoon product (met parentSlug en groupName); groups = hoofdcategorieën met hun bovenste categorieën (slug, name, categories, count, intro, image); featured = uitgelichte producten; bestsellers = de meest verkochte producten met foto (leeg zonder verkopen).
  */
 function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE, discountConfig = {}) {
   const categoryDiscountOf = resolverFor(tree, discountConfig);
@@ -272,8 +272,8 @@ function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE, discoun
    * @returns {number} Negatief, nul of positief.
    */
   const compareByName = (left, right) => String(left.name).localeCompare(String(right.name), 'nl') || String(left.code).localeCompare(String(right.code), 'nl');
-  const parentRows = new Map(rows.filter((row) => Number(row.has_variants)).map((row) => [row.id, row]));
-  const itemRows = rows.filter((row) => !Number(row.has_variants)).sort(compareByName);
+  const groupRows = new Map(rows.filter((row) => Number(row.is_group)).map((row) => [row.id, row]));
+  const itemRows = rows.filter((row) => !Number(row.is_group)).sort(compareByName);
   const usedSlugs = new Set();
   /**
    * Geeft een unieke slug die volgt uit naam én artikelcode (de code is uniek en
@@ -348,7 +348,7 @@ function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE, discoun
     };
   };
   /**
-   * Past de categoriekorting voor zakelijke klanten toe op een product of variant (na het bepalen van de categorie):
+   * Past de categoriekorting voor zakelijke klanten toe op een product of subartikel (na het bepalen van de categorie):
    * zet `priceBusinessList` (de prijs ervoor), `categoryDiscountPct` en verlaagt `priceBusiness`. Een artikel met een
    * eigen zakelijke prijs blijft ongemoeid.
    * @param {object} product Het product (met treeSlug, priceBusiness en explicitBusinessPrice).
@@ -363,69 +363,69 @@ function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE, discoun
     product.priceBusinessIncl = Math.round(product.priceBusiness * (1 + product.vatRate / 100) * 100) / 100;
   };
   const standalone = [];
-  const variantsOfParent = new Map();
-  const variantProducts = [];
+  const subItemsOfGroup = new Map();
+  const subItemProducts = [];
   for (const row of itemRows) {
     const product = toProduct(row);
-    const parent = row.parent_id ? parentRows.get(row.parent_id) : null;
-    if (!parent) { applyCategoryDiscount(product); standalone.push(product); continue; }
-    product.values = variantValuesOf(row.variant_values);
-    product.parentName = decodeHtmlEntities(parent.name);
-    variantProducts.push(product);
-    variantsOfParent.set(parent.id, [...(variantsOfParent.get(parent.id) || []), product]);
+    const articleGroup = row.group_id ? groupRows.get(row.group_id) : null;
+    if (!articleGroup) { applyCategoryDiscount(product); standalone.push(product); continue; }
+    product.values = subItemValuesOf(row.sub_values);
+    product.groupName = decodeHtmlEntities(articleGroup.name);
+    subItemProducts.push(product);
+    subItemsOfGroup.set(articleGroup.id, [...(subItemsOfGroup.get(articleGroup.id) || []), product]);
   }
   const listing = [...standalone];
-  for (const [parentId, variants] of variantsOfParent) {
-    const parent = parentRows.get(parentId);
-    variants.sort((left, right) => Object.values(left.values).join(' ').localeCompare(Object.values(right.values).join(' '), 'nl', { numeric: true }) || compareByName(left, right));
-    const attributeNames = attributeNamesOf(parent.attributes);
-    const placement = parent.categories ? placementOf(parent.categories) : { categoryKey: variants[0].categoryKey, categoryName: variants[0].categoryName, groupSlug: variants[0].groupSlug, treeSlug: variants[0].treeSlug };
-    // Een variant ligt in de categorie van zijn hoofdartikel: pas daarmee de categoriekorting toe, vóór de laagste prijs wordt bepaald.
-    for (const variant of variants) { variant.treeSlug = placement.treeSlug; applyCategoryDiscount(variant); }
-    const cheapest = variants.reduce((lowest, variant) => (variant.priceIncl < lowest.priceIncl ? variant : lowest), variants[0]);
-    const cheapestBusiness = variants.reduce((lowest, variant) => (variant.priceBusiness < lowest.priceBusiness ? variant : lowest), variants[0]);
+  for (const [groupId, subItems] of subItemsOfGroup) {
+    const articleGroup = groupRows.get(groupId);
+    subItems.sort((left, right) => Object.values(left.values).join(' ').localeCompare(Object.values(right.values).join(' '), 'nl', { numeric: true }) || compareByName(left, right));
+    const attributeNames = attributeNamesOf(articleGroup.attributes);
+    const placement = articleGroup.categories ? placementOf(articleGroup.categories) : { categoryKey: subItems[0].categoryKey, categoryName: subItems[0].categoryName, groupSlug: subItems[0].groupSlug, treeSlug: subItems[0].treeSlug };
+    // Een subartikel ligt in de categorie van zijn artikelgroep: pas daarmee de categoriekorting toe, vóór de laagste prijs wordt bepaald.
+    for (const subItem of subItems) { subItem.treeSlug = placement.treeSlug; applyCategoryDiscount(subItem); }
+    const cheapest = subItems.reduce((lowest, subItem) => (subItem.priceIncl < lowest.priceIncl ? subItem : lowest), subItems[0]);
+    const cheapestBusiness = subItems.reduce((lowest, subItem) => (subItem.priceBusiness < lowest.priceBusiness ? subItem : lowest), subItems[0]);
     const group = {
-      slug: uniqueSlug(parent.name, parent.code), itemId: String(parent.id), code: String(parent.code), name: decodeHtmlEntities(parent.name), unit: String(parent.unit || variants[0].unit),
+      slug: uniqueSlug(articleGroup.name, articleGroup.code), itemId: String(articleGroup.id), code: String(articleGroup.code), name: decodeHtmlEntities(articleGroup.name), unit: String(articleGroup.unit || subItems[0].unit),
       ...placement,
       priceExcl: cheapest.priceExcl, vatRate: cheapest.vatRate, priceIncl: cheapest.priceIncl,
       priceBusiness: cheapestBusiness.priceBusiness, priceBusinessIncl: cheapestBusiness.priceBusinessIncl,
-      updatedAt: [String(parent.updated_at || '').slice(0, 10), ...variants.map((variant) => variant.updatedAt)].sort().pop(),
-      inStock: variants.some((variant) => variant.inStock), image: imageOf(parent) || (variants.find((variant) => variant.image) || {}).image || '',
+      updatedAt: [String(articleGroup.updated_at || '').slice(0, 10), ...subItems.map((subItem) => subItem.updatedAt)].sort().pop(),
+      inStock: subItems.some((subItem) => subItem.inStock), image: imageOf(articleGroup) || (subItems.find((subItem) => subItem.image) || {}).image || '',
       attributeName: attributeNames.length === 1 ? attributeNames[0] : 'Uitvoeringen',
-      variants: variants.map((variant) => ({
-        slug: variant.slug, itemId: variant.itemId, code: variant.code, label: Object.values(variant.values).join(' / ') || variant.code,
-        meta: Object.entries(variant.values).map(([name, value]) => `${name}: ${value}`).join(' | '),
-        priceIncl: variant.priceIncl, priceBusiness: variant.priceBusiness, priceBusinessIncl: variant.priceBusinessIncl, vatRate: variant.vatRate, inStock: variant.inStock, stockQty: variant.stockQty, image: variant.image || imageOf(parent),
+      subItems: subItems.map((subItem) => ({
+        slug: subItem.slug, itemId: subItem.itemId, code: subItem.code, label: Object.values(subItem.values).join(' / ') || subItem.code,
+        meta: Object.entries(subItem.values).map(([name, value]) => `${name}: ${value}`).join(' | '),
+        priceIncl: subItem.priceIncl, priceBusiness: subItem.priceBusiness, priceBusinessIncl: subItem.priceBusinessIncl, vatRate: subItem.vatRate, inStock: subItem.inStock, stockQty: subItem.stockQty, image: subItem.image || imageOf(articleGroup),
       })),
     };
-    for (const variant of variants) {
-      variant.parentSlug = group.slug;
-      variant.categoryKey = group.categoryKey; variant.categoryName = group.categoryName; variant.groupSlug = group.groupSlug; variant.treeSlug = group.treeSlug;
+    for (const subItem of subItems) {
+      subItem.articleGroupSlug = group.slug;
+      subItem.categoryKey = group.categoryKey; subItem.categoryName = group.categoryName; subItem.groupSlug = group.groupSlug; subItem.treeSlug = group.treeSlug;
     }
     listing.push(group);
   }
   const products = listing.sort(compareByName);
-  const { categoryList, groups } = arrangeCategories(products, variantProducts, tree);
+  const { categoryList, groups } = arrangeCategories(products, subItemProducts, tree);
   /**
-   * Het verkochte aantal van een product (bij een hoofdartikel de varianten samen).
+   * Het verkochte aantal van een product (bij een artikelgroep de subartikelen samen).
    * @param {object} product Een product van de catalogus.
    * @returns {number} Het aantal.
    */
-  const soldOf = (product) => (product.variants ? product.variants.reduce((total, variant) => total + (soldByCode.get(variant.code) || 0), 0) : soldByCode.get(product.code) || 0);
+  const soldOf = (product) => (product.subItems ? product.subItems.reduce((total, subItem) => total + (soldByCode.get(subItem.code) || 0), 0) : soldByCode.get(product.code) || 0);
   const bestsellers = products.filter((product) => product.image && soldOf(product) > 0)
     .sort((left, right) => soldOf(right) - soldOf(left) || compareByName(left, right)).slice(0, FEATURED_COUNT);
   // Per artikelcode de categoriekorting voor zakelijke klanten (voor de winkelwagen, zie web-orders.js priceCart).
-  const discountByCode = new Map([...standalone, ...variantProducts].filter((product) => product.categoryDiscountPct > 0).map((product) => [product.code, product.categoryDiscountPct]));
-  return { products, variantProducts, categories: categoryList, groups, featured: pickFeatured(products), bestsellers, discountByCode };
+  const discountByCode = new Map([...standalone, ...subItemProducts].filter((product) => product.categoryDiscountPct > 0).map((product) => [product.code, product.categoryDiscountPct]));
+  return { products, subItemProducts, categories: categoryList, groups, featured: pickFeatured(products), bestsellers, discountByCode };
 }
 
 // De catalogus van een omgeving (parameters: tenant, tenant): niet-gearchiveerde artikelen met verkoopprijs die naar de
 // webshop mogen, met reservering, categorie en afbeelding van het gekoppelde webshopproduct.
-const CATALOG_SQL = `SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.stock_managed, p.in_stock AS shop_in_stock, i.parent_id, i.has_variants, i.attributes, i.variant_values, COALESCE(r.qty, 0) AS reserved, i.sale_price, i.business_price, i.vat_rate, i.image_id, i.order_pack_size, i.order_min_qty, i.price_tiers, i.updated_at, p.categories, p.image
+const CATALOG_SQL = `SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.stock_managed, p.in_stock AS shop_in_stock, i.group_id, i.is_group, i.attributes, i.sub_values, COALESCE(r.qty, 0) AS reserved, i.sale_price, i.business_price, i.vat_rate, i.image_id, i.order_pack_size, i.order_min_qty, i.price_tiers, i.updated_at, p.categories, p.image
         FROM stock_items i
         LEFT JOIN (SELECT item_id, SUM(qty) AS qty FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id
         LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
-        WHERE i.tenant_id = ? AND i.archived = 0 AND ((i.shop_sync = 1 AND i.has_variants = 0 AND i.sale_price IS NOT NULL) OR i.has_variants = 1)`;
+        WHERE i.tenant_id = ? AND i.archived = 0 AND ((i.shop_sync = 1 AND i.is_group = 0 AND i.sale_price IS NOT NULL) OR i.is_group = 1)`;
 // Meest verkocht (parameters: tenant, vanaf): afboekingen van webshopverkopen (eigen bestellingen en de oude webshop).
 const SOLD_SQL = `SELECT i.code, SUM(-m.qty) AS qty FROM stock_movements m JOIN stock_items i ON i.tenant_id = m.tenant_id AND i.id = m.item_id
         WHERE m.tenant_id = ? AND m.created_at >= ? AND m.kind = 'afboeking' AND m.qty < 0 AND (m.source = 'webshop' OR m.source LIKE 'bestelling:%')
@@ -519,9 +519,9 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
     },
     /**
      * Omschrijving en specificaties per artikelcode voor de productpagina of de feed (12): eigen tekst, anders die van
-     * het webshopproduct, anders die van het hoofdartikel. Eén query (niet in de catalogus, want die staat in het geheugen).
+     * het webshopproduct, anders die van de artikelgroep. Eén query (niet in de catalogus, want die staat in het geheugen).
      * @param {string} tenantId De omgeving.
-     * @param {string[]|null} [codes] Alleen deze codes (de productpagina: het artikel en zijn varianten); null = alle artikelen (de feed).
+     * @param {string[]|null} [codes] Alleen deze codes (de productpagina: het artikel en zijn subartikelen); null = alle artikelen (de feed).
      * @returns {Map<string, { description: string, specifications: object[] }>} Per code wat de shop toont.
      */
     detailsOf(tenantId, codes = null) {
@@ -539,7 +539,7 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
      * De actieve verpakkingen (doos, pallet) van artikelen, voor de keuze op de productpagina. Eén query per
      * productpagina, daarna uit het geheugen. Welke verpakking een bezoeker mag zien bepaalt de aanroeper (doelgroep).
      * @param {string} tenantId De omgeving.
-     * @param {string[]} codes Artikelcodes (het artikel of zijn varianten).
+     * @param {string[]} codes Artikelcodes (het artikel of zijn subartikelen).
      * @returns {Map<string, { code: string, name: string, factor: number, audience: string }[]>} Per artikelcode de verpakkingen, kleinste eerst (artikelen zonder verpakking ontbreken).
      */
     packagingsOf(tenantId, codes) {
@@ -562,9 +562,9 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
      * artikel, de levertijd van de voorkeursleverancier en de vroegste verwachte datum van een openstaande inkooporder. Eén query per
      * productpagina, daarna uit het geheugen.
      * @param {string} tenantId De omgeving.
-     * @param {string[]} codes Artikelcodes (het artikel of zijn varianten).
+     * @param {string[]} codes Artikelcodes (het artikel of zijn subartikelen).
      * @param {{ fresh?: boolean }} [options] `fresh` slaat het geheugen over (Beheer wil direct zien wat net is opgeslagen).
-     * @returns {Map<string, { override: ?{ min: number, max: number }, supplierLeadDays: ?number, expectedDate: string, itemRules: *, parentRules: * }>} Per artikelcode (een artikel zonder gegevens ontbreekt niet: de waarden zijn dan leeg).
+     * @returns {Map<string, { override: ?{ min: number, max: number }, supplierLeadDays: ?number, expectedDate: string, itemRules: *, groupRules: * }>} Per artikelcode (een artikel zonder gegevens ontbreekt niet: de waarden zijn dan leeg).
      */
     leadInfoOf(tenantId, codes, { fresh = false } = {}) {
       const wanted = [...new Set(codes.map(String))].slice(0, 500);
@@ -572,7 +572,7 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
       const cacheKey = `${tenantId}|${wanted.join('|')}`;
       const hit = leadCache.get(cacheKey);
       if (!fresh && hit && hit.until > Date.now()) return hit.info;
-      const rows = db.prepare(`SELECT i.code, i.lead_days_min, i.lead_days_max, i.delivery_rules, (SELECT p.delivery_rules FROM stock_items p WHERE p.tenant_id = i.tenant_id AND p.id = i.parent_id) AS parent_delivery_rules,
+      const rows = db.prepare(`SELECT i.code, i.lead_days_min, i.lead_days_max, i.delivery_rules, (SELECT p.delivery_rules FROM stock_items p WHERE p.tenant_id = i.tenant_id AND p.id = i.group_id) AS parent_delivery_rules,
           (SELECT l.lead_days FROM item_suppliers l WHERE l.tenant_id = i.tenant_id AND l.item_id = i.id AND l.lead_days IS NOT NULL ORDER BY l.preferred DESC, l.lead_days LIMIT 1) AS supplier_lead_days,
           (SELECT MIN(p.expected_date) FROM purchase_order_lines l JOIN purchase_orders p ON p.tenant_id = l.tenant_id AND p.id = l.order_id
             WHERE l.tenant_id = i.tenant_id AND l.item_id = i.id AND p.status IN ('besteld', 'deels_ontvangen') AND l.received_qty < l.qty AND p.expected_date <> '') AS expected_date
@@ -580,7 +580,7 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
       const info = new Map(rows.map((row) => [row.code, {
         override: row.lead_days_min == null ? null : { min: Number(row.lead_days_min), max: Number(row.lead_days_max) },
         supplierLeadDays: row.supplier_lead_days == null ? null : Number(row.supplier_lead_days), expectedDate: String(row.expected_date || ''),
-        itemRules: row.delivery_rules, parentRules: row.parent_delivery_rules,
+        itemRules: row.delivery_rules, groupRules: row.parent_delivery_rules,
       }]));
       if (leadCache.size >= DETAILS_CACHE_MAX) leadCache.delete(leadCache.keys().next().value);
       leadCache.set(cacheKey, { info, until: Date.now() + CACHE_MS });
@@ -589,7 +589,7 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
     /**
      * De gerelateerde artikelen (Past bij en Vaak samen besteld) van een omgeving als artikelcodes, uit het geheugen (gevuld door warm; zonder stand een lege lijst). Wat zichtbaar en leverbaar is bepaalt de aanroeper met de catalogus.
      * @param {string} tenantId De omgeving.
-     * @returns {Map<string, { fits: string[], together: string[] }>} Per hoofdartikelcode; leeg zonder deze functie.
+     * @returns {Map<string, { fits: string[], together: string[] }>} Per artikelgroepcode; leeg zonder deze functie.
      */
     relatedFor(tenantId) {
       if (!relatedOf) return new Map();
@@ -611,8 +611,8 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
    * @returns {Map<string, { description: string, specifications: object[] }>} Per code wat de shop toont.
    */
   function readDetails(tenantId, wanted) {
-    const filter = wanted ? ` AND (i.code IN (${wanted.map(() => '?').join(',')}) OR i.id IN (SELECT v.parent_id FROM stock_items v WHERE v.tenant_id = ? AND v.code IN (${wanted.map(() => '?').join(',')})))` : '';
-    const rows = db.prepare(`SELECT i.id, i.code, i.parent_id, i.description, i.specifications, i.seo_title, i.seo_description, i.brand, i.ean, p.description AS shop_description, p.attributes AS shop_attributes,
+    const filter = wanted ? ` AND (i.code IN (${wanted.map(() => '?').join(',')}) OR i.id IN (SELECT v.group_id FROM stock_items v WHERE v.tenant_id = ? AND v.code IN (${wanted.map(() => '?').join(',')})))` : '';
+    const rows = db.prepare(`SELECT i.id, i.code, i.group_id, i.description, i.specifications, i.seo_title, i.seo_description, i.brand, i.ean, p.description AS shop_description, p.attributes AS shop_attributes,
         (SELECT CASE WHEN s.specs LIKE '%"textLog":{"action":"nieuw"%' THEN 'nieuw' WHEN s.specs LIKE '%"textLog":{"action":"overschreven"%' THEN 'overschreven' END FROM item_specs s WHERE s.tenant_id = i.tenant_id AND s.item_id = i.id) AS text_action,
         (SELECT SUBSTRING(s.specs FROM '"textHash":"([0-9a-f]{16})"') FROM item_specs s WHERE s.tenant_id = i.tenant_id AND s.item_id = i.id) AS text_hash
       FROM stock_items i LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id
@@ -624,8 +624,8 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
      * @returns {object} De rij.
      */
     const shown = (row) => (AI_TEXT_ACTIONS.includes(row.text_action) && (!row.text_hash || row.text_hash === ItemDetails.textHash(row.description)) ? { ...row, description: '' } : row);
-    const parents = new Map(rows.filter((row) => !row.parent_id).map((row) => [row.id, ItemDetails.shownDetails(shown(row))]));
-    return new Map(rows.map((row) => [row.code, row.parent_id ? ItemDetails.shownDetails(shown(row), parents.get(row.parent_id) || null) : parents.get(row.id)]));
+    const articleGroups = new Map(rows.filter((row) => !row.group_id).map((row) => [row.id, ItemDetails.shownDetails(shown(row))]));
+    return new Map(rows.map((row) => [row.code, row.group_id ? ItemDetails.shownDetails(shown(row), articleGroups.get(row.group_id) || null) : articleGroups.get(row.id)]));
   }
 }
 

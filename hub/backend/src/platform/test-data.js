@@ -920,34 +920,34 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
         counts.purchaseOrders = purchaseOrders.list(tenantId).length;
       }
     }
-    // Artikel met varianten: een hoofdartikel met het kenmerk Lengte, elke
+    // Artikel met subartikelen: een artikelgroep met het kenmerk Lengte, elke
     // lengte een eigen code, prijs en voorraad.
     const hose = stock.create(tenantId, admin, {
       code: 'TUINSLANG', name: 'Tuinslang 1/2"', unit: 'st', costPrice: 14, salePrice: 24.95, minQty: 0,
-      // Omschrijving en specificaties voor de productpagina en de feed (12); de varianten tonen die van het hoofdartikel.
+      // Omschrijving en specificaties voor de productpagina en de feed (12); de subartikelen tonen die van de artikelgroep.
       description: 'Soepele tuinslang van versterkt pvc, knikvrij en uv-bestendig.\n\n• Geschikt voor drinkwater\n• Werkdruk tot 10 bar',
       specifications: [{ name: 'Binnendiameter', value: '1/2 inch (13 mm)' }, { name: 'Materiaal', value: 'Pvc met textielversterking' }, { name: 'Werkdruk', value: '10 bar' }],
     }, { resync: false });
-    if (hose.error) throw new Error(`Testdata: hoofdartikel mislukt (${hose.error})`);
+    if (hose.error) throw new Error(`Testdata: artikelgroep mislukt (${hose.error})`);
     if (itemImages) itemImages.setForItem(tenantId, hose.item.id, { name: 'tuinslang.png', data: sitePhotoPng('voor', 7).toString('base64') });
-    const hoseVariants = stock.setVariants(tenantId, hose.item.id, [{ name: 'Lengte', values: ['15 m', '25 m', '50 m'] }]);
-    if (hoseVariants.error) throw new Error(`Testdata: varianten mislukt (${hoseVariants.error})`);
-    hoseVariants.item.variants.forEach((variant, variantIndex) => {
-      stock.update(tenantId, variant.id, { costPrice: [9.5, 14, 26][variantIndex], salePrice: [17.95, 24.95, 44.95][variantIndex], minQty: 2, reorderQty: 6 });
-      stock.move(tenantId, admin, variant.id, { kind: 'ontvangst', qty: [6, 4, 1][variantIndex], note: 'Pakbon slangen' });
+    const hoseSubItems = stock.setSubItems(tenantId, hose.item.id, [{ name: 'Lengte', values: ['15 m', '25 m', '50 m'] }]);
+    if (hoseSubItems.error) throw new Error(`Testdata: subartikelen mislukt (${hoseSubItems.error})`);
+    hoseSubItems.item.subItems.forEach((subItem, subItemIndex) => {
+      stock.update(tenantId, subItem.id, { costPrice: [9.5, 14, 26][subItemIndex], salePrice: [17.95, 24.95, 44.95][subItemIndex], minQty: 2, reorderQty: 6 });
+      stock.move(tenantId, admin, subItem.id, { kind: 'ontvangst', qty: [6, 4, 1][subItemIndex], note: 'Pakbon slangen' });
     });
-    // Gerelateerde artikelen: de tuinslang past bij (handmatig ingesteld) het eerste andere hoofdartikel zonder varianten.
+    // Gerelateerde artikelen: de tuinslang past bij (handmatig ingesteld) het eerste andere artikelgroep zonder subartikelen.
     if (related) {
-      const partner = stock.list(tenantId).find((item) => item.code !== 'TUINSLANG' && !item.parentId && !item.hasVariants);
+      const partner = stock.list(tenantId).find((item) => item.code !== 'TUINSLANG' && !item.groupId && !item.isGroup);
       if (partner) related.setManual(tenantId, hose.item.id, [partner.id]);
     }
-    // Samengevoegde artikelen: drie losse verloopstukken zijn samengevoegd tot één hoofdartikel (met logboek, dus terug te draaien).
+    // Samengevoegde artikelen: drie losse verloopstukken zijn samengevoegd tot één artikelgroep (met logboek, dus terug te draaien).
     const reducerIds = [['VERLOOP-16', '16 mm', 1.4], ['VERLOOP-20', '20 mm', 1.8], ['VERLOOP-25', '25 mm', 2.3]].map(([code, size, price]) => {
       const reducer = stock.create(tenantId, admin, { code, name: `Verloopstuk ${size}`, unit: 'st', costPrice: price, salePrice: Math.round(price * 2.2 * 100) / 100, minQty: 0, onHand: 10 }, { resync: false });
       if (reducer.error) throw new Error(`Testdata: verloopstuk mislukt (${reducer.error})`);
       return reducer.item.id;
     });
-    const mergedReducers = stock.mergeIntoVariants(tenantId, {
+    const mergedReducers = stock.mergeIntoGroup(tenantId, {
       ids: reducerIds, code: 'VERLOOPSTUK', name: 'Verloopstuk', attributeName: 'Maat',
       values: Object.fromEntries(reducerIds.map((reducerId, reducerIndex) => [reducerId, ['16 mm', '20 mm', '25 mm'][reducerIndex]])),
     }, { user: admin });
@@ -1062,7 +1062,7 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
   counts.categoryDiscounts = 2;
   // Prijsfactor (Artikelen > Prijsfactor): standaard 1,8 met afronding op ,95; vijf artikelen met inkoop- en verkoopprijs rekenen met de factor.
   settings.update({ priceFactors: { defaultFactor: 1.8, rounding: { mode: 'x.95', direction: 'dichtstbij' }, categories: [{ categorySlug: 'druppelslang-toebehoren', factor: 2 }], suppliers: [] } });
-  prepare(`UPDATE stock_items SET price_mode = 'factor' WHERE tenant_id = ? AND id IN (SELECT id FROM stock_items WHERE tenant_id = ? AND archived = 0 AND has_variants = 0 AND cost_price IS NOT NULL AND sale_price IS NOT NULL ORDER BY code LIMIT 5)`).run(seeded.tenantId, seeded.tenantId);
+  prepare(`UPDATE stock_items SET price_mode = 'factor' WHERE tenant_id = ? AND id IN (SELECT id FROM stock_items WHERE tenant_id = ? AND archived = 0 AND is_group = 0 AND cost_price IS NOT NULL AND sale_price IS NOT NULL ORDER BY code LIMIT 5)`).run(seeded.tenantId, seeded.tenantId);
   counts.priceFactor = Number(prepare("SELECT COUNT(*) AS n FROM stock_items WHERE tenant_id = ? AND price_mode = 'factor'").get(seeded.tenantId).n);
   return counts;
 }

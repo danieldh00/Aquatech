@@ -91,9 +91,9 @@ function createReportTools(shared) {
         const rows = [];
         for (const article of articlesOf(req.tenantId)) {
           if (rows.length >= maxRows) { truncated = true; break; }
-          const variants = Array.isArray(article.variants) ? article.variants : [];
-          if (variants.length) {
-            for (const variant of variants) rows.push({ code: variant.code, naam: `${article.name} ${Object.values(variant.values || {}).join(' ')}`.trim(), eenheid: article.unit || 'st', prijs: variant.salePrice, btw: article.vatRate, beschikbaar: variant.available });
+          const subItems = Array.isArray(article.subItems) ? article.subItems : [];
+          if (subItems.length) {
+            for (const subItem of subItems) rows.push({ code: subItem.code, naam: `${article.name} ${Object.values(subItem.values || {}).join(' ')}`.trim(), eenheid: article.unit || 'st', prijs: subItem.salePrice, btw: article.vatRate, beschikbaar: subItem.available });
           } else rows.push({ code: article.code, naam: article.name, eenheid: article.unit || 'st', prijs: article.salePrice, btw: article.vatRate, beschikbaar: article.available });
         }
         if (rows.length > maxRows) { rows.length = maxRows; truncated = true; }

@@ -19,4 +19,4 @@
 .ap-attrs select { min-width: 140px; }
 .ap-result { margin: 0; padding: 10px 12px; border-radius: var(--radius, 10px); background: color-mix(in srgb, var(--at-teal) 8%, transparent); font-size: 14px; }
 .ap-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; }
-.c-desc .ap-variant { margin-left: 6px; }
+.c-desc .ap-sub-item { margin-left: 6px; }

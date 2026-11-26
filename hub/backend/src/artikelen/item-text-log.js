@@ -1,4 +1,4 @@
-// Bewaart per hoofdartikel wat de AI-omschrijving nodig heeft in de kolom item_specs.specs (geen eigen tabel, dus geen migratie):
+// Bewaart per artikelgroep wat de AI-omschrijving nodig heeft in de kolom item_specs.specs (geen eigen tabel, dus geen migratie):
 // - kenmerken: de opgezochte kenmerken met bronadres en bronzin (materiaal, afmetingen, werpstraal), plus kenmerkenAt (wanneer opgezocht, ook als er niets is gevonden);
 // - specsAt: wanneer de kenmerken als specificaties bij het artikel zijn gezet (specs-overzicht in plaats van een tekst);
 // - textLog: wat de bulkrun met de omschrijving deed (nieuw, overschreven, behouden, hersteld), met bij overschreven de vorige tekst zodat die terug kan.

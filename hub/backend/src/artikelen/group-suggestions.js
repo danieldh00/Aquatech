@@ -86,7 +86,7 @@ const compareValues = (left, right) => left.localeCompare(right, 'nl', { numeric
 /**
  * Zoekt groepen losse artikelen die samen één variabel artikel kunnen worden:
  * zelfde omschrijving op de maat (of kleur) na, en dezelfde eenheid, btw en omzetgroep
- * (varianten volgen die van het hoofdartikel). Artikelen waarvan de maat dubbel voorkomt
+ * (subartikelen volgen die van de artikelgroep). Artikelen waarvan de maat dubbel voorkomt
  * of die niet mee kunnen vallen buiten het voorstel.
  * @param {{ id: string, code: string, name: string, unit: string, vatRate: number, revenueGroup: string }[]} items De losse, actieve artikelen.
  * @param {Set<string>} takenCodes Alle artikelcodes in de omgeving (voor een vrije voorgestelde code).
@@ -103,7 +103,7 @@ function suggestGroups(items, takenCodes = new Set()) {
   }
   const groups = [];
   for (const { split, members } of buckets.values()) {
-    // Dubbele waarden (twee artikelen "PE-buis 16 mm") kunnen niet allebei een variant worden.
+    // Dubbele waarden (twee artikelen "PE-buis 16 mm") kunnen niet allebei een subartikel worden.
     const counts = new Map();
     for (const member of members) counts.set(member.value.toLowerCase(), (counts.get(member.value.toLowerCase()) || 0) + 1);
     const usable = members.filter((member) => counts.get(member.value.toLowerCase()) === 1).slice(0, MAX_GROUP_SIZE);

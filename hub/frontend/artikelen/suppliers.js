@@ -125,7 +125,7 @@
   }
 
   /**
-   * Toont het blok Leveranciers bij een artikel (niet bij een hoofdartikel met varianten).
+   * Toont het blok Leveranciers bij een artikel (niet bij een artikelgroep met subartikelen).
    * @param {object} item Het artikel.
    * @returns {Promise<void>}
    */
@@ -136,9 +136,9 @@
     state.loaded = false;
     $('#d-sup-table').innerHTML = '';
     setBusy(true);
-    section.hidden = Boolean(item.hasVariants);
+    section.hidden = Boolean(item.isGroup);
     $('.err', section).textContent = '';
-    if (item.hasVariants) return;
+    if (item.isGroup) return;
     const [lines, suppliers] = await Promise.all([context.api(`stock/items/${encodeURIComponent(item.id)}/suppliers`), context.api('suppliers')]);
     if (!state.item || state.item.id !== item.id) return;
     state.choices = suppliers.items;

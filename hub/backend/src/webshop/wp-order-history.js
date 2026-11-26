@@ -411,7 +411,7 @@ function createWpOrderHistory({ db, settingsFor, fetchImpl = null, afterImport =
    * Koppelt een groep niet-gekoppelde regels met de hand aan een artikel (de keuze blijft staan bij opnieuw ophalen).
    * @param {string} tenantId Id van de omgeving.
    * @param {{ productId?: string, variationId?: string, sku?: string, name?: string }} group De groep zoals unmatched() hem geeft.
-   * @param {string} itemId Id van het artikel (hoofdartikel of variant).
+   * @param {string} itemId Id van het artikel (artikelgroep of subartikel).
    * @returns {{ updated: number }|{ error: string, status: number }} Aantal regels, of een fout.
    */
   function link(tenantId, group, itemId) {

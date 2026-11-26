@@ -22,18 +22,18 @@ test('omschrijving: regeleinden blijven, stuurtekens en meer dan één lege rege
   assert.strictEqual(ItemDetails.sanitizeDescription('x'.repeat(6000)).length, ItemDetails.MAX_DESCRIPTION);
 });
 
-test('de shop toont eigen tekst, anders die van de webshop, anders die van het hoofdartikel', () => {
+test('de shop toont eigen tekst, anders die van de webshop, anders die van de artikelgroep', () => {
   const shopAttributes = JSON.stringify([{ name: 'Maat', visible: true, variation: false, options: ['25', '32'] }, { name: 'Verborgen', visible: false, options: ['x'] }]);
   const own = ItemDetails.shownDetails({ description: 'Eigen', specifications: '[{"name":"A","value":"B"}]', shop_description: 'Webshop', shop_attributes: shopAttributes });
   assert.deepStrictEqual({ description: own.description, specifications: own.specifications }, { description: 'Eigen', specifications: [{ name: 'A', value: 'B' }] });
   const shop = ItemDetails.shownDetails({ description: '', specifications: '[]', shop_description: 'Webshop', shop_attributes: shopAttributes });
   assert.deepStrictEqual({ description: shop.description, specifications: shop.specifications }, { description: 'Webshop', specifications: [{ name: 'Maat', value: '25, 32' }] });
   assert.strictEqual(ItemDetails.shownDetails({ description: '', specifications: '[]', shop_description: 'Diameter < 20 mm > 10 mm' }).description, 'Diameter < 20 mm > 10 mm', 'opgeslagen platte tekst niet opnieuw als HTML');
-  const variant = ItemDetails.shownDetails({ description: '', specifications: '[]' }, { description: 'Van het hoofdartikel', specifications: [{ name: 'X', value: 'Y' }] });
-  assert.deepStrictEqual({ description: variant.description, specifications: variant.specifications }, { description: 'Van het hoofdartikel', specifications: [{ name: 'X', value: 'Y' }] });
+  const subItem = ItemDetails.shownDetails({ description: '', specifications: '[]' }, { description: 'Van de artikelgroep', specifications: [{ name: 'X', value: 'Y' }] });
+  assert.deepStrictEqual({ description: subItem.description, specifications: subItem.specifications }, { description: 'Van de artikelgroep', specifications: [{ name: 'X', value: 'Y' }] });
 });
 
-test('zoekmachineteksten en merk: opgeschoond, afgekapt en een variant erft van het hoofdartikel', () => {
+test('zoekmachineteksten en merk: opgeschoond, afgekapt en een subartikel erft van de artikelgroep', () => {
   assert.strictEqual(ItemDetails.sanitizeSeoTitle('  Een <b>titel</b>\n met\ttabs  '), 'Een titel met tabs');
   assert.strictEqual(ItemDetails.sanitizeSeoTitle('x'.repeat(100)).length, ItemDetails.MAX_SEO_TITLE);
   assert.strictEqual(ItemDetails.sanitizeSeoDescription('y'.repeat(300)).length, ItemDetails.MAX_SEO_DESCRIPTION);

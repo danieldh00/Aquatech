@@ -1,5 +1,5 @@
 // Artikelen samenvoegen (module Artikelen): losse artikelen die eigenlijk maten of
-// kleuren van één product zijn, omzetten naar één variabel artikel. Stap 1: kies een
+// kleuren van één product zijn, omzetten naar één artikelgroep. Stap 1: kies een
 // voorstel van het systeem of kies zelf artikelen. Stap 2: controleer code, omschrijving
 // en de waarde per artikel; daar staat ook wat er verandert en wat gelijk blijft.
 // Praat met /api/stock/merge-suggestions en /api/stock/merge (recht 'voorraad').
@@ -7,7 +7,7 @@
   /** Hoogstens zoveel artikelen per keer (gelijk aan de grens op de server). */
   const MAX_ITEMS = 30;
   const context = { api: null, toast: null, getItems: null, onMerged: null, onMergedAll: null, esc: null, eur: null, nl: null };
-  /** shop: wat het samenvoegen met de webshop doet (publishes = Aquatech zet het hoofdartikel zelf in de webshop; blocked = de webshop bepaalt de lijst maar schrijven staat uit). */
+  /** shop: wat het samenvoegen met de webshop doet (publishes = Aquatech zet de artikelgroep zelf in de webshop; blocked = de webshop bepaalt de lijst maar schrijven staat uit). */
   const state = { groups: [], chosen: [], shop: { publishes: false, blocked: false }, running: false };
 
   /**
@@ -18,11 +18,11 @@
   const $ = (selector) => document.querySelector(selector);
 
   /**
-   * De losse artikelen waaruit gekozen kan worden: niet gearchiveerd en geen hoofdartikel of variant.
+   * De losse artikelen waaruit gekozen kan worden: niet gearchiveerd en geen artikelgroep of subartikel.
    * @returns {object[]} De artikelen, op code.
    */
   function looseItems() {
-    return context.getItems().filter((item) => !item.archived && !item.hasVariants && !item.parentId);
+    return context.getItems().filter((item) => !item.archived && !item.isGroup && !item.groupId);
   }
 
   /**
@@ -67,9 +67,9 @@
    */
   function webshopNote(linked, shop) {
     if (!linked) return '';
-    if (shop.publishes) return `<li>${linked} gekoppeld${linked === 1 ? '' : 'e'} webshopproduct${linked === 1 ? '' : 'en'}: Aquatech zet het hoofdartikel zelf als één variabel product in de webshop (met een variatie per maat) en zet de oude losse producten op concept. Ze worden niet verwijderd en zijn in de webshop terug te zetten. Lukt het niet in de webshop, dan wordt er niets samengevoegd.</li>`;
+    if (shop.publishes) return `<li>${linked} gekoppeld${linked === 1 ? '' : 'e'} webshopproduct${linked === 1 ? '' : 'en'}: Aquatech zet de artikelgroep zelf als één variabel product in de webshop (met een variatie per maat) en zet de oude losse producten op concept. Ze worden niet verwijderd en zijn in de webshop terug te zetten. Lukt het niet in de webshop, dan wordt er niets samengevoegd.</li>`;
     if (shop.blocked) return `<li class="bad">De webshop bepaalt de artikellijst en Aquatech mag niet naar de webshop schrijven. Zet in Beheer → Integraties → Webshop de REST API aan met "Aquatech is de bron"; daarna kun je deze artikelen samenvoegen.</li>`;
-    return `<li>${linked} gekoppeld${linked === 1 ? '' : 'e'} webshopproduct${linked === 1 ? '' : 'en'}: de koppeling vervalt. Zet daarna het hoofdartikel in de webshop (knop <i>In webshop zetten</i>) als één variabel product; de oude producten blijven in de webshop staan tot je ze daar weghaalt.</li>`;
+    return `<li>${linked} gekoppeld${linked === 1 ? '' : 'e'} webshopproduct${linked === 1 ? '' : 'en'}: de koppeling vervalt. Zet daarna de artikelgroep in de webshop (knop <i>In webshop zetten</i>) als één variabel product; de oude producten blijven in de webshop staan tot je ze daar weghaalt.</li>`;
   }
 
   /**
@@ -82,8 +82,8 @@
     const parts = [];
     if (linkedGroups) {
       parts.push(state.shop.publishes
-        ? `<li>${linkedGroups} ${linkedGroups === 1 ? 'groep heeft' : 'groepen hebben'} artikelen met een webshopproduct: Aquatech zet daarvan het hoofdartikel zelf als één variabel product in de webshop en zet de oude losse producten op concept (niet verwijderd, in de webshop terug te zetten). Lukt het in de webshop niet, dan wordt die groep niet samengevoegd.</li>`
-        : `<li>${linkedGroups} ${linkedGroups === 1 ? 'groep heeft' : 'groepen hebben'} artikelen met een webshopproduct: die koppeling vervalt. Zet daarna het hoofdartikel in de webshop (knop <i>In webshop zetten</i>); de oude producten blijven daar staan tot je ze weghaalt.</li>`);
+        ? `<li>${linkedGroups} ${linkedGroups === 1 ? 'groep heeft' : 'groepen hebben'} artikelen met een webshopproduct: Aquatech zet daarvan de artikelgroep zelf als één variabel product in de webshop en zet de oude losse producten op concept (niet verwijderd, in de webshop terug te zetten). Lukt het in de webshop niet, dan wordt die groep niet samengevoegd.</li>`
+        : `<li>${linkedGroups} ${linkedGroups === 1 ? 'groep heeft' : 'groepen hebben'} artikelen met een webshopproduct: die koppeling vervalt. Zet daarna de artikelgroep in de webshop (knop <i>In webshop zetten</i>); de oude producten blijven daar staan tot je ze weghaalt.</li>`);
     }
     if (blockedGroups) parts.push(`<li class="bad">${blockedGroups} ${blockedGroups === 1 ? 'groep kan' : 'groepen kunnen'} niet: de webshop bepaalt de artikellijst en Aquatech mag niet naar de webshop schrijven. Zet in Beheer → Integraties → Webshop de REST API aan met "Aquatech is de bron".</li>`);
     return parts.join('');
@@ -170,8 +170,8 @@
     // Zelfde keuze als de server: het artikel met de laagste code levert eenheid, btw, omzetgroep en prijs.
     const first = [...items].sort((left, right) => (left.code < right.code ? -1 : left.code > right.code ? 1 : 0))[0];
     const mixed = items.some((item) => item.unit !== first.unit || item.vatRate !== first.vatRate || item.revenueGroup !== first.revenueGroup);
-    $('#mg-notes').innerHTML = `<li>${items.length} artikelen worden varianten van één nieuw hoofdartikel. Code, voorraad, prijzen, minimum, afbeelding, boekingen en reserveringen van elk artikel blijven zoals ze zijn; werkorders, offertes, facturen en bestellingen verwijzen nog naar dezelfde artikelcodes.</li>
-      <li>Het hoofdartikel heeft zelf geen voorraad: het telt de varianten op. Het neemt eenheid, btw, omzetgroep en prijs van ${esc(first.code)} over.</li>
+    $('#mg-notes').innerHTML = `<li>${items.length} artikelen worden subartikelen van één nieuw artikelgroep. Code, voorraad, prijzen, minimum, afbeelding, boekingen en reserveringen van elk artikel blijven zoals ze zijn; werkorders, offertes, facturen en bestellingen verwijzen nog naar dezelfde artikelcodes.</li>
+      <li>De artikelgroep heeft zelf geen voorraad: het telt de subartikelen op. Het neemt eenheid, btw, omzetgroep en prijs van ${esc(first.code)} over.</li>
       ${webshopNote(linked, state.shop)}
       ${mixed ? '<li class="bad">Deze artikelen hebben niet dezelfde eenheid, btw en omzetgroep. Pas die eerst aan, anders kunnen ze niet samen.</li>' : ''}`;
     $('#mg-submit').disabled = mixed || (linked > 0 && state.shop.blocked);
@@ -244,7 +244,7 @@
     }).join('');
     const total = groups.filter((entry) => !entry.tooBig && !(entry.linked > 0 && state.shop.blocked));
     const linkedGroups = total.filter((entry) => entry.linked > 0).length;
-    $('#mga-notes').innerHTML = `<li>${total.reduce((sum, entry) => sum + entry.items.length, 0)} artikelen in ${total.length} groepen worden varianten van een nieuw hoofdartikel. Code, voorraad, prijzen, minimum, afbeelding, boekingen en reserveringen van elk artikel blijven zoals ze zijn; werkorders, offertes, facturen en bestellingen verwijzen nog naar dezelfde artikelcodes.</li>
+    $('#mga-notes').innerHTML = `<li>${total.reduce((sum, entry) => sum + entry.items.length, 0)} artikelen in ${total.length} groepen worden subartikelen van een nieuw artikelgroep. Code, voorraad, prijzen, minimum, afbeelding, boekingen en reserveringen van elk artikel blijven zoals ze zijn; werkorders, offertes, facturen en bestellingen verwijzen nog naar dezelfde artikelcodes.</li>
       ${bulkWebshopNote(linkedGroups, groups.filter((entry) => entry.linked > 0 && state.shop.blocked).length)}
       ${groups.some((entry) => entry.tooBig) ? `<li class="bad">Een voorstel met meer dan ${MAX_ITEMS} artikelen kan niet in één keer; kies die artikelen zelf in twee delen.</li>` : ''}
       ${state.shop.publishes && linkedGroups ? '<li>Per groep met webshopproducten duurt het enkele seconden; blijf op deze pagina tot alles klaar is.</li>' : ''}`;
@@ -315,7 +315,7 @@
 
   /**
    * Koppelt de knop en het formulier.
-   * @param {{ api: Function, toast: Function, getItems: Function, onMerged: Function, esc: Function, eur: Function, nl: Function }} options Hulpfuncties van de pagina; getItems geeft de artikellijst, onMerged wordt aangeroepen met het nieuwe hoofdartikel.
+   * @param {{ api: Function, toast: Function, getItems: Function, onMerged: Function, esc: Function, eur: Function, nl: Function }} options Hulpfuncties van de pagina; getItems geeft de artikellijst, onMerged wordt aangeroepen met de nieuwe artikelgroep.
    */
   function setup(options) {
     Object.assign(context, options);

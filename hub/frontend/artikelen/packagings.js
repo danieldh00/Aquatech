@@ -21,7 +21,7 @@
   }
 
   /**
-   * Toont het blok bij een artikel (niet bij een hoofdartikel met varianten).
+   * Toont het blok bij een artikel (niet bij een artikelgroep met subartikelen).
    * @param {object} item Het artikel.
    * @returns {Promise<void>}
    */
@@ -32,9 +32,9 @@
     state.loaded = false;
     $('#d-pk-table').innerHTML = '';
     setBusy(true);
-    section.hidden = Boolean(item.hasVariants);
+    section.hidden = Boolean(item.isGroup);
     $('.err', section).textContent = '';
-    if (item.hasVariants) return;
+    if (item.isGroup) return;
     let result;
     try {
       result = await context.api(`stock/items/${encodeURIComponent(item.id)}/packagings`);

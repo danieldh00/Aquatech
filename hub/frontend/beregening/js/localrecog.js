@@ -1208,9 +1208,9 @@
    * @param {HTMLImageElement} image het beeld
    * @param {boolean} rotate 90° draaien
    * @param {boolean} binary zwart-wit maken
-   * @returns {HTMLCanvasElement} de variant
+   * @returns {HTMLCanvasElement} het subartikel
    */
-  function variant(image, rotate, binary) {
+  function subItem(image, rotate, binary) {
     const width = image.naturalWidth || image.width, height = image.naturalHeight || image.height;
     const canvas = document.createElement('canvas');
     canvas.width = rotate ? height : width;
@@ -1293,7 +1293,7 @@
     const ratios = []; // schaalaanduiding "1:N"; bruikbaar als het papierformaat bekend is (PDF)
     for (const pass of passes) {
       onProgress && onProgress(pass.msg);
-      const canvas = variant(image, pass.rotate, pass.binary);
+      const canvas = subItem(image, pass.rotate, pass.binary);
       await worker.setParameters({
         tessedit_pageseg_mode: '11', // losse tekst verspreid over de tekening
         tessedit_char_whitelist: pass.digits ? '0123456789.,:/mMcC ' : '',

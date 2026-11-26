@@ -1,7 +1,7 @@
 // Gerelateerde artikelen voor de webshop: "Past bij" (handmatig of door de AI, tabel item_related) en "Vaak samen besteld" (berekend, tabel
 // item_together), plus de opgezochte specificaties waarop de AI-koppeling rust (tabel item_specs, migratie 99).
 //
-// - Alles werkt op hoofdartikelen: varianten delen de koppelingen van hun hoofdartikel.
+// - Alles werkt op artikelgroepen: subartikelen delen de koppelingen van hun artikelgroep.
 // - Past bij handmatig: de gebruiker kiest artikelen (hoogstens MAX_LINKS). Een handmatige koppeling wordt nooit door de AI overschreven of gewist.
 // - Past bij met AI: de AI zoekt specificaties op (related-research.js), de code bepaalt met vaste regels wat past (related-compat.js). Elke koppeling heeft
 //   een reden en bronnen. Zonder gevonden specificaties komt er geen koppeling.
@@ -52,7 +52,7 @@ function jsonOf(value, fallback) {
 
 /**
  * Berekent welke artikelparen vaak samen besteld worden.
- * @param {{ orderId: string, itemId: string, kind: string }[]} lines Verkoop- en retourregels (artikel = hoofdartikel).
+ * @param {{ orderId: string, itemId: string, kind: string }[]} lines Verkoop- en retourregels (artikel = artikelgroep).
  * @returns {Map<string, { otherId: string, both: number, item: number, other: number, lift: number, score: number }[]>} Per artikel de beste partners (hoogstens MAX_LINKS), beste eerst.
  */
 function computeTogether(lines) {
@@ -117,12 +117,12 @@ function createRelatedStore(db) {
   const placeholders = (count) => Array.from({ length: count }, () => '?').join(',');
 
   /**
-   * Het hoofdartikel (geen variant, niet gearchiveerd) met dit id.
+   * De artikelgroep (geen subartikel, niet gearchiveerd) met dit id.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} itemId Id van het artikel.
    * @returns {object|undefined} De rij, of niets.
    */
-  const findMain = (tenantId, itemId) => prepare('SELECT id, code, name FROM stock_items WHERE tenant_id = ? AND id::text = ? AND parent_id IS NULL AND archived = 0').get(tenantId, String(itemId || ''));
+  const findMain = (tenantId, itemId) => prepare('SELECT id, code, name FROM stock_items WHERE tenant_id = ? AND id::text = ? AND group_id IS NULL AND archived = 0').get(tenantId, String(itemId || ''));
 
   /**
    * Zet een koppelingsrij om naar het formaat van de API.
@@ -134,7 +134,7 @@ function createRelatedStore(db) {
   /**
    * De koppelingen en partners van één artikel.
    * @param {string} tenantId Id van de omgeving.
-   * @param {string} itemId Id van het hoofdartikel.
+   * @param {string} itemId Id van de artikelgroep.
    * @returns {{ links: object[], together: object[], specs: ?object }|null} Past bij, vaak samen besteld en de stand van de specificaties, of null als het artikel niet bestaat.
    */
   function detail(tenantId, itemId) {
@@ -150,7 +150,7 @@ function createRelatedStore(db) {
   }
 
   /**
-   * Overzicht van de hoofdartikelen met het aantal koppelingen en de stand van de specificaties.
+   * Overzicht van de artikelgroepen met het aantal koppelingen en de stand van de specificaties.
    * @param {string} tenantId Id van de omgeving.
    * @param {{ search?: string, filter?: string }} [options] Zoekterm en filter (alle, zonder, handmatig, ai, geenspec).
    * @returns {{ items: object[], total: number, truncated: boolean }} Hoogstens MAX_LIST artikelen.
@@ -162,7 +162,7 @@ function createRelatedStore(db) {
         (SELECT COUNT(*) FROM item_related r WHERE r.tenant_id = i.tenant_id AND r.item_id = i.id AND r.source = 'ai') AS ai_count,
         (SELECT COUNT(*) FROM item_together t WHERE t.tenant_id = i.tenant_id AND t.item_id = i.id) AS together_count,
         (SELECT CASE WHEN s.specs LIKE '%"descOnly":true%' THEN '' ELSE s.status END FROM item_specs s WHERE s.tenant_id = i.tenant_id AND s.item_id = i.id) AS spec_status
-      FROM stock_items i WHERE i.tenant_id = ? AND i.parent_id IS NULL AND i.archived = 0 AND (lower(i.name) LIKE ? OR lower(i.code) LIKE ?)
+      FROM stock_items i WHERE i.tenant_id = ? AND i.group_id IS NULL AND i.archived = 0 AND (lower(i.name) LIKE ? OR lower(i.code) LIKE ?)
       ORDER BY i.name`).all(tenantId, term, term);
     const shaped = rows.map((row) => ({ id: row.id, code: row.code, name: row.name, brand: row.brand || '', manual: Number(row.manual_count), ai: Number(row.ai_count), together: Number(row.together_count), specStatus: row.spec_status || '' }));
     const filtered = shaped.filter((row) => (filter === 'zonder' ? !row.manual && !row.ai : filter === 'handmatig' ? row.manual : filter === 'ai' ? row.ai : filter === 'geenspec' ? row.specStatus === 'niet_gevonden' : true));
@@ -173,7 +173,7 @@ function createRelatedStore(db) {
    * Vervangt de handmatige koppelingen van een artikel door de gekozen lijst (in die volgorde, vóór de AI-koppelingen). Een gekozen artikel dat al een
    * AI-koppeling was wordt handmatig. Valideert eerst, schrijft dan.
    * @param {string} tenantId Id van de omgeving.
-   * @param {string} itemId Id van het hoofdartikel.
+   * @param {string} itemId Id van de artikelgroep.
    * @param {string[]} relatedIds Gekozen artikelen.
    * @returns {{ ok?: boolean, error?: string, message?: string }} Uitkomst; bij een fout niets geschreven.
    */
@@ -184,8 +184,8 @@ function createRelatedStore(db) {
     if (wanted.includes(String(item.id))) return { error: 'invalid', message: 'Een artikel kan niet bij zichzelf passen.' };
     if (wanted.length > MAX_LINKS) return { error: 'too_many', message: `Hoogstens ${MAX_LINKS} artikelen per artikel.` };
     if (wanted.length) {
-      const found = prepare(`SELECT id FROM stock_items WHERE tenant_id = ? AND parent_id IS NULL AND archived = 0 AND id::text IN (${placeholders(wanted.length)})`).all(tenantId, ...wanted);
-      if (found.length !== wanted.length) return { error: 'invalid', message: 'Een gekozen artikel bestaat niet of is een variant of gearchiveerd.' };
+      const found = prepare(`SELECT id FROM stock_items WHERE tenant_id = ? AND group_id IS NULL AND archived = 0 AND id::text IN (${placeholders(wanted.length)})`).all(tenantId, ...wanted);
+      if (found.length !== wanted.length) return { error: 'invalid', message: 'Een gekozen artikel bestaat niet of is een subartikel of gearchiveerd.' };
     }
     transaction(db, () => {
       // Binnen de transactie gelezen, zodat een gelijktijdige AI-ronde geen verouderde lijst oplevert.
@@ -210,7 +210,7 @@ function createRelatedStore(db) {
   /**
    * Haalt één koppeling weg (ook een AI-koppeling).
    * @param {string} tenantId Id van de omgeving.
-   * @param {string} itemId Id van het hoofdartikel.
+   * @param {string} itemId Id van de artikelgroep.
    * @param {string} relatedId Id van het gekoppelde artikel.
    * @returns {boolean} true als er een koppeling was.
    */
@@ -226,14 +226,14 @@ function createRelatedStore(db) {
   const clearAi = (tenantId) => prepare("DELETE FROM item_related WHERE tenant_id = ? AND source = 'ai'").run(tenantId).changes;
 
   /**
-   * De hoofdartikelen waarvan de specificaties nog moeten worden opgezocht.
+   * De artikelgroepen waarvan de specificaties nog moeten worden opgezocht.
    * @param {string} tenantId Id van de omgeving.
    * @param {{ again?: boolean, staleBefore?: string }} [options] again = ook artikelen met een eerdere uitkomst; staleBefore = ook artikelen die vóór dit moment zijn gecontroleerd.
    * @returns {{ ids: string[], total: number, capped: boolean }} De id's (hoogstens MAX_RESEARCH) en het totaal.
    */
   function researchTodo(tenantId, { again = false, staleBefore = '' } = {}) {
     const rows = prepare(`SELECT i.id FROM stock_items i LEFT JOIN item_specs s ON s.tenant_id = i.tenant_id AND s.item_id = i.id
-      WHERE i.tenant_id = ? AND i.parent_id IS NULL AND i.archived = 0
+      WHERE i.tenant_id = ? AND i.group_id IS NULL AND i.archived = 0
         AND (? OR s.item_id IS NULL OR s.specs LIKE '%"descOnly":true%' OR (? <> '' AND s.checked_at < ?::timestamptz))
       ORDER BY i.name`).all(tenantId, again, staleBefore, staleBefore || '1970-01-01T00:00:00Z');
     return { ids: rows.slice(0, MAX_RESEARCH).map((row) => row.id), total: rows.length, capped: rows.length > MAX_RESEARCH };
@@ -246,7 +246,7 @@ function createRelatedStore(db) {
    * @returns {{ fields: { label: string, value: string }[] }|null} De velden, of null als het artikel niet te onderzoeken is.
    */
   function factsFor(tenantId, itemId) {
-    const row = prepare('SELECT id, code, name, brand, ean, unit FROM stock_items WHERE tenant_id = ? AND id::text = ? AND parent_id IS NULL AND archived = 0').get(tenantId, String(itemId || ''));
+    const row = prepare('SELECT id, code, name, brand, ean, unit FROM stock_items WHERE tenant_id = ? AND id::text = ? AND group_id IS NULL AND archived = 0').get(tenantId, String(itemId || ''));
     if (!row) return null;
     const skus = prepare('SELECT supplier_sku FROM item_suppliers WHERE tenant_id = ? AND item_id = ? AND supplier_sku <> \'\' ORDER BY preferred DESC LIMIT 2').all(tenantId, row.id).map((entry) => entry.supplier_sku);
     const fields = [{ label: 'Naam', value: row.name }, { label: 'Merk', value: row.brand }, { label: 'Artikelnummer', value: row.code }, { label: 'EAN', value: row.ean }, { label: 'Artikelnummer leverancier', value: skus.join(', ') }, { label: 'Eenheid', value: row.unit }]
@@ -257,7 +257,7 @@ function createRelatedStore(db) {
   /**
    * Bewaart de uitkomst van een zoekopdracht (vervangt een eerdere).
    * @param {string} tenantId Id van de omgeving.
-   * @param {string} itemId Id van het hoofdartikel.
+   * @param {string} itemId Id van de artikelgroep.
    * @param {{ status: string, specs: ?object, model: string }} result De uitkomst.
    * @returns {void}
    */
@@ -282,7 +282,7 @@ function createRelatedStore(db) {
    */
   function linkWithSpecs(tenantId) {
     const rows = prepare(`SELECT s.item_id, s.specs, i.name FROM item_specs s JOIN stock_items i ON i.tenant_id = s.tenant_id AND i.id = s.item_id
-      WHERE s.tenant_id = ? AND s.status = 'gevonden' AND i.parent_id IS NULL AND i.archived = 0`).all(tenantId);
+      WHERE s.tenant_id = ? AND s.status = 'gevonden' AND i.group_id IS NULL AND i.archived = 0`).all(tenantId);
     const ranks = new Map();
     for (const row of prepare('SELECT item_id, other_id, score FROM item_together WHERE tenant_id = ?').all(tenantId)) ranks.set(`${row.item_id}|${row.other_id}`, Number(row.score));
     const items = rows.map((row) => ({ id: String(row.item_id), name: row.name, specs: jsonOf(row.specs, null) })).filter((item) => item.specs && Array.isArray(item.specs.connections));
@@ -307,7 +307,7 @@ function createRelatedStore(db) {
         if (fresh.length) { itemCount += 1; linkCount += fresh.length; }
       }
     });
-    const withoutSpecs = Number(prepare("SELECT COUNT(*) AS n FROM stock_items i WHERE i.tenant_id = ? AND i.parent_id IS NULL AND i.archived = 0 AND NOT EXISTS (SELECT 1 FROM item_specs s WHERE s.tenant_id = i.tenant_id AND s.item_id = i.id AND s.status = 'gevonden')").get(tenantId).n);
+    const withoutSpecs = Number(prepare("SELECT COUNT(*) AS n FROM stock_items i WHERE i.tenant_id = ? AND i.group_id IS NULL AND i.archived = 0 AND NOT EXISTS (SELECT 1 FROM item_specs s WHERE s.tenant_id = i.tenant_id AND s.item_id = i.id AND s.status = 'gevonden')").get(tenantId).n);
     return { items: itemCount, links: linkCount, withSpecs: items.length, withoutSpecs };
   }
 
@@ -318,11 +318,11 @@ function createRelatedStore(db) {
    */
   function refreshTogether(tenantId) {
     const since = new Date(); since.setMonth(since.getMonth() - TOGETHER_MONTHS);
-    const rows = prepare(`SELECT l.order_id, l.kind, l.sold_at, COALESCE(i.parent_id, i.id) AS main_id FROM web_sale_lines l
+    const rows = prepare(`SELECT l.order_id, l.kind, l.sold_at, COALESCE(i.group_id, i.id) AS main_id FROM web_sale_lines l
       JOIN stock_items i ON i.tenant_id = l.tenant_id AND i.id = l.item_id
       WHERE l.tenant_id = ? AND l.order_id IS NOT NULL AND l.sold_at >= ? ORDER BY l.sold_at DESC, l.order_id LIMIT ${MAX_SALE_LINES}`).all(tenantId, since.toISOString());
     // Ook de orderhistorie uit de oude WordPress-webshop (wp_order_lines, alleen gekoppelde regels) telt mee; haar bestelnummers krijgen een voorvoegsel.
-    const wpRows = prepare(`SELECT l.wp_order_id, l.ordered_at, COALESCE(i.parent_id, i.id) AS main_id FROM wp_order_lines l
+    const wpRows = prepare(`SELECT l.wp_order_id, l.ordered_at, COALESCE(i.group_id, i.id) AS main_id FROM wp_order_lines l
       JOIN stock_items i ON i.tenant_id = l.tenant_id AND i.id = l.item_id
       WHERE l.tenant_id = ? AND l.ordered_at >= ? ORDER BY l.ordered_at DESC, l.wp_order_id LIMIT ${MAX_SALE_LINES}`).all(tenantId, since.toISOString())
       .map((row) => ({ order_id: `wp:${row.wp_order_id}`, kind: 'verkoop', main_id: row.main_id, sold_at: new Date(row.ordered_at).toISOString() }));
@@ -380,7 +380,7 @@ function createRelatedStore(db) {
   }
 
   /**
-   * De gerelateerde artikelen voor de webshop: per hoofdartikel (code) de codes van Past bij en Vaak samen besteld, in volgorde. De webshop filtert zelf op wat
+   * De gerelateerde artikelen voor de webshop: per artikelgroep (code) de codes van Past bij en Vaak samen besteld, in volgorde. De webshop filtert zelf op wat
    * zichtbaar en leverbaar is. Twee queries.
    * @param {string} tenantId Id van de omgeving.
    * @returns {Map<string, { fits: string[], together: string[] }>} Per code.

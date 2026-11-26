@@ -1,4 +1,4 @@
-// Artikelen met varianten: hoofdartikel met kenmerken, varianten met eigen
+// Artikelen met subartikelen: artikelgroep met kenmerken, subartikelen met eigen
 // code/prijs/voorraad, reserveren op werkorders (eerst een maat kiezen), de
 // keuzelijst voor werkorder en offerte, en WooCommerce-variaties in beide
 // richtingen tegen een nagebootste webshop.
@@ -18,7 +18,7 @@ const SECRET = 's'.repeat(64);
 const PW = 'Tuin-Plan-2026!';
 const USER = { id: null, display_name: 'Test' };
 
-test('varianten: kenmerken opschonen en combinaties', () => {
+test('subartikelen: kenmerken opschonen en combinaties', () => {
   assert.deepStrictEqual(sanitizeAttributes([{ name: ' Maat ', values: '16 mm, 20 mm, 16 MM,' }]).value, [{ name: 'Maat', values: ['16 mm', '20 mm'] }]);
   assert.strictEqual(sanitizeAttributes([{ name: '', values: ['a'] }]).field, 'attributes');
   assert.strictEqual(sanitizeAttributes([{ name: 'Maat', values: [] }]).field, 'attributes');
@@ -29,68 +29,68 @@ test('varianten: kenmerken opschonen en combinaties', () => {
   assert.deepStrictEqual(combinations([{ name: 'Maat', values: ['16', '20'] }, { name: 'Kleur', values: ['zwart'] }]), [{ Maat: '16', Kleur: 'zwart' }, { Maat: '20', Kleur: 'zwart' }]);
 });
 
-test('varianten: hoofdartikel, totalen, mutaties alleen op een variant, bestelvoorstel', () => {
+test('subartikelen: artikelgroep, totalen, mutaties alleen op een subartikel, bestelvoorstel', () => {
   const db = openDb();
   const tenantId = createStore(db).ensureTenant().id;
   const stock = createStockStore(db);
-  const parent = stock.create(tenantId, USER, { code: 'PE-BUIS', name: 'PE-buis', unit: 'm', costPrice: 0.5, salePrice: 1.2, vatRate: 9 }).item;
-  const made = stock.setVariants(tenantId, parent.id, [{ name: 'Maat', values: ['16 mm', '20 mm'] }]);
+  const articleGroup = stock.create(tenantId, USER, { code: 'PE-BUIS', name: 'PE-buis', unit: 'm', costPrice: 0.5, salePrice: 1.2, vatRate: 9 }).item;
+  const made = stock.setSubItems(tenantId, articleGroup.id, [{ name: 'Maat', values: ['16 mm', '20 mm'] }]);
   assert.strictEqual(made.created, 2);
-  assert.deepStrictEqual(made.item.variants.map((variant) => [variant.code, variant.name, variant.unit, variant.salePrice, variant.vatRate, variant.values]), [
+  assert.deepStrictEqual(made.item.subItems.map((subItem) => [subItem.code, subItem.name, subItem.unit, subItem.salePrice, subItem.vatRate, subItem.values]), [
     ['PE-BUIS-16MM', 'PE-buis 16 mm', 'm', 1.2, 9, { Maat: '16 mm' }],
     ['PE-BUIS-20MM', 'PE-buis 20 mm', 'm', 1.2, 9, { Maat: '20 mm' }],
   ]);
-  const [small, large] = made.item.variants;
+  const [small, large] = made.item.subItems;
 
-  // Eigen prijs, voorraad en minimum per variant; het hoofdartikel telt op.
+  // Eigen prijs, voorraad en minimum per subartikel; de artikelgroep telt op.
   stock.update(tenantId, small.id, { salePrice: 0.95, minQty: 50 });
   stock.move(tenantId, USER, small.id, { kind: 'ontvangst', qty: 20 });
   stock.move(tenantId, USER, large.id, { kind: 'ontvangst', qty: 100 });
   const listed = stock.list(tenantId);
-  const listedParent = listed.find((item) => item.id === parent.id);
-  assert.strictEqual(listedParent.hasVariants, true);
-  assert.strictEqual(listedParent.variantCount, 2);
-  assert.strictEqual(listedParent.onHand, 120);
-  assert.strictEqual(listedParent.low, true);
-  assert.strictEqual(listed.find((item) => item.id === small.id).parentId, parent.id);
-  assert.strictEqual(stock.get(tenantId, small.id).parent.code, 'PE-BUIS');
+  const listedGroup = listed.find((item) => item.id === articleGroup.id);
+  assert.strictEqual(listedGroup.isGroup, true);
+  assert.strictEqual(listedGroup.subItemCount, 2);
+  assert.strictEqual(listedGroup.onHand, 120);
+  assert.strictEqual(listedGroup.low, true);
+  assert.strictEqual(listed.find((item) => item.id === small.id).groupId, articleGroup.id);
+  assert.strictEqual(stock.get(tenantId, small.id).articleGroup.code, 'PE-BUIS');
   assert.strictEqual(stock.get(tenantId, small.id).salePrice, 0.95);
-  assert.strictEqual(stock.move(tenantId, USER, parent.id, { kind: 'ontvangst', qty: 1 }).status, 409);
+  assert.strictEqual(stock.move(tenantId, USER, articleGroup.id, { kind: 'ontvangst', qty: 1 }).status, 409);
   assert.deepStrictEqual(stock.reorderProposal(tenantId).items.map((item) => [item.code, item.orderQty]), [['PE-BUIS-16MM', 80]]);
 
-  // Waarde erbij: alleen de nieuwe variant; kenmerk hernoemen mag niet meer.
-  const more = stock.setVariants(tenantId, parent.id, [{ name: 'Maat', values: ['16 mm', '20 mm', '25 mm'] }]);
+  // Waarde erbij: alleen de nieuwe subartikel; kenmerk hernoemen mag niet meer.
+  const more = stock.setSubItems(tenantId, articleGroup.id, [{ name: 'Maat', values: ['16 mm', '20 mm', '25 mm'] }]);
   assert.strictEqual(more.created, 1);
-  assert.strictEqual(more.item.variants.length, 3);
-  assert.strictEqual(stock.setVariants(tenantId, parent.id, [{ name: 'Diameter', values: ['16 mm'] }]).status, 409);
-  assert.strictEqual(stock.setVariants(tenantId, parent.id, []).status, 409);
+  assert.strictEqual(more.item.subItems.length, 3);
+  assert.strictEqual(stock.setSubItems(tenantId, articleGroup.id, [{ name: 'Diameter', values: ['16 mm'] }]).status, 409);
+  assert.strictEqual(stock.setSubItems(tenantId, articleGroup.id, []).status, 409);
 
-  // Waarde weghalen: die variant gaat weg (zonder boekingen echt verwijderd).
-  const fewer = stock.setVariants(tenantId, parent.id, [{ name: 'Maat', values: ['16 mm', '20 mm'] }]);
+  // Waarde weghalen: dat subartikel gaat weg (zonder boekingen echt verwijderd).
+  const fewer = stock.setSubItems(tenantId, articleGroup.id, [{ name: 'Maat', values: ['16 mm', '20 mm'] }]);
   assert.strictEqual(fewer.removed, 1);
-  assert.deepStrictEqual(fewer.item.variants.map((variant) => variant.code), ['PE-BUIS-16MM', 'PE-BUIS-20MM']);
+  assert.deepStrictEqual(fewer.item.subItems.map((subItem) => subItem.code), ['PE-BUIS-16MM', 'PE-BUIS-20MM']);
 
-  // Eenheid en btw volgen het hoofdartikel; archiveren neemt de varianten mee.
-  stock.update(tenantId, parent.id, { unit: 'rol', vatRate: 21 });
-  assert.ok(stock.get(tenantId, parent.id).variants.every((variant) => variant.unit === 'rol' && variant.vatRate === 21));
-  // Terugzetten brengt alleen de varianten terug die met het hoofdartikel mee gingen, niet een los verwijderde.
+  // Eenheid en btw volgen de artikelgroep; archiveren neemt de subartikelen mee.
+  stock.update(tenantId, articleGroup.id, { unit: 'rol', vatRate: 21 });
+  assert.ok(stock.get(tenantId, articleGroup.id).subItems.every((subItem) => subItem.unit === 'rol' && subItem.vatRate === 21));
+  // Terugzetten brengt alleen de subartikelen terug die met de artikelgroep mee gingen, niet een los verwijderde.
   assert.deepStrictEqual(stock.remove(tenantId, large.id), { archived: true, code: 'PE-BUIS-20MM' });
-  stock.update(tenantId, parent.id, { archived: true });
-  assert.ok(stock.get(tenantId, parent.id).variants.every((variant) => variant.archived));
+  stock.update(tenantId, articleGroup.id, { archived: true });
+  assert.ok(stock.get(tenantId, articleGroup.id).subItems.every((subItem) => subItem.archived));
   assert.strictEqual(stock.update(tenantId, small.id, { archived: false }).status, 409);
-  stock.update(tenantId, parent.id, { archived: false });
-  assert.deepStrictEqual(stock.get(tenantId, parent.id).variants.map((variant) => [variant.code, variant.archived]), [['PE-BUIS-16MM', false], ['PE-BUIS-20MM', true]]);
+  stock.update(tenantId, articleGroup.id, { archived: false });
+  assert.deepStrictEqual(stock.get(tenantId, articleGroup.id).subItems.map((subItem) => [subItem.code, subItem.archived]), [['PE-BUIS-16MM', false], ['PE-BUIS-20MM', true]]);
 
-  // Een artikel met voorraad kan geen hoofdartikel worden; een variant ook niet.
+  // Een artikel met voorraad kan geen artikelgroep worden; een subartikel ook niet.
   const used = stock.create(tenantId, USER, { code: 'SLANG', name: 'Slang', onHand: 3 }).item;
-  assert.strictEqual(stock.setVariants(tenantId, used.id, [{ name: 'Lengte', values: ['15 m'] }]).status, 409);
-  assert.strictEqual(stock.setVariants(tenantId, small.id, [{ name: 'Kleur', values: ['zwart'] }]).status, 409);
+  assert.strictEqual(stock.setSubItems(tenantId, used.id, [{ name: 'Lengte', values: ['15 m'] }]).status, 409);
+  assert.strictEqual(stock.setSubItems(tenantId, small.id, [{ name: 'Kleur', values: ['zwart'] }]).status, 409);
 
-  // Verwijderen: varianten met mutaties worden gearchiveerd, het hoofdartikel blijft (gearchiveerd).
-  assert.deepStrictEqual(stock.remove(tenantId, parent.id), { archived: true, code: 'PE-BUIS' });
-  assert.strictEqual(stock.get(tenantId, more.item.variants[2].id), null);
+  // Verwijderen: subartikelen met mutaties worden gearchiveerd, de artikelgroep blijft (gearchiveerd).
+  assert.deepStrictEqual(stock.remove(tenantId, articleGroup.id), { archived: true, code: 'PE-BUIS' });
+  assert.strictEqual(stock.get(tenantId, more.item.subItems[2].id), null);
   const fresh = stock.create(tenantId, USER, { code: 'DRUPPELAAR', name: 'Druppelaar' }).item;
-  stock.setVariants(tenantId, fresh.id, [{ name: 'Afgifte', values: ['2 l/u', '4 l/u'] }]);
+  stock.setSubItems(tenantId, fresh.id, [{ name: 'Afgifte', values: ['2 l/u', '4 l/u'] }]);
   assert.deepStrictEqual(stock.remove(tenantId, fresh.id), { deleted: true, code: 'DRUPPELAAR' });
   assert.strictEqual(stock.list(tenantId, { archived: true }).filter((item) => item.code.startsWith('DRUPPELAAR')).length, 0);
 });
@@ -111,70 +111,70 @@ async function setup() {
   return { server, db, as: createLogin(base, { password: PW }) };
 }
 
-test('varianten via de API: kenmerken, keuzelijst, werkorder kiest eerst een maat, rechten en andere organisatie', async () => {
+test('subartikelen via de API: kenmerken, keuzelijst, werkorder kiest eerst een maat, rechten en andere organisatie', async () => {
   const { server, db: stockDb, as } = await setup();
   try {
     const baas = await as('baas');
     const kees = await as('kees');
     const pien = await as('pien');
     const klant = await as('klant');
-    const parent = (await kees.post('/app/api/stock/items', { code: 'SLANG', name: 'Tuinslang', salePrice: 20, costPrice: 12 })).body;
-    const made = await kees.put(`/app/api/stock/items/${parent.id}/variants`, { attributes: [{ name: 'Lengte', values: ['15 m', '25 m'] }] });
+    const articleGroup = (await kees.post('/app/api/stock/items', { code: 'SLANG', name: 'Tuinslang', salePrice: 20, costPrice: 12 })).body;
+    const made = await kees.put(`/app/api/stock/items/${articleGroup.id}/sub-items`, { attributes: [{ name: 'Lengte', values: ['15 m', '25 m'] }] });
     assert.strictEqual(made.status, 200, JSON.stringify(made.body));
     assert.strictEqual(made.body.created, 2);
-    assert.strictEqual((await kees.put(`/app/api/stock/items/${parent.id}/variants`, { attributes: [{ name: '', values: ['x'] }] })).status, 400);
-    assert.strictEqual((await kees.post(`/app/api/stock/items/${parent.id}/movements`, { kind: 'ontvangst', qty: 1 })).status, 409);
+    assert.strictEqual((await kees.put(`/app/api/stock/items/${articleGroup.id}/sub-items`, { attributes: [{ name: '', values: ['x'] }] })).status, 400);
+    assert.strictEqual((await kees.post(`/app/api/stock/items/${articleGroup.id}/movements`, { kind: 'ontvangst', qty: 1 })).status, 409);
 
-    // Keuzelijst: hoofdartikel met varianten, zonder inkoopprijs; ook voor de planner (werkorders).
+    // Keuzelijst: artikelgroep met subartikelen, zonder inkoopprijs; ook voor de planner (werkorders).
     const picker = (await pien.get('/app/api/stock/articles')).body.items;
     const hose = picker.find((article) => article.code === 'SLANG');
-    assert.deepStrictEqual(hose.variants.map((variant) => [variant.code, variant.values.Lengte]), [['SLANG-15M', '15 m'], ['SLANG-25M', '25 m']]);
+    assert.deepStrictEqual(hose.subItems.map((subItem) => [subItem.code, subItem.values.Lengte]), [['SLANG-15M', '15 m'], ['SLANG-25M', '25 m']]);
     assert.ok(!JSON.stringify(picker).includes('costPrice'));
     assert.strictEqual((await klant.get('/app/api/stock/articles')).status, 403);
-    assert.strictEqual((await pien.put(`/app/api/stock/items/${parent.id}/variants`, { attributes: [] })).status, 403);
-    assert.strictEqual((await pien.post(`/app/api/stock/items/${parent.id}/publish`, {})).status, 403);
-    const unlinked = await kees.post(`/app/api/stock/items/${parent.id}/publish`, {});
+    assert.strictEqual((await pien.put(`/app/api/stock/items/${articleGroup.id}/sub-items`, { attributes: [] })).status, 403);
+    assert.strictEqual((await pien.post(`/app/api/stock/items/${articleGroup.id}/publish`, {})).status, 403);
+    const unlinked = await kees.post(`/app/api/stock/items/${articleGroup.id}/publish`, {});
     assert.strictEqual(unlinked.status, 409);
     assert.strictEqual(unlinked.body.error, 'not_configured');
 
-    // Werkorder met de code van het hoofdartikel: eerst een maat kiezen; met de variant wordt er gereserveerd.
+    // Werkorder met de code van de artikelgroep: eerst een maat kiezen; met het subartikel wordt er gereserveerd.
     const quote = (await kees.post('/app/api/quotes', { data: { title: 'Slang', customer: { name: 'Fam. Jansen' },
       lines: [{ section: 'materiaal', code: 'SLANG', description: 'Tuinslang', qty: 2, unit: 'st', price: 20 }] } })).body;
     await kees.put(`/app/api/quotes/${quote.id}`, { status: 'akkoord' });
     const workOrder = (await kees.post('/app/api/workorders', { quoteId: quote.id })).body;
     let stockOfOrder = (await kees.get(`/app/api/stock/workorders/${workOrder.id}`)).body;
-    assert.deepStrictEqual(stockOfOrder.chooseVariant.map((line) => [line.code, line.qty]), [['SLANG', 2]]);
+    assert.deepStrictEqual(stockOfOrder.chooseSubItem.map((line) => [line.code, line.qty]), [['SLANG', 2]]);
     assert.deepStrictEqual(stockOfOrder.notInStock, []);
     assert.strictEqual(stockOfOrder.lines.length, 0);
     const full = (await kees.get(`/app/api/workorders/${workOrder.id}`)).body;
     full.data.materials[0].code = 'SLANG-25M';
     assert.strictEqual((await kees.put(`/app/api/workorders/${workOrder.id}`, { data: full.data })).status, 200);
     stockOfOrder = (await kees.get(`/app/api/stock/workorders/${workOrder.id}`)).body;
-    assert.deepStrictEqual(stockOfOrder.chooseVariant, []);
+    assert.deepStrictEqual(stockOfOrder.chooseSubItem, []);
     assert.deepStrictEqual(stockOfOrder.lines.map((line) => [line.code, line.reserved]), [['SLANG-25M', 2]]);
 
-    // Twee maten op dezelfde werkorder: het hoofdartikel telt één werkorder.
+    // Twee maten op dezelfde werkorder: de artikelgroep telt één werkorder.
     full.data.materials.push({ ...full.data.materials[0], code: 'SLANG-15M', qty: 1 });
     assert.strictEqual((await kees.put(`/app/api/workorders/${workOrder.id}`, { data: full.data })).status, 200);
-    assert.strictEqual((await kees.get(`/app/api/stock/items/${parent.id}`)).body.orders, 1);
-    assert.strictEqual((await kees.get('/app/api/stock')).body.items.find((item) => item.id === parent.id).orders, 1);
+    assert.strictEqual((await kees.get(`/app/api/stock/items/${articleGroup.id}`)).body.orders, 1);
+    assert.strictEqual((await kees.get('/app/api/stock')).body.items.find((item) => item.id === articleGroup.id).orders, 1);
     full.data.materials.pop();
     assert.strictEqual((await kees.put(`/app/api/workorders/${workOrder.id}`, { data: full.data })).status, 200);
 
-    // Losse factuur met de code van het hoofdartikel: niets afgeboekt op het hoofdartikel.
+    // Losse factuur met de code van de artikelgroep: niets afgeboekt op de artikelgroep.
     const invoice = (await baas.post('/app/api/invoices', { data: { customer: { name: 'Balieklant' }, lines: [{ code: 'SLANG', description: 'Tuinslang', qty: 1, price: 20 }] } })).body;
     assert.strictEqual((await baas.post(`/app/api/invoices/${invoice.id}/finalize`, {})).status, 200);
-    const parentAfter = (await kees.get(`/app/api/stock/items/${parent.id}`)).body;
-    assert.strictEqual(parentAfter.onHand, 0);
-    assert.deepStrictEqual(parentAfter.movements, []);
-    assert.strictEqual(stockDb.prepare('SELECT on_hand FROM stock_items WHERE id = ?').get(parent.id).on_hand, 0);
+    const groupAfter = (await kees.get(`/app/api/stock/items/${articleGroup.id}`)).body;
+    assert.strictEqual(groupAfter.onHand, 0);
+    assert.deepStrictEqual(groupAfter.movements, []);
+    assert.strictEqual(stockDb.prepare('SELECT on_hand FROM stock_items WHERE id = ?').get(articleGroup.id).on_hand, 0);
 
-    // Andere organisatie: 404 op het hoofdartikel, eigen lege keuzelijst.
+    // Andere organisatie: 404 op de artikelgroep, eigen lege keuzelijst.
     const created = await baas.post('/app/api/platform/tenants', { name: 'Groen BV', slug: 'groen', admin: { username: 'piet', displayName: 'Piet', password: PW, mustChangePassword: false } });
     assert.strictEqual(created.status, 201, JSON.stringify(created.body));
     const piet = await as('piet', 'groen');
-    assert.strictEqual((await piet.put(`/app/api/stock/items/${parent.id}/variants`, { attributes: [{ name: 'Lengte', values: ['50 m'] }] })).status, 404);
-    assert.strictEqual((await piet.post(`/app/api/stock/items/${parent.id}/publish`, {})).status, 404);
+    assert.strictEqual((await piet.put(`/app/api/stock/items/${articleGroup.id}/sub-items`, { attributes: [{ name: 'Lengte', values: ['50 m'] }] })).status, 404);
+    assert.strictEqual((await piet.post(`/app/api/stock/items/${articleGroup.id}/publish`, {})).status, 404);
     assert.deepStrictEqual((await piet.get('/app/api/stock/articles')).body.items, []);
   } finally {
     server.close();
@@ -289,19 +289,19 @@ function setupShop(products, variations, source) {
  */
 const variation = (id, sku, size, price, stockQty) => ({ id, sku, regular_price: price, manage_stock: true, stock_quantity: stockQty, attributes: [{ id: 1, name: 'Maat', option: size }], meta_data: [] });
 
-test('varianten en WooCommerce: variabel product wordt hoofdartikel, prijs en voorraad per variatie, nieuwe variant naar de webshop', async () => {
+test('subartikelen en WooCommerce: variabel product wordt artikelgroep, prijs en voorraad per variatie, nieuwe subartikel naar de webshop', async () => {
   const products = new Map([['70', { id: 70, type: 'variable', sku: 'KOPPELING', name: 'Koppeling', status: 'publish', regular_price: '', meta_data: [],
     attributes: [{ id: 1, name: 'Maat', options: ['20 mm', '25 mm'], variation: true, visible: true, position: 0 }, { id: 2, name: 'Merk', options: ['Aquatech'], variation: false, visible: true, position: 1 }] }]]);
   const variations = new Map([['70', [variation(71, 'KOP-20', '20 mm', '2.42', 10), variation(72, 'KOP-25', '25 mm', '3.63', 4)]]]);
   const { tenantId, stock, sync, shop, calls } = setupShop(products, variations, { url: 'http://shop.test', mode: 'rest', push: true, pricesIncludeTax: true, vatRate: 21 });
 
-  // Webshop → Aquatech: hoofdartikel met het kenmerk Maat, varianten met prijs en stand.
+  // Webshop → Aquatech: artikelgroep met het kenmerk Maat, subartikelen met prijs en stand.
   const first = await sync.run(tenantId);
   assert.strictEqual(first.created, 3);
-  const parent = stock.list(tenantId).find((item) => item.code === 'KOPPELING');
-  assert.deepStrictEqual(parent.attributes, [{ name: 'Maat', values: ['20 mm', '25 mm'] }]);
-  let full = stock.get(tenantId, parent.id);
-  assert.deepStrictEqual(full.variants.map((item) => [item.code, item.values.Maat, item.salePrice, item.onHand, item.shop.productId]), [
+  const articleGroup = stock.list(tenantId).find((item) => item.code === 'KOPPELING');
+  assert.deepStrictEqual(articleGroup.attributes, [{ name: 'Maat', values: ['20 mm', '25 mm'] }]);
+  let full = stock.get(tenantId, articleGroup.id);
+  assert.deepStrictEqual(full.subItems.map((item) => [item.code, item.values.Maat, item.salePrice, item.onHand, item.shop.productId]), [
     ['KOP-20', '20 mm', 2, 10, '71'], ['KOP-25', '25 mm', 3, 4, '72'],
   ]);
   assert.strictEqual(shop.products(tenantId).find((product) => product.id === '71').parentId, '70');
@@ -310,24 +310,24 @@ test('varianten en WooCommerce: variabel product wordt hoofdartikel, prijs en vo
   shop.replaceProducts(tenantId, [{ ...stored, id: '99', type: 'variable' }], new Date().toISOString());
   assert.strictEqual(shop.products(tenantId)[0].type, 'variable');
 
-  // Aquatech → webshop: prijs van één variant via de variatie-batch.
-  stock.update(tenantId, full.variants[0].id, { salePrice: 2.5 });
+  // Aquatech → webshop: prijs van één subartikel via de variatie-batch.
+  stock.update(tenantId, full.subItems[0].id, { salePrice: 2.5 });
   calls.length = 0;
   await sync.run(tenantId, { full: false });
   assert.ok(calls.some((call) => call.path.endsWith('/products/70/variations') && call.method === 'GET'));
   assert.ok(calls.some((call) => call.path.endsWith('/products/70/variations/batch')));
   assert.strictEqual(variations.get('70')[0].regular_price, '3.03');
 
-  // Verkocht in de webshop: afgeboekt op de variant.
+  // Verkocht in de webshop: afgeboekt op het subartikel.
   variations.get('70')[1].stock_quantity = 3;
   const second = await sync.run(tenantId);
   assert.strictEqual(second.soldInShop, 1);
-  assert.strictEqual(stock.get(tenantId, full.variants[1].id).onHand, 3);
+  assert.strictEqual(stock.get(tenantId, full.subItems[1].id).onHand, 3);
 
   // Nieuwe maat in Aquatech: de variatie en de waarde komen in de webshop (andere kenmerken blijven).
-  stock.setVariants(tenantId, parent.id, [{ name: 'Maat', values: ['20 mm', '25 mm', '32 mm'] }]);
-  full = stock.get(tenantId, parent.id);
-  const added = full.variants.find((item) => item.values.Maat === '32 mm');
+  stock.setSubItems(tenantId, articleGroup.id, [{ name: 'Maat', values: ['20 mm', '25 mm', '32 mm'] }]);
+  full = stock.get(tenantId, articleGroup.id);
+  const added = full.subItems.find((item) => item.values.Maat === '32 mm');
   stock.update(tenantId, added.id, { salePrice: 5 });
   stock.move(tenantId, USER, added.id, { kind: 'ontvangst', qty: 7 });
   const third = await sync.run(tenantId);
@@ -340,21 +340,21 @@ test('varianten en WooCommerce: variabel product wordt hoofdartikel, prijs en vo
   assert.strictEqual(stock.get(tenantId, added.id).shop.productId, String(created.id));
   assert.strictEqual(stock.list(tenantId, { archived: true }).filter((item) => item.archived).length, 0);
 
-  // Product weg uit de webshop terwijl er een nieuwe maat is: de ronde loopt door, de variant krijgt een melding.
+  // Product weg uit de webshop terwijl er een nieuwe maat is: de ronde loopt door, het subartikel krijgt een melding.
   products.delete('70');
-  stock.setVariants(tenantId, parent.id, [{ name: 'Maat', values: ['20 mm', '25 mm', '32 mm', '40 mm'] }]);
-  const newest = stock.get(tenantId, parent.id).variants.find((item) => item.values.Maat === '40 mm');
+  stock.setSubItems(tenantId, articleGroup.id, [{ name: 'Maat', values: ['20 mm', '25 mm', '32 mm', '40 mm'] }]);
+  const newest = stock.get(tenantId, articleGroup.id).subItems.find((item) => item.values.Maat === '40 mm');
   await sync.run(tenantId);
   assert.match(stock.get(tenantId, newest.id).shop.error, /Variatie niet aangemaakt/);
 });
 
-test('varianten en WooCommerce: artikel en hoofdartikel uit Aquatech als nieuw product in de webshop', async () => {
+test('subartikelen en WooCommerce: artikel en artikelgroep uit Aquatech als nieuw product in de webshop', async () => {
   const products = new Map();
   const variations = new Map();
   const { tenantId, stock, sync } = setupShop(products, variations, { url: 'http://shop.test', mode: 'rest', push: true, mirror: false, pricesIncludeTax: true, vatRate: 21 });
   const simple = stock.create(tenantId, USER, { code: 'VENTIEL', name: 'Ventiel', salePrice: 40, onHand: 5 }).item;
-  const parent = stock.create(tenantId, USER, { code: 'SPROEIER', name: 'Sproeier', salePrice: 10 }).item;
-  stock.setVariants(tenantId, parent.id, [{ name: 'Worp', values: ['4 m', '8 m'] }]);
+  const articleGroup = stock.create(tenantId, USER, { code: 'SPROEIER', name: 'Sproeier', salePrice: 10 }).item;
+  stock.setSubItems(tenantId, articleGroup.id, [{ name: 'Worp', values: ['4 m', '8 m'] }]);
 
   const plain = await sync.publish(tenantId, simple.id);
   assert.ok(plain.productId);
@@ -364,30 +364,30 @@ test('varianten en WooCommerce: artikel en hoofdartikel uit Aquatech als nieuw p
   assert.strictEqual(createdSimple.stock_quantity, 5);
   assert.strictEqual((await sync.publish(tenantId, simple.id)).status, 409);
 
-  // Een ander, al gekoppeld hoofdartikel met een ontbrekende variatie telt niet mee bij deze publicatie.
+  // Een ander, al gekoppeld artikelgroep met een ontbrekende variatie telt niet mee bij deze publicatie.
   const other = stock.create(tenantId, USER, { code: 'DOP', name: 'Dop' }).item;
-  stock.setVariants(tenantId, other.id, [{ name: 'Maat', values: ['1/2"'] }]);
+  stock.setSubItems(tenantId, other.id, [{ name: 'Maat', values: ['1/2"'] }]);
   const otherProduct = await sync.publish(tenantId, other.id);
-  stock.setVariants(tenantId, other.id, [{ name: 'Maat', values: ['1/2"', '3/4"'] }]);
-  const variable = await sync.publish(tenantId, parent.id);
+  stock.setSubItems(tenantId, other.id, [{ name: 'Maat', values: ['1/2"', '3/4"'] }]);
+  const variable = await sync.publish(tenantId, articleGroup.id);
   assert.strictEqual(variable.variations, 2);
   assert.strictEqual(variable.warning, null);
   assert.strictEqual(variations.get(otherProduct.productId).length, 1);
-  assert.ok(!stock.get(tenantId, other.id).variants.find((item) => item.values.Maat === '3/4"').shop.productId);
+  assert.ok(!stock.get(tenantId, other.id).subItems.find((item) => item.values.Maat === '3/4"').shop.productId);
   assert.strictEqual(products.get(variable.productId).type, 'variable');
   assert.deepStrictEqual(variations.get(variable.productId).map((entry) => [entry.sku, entry.attributes[0].option, entry.regular_price]), [['SPROEIER-4M', '4 m', '12.10'], ['SPROEIER-8M', '8 m', '12.10']]);
-  const variant = stock.get(tenantId, parent.id).variants[0];
-  assert.strictEqual((await sync.publish(tenantId, variant.id)).status, 409);
+  const subItem = stock.get(tenantId, articleGroup.id).subItems[0];
+  assert.strictEqual((await sync.publish(tenantId, subItem.id)).status, 409);
 
   // Een volle ronde daarna koppelt alles zonder iets dubbel aan te maken; alleen de ontbrekende maat van DOP komt erbij.
   const round = await sync.run(tenantId);
   assert.strictEqual(round.createdVariations, 1);
   assert.strictEqual(variations.get(otherProduct.productId).length, 2);
   assert.strictEqual(variations.get(variable.productId).length, 2);
-  assert.ok(stock.get(tenantId, parent.id).variants.every((item) => item.shop.productId && !item.shop.error));
+  assert.ok(stock.get(tenantId, articleGroup.id).subItems.every((item) => item.shop.productId && !item.shop.error));
 });
 
-test('varianten en WooCommerce: een eerder als gewoon artikel overgenomen variabel product wordt hoofdartikel (zonder voorraad)', async () => {
+test('subartikelen en WooCommerce: een eerder als gewoon artikel overgenomen variabel product wordt artikelgroep (zonder voorraad)', async () => {
   const products = new Map([
     ['70', { id: 70, type: 'variable', sku: 'KOPPELING', name: 'Koppeling', status: 'publish', regular_price: '', meta_data: [],
       attributes: [{ id: 1, name: 'Maat', options: ['20 mm'], variation: true, visible: true, position: 0 }] }],
@@ -401,15 +401,15 @@ test('varianten en WooCommerce: een eerder als gewoon artikel overgenomen variab
 
   await sync.run(tenantId);
   const promoted = stock.get(tenantId, empty.id);
-  assert.strictEqual(promoted.hasVariants, true);
-  assert.deepStrictEqual(promoted.variants.map((item) => [item.code, item.values.Maat]), [['KOP-20', '20 mm']]);
+  assert.strictEqual(promoted.isGroup, true);
+  assert.deepStrictEqual(promoted.subItems.map((item) => [item.code, item.values.Maat]), [['KOP-20', '20 mm']]);
   const kept = stock.get(tenantId, used.id);
-  assert.strictEqual(kept.hasVariants, false);
+  assert.strictEqual(kept.isGroup, false);
   assert.strictEqual(kept.onHand, 3);
   assert.match(kept.shop.error, /voorraad of boekingen/);
 });
 
-test('varianten en WooCommerce: type van vóór de migratie is onbekend, variatiekenmerken na het tiende blijven bewaard', () => {
+test('subartikelen en WooCommerce: type van vóór de migratie is onbekend, variatiekenmerken na het tiende blijven bewaard', () => {
   const db = openDb();
   const tenantId = createStore(db).ensureTenant().id;
   const stock = createStockStore(db);
@@ -434,7 +434,7 @@ test('varianten en WooCommerce: type van vóór de migratie is onbekend, variati
   assert.ok(!stock.findCode(tenantId, 'LOS'));
 });
 
-test('varianten en WooCommerce: mislukt een latere batch, dan blijven de eerder aangemaakte variaties bewaard', async () => {
+test('subartikelen en WooCommerce: mislukt een latere batch, dan blijven de eerder aangemaakte variaties bewaard', async () => {
   let batch = 0;
   /**
    * Nagebootste webshop: de eerste batch slaagt, de tweede geeft een serverfout.
@@ -456,17 +456,17 @@ test('varianten en WooCommerce: mislukt een latere batch, dan blijven de eerder 
   assert.strictEqual(results[100].ok, false);
 });
 
-test('varianten: een hoofdartikel zonder mutaties wordt met zijn varianten echt verwijderd (FK stock_items.parent_id)', () => {
+test('subartikelen: een artikelgroep zonder mutaties wordt met zijn subartikelen echt verwijderd (FK stock_items.group_id)', () => {
   const db = openDb();
   const tenantId = createStore(db).ensureTenant().id;
   const stock = createStockStore(db);
-  const parent = stock.create(tenantId, USER, { code: 'LOSBUIS', name: 'Losse buis', unit: 'm' }).item;
-  stock.setVariants(tenantId, parent.id, [{ name: 'Maat', values: ['16 mm', '20 mm'] }]);
-  assert.deepStrictEqual(stock.remove(tenantId, parent.id), { deleted: true, code: 'LOSBUIS' });
+  const articleGroup = stock.create(tenantId, USER, { code: 'LOSBUIS', name: 'Losse buis', unit: 'm' }).item;
+  stock.setSubItems(tenantId, articleGroup.id, [{ name: 'Maat', values: ['16 mm', '20 mm'] }]);
+  assert.deepStrictEqual(stock.remove(tenantId, articleGroup.id), { deleted: true, code: 'LOSBUIS' });
   assert.strictEqual(db.prepare("SELECT COUNT(*) AS n FROM stock_items WHERE tenant_id = ? AND code LIKE 'LOSBUIS%'").get(tenantId).n, 0);
 });
 
-test('samenvoegen en WooCommerce: oude producten krijgen een lege sku en gaan op concept, het hoofdartikel wordt één variabel product', async () => {
+test('samenvoegen en WooCommerce: oude producten krijgen een lege sku en gaan op concept, de artikelgroep wordt één variabel product', async () => {
   const products = new Map([
     ['11', { id: 11, type: 'simple', sku: 'BUS-32', name: 'Steunbus 32 mm', status: 'publish', regular_price: '1.21', meta_data: [], attributes: [] }],
     ['12', { id: 12, type: 'simple', sku: 'BUS-40', name: 'Steunbus 40 mm', status: 'publish', regular_price: '1.21', meta_data: [], attributes: [] }],
@@ -478,13 +478,13 @@ test('samenvoegen en WooCommerce: oude producten krijgen een lege sku en gaan op
   const second = stock.create(tenantId, USER, { code: 'BUS-40', name: 'Steunbus 40 mm', salePrice: 1, onHand: 2 }).item;
   stock.update(tenantId, first.id, { shopSync: true });
   stock.update(tenantId, second.id, { shopSync: true });
-  const merged = stock.mergeIntoVariants(tenantId, { ids: [first.id, second.id], code: 'BUS', name: 'Steunbus', attributeName: 'Maat', values: { [first.id]: '32 mm', [second.id]: '40 mm' } }, {
+  const merged = stock.mergeIntoGroup(tenantId, { ids: [first.id, second.id], code: 'BUS', name: 'Steunbus', attributeName: 'Maat', values: { [first.id]: '32 mm', [second.id]: '40 mm' } }, {
     shopMatchOf: sync.matcher([{ id: '11', sku: 'BUS-32' }, { id: '12', sku: 'BUS-40' }]),
   });
   assert.ok(!merged.error, JSON.stringify(merged));
   assert.deepStrictEqual(merged.shopProductIds.sort(), ['11', '12']);
 
-  const result = await sync.exclusive(tenantId, () => sync.publishMergedNow(tenantId, merged.parentId, merged.shopProductIds));
+  const result = await sync.exclusive(tenantId, () => sync.publishMergedNow(tenantId, merged.groupId, merged.shopProductIds));
   assert.ok(!result.error, JSON.stringify(result));
   assert.strictEqual(result.hidden, 2);
   assert.strictEqual(result.variations, 2);
@@ -498,15 +498,15 @@ test('samenvoegen en WooCommerce: oude producten krijgen een lege sku en gaan op
   assert.ok(calls.some((call) => call.path.endsWith('/products/batch')));
 });
 
-test('samenvoegen en WooCommerce: lukt het hoofdartikel niet, dan komen de sku\'s terug en meldt de functie revert', async () => {
+test('samenvoegen en WooCommerce: lukt de artikelgroep niet, dan komen de sku\'s terug en meldt de functie revert', async () => {
   const products = new Map([
     ['21', { id: 21, type: 'simple', sku: 'KAP-1', name: 'Kap 1', status: 'publish', regular_price: '1.21', meta_data: [], attributes: [] }],
   ]);
   const { tenantId, stock, sync } = setupShop(products, new Map(), { url: 'http://shop.test', mode: 'rest', push: true, pricesIncludeTax: true, vatRate: 21 });
-  // Een hoofdartikel dat niet naar de webshop mag (shop_sync uit) laat publishNow een fout geven.
-  const parent = stock.create(tenantId, USER, { code: 'KAP', name: 'Kap' }).item;
-  stock.update(tenantId, parent.id, { shopSync: false });
-  const result = await sync.exclusive(tenantId, () => sync.publishMergedNow(tenantId, parent.id, ['21']));
+  // Een artikelgroep dat niet naar de webshop mag (shop_sync uit) laat publishNow een fout geven.
+  const articleGroup = stock.create(tenantId, USER, { code: 'KAP', name: 'Kap' }).item;
+  stock.update(tenantId, articleGroup.id, { shopSync: false });
+  const result = await sync.exclusive(tenantId, () => sync.publishMergedNow(tenantId, articleGroup.id, ['21']));
   assert.strictEqual(result.revert, true);
   assert.ok(result.error);
   assert.strictEqual(products.get('21').sku, 'KAP-1', 'de sku is teruggezet');
@@ -566,7 +566,7 @@ test('samenvoegen via de API: gekoppelde artikelen worden één variabel webshop
     assert.strictEqual(failed.status, 502, JSON.stringify(failed.body));
     assert.match(failed.body.message, /^Niet samengevoegd/);
     failBatch = false;
-    assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_items WHERE has_variants = 1').get().n, 0, 'geen hoofdartikel achtergebleven');
+    assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM stock_items WHERE is_group = 1').get().n, 0, 'geen artikelgroep achtergebleven');
     assert.strictEqual(db.prepare('SELECT shop_product_id FROM stock_items WHERE id = ?').get(first.id).shop_product_id, '11', 'de koppeling is terug');
     assert.strictEqual(products.get('11').sku, 'BUS-32');
 

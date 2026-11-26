@@ -214,7 +214,7 @@ function createStockCounts(db, { stock }) {
         if (done) return { error: `Voor ${year} is al een jaartelling afgesloten (${done.number}).`, code: 'year_done', status: 409 };
       }
       let items = prepare(`SELECT id, code, name, unit, ean, location, on_hand, cost_price FROM stock_items
-        WHERE tenant_id = ? AND has_variants = 0 AND stock_managed = 1 AND (archived = 0 OR on_hand <> 0) ORDER BY location, code`).all(tenantId);
+        WHERE tenant_id = ? AND is_group = 0 AND stock_managed = 1 AND (archived = 0 OR on_hand <> 0) ORDER BY location, code`).all(tenantId);
       if (locations.length) items = items.filter((item) => locations.includes(item.location));
       if (!items.length) return { error: 'Er zijn geen artikelen om te tellen.', code: 'empty', status: 409 };
       if (items.length > MAX_LINES) return { error: `Een telling omvat hoogstens ${MAX_LINES} artikelen; kies minder locaties.`, code: 'too_large', status: 409 };
