@@ -942,6 +942,9 @@ ${related ? relatedSections(related, root, shown, product) : ''}`;
   return layout({ root, events: viewedItem ? Analytics.viewItemEvents(viewedItem, { inStock: pack ? pack.inStock : shown.inStock }) : [], canonicalPath: productPath, ogType: 'product', ogImage: Seo.imageUrlOf(activeShop.baseUrl, imageUrl), variantScript: Boolean(chosen || packagings.length), jsonLd: [Seo.productJsonLd({ product: jsonProduct, baseUrl: activeShop.baseUrl, canonicalPath: productPath, shopName: SHOP_NAME, description: productDescription, brand: shownDetails.brand, ean: shownDetails.ean }), Seo.breadcrumbJsonLd(breadcrumbSteps, activeShop.baseUrl)], title: Seo.pageTitleOf(shownDetails.seoTitle, `${product.name} – ${SHOP_NAME}`), description: shownDetails.seoDescription || (shownDetails.description ? shortText(shownDetails.description, 155) : `${product.name} (${formatPrice(shownPrice(shown))} ${activeShop.business ? 'excl.' : 'incl.'} btw) bij AquaTech Service.`), body, groups });
 }
 
+/** Hoeveel gerelateerde artikelen direct zichtbaar zijn; de rest staat achter *Bekijk meer*. */
+const RELATED_VISIBLE = 4;
+
 /**
  * Of een product (of minstens één variant) leverbaar is.
  * @param {object} product Een product uit de catalogus.
@@ -981,11 +984,16 @@ function relatedSections(related, root, shown, product) {
   const fits = pick(related.fits, 8);
   const together = pick(related.together, 4);
   /**
-   * Het rooster met productkaarten.
+   * Het rooster met productkaarten: de eerste vier zichtbaar, de rest achter *Bekijk meer* (een details-blok, dus zonder script).
    * @param {object[]} list De producten.
    * @returns {string} HTML.
    */
-  const grid = (list) => `<div class="product-grid">\n${list.map((entry) => productCard(entry, root)).join('\n')}\n</div>`;
+  const grid = (list) => {
+    const first = list.slice(0, RELATED_VISIBLE);
+    const rest = list.slice(RELATED_VISIBLE);
+    const more = rest.length ? `\n<details class="related-more"><summary class="button secondary">Bekijk meer (${rest.length})</summary><div class="product-grid">\n${rest.map((entry) => productCard(entry, root)).join('\n')}\n</div></details>` : '';
+    return `<div class="product-grid">\n${first.map((entry) => productCard(entry, root)).join('\n')}\n</div>${more}`;
+  };
   const partners = together.filter((entry) => !(entry.variants || []).length).slice(0, 2);
   const bundle = activeShop.ordering && shown.inStock && partners.length ? [shown, ...partners] : [];
   const bundleHtml = bundle.length ? `<form class="related-bundle" method="post" action="${root}winkelwagen/samen/">
