@@ -138,34 +138,6 @@
     }
   }
 
-  /**
-   * TIJDELIJK (zolang WooCommerce nog draait): voegt alleen de webshopproducten toe die nog geen artikel hebben;
-   * er wordt niets gearchiveerd of gewijzigd.
-   * @returns {Promise<void>}
-   */
-  async function importShopMissing() {
-    const dialog = $('#shop-dialog');
-    const button = $('#b-shop-missing');
-    const bar = $('#shop-bar');
-    $('#shop-text').textContent = 'Ontbrekende producten ophalen uit de webshop en als artikel toevoegen…';
-    $('#shop-close').hidden = true;
-    bar.removeAttribute('value');
-    dialog.showModal();
-    button.disabled = true;
-    try {
-      const result = await api('stock/import-shop-missing', { method: 'POST', body: {} });
-      bar.value = 1;
-      $('#shop-text').textContent = `Klaar: ${result.created} artikel${result.created === 1 ? '' : 'en'} toegevoegd${result.skippedProducts ? `, ${result.skippedProducts} overgeslagen (geen geldige of dubbele code)` : ''}. Er is niets gearchiveerd of gewijzigd.`;
-      await Promise.all([load(), loadUnits().catch((error) => toast(error.message, true))]);
-    } catch (error) {
-      bar.value = 0;
-      $('#shop-text').textContent = `Toevoegen mislukt: ${error.message}`;
-    } finally {
-      button.disabled = false;
-      $('#shop-close').hidden = false;
-    }
-  }
-
   /** Koppelt de knop om het venster te sluiten. */
   function setupShop() {
     /** Sluit het venster. */
@@ -230,5 +202,5 @@
     setupShop();
   }
 
-  window.ArtikelenNew = { setup, setupAll, openNew, openImport, importShop, importShopMissing };
+  window.ArtikelenNew = { setup, setupAll, openNew, openImport, importShop };
 })();

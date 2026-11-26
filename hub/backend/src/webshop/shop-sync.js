@@ -207,10 +207,10 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
   /**
    * Eén synchronisatie: voorraad en prijs uit de webshop verwerken en terugschrijven wat er veranderd is.
    * @param {string} tenantId Id van de omgeving.
-   * @param {{ full?: boolean, user?: object, addMissing?: boolean }} [options] full: alle producten ophalen (en de catalogus bijwerken), anders alleen de gewijzigde, gekoppelde artikelen; user voor de voorraadboekingen; addMissing: alleen de producten die nog geen artikel hebben aanmaken en dan stoppen (geen boekingen, prijzen of terugschrijven; bij spiegelen aan loopt de gewone ronde).
+   * @param {{ full?: boolean, user?: object, addMissing?: boolean }} [options] full: alle producten ophalen (en de catalogus bijwerken), anders alleen de gewijzigde, gekoppelde artikelen; user voor de voorraadboekingen; onProgress: voortgang van het ophalen en toevoegen (alleen met addMissing); addMissing: alleen de producten die nog geen artikel hebben aanmaken en dan stoppen (geen boekingen, prijzen of terugschrijven; bij spiegelen aan loopt de gewone ronde).
    * @returns {Promise<object>} Samenvatting (created, restored, archived, skippedProducts, mirror, linked, unlinked, soldInShop, pricesFromShop, updated, failed) of { skipped }.
    */
-  async function sync(tenantId, { full = true, user = null, addMissing = false } = {}) {
+  async function sync(tenantId, { full = true, user = null, addMissing = false, onProgress = null } = {}) {
     const shopConfig = configOf(tenantId);
     if (!shopConfig.url) return { skipped: 'not_configured' };
     if (!full && !shopConfig.push) return { skipped: 'no_push' };
@@ -219,7 +219,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
     const dirtyItems = full ? null : itemsOf(tenantId, true);
     if (!full && !dirtyItems.length) return createdVariations ? { createdVariations } : { skipped: 'nothing' };
     const products = full
-      ? await fetchProducts(shopConfig, { fetchImpl })
+      ? await fetchProducts(shopConfig, { fetchImpl, onProgress: addMissing ? onProgress : null })
       : await fetchProducts(shopConfig, {
         fetchImpl,
         ids: dirtyItems.filter((item) => !item.shop_parent_id).map((item) => item.shop_product_id),
@@ -237,7 +237,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
     // Alleen ontbrekende artikelen toevoegen (ook bij spiegelen aan): verder niets doen, dus geen boekingen,
     // geen prijzen overnemen, niets archiveren en niets naar de webshop schrijven.
     if (full && addMissing) {
-      const added = stock.addMissingShop(tenantId, products, match, { vatRate: shopConfig.vatRate, priceOf: productPrice });
+      const added = stock.addMissingShop(tenantId, products, match, { vatRate: shopConfig.vatRate, priceOf: productPrice, onProgress });
       return { created: added.created, skippedProducts: added.skippedProducts, linked: 0 };
     }
     const mirrored = full && mirrorOn

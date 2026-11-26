@@ -213,6 +213,15 @@
           <div class="row"><button class="btn" id="shop-close" type="button" hidden>Sluiten</button></div>
         </dialog>
 
+        <dialog id="shop-missing-dialog" class="card-form">
+          <h3>Ontbrekende uit webshop toevoegen</h3>
+          <p id="sm-text" class="small"></p>
+          <progress id="sm-bar" max="1" style="width:100%"></progress>
+          <div id="sm-list" class="small" style="max-height:40vh;overflow:auto;margin-top:8px" hidden></div>
+          <div class="row actions"><button class="btn" id="sm-excel" type="button" hidden>Lijst als Excel</button><button class="btn" id="sm-close" type="button">Sluiten</button></div>
+          <p class="small muted">Het toevoegen loopt op de server door, ook als je dit venster sluit. Klik de knop opnieuw om de voortgang te zien.</p>
+        </dialog>
+
         <dialog id="images-dialog" class="card-form">
           <h3>Afbeeldingen en miniaturen</h3>
           <p id="images-text" class="small"></p>
@@ -818,6 +827,7 @@
   <script src="../shared/excel-import.js"></script>
   <script src="exports.js"></script>
   <script src="new-item.js"></script>
+  <script src="shop-missing.js"></script>
   <script src="media.js"></script>
   <script src="artikelen.js"></script>
 </body>

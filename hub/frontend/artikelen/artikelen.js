@@ -1135,7 +1135,7 @@
      * Voegt alleen de ontbrekende webshopproducten toe (tijdelijk, zolang WooCommerce draait).
      * @returns {Promise<void>}
      */
-    $('#b-shop-missing').onclick = () => window.ArtikelenNew.importShopMissing();
+    $('#b-shop-missing').onclick = () => window.ArtikelenShopMissing.open();
     /** Opent het venster om de afbeeldingen van de webshop over te nemen. */
     $('#b-images').onclick = () => { window.ArtikelenMedia.openImagesImport(); };
     window.StockBulk.init({ api, toast, reload: load, rerender: renderStock, items: () => state.items });
@@ -1180,6 +1180,7 @@
     setupUnits();
     window.ArtikelenExports.setup({ state, api, toast, visible, valuesText, loadMoves, movesShown, KINDS });
     window.ArtikelenNew.setup({ state, api, toast, num, parseTiers, load, loadUnits, fillUnits });
+    window.ArtikelenShopMissing.setup({ api, toast, load });
     window.ArtikelenNew.setupAll();
     window.ArtikelenMedia.setup({ state, api, toast, load, openItem });
     window.ArtikelenMedia.setupAll();
