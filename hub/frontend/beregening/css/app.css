@@ -329,12 +329,18 @@ table.list.missing td { color: var(--danger); }
 .review-bar[hidden] { display: none; }
 .review-bar .rv-text { flex: 1 1 200px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .review-bar .rv-act { display: flex; gap: 8px; align-items: center; }
+.review-bar.anon .rv-act { flex: 1 1 100%; flex-direction: column; align-items: stretch; }
+.review-bar.anon .rv-act .btn { min-height: 40px; width: 100%; text-decoration: none; font-weight: 600; }
+.review-bar.anon .rv-tour { color: #fff; font-weight: 600; white-space: nowrap; }
+.review-bar .rv-sub { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.review-bar .rv-sub:has(> :only-child) { grid-template-columns: 1fr; }
 .review-bar .rv-chip { align-self: flex-start; font-weight: 700; font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--at-navy); color: #fff; }
 .review-bar.st-ter_controle .rv-chip { background: var(--at-teal); }
 .review-bar.st-goedgekeurd .rv-chip { background: var(--at-green); }
 .review-bar.anon { background: var(--at-navy); color: #fff; }
-.review-bar.anon .rv-login { color: #fff; }
-.review-bar.anon .btn:not(.primary) { color: var(--text); }
+.review-bar.anon .rv-text span { color: #cfd8e8; }
+.review-bar.anon .btn.line { background: transparent; color: #fff; border-color: rgba(255,255,255,.55); }
+.review-bar.anon .btn.line:hover { background: rgba(255,255,255,.12); }
 body.anon #btn-myplans, body.anon .home-link, body.anon [data-shop-link], body.anon a.menu-only[href="../"] { display: none; }
 .submit-card { width: min(480px, 100%); }
 .submit-card label { display: block; margin: 8px 0; font-size: 13px; color: var(--muted); }
@@ -352,3 +358,14 @@ body.anon #btn-myplans, body.anon .home-link, body.anon [data-shop-link], body.a
 .public-price-total small { display: block; font-size: 12px; font-weight: 600; opacity: .7; margin-top: 4px; }
 .public-price .btn { display: block; width: 100%; text-align: center; margin-top: 8px; }
 .public-price .to-cart { margin: 0; }
+
+/* Rondleiding voor bezoekers zonder account */
+.tour-card { width: min(460px, 100%); padding: 24px; }
+.tour-card h2 { margin: 0 0 8px; font-size: 18px; color: var(--at-navy); }
+.tour-card p { margin: 0 0 16px; line-height: 1.5; }
+.tour-dots { display: flex; gap: 6px; margin-bottom: 16px; }
+.tour-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+.tour-dot.on { background: var(--at-green); width: 22px; border-radius: 4px; }
+.tour-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.tour-nav { display: flex; gap: 8px; }
+.tour-actions .btn { min-height: 40px; }

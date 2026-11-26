@@ -57,11 +57,25 @@
         if (!drawing) { bar.hidden = true; return; }
         bar.hidden = false;
         bar.className = 'review-bar anon';
+        /**
+         * Maakt een klein lijnicoon voor een knop.
+         * @param {string} paths De svg-paden van het icoon.
+         * @returns {string} De svg als HTML.
+         */
+        const icon = (paths) => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+        const saveIcon = icon('<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8"/>');
+        const loginIcon = icon('<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/>');
+        const sendIcon = icon('<path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/>');
+        const save = `<a class="btn line" href="${escapeHtml(this._saveWithAccountHref())}" title="Ontwerp bewaren met een account">${saveIcon}Bewaren</a>`;
+        const login = `<a class="btn line" href="${escapeHtml(this._loginHref())}">${loginIcon}Inloggen</a>`;
         bar.innerHTML = drawing.enabled
-          ? `<div class="rv-text"><b>Tekenen zonder account</b><span>Teken je tuin en dien hem in: een installateur${drawing.company ? ` van ${escapeHtml(drawing.company)}` : ''} controleert hem. Tot dan blijft de tekening alleen in deze browser.</span></div>
-             <div class="rv-act"><button id="rv-submit" class="btn primary">Tekening indienen</button><a class="btn" href="${escapeHtml(this._saveWithAccountHref())}">Ontwerp bewaren met account</a><a class="rv-login" href="${escapeHtml(this._loginHref())}">Inloggen</a></div>`
+          ? `<div class="rv-text"><b>Tekenen zonder account</b><span>Teken je tuin en dien hem in: een installateur${drawing.company ? ` van ${escapeHtml(drawing.company)}` : ''} controleert hem. Tot dan blijft de tekening alleen in deze browser. <a href="#" class="rv-tour" id="rv-tour">Hoe werkt het?</a></span></div>
+             <div class="rv-act"><button id="rv-submit" class="btn primary">${sendIcon}Tekening indienen</button><div class="rv-sub">${save}${login}</div></div>`
           : `<div class="rv-text"><b>Tekenen zonder account</b><span>Bij deze organisatie kun je geen tekening indienen zonder account. Maak een account om je plan te bewaren.</span></div>
-             <div class="rv-act"><a class="btn primary" href="${escapeHtml(this._saveWithAccountHref())}">Ontwerp bewaren met account</a><a class="rv-login" href="${escapeHtml(this._loginHref())}">Inloggen</a></div>`;
+             <div class="rv-act"><a class="btn primary" href="${escapeHtml(this._saveWithAccountHref())}">${saveIcon}Bewaren met account</a><div class="rv-sub">${login}</div></div>`;
+        const tour = $('#rv-tour', bar);
+        if (tour) tour.addEventListener('click', (event) => { event.preventDefault(); if (window.PlannerTour) window.PlannerTour.open(); });
+        if (window.PlannerTour && !window.PlannerTour.seen() && !this._tourShown) { this._tourShown = true; window.PlannerTour.open({ canSubmit: Boolean(drawing.enabled) }); }
         return;
       }
       const review = this.review;
