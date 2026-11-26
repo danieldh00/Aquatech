@@ -237,6 +237,13 @@ test('product-JSON-LD: merk en EAN alleen als ze bestaan; een prijsbereik krijgt
   assert.ok(!('gtin13' in range));
 });
 
+test('product-JSON-LD: specificaties van de pagina komen als additionalProperty mee; lege of onvolledige regels niet', () => {
+  const withSpecs = Seo.productJsonLd({ product: PRODUCT, baseUrl: BASE, canonicalPath: 'product/x/', shopName: 'Shop', description: 'd', specifications: [{ name: 'Werkdruk', value: '2,1 bar' }, { name: 'Kleur', value: '' }, { name: '', value: 'x' }] });
+  assert.deepStrictEqual(withSpecs.additionalProperty, [{ '@type': 'PropertyValue', name: 'Werkdruk', value: '2,1 bar' }]);
+  const without = Seo.productJsonLd({ product: PRODUCT, baseUrl: BASE, canonicalPath: 'product/x/', shopName: 'Shop', description: 'd' });
+  assert.ok(!('additionalProperty' in without));
+});
+
 test('artikel: eigen zoekmachinetitel, -omschrijving en merk komen in de pagina en de JSON-LD; leeg = automatisch; variant erft van het hoofdartikel', async () => {
   const { anonymous, admin } = await setupShop();
   const items = (await admin.get('/app/api/stock')).body.items;
