@@ -216,3 +216,8 @@ body.has-nav .tab[data-purchasing] { display: none; }
 .rl-list li { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; padding: 8px 12px; border: 1px solid var(--at-line); border-radius: var(--radius); }
 .rl-evidence { margin: 4px 0 0; padding-left: 18px; font-size: 13px; color: var(--at-muted); }
 @media (max-width: 600px) { .rl-list li { flex-direction: column; } }
+
+.pager { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 10px 0; }
+.pager-size { display: flex; align-items: center; gap: 8px; }
+.pager-nav { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+@media (max-width: 600px) { .pager-nav { margin-left: 0; width: 100%; justify-content: space-between; } }
