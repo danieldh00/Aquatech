@@ -13,6 +13,25 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.44.0',
+      date: '2026-11-26',
+      title: 'Archief voor testgegevens',
+      items: [
+        { text: 'Nieuw: Beheer > Systeem > Archief. Plannen, offertes, werkorders, facturen, webshopbestellingen en klanten (bijvoorbeeld testgegevens vóór go-live) haal je daar in bulk uit de lijsten en KPI\'s, zonder ze te wissen. Je kunt op datum of zoekterm selecteren, eerst een voorbeeld bekijken en alles terughalen. Nummers blijven bezet; wat de planner heeft geleerd blijft staan.', for: ['beheer'] },
+        { text: 'Het archief kun je ook definitief verwijderen. Definitieve facturen blijven zeven jaar bewaard (bewaarplicht) en worden overgeslagen.', for: ['beheer'] },
+      ],
+    },
+    {
+      version: '1.43.0',
+      date: '2026-11-26',
+      title: 'Productomschrijvingen in één keer schrijven met AI',
+      items: [
+        { text: 'Artikelen > Teksten heeft nu *Alles in één keer schrijven*: de AI zoekt de kenmerken van elk artikel op in de bron van de fabrikant en schrijft daar één natuurlijke omschrijving van, alleen met feiten uit die bron en de gegevens van Past bij. Je ziet vooraf de geschatte kosten en kunt het model kiezen (Sonnet is de standaard).', for: ['voorraad'] },
+        { text: 'Heeft een artikel al een omschrijving, dan beoordeelt de AI of de nieuwe beter is. Alleen dan wordt hij vervangen; per artikel staat zichtbaar of de tekst nieuw, overschreven of behouden is, en de vorige tekst kun je terugzetten. Een tekst met een getal of bewering die niet in de gegevens staat gaat niet live maar wordt een concept.', for: ['voorraad'] },
+        { text: 'Schrijven van omschrijvingen en het opzoeken bij Past bij draaien nu als taak op de server: ze lopen door als je het venster of de browser sluit, en je ziet de voortgang terug als je weer terugkomt. Stoppen kan met de knop Stop.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.42.3',
       date: '2026-11-26',
       title: 'Betaalmethoden in de voet van de webshop instelbaar',

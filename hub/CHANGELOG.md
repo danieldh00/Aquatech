@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.44.0
+
+- Migratie 100: kolom `archived_at` (met gedeeltelijke index) op `plans`, `quotes`, `work_orders`, `invoices`, `web_orders` en `users`, en de tabel `number_floors` (hoogste uitgegeven volgnummer per soort en voorvoegsel).
+- Definitief verwijderen legt eerst het volgnummer vast (`platform/number-floors.js`); de nummergeneratoren van offertes, werkorders, facturen en bestellingen nemen die ondergrens mee, dus een nummer komt nooit terug.
+- `platform/archive.js` (archiveren, terughalen, bulkselectie met voorbeeld, definitief verwijderen), `archive-routes.js` (`/api/admin/archive`, recht beheer, limieten, audit `archief_*`) en `archive-filter.js` (`?archief=verberg|toon|alleen` voor lijsten; standaard verbergen). Offertes-, werkorder-, factuur-, bestelling-, plan- en klantlijsten, de taken-/planningsqueries en de KPI's tellen gearchiveerde stukken niet mee.
+- Definitief verwijderen: alleen gearchiveerde stukken, een definitieve factuur jonger dan zeven jaar wordt overgeslagen, gekoppelde stukken (foreign key) worden geweigerd met reden; `plan_recognitions` en `item_specs` blijven staan. Beheerscherm `frontend/beheer/archief.js`.
+- Archiveren mag alleen voor afgeronde stukken (werkorder Gereed/Geannuleerd, factuur niet definitief-onbetaald, bestelling niet Nieuw, klant zonder actieve inlog); de rest wordt overgeslagen met uitleg. Bulk archiveren eist soorten en het aantal uit het voorbeeld (409 bij afwijking). Definitief verwijderen vraagt ook het wachtwoord (en tweestapscode), maakt eerst een veiligheidsback-up en weigert stukken waar nog iets naar verwijst. Een gearchiveerde offerte of werkorder is niet meer via de openbare link bereikbaar.
+- Per lijst een archieffilter en knoppen Archiveren/Terughalen volgen in een aparte PR.
+
+## 1.43.0
+
+Nieuw: `artikelen/item-text-bulk.js` (routes `bulk/todo`, `bulk/run`, `bulk/model`, `:itemId/restore`), `item-text-log.js` (kenmerken en logboek in `item_specs.specs`, geen migratie), `researchFeatures` + `validateFeatures` (kenmerken met bron), `buildFacts` neemt de specificaties en kenmerken van Past bij mee, nieuwe schrijfstijlregels en een oordeel over de bestaande omschrijving (`verdict`) in `item-text-writer.js`, instelling `descriptionAiModel` (standaard Sonnet; het schrijven gebruikte eerder `aiModel`), feature `kenmerken_opzoeken` in de AI-kosten, tabblad Teksten met bulkblok, markering en filter per artikel. Past bij bewaart kenmerken en logboek bij het opslaan van nieuwe specificaties en zoekt artikelen met alleen kenmerken nog op. Kostenrem: dagplafond `descriptionBulkDailyItems` (standaard 2000 artikelen) en 120 verzoeken per uur; gelijktijdige runs slaan een artikel in behandeling over en een tekst wordt alleen overschreven als de bestaande omschrijving nog gelijk is aan die waarop de AI oordeelde. Tests: `item-text-bulk.test.js`.
+ Achtergrondtaken (`artikelen/background-jobs.js`, geen migratie): `POST|GET .../bulk/job` + `.../bulk/job/stop` voor de omschrijvingen en `POST|GET /api/stock/related-ai/job` + `.../job/stop` voor Past bij (koppelt aan het eind automatisch); de schermen volgen de taak elke 3 seconden. De stand staat in het geheugen (één container); na een herstart start je gewoon opnieuw en gaat de taak verder met wat nog aan de beurt is. Kostenrem: een taak starten kan 6 keer per uur per omgeving; Past bij heeft een dagplafond `relatedAiDailyItems` (standaard 1000 artikelen) en koppelt aan het eind alleen als er nieuwe uitkomsten zijn.
+
 ## 1.42.3
 
 `shopPayment.footerMethods`: lijst met aangevinkte betaalmethoden voor de voet (niet ingesteld = alles behalve Bitcoin); vinkjes in Beheer > Webshop > Betalen, kaartjes via `footerPayments` in storefront-pages.js.
