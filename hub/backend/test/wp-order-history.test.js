@@ -238,6 +238,20 @@ test('routes: rechten, andere organisatie, limiet en module uit', async () => {
   for (let attempt = 0; attempt < 9; attempt++) await admin.post(`${base}/start`, {});
   assert.strictEqual((await admin.post(`${base}/start`, {})).status, 429);
   assert.strictEqual((await admin.post(`${base}/stop`, {})).status, 200);
+  // Lijst bij Webshopbestellingen: bronfilter, rechten en andere organisatie.
+  const wpId = require('crypto').randomUUID();
+  world.db.prepare(`INSERT INTO wp_orders (id, tenant_id, wp_order_id, number, status, ordered_at, customer_name, email, total) VALUES (?, ?, '5', '1005', 'completed', now(), 'Oude Klant', 'oud@voorbeeld.test', 42)`).run(wpId, tenantId);
+  const listed = await admin.get('/app/api/admin/web-orders?bron=alle');
+  assert.strictEqual(listed.status, 200);
+  assert.strictEqual(listed.body.items.find((order) => order.source === 'wordpress').number, 'WP-1005');
+  assert.strictEqual(listed.body.wordpress, 1);
+  assert.strictEqual((await admin.get('/app/api/admin/web-orders?bron=systeem')).body.items.some((order) => order.source === 'wordpress'), false);
+  assert.strictEqual((await admin.get('/app/api/admin/web-orders')).body.items.some((order) => order.source === 'wordpress'), false, 'zonder bron alleen de eigen webshop');
+  assert.strictEqual((await admin.get(`/app/api/admin/web-orders/wordpress/${wpId}`)).body.order.customerName, 'Oude Klant');
+  assert.strictEqual((await vreemd.get(`/app/api/admin/web-orders/wordpress/${wpId}`)).status, 404);
+  assert.strictEqual((await vreemd.get('/app/api/admin/web-orders?bron=alle')).body.wordpress, 0);
+  assert.strictEqual((await shopper.get(`/app/api/admin/web-orders/wordpress/${wpId}`)).status, 403);
+  assert.strictEqual((await shopper.get('/app/api/admin/web-orders?bron=alle')).status, 403);
   // Module uit: ook deze adressen zijn dicht.
   assert.strictEqual((await admin.put('/app/api/admin/modules', { flags: { 'gerelateerde-artikelen': false } })).status, 200);
   assert.strictEqual((await admin.get(base)).status, 409);
@@ -289,23 +303,3 @@ test('kopgegevens voor de lijst: alle echte statussen, bijgewerkt bij opnieuw op
   for (const table of ['web_orders', 'invoices', 'stock_movements']) assert.strictEqual(Number(scene.db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE tenant_id = ?`).get(scene.tenantId).n), 0, table);
 });
 
-test('lijst bij Webshopbestellingen via de API: bronfilter, rechten en andere organisatie', async () => {
-  const { setup: webshopSetup } = require('./helpers/webshop-world');
-  const world = await webshopSetup();
-  const { admin, vreemd } = world;
-  const shopper = world.shoppers[0].client;
-  const tenantId = world.db.prepare("SELECT id FROM tenants WHERE slug = 'default' OR parent_id IS NULL ORDER BY created_at LIMIT 1").get().id;
-  const wpId = require('crypto').randomUUID();
-  world.db.prepare(`INSERT INTO wp_orders (id, tenant_id, wp_order_id, number, status, ordered_at, customer_name, email, total) VALUES (?, ?, '5', '1005', 'completed', now(), 'Oude Klant', 'oud@voorbeeld.test', 42)`).run(wpId, tenantId);
-  const listed = await admin.get('/app/api/admin/web-orders?bron=alle');
-  assert.strictEqual(listed.status, 200);
-  assert.strictEqual(listed.body.items.find((order) => order.source === 'wordpress').number, 'WP-1005');
-  assert.strictEqual(listed.body.wordpress, 1);
-  assert.strictEqual((await admin.get('/app/api/admin/web-orders?bron=systeem')).body.items.some((order) => order.source === 'wordpress'), false);
-  assert.strictEqual((await admin.get('/app/api/admin/web-orders')).body.items.some((order) => order.source === 'wordpress'), false, 'zonder bron alleen de eigen webshop');
-  assert.strictEqual((await admin.get(`/app/api/admin/web-orders/wordpress/${wpId}`)).body.order.customerName, 'Oude Klant');
-  assert.strictEqual((await vreemd.get(`/app/api/admin/web-orders/wordpress/${wpId}`)).status, 404);
-  assert.strictEqual((await vreemd.get('/app/api/admin/web-orders?bron=alle')).body.wordpress, 0);
-  assert.strictEqual((await shopper.get(`/app/api/admin/web-orders/wordpress/${wpId}`)).status, 403);
-  assert.strictEqual((await shopper.get('/app/api/admin/web-orders?bron=alle')).status, 403);
-});
