@@ -266,6 +266,16 @@
     try { state.openId = id; const out = await api(`/${encodeURIComponent(id)}`); renderDetail(out.order, out.invoice); $('#wo-detail').scrollIntoView({ block: 'nearest' }); } catch (error) { toast(error.message, true); }
   }
 
+  /** Archieffilter van de lijst (alleen voor beheerders), gezet in init. */
+  let archive = null;
+
+  /**
+   * Plakt de archiefkeuze aan een adres van de lijst.
+   * @param {string} url het adres na api/admin/web-orders
+   * @returns {string} het adres, met de archiefkeuze als die er is
+   */
+  const archived = (url) => (archive ? archive.withParam(url) : url);
+
   /**
    * Laadt de lijst met het gekozen filter en tekent hem.
    * @returns {Promise<void>}
@@ -273,7 +283,7 @@
   async function load() {
     const table = $('#wo-table');
     try {
-      const out = await api(`?status=${encodeURIComponent(state.status)}&q=${encodeURIComponent(state.query)}&limit=${PAGE}&offset=${state.offset}`);
+      const out = await api(archived(`?status=${encodeURIComponent(state.status)}&q=${encodeURIComponent(state.query)}&limit=${PAGE}&offset=${state.offset}`));
       state.statuses = out.statuses;
       const select = $('#wo-status');
       if (!select.options.length) select.innerHTML = `<option value="">Alle statussen</option>${Object.entries(out.statuses).map(([key, label]) => `<option value="${key}">${esc(label)}</option>`).join('')}`;
@@ -324,7 +334,7 @@
       const seen = new Set();
       let expectedTotal = null;
       for (;;) {
-        const page = await api(`?status=${encodeURIComponent(status)}&q=${encodeURIComponent(query)}&lines=1&limit=500&offset=${items.length}`);
+        const page = await api(archived(`?status=${encodeURIComponent(status)}&q=${encodeURIComponent(query)}&lines=1&limit=500&offset=${items.length}`));
         if (expectedTotal === null) expectedTotal = page.total;
         if (page.total !== expectedTotal || page.items.some((order) => seen.has(order.id))) {
           toast('De bestellingen zijn tijdens het exporteren gewijzigd. Start de export opnieuw.', true);
@@ -394,6 +404,7 @@
     /** Volgende pagina. */
     $('#wo-next').onclick = () => { state.offset += PAGE; load(); };
     $('#wo-export').onclick = exportExcel;
+    archive = window.AquatechArchive.attach({ kind: 'bestellingen', filters: $('#wo-search').closest('.filters'), table: $('#wo-table'), onChange: () => { state.offset = 0; return load(); } });
     // Een link naar één bestelling (bijvoorbeeld vanuit een omgezette offerte) opent direct het detail.
     const directId = new URLSearchParams(location.search).get('id');
     if (directId) open(directId);

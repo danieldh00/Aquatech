@@ -133,6 +133,9 @@
     ].map(([value, label]) => `<div class="stat"><b>${esc(value)}</b><span>${esc(label)}</span></div>`).join('');
   }
 
+  /** Archieffilter van het overzicht (alleen voor beheerders), gezet bij het opstarten. */
+  let archive = null;
+
   /** Tekent de tabel met facturen. */
   function renderList() {
     const table = $('#l-table');
@@ -303,7 +306,8 @@
   async function load() {
     const from = $('#f-from').value;
     const to = $('#f-to').value;
-    const result = await api(`invoices?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+    const listUrl = `invoices?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+    const result = await api(archive ? archive.withParam(listUrl) : listUrl);
     state.items = result.items;
     if (window.AquatechCommon) window.AquatechCommon.truncationNotice(result, 'facturen');
     renderStats();
@@ -1143,6 +1147,7 @@
     };
     $('#x-form').onsubmit = exportExcel;
     $('#b-orders').onclick = fetchOrders;
+    archive = window.AquatechArchive.attach({ kind: 'facturen', filters: $('#l-table').closest('section').querySelector('.filters'), table: $('#l-table'), onChange: load, selected: state.selected, bar: $('#l-bulk') });
     $('#b-export').onclick = exportSelected;
     $('#l-bulk-mail').onclick = mailSelected;
     /** Heft de selectie op. */

@@ -159,13 +159,23 @@
    */
   const columns = () => COLUMNS.filter((column) => !column.admin || showAll());
 
+  /** Archieffilter van het overzicht (alleen voor beheerders), gezet in init. */
+  let archive = null;
+
+  /**
+   * Plakt de archiefkeuze aan een adres van de lijst.
+   * @param {string} url het adres na api/
+   * @returns {string} het adres, met de archiefkeuze als die er is
+   */
+  const archived = (url) => (archive ? archive.withParam(url) : url);
+
   /**
    * Haalt de offertes op en toont het overzicht.
    * @returns {Promise<void>}
    */
   async function loadList() {
     try {
-      const result = await api(`quotes${showAll() ? '?all=1' : ''}`);
+      const result = await api(archived(`quotes${showAll() ? '?all=1' : ''}`));
       state.items = result.items || [];
       if (window.AquatechCommon) window.AquatechCommon.truncationNotice(result, 'offertes');
     } catch (error) {
@@ -1230,6 +1240,7 @@
     $('#l-search').oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(renderList, 150); };
     $('#l-status').onchange = renderList;
     $('#l-all').onchange = loadList;
+    archive = window.AquatechArchive.attach({ kind: 'offertes', filters: $('#l-search').closest('.filters'), table: $('#l-table'), onChange: loadList, selected: state.selected, bar: $('#l-bulk') });
     $('#l-new-plan').onclick = pickPlan;
     /** Maakt een lege offerte. */
     $('#l-new-empty').onclick = () => { createEmpty(); };
