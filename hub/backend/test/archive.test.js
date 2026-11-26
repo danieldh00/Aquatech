@@ -184,3 +184,16 @@ test('definitief verwijderen weigert een offerte waar een werkorder of factuur n
   assert.strictEqual(result.deleted.offertes, 0);
   assert.match(result.blocked[0].reason, /gekoppeld aan facturen/);
 });
+
+test('na het definitief verwijderen van het archief geeft de generator het volgende nummer, niet het gewiste', () => {
+  const { createQuoteStore } = require('../src/verkoop/quotes');
+  const { db, archive, tenantId, ownerId } = setup();
+  const quotes = createQuoteStore(db);
+  const year = '2026';
+  addQuote(db, tenantId, ownerId, 'O2026-0001', 'Test BV');
+  const second = addQuote(db, tenantId, ownerId, 'O2026-0002', 'Test BV');
+  assert.strictEqual(quotes.nextNumber(tenantId, 'O', year), 'O2026-0003');
+  archive.archive(tenantId, 'offertes', [second]);
+  archive.purge(tenantId, { kinds: ['offertes'] });
+  assert.strictEqual(quotes.nextNumber(tenantId, 'O', year), 'O2026-0003', 'het gewiste nummer 2 komt niet terug en 3 blijft de volgende');
+});

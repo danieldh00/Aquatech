@@ -16,6 +16,13 @@ function registerArchiveRoutes(app, { archive, audit, confirmIdentity, runBackup
   const changeLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 120, keyFn: (req) => `archief-wijzig:${req.user ? req.user.id : ''}` });
   const purgeLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10, keyFn: (req) => `archief-wissen:${req.user ? req.user.id : ''}` });
 
+  /**
+   * Zoekt de soortsleutel op in de vaste lijst (nooit een waarde uit het verzoek zelf als sleutel gebruiken).
+   * @param {*} value De ingevoerde soort.
+   * @returns {string|null} De sleutel uit de lijst, of null als de soort onbekend is.
+   */
+  const kindKey = (value) => Object.keys(archive.kinds).find((key) => key === value) || null;
+
   app.use('/api/admin/archive', express.json({ limit: '100kb' }), (req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
 
   /**
@@ -24,7 +31,7 @@ function registerArchiveRoutes(app, { archive, audit, confirmIdentity, runBackup
    * @returns {{ kinds: string[]|null, before: string, query: string }} De selectie.
    */
   const selectionOf = (body) => ({
-    kinds: Array.isArray(body.kinds) ? body.kinds.map(String).filter((kind) => archive.kinds[kind]) : null,
+    kinds: Array.isArray(body.kinds) ? body.kinds.map(String).map(kindKey).filter(Boolean) : null,
     before: /^\d{4}-\d{2}-\d{2}$/.test(String(body.before || '')) ? String(body.before) : '',
     query: String(body.query || '').slice(0, 80),
   });
@@ -32,8 +39,8 @@ function registerArchiveRoutes(app, { archive, audit, confirmIdentity, runBackup
   app.get('/api/admin/archive', (req, res) => res.json({ counts: archive.counts(req.tenantId), retentionCutoff: archive.retentionCutoff() }));
 
   app.get('/api/admin/archive/list', (req, res) => {
-    if (!archive.kinds[req.query.kind]) return res.status(400).json({ error: 'invalid_kind', message: 'Onbekende soort.' });
-    res.json(archive.list(req.tenantId, { kind: req.query.kind, query: String(req.query.query || '').slice(0, 80), limit: req.query.limit, offset: req.query.offset }));
+    if (!kindKey(req.query.kind)) return res.status(400).json({ error: 'invalid_kind', message: 'Onbekende soort.' });
+    res.json(archive.list(req.tenantId, { kind: kindKey(req.query.kind), query: String(req.query.query || '').slice(0, 80), limit: req.query.limit, offset: req.query.offset }));
   });
 
   app.post('/api/admin/archive/preview', (req, res) => {
@@ -44,10 +51,11 @@ function registerArchiveRoutes(app, { archive, audit, confirmIdentity, runBackup
   app.post('/api/admin/archive/archive', changeLimiter, (req, res) => {
     const body = req.body || {};
     if (body.kind) {
-      if (!archive.kinds[body.kind] || !Array.isArray(body.ids) || !body.ids.length || body.ids.length > 500) return res.status(400).json({ error: 'invalid_request', message: 'Kies een soort en één of meer stukken.' });
-      const out = archive.archive(req.tenantId, body.kind, body.ids);
-      audit(req, 'archief_archiveren', { soort: body.kind, aantal: out.changed, overgeslagen: out.skipped });
-      return res.json({ archived: { [body.kind]: out.changed }, skipped: { [body.kind]: out.skipped } });
+      if (!kindKey(body.kind) || !Array.isArray(body.ids) || !body.ids.length || body.ids.length > 500) return res.status(400).json({ error: 'invalid_request', message: 'Kies een soort en één of meer stukken.' });
+      const kind = kindKey(body.kind);
+      const out = archive.archive(req.tenantId, kind, body.ids);
+      audit(req, 'archief_archiveren', { soort: kind, aantal: out.changed, overgeslagen: out.skipped });
+      return res.json({ archived: { [kind]: out.changed }, skipped: { [kind]: out.skipped } });
     }
     const selection = selectionOf(body);
     if (!selection.before && !selection.query) return res.status(400).json({ error: 'selection_required', message: 'Geef een datum of zoekterm op, zodat niet per ongeluk alles wordt gearchiveerd.' });
@@ -66,10 +74,11 @@ function registerArchiveRoutes(app, { archive, audit, confirmIdentity, runBackup
 
   app.post('/api/admin/archive/restore', changeLimiter, (req, res) => {
     const body = req.body || {};
-    if (!archive.kinds[body.kind] || !Array.isArray(body.ids) || !body.ids.length || body.ids.length > 500) return res.status(400).json({ error: 'invalid_request', message: 'Kies een soort en één of meer stukken.' });
-    const changed = archive.restore(req.tenantId, body.kind, body.ids);
-    audit(req, 'archief_terughalen', { soort: body.kind, aantal: changed });
-    res.json({ restored: { [body.kind]: changed } });
+    if (!kindKey(body.kind) || !Array.isArray(body.ids) || !body.ids.length || body.ids.length > 500) return res.status(400).json({ error: 'invalid_request', message: 'Kies een soort en één of meer stukken.' });
+    const kind = kindKey(body.kind);
+    const changed = archive.restore(req.tenantId, kind, body.ids);
+    audit(req, 'archief_terughalen', { soort: kind, aantal: changed });
+    res.json({ restored: { [kind]: changed } });
   });
 
   app.post('/api/admin/archive/purge', purgeLimiter, async (req, res) => {
