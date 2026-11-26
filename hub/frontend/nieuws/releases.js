@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.45.4',
+      date: '2026-11-26',
+      title: 'Artikelen overzichtelijker met subpagina\'s in de zijbalk',
+      items: [
+        { text: 'Artikelen is opgedeeld: in de zijbalk staan onder Artikelen nu subpagina\'s (Alle artikelen, Voorraad: Gereserveerd en Telling, Inhoud: Specificaties en teksten, Afbeeldingen en Past bij, Beheer: Import en export en Eenheden). De lijst zelf houdt alleen zoeken, filters, + Artikel en Excel-export; de overige knoppen staan op de pagina Import en export.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.45.3',
       date: '2026-11-26',
       title: 'Ontbrekende webshopproducten toevoegen met voortgang',
