@@ -137,12 +137,16 @@ test('webshop aan: start, categorie en product zonder inloggen, zonder interne g
 });
 
 test('productpagina: knop Bewerken in beheer alleen voor medewerkers, direct naar de artikelkaart', async () => {
-  const { admin, anonymous, created } = await setup();
+  const { base, admin, anonymous, created } = await setup();
   await admin.put('/app/api/admin/settings', { storefront: true, shopClarity: { enabled: false } });
   const buis = created[2];
   const asAdmin = await admin.get('/product/pe-buis-25-mm-buis-25/');
   assert.strictEqual(asAdmin.status, 200);
   assert.ok(asAdmin.text.includes(`href="../../app/artikelen/?id=${encodeURIComponent(buis.id)}"`), 'beheerder krijgt de directe link naar de artikelkaart');
+  // Een medewerker zonder recht voorraad (planner) ziet de knop niet.
+  await admin.post('/app/api/admin/users', { username: 'pia.planner', displayName: 'Pia', role: 'planner', password: PW, mustChangePassword: false });
+  const planner = await createLogin(base, { password: PW })('pia.planner');
+  assert.ok(!(await planner.get('/product/pe-buis-25-mm-buis-25/')).text.includes('app/artikelen'), 'planner zonder voorraadrecht ziet de knop niet');
   const asVisitor = await anonymous.get('/product/pe-buis-25-mm-buis-25/');
   assert.ok(!asVisitor.text.includes('app/artikelen') && !asVisitor.text.includes(buis.id), 'bezoeker ziet de knop en het artikel-id niet');
 });
