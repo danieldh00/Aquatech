@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.42.3
+
+`shopPayment.footerMethods`: lijst met aangevinkte betaalmethoden voor de voet (niet ingesteld = alles behalve Bitcoin); vinkjes in Beheer > Webshop > Betalen, kaartjes via `footerPayments` in storefront-pages.js.
+
 ## 1.42.2
 
 Startpagina (`storefront.css`): onder 860 px is de assortimentsstrip een horizontale swipe-rij met tegels van 132 px (scroll-snap); op brede schermen blijft de vulrij ongewijzigd.

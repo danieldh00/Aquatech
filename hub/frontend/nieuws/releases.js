@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.42.3',
+      date: '2026-11-26',
+      title: 'Betaalmethoden in de voet van de webshop instelbaar',
+      items: [
+        { text: 'In Beheer > Webshop > Betalen stel je in welke betaalmethoden onderaan de webshop staan, inclusief Bitcoin.', for: ['beheer'] },
+      ],
+    },
+    {
       version: '1.42.2',
       date: '2026-11-26',
       title: 'Assortiment op de startpagina compacter op de telefoon',
