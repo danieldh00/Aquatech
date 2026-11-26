@@ -1,6 +1,7 @@
 // Offertes: opslag (tabel quotes), het bedrijfsprofiel voor op de offerte
 // (instelling quoteProfile) en de API-routes. De berekening zelf staat in
 // frontend/offertes/quote-core.js en is gedeeld met de browser.
+const { floorOf } = require('../platform/number-floors');
 const { archiveModeOf, archiveClause } = require('../platform/archive-filter');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
@@ -430,7 +431,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
    */
   function nextNumber(tenantId, prefix, year) {
     const head = `${prefix}${year}-`;
-    let max = 0;
+    let max = floorOf(prepare, tenantId, 'offertes', head);
     for (const existing of prepare('SELECT number FROM quotes WHERE tenant_id = ? AND substr(number, 1, ?) = ?').all(tenantId, head.length, head)) {
       const sequence = Number(existing.number.slice(head.length));
       if (Number.isInteger(sequence) && sequence > max) max = sequence;

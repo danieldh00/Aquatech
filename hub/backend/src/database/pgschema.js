@@ -1869,6 +1869,14 @@ const PG_MIGRATIONS = [
   CREATE INDEX web_orders_archived ON web_orders (tenant_id, archived_at) WHERE archived_at IS NOT NULL;
   ALTER TABLE users ADD COLUMN archived_at TIMESTAMPTZ;
   CREATE INDEX users_archived ON users (tenant_id, archived_at) WHERE archived_at IS NOT NULL;
+  -- Hoogste uitgegeven volgnummer per soort en voorvoegsel; een nummer van een definitief verwijderd stuk komt nooit terug.
+  CREATE TABLE number_floors (
+    tenant_id UUID NOT NULL ${references('tenants(id)')},
+    kind      ${TEXT_TYPE} NOT NULL,
+    head      ${TEXT_TYPE} NOT NULL,
+    floor     BIGINT NOT NULL,
+    PRIMARY KEY (tenant_id, kind, head)
+  );
   `,
 ];
 

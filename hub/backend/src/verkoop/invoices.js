@@ -20,6 +20,7 @@
 // - Uit de webshop: shop-orders.js maakt van een afgeronde bestelling een
 //   factuur (shop_order_id); de voorraad volgt dan uit de webshopsynchronisatie.
 // Alles per omgeving (req.tenantId); recht 'facturen'.
+const { floorOf } = require('../platform/number-floors');
 const { archiveModeOf, archiveClause } = require('../platform/archive-filter');
 const path = require('path');
 const { FRONTEND_DIR } = require('../paths');
@@ -199,7 +200,7 @@ function createInvoiceStore(db, { stock = null, debtors = null } = {}) {
    */
   function nextNumber(tenantId, prefix, year) {
     const head = `${prefix}${year}-`;
-    let max = 0;
+    let max = floorOf(prepare, tenantId, 'facturen', head);
     for (const row of prepare('SELECT number FROM invoices WHERE tenant_id = ? AND number IS NOT NULL AND substr(number, 1, ?) = ?').all(tenantId, head.length, head)) {
       const sequence = Number(row.number.slice(head.length));
       if (Number.isInteger(sequence) && sequence > max) max = sequence;

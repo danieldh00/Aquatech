@@ -9,6 +9,7 @@
 // (status open, betaald, mislukt of verlopen) en kan pas op Verzonden als hij
 // betaald is; een onbetaalde online bestelling houdt de voorraad vast tot hij
 // betaald, geannuleerd of verlopen is.
+const { floorOf } = require('../platform/number-floors');
 const { archiveModeOf, archiveClause } = require('../platform/archive-filter');
 const crypto = require('crypto');
 const { transaction } = require('../database/db');
@@ -361,7 +362,7 @@ function createWebOrderStore(db, { stock, categoryDiscountsOf = () => new Map(),
     // De grenzen houden het bij nummers met een cijfer na het voorvoegsel (':' komt na '9').
     const row = prepare('SELECT MAX(CAST(substr(number, ?) AS INTEGER)) AS last FROM web_orders WHERE tenant_id = ? AND number > ? AND number < ?')
       .get(head.length + 1, tenantId, head, `${head}:`);
-    const max = Number(row && row.last) || 0;
+    const max = Math.max(Number(row && row.last) || 0, floorOf(prepare, tenantId, 'bestellingen', head));
     return `${head}${String(max + 1).padStart(4, '0')}`;
   }
 

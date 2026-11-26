@@ -2,6 +2,7 @@
 // terughalen, in bulk archiveren op datum of zoekterm, en het archief ten slotte definitief verwijderen.
 // Gearchiveerd = kolom archived_at gevuld. Planner-leerdata (plan_recognitions) en artikelspecificaties (item_specs) blijven altijd staan.
 const { transaction } = require('../database/db');
+const { recordFloor } = require('./number-floors');
 
 /** Wettelijke bewaartermijn voor facturen (jaren): een definitieve factuur jonger dan dit wordt niet definitief verwijderd. */
 const INVOICE_RETENTION_YEARS = 7;
@@ -230,6 +231,8 @@ function createArchive(db, { customerRoleKeys, purgePlan, today = () => new Date
     }
     try {
       transaction(db, () => {
+        const numberKind = { offertes: 'offertes', werkorders: 'werkorders', facturen: 'facturen', bestellingen: 'bestellingen' }[kind];
+        if (numberKind && row.number) recordFloor(prepare, tenantId, numberKind, row.number);
         if (kind === 'plannen') purgePlan(tenantId, row.id);
         else prepare(`DELETE FROM ${spec.table} WHERE tenant_id = ? AND id = ? AND archived_at IS NOT NULL`).run(tenantId, row.id);
       });

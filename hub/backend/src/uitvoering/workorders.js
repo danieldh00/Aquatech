@@ -7,6 +7,7 @@
 // openbare link (openbaar/afspraak.html#t=<token>, zoals de digitale offerte)
 // ziet hij wanneer de klus gepland staat en bevestigt hij die of vraagt hij
 // een ander moment.
+const { floorOf } = require('../platform/number-floors');
 const { archiveModeOf, archiveClause } = require('../platform/archive-filter');
 const { mailStyleOf } = require('../platform/mail-layout');
 const path = require('path');
@@ -330,7 +331,7 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
    */
   function nextNumber(tenantId, year) {
     const head = `${PREFIX}${year}-`;
-    let max = 0;
+    let max = floorOf(prepare, tenantId, 'werkorders', head);
     for (const numberRow of prepare('SELECT number FROM work_orders WHERE tenant_id = ? AND substr(number, 1, ?) = ?').all(tenantId, head.length, head)) {
       const sequence = Number(numberRow.number.slice(head.length));
       if (Number.isInteger(sequence) && sequence > max) max = sequence;

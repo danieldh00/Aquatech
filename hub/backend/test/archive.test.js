@@ -144,3 +144,13 @@ test('routes: beheerder archiveert en haalt terug, installateur krijgt 403, verw
     assert.strictEqual((await admin.get('/app/api/quotes?all=1')).body.items.length, 1);
   } finally { server.close(); }
 });
+
+test('een definitief verwijderd nummer komt nooit terug (offerte, factuur)', () => {
+  const { db, archive, tenantId, ownerId } = setup();
+  addQuote(db, tenantId, ownerId, 'O2026-0001', 'Test BV');
+  const second = addQuote(db, tenantId, ownerId, 'O2026-0002', 'Test BV');
+  archive.archive(tenantId, 'offertes', [second]);
+  archive.purge(tenantId, { kinds: ['offertes'] });
+  const { floorOf } = require('../src/platform/number-floors');
+  assert.strictEqual(floorOf((sql) => db.prepare(sql), tenantId, 'offertes', 'O2026-'), 2);
+});
