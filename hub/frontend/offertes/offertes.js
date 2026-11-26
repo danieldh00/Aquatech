@@ -159,10 +159,6 @@
    */
   const columns = () => COLUMNS.filter((column) => !column.admin || showAll());
 
-  /**
-   * Haalt de offertes op en toont het overzicht.
-   * @returns {Promise<void>}
-   */
   /** Archieffilter van het overzicht (alleen voor beheerders), gezet in init. */
   let archive = null;
 
