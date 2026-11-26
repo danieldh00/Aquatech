@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.44.8',
+      date: '2026-11-26',
+      title: 'Product bewerken vanuit de webshop',
+      items: [
+        { text: 'Op een productpagina in de webshop staat voor medewerkers een knop *Bewerken in beheer* die direct de artikelkaart opent.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.44.7',
       date: '2026-11-26',
       title: 'WordPress-bestellingen zichtbaar bij Webshopbestellingen',

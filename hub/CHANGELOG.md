@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.44.8
+
+`productPage` toont voor `activeShop.staff` een knop naar `app/artikelen/?id=<artikel-id>` (bij een variant de gekozen variant). De catalogus bewaart daarvoor `itemId` per product en variant (alleen in het geheugen, geen extra query; bezoekers zien het id nooit). Test in `storefront.test.js`.
+
 ## 1.44.7
 
 - Migratie 102: tabel `wp_orders` met de kopgegevens (nummer, status, besteldatum, klant, totaal, betaalmethode) van de WordPress-bestellingen; de ophaalcursor van `wp_order_import` gaat terug, zodat de eerstvolgende ronde de koppen van de al opgehaalde bestellingen aanvult (regels en klanten blijven ongemoeid). `wp-order-history.js` schrijft de kop van elke echte bestelling weg (alle statussen behalve concept en prullenbak) en werkt status en totaal bij.
