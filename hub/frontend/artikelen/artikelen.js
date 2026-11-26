@@ -1131,6 +1131,11 @@
      * @returns {Promise<void>}
      */
     $('#b-shop').onclick = () => window.ArtikelenNew.importShop();
+    /**
+     * Voegt alleen de ontbrekende webshopproducten toe (tijdelijk, zolang WooCommerce draait).
+     * @returns {Promise<void>}
+     */
+    $('#b-shop-missing').onclick = () => window.ArtikelenNew.importShopMissing();
     /** Opent het venster om de afbeeldingen van de webshop over te nemen. */
     $('#b-images').onclick = () => { window.ArtikelenMedia.openImagesImport(); };
     window.StockBulk.init({ api, toast, reload: load, rerender: renderStock, items: () => state.items });

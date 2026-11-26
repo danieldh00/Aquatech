@@ -59,7 +59,7 @@ const { KINDS, GROUPS, VAT_RATES } = require('./stock-helpers');
  * Maakt de opslag voor voorraadartikelen, mutaties en reserveringen.
  * @param {object} db De database.
  * @param {{ articles?: Function, onDirty?: Function }} [options] Catalogus van de planner; aanroep na een wijziging voor de webshop.
- * @returns {object} list, get, create, update, remove, move, setVariants, articleChoices, mergeSuggestions, mergeIntoVariants, unmergePreview, unmergeVariants, importCatalog, importShop, mirrorShop, movements, reservations, syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode, reorderProposal, reserveOrder, releaseOrder, issueOrder en onDirty.
+ * @returns {object} list, get, create, update, remove, move, setVariants, articleChoices, mergeSuggestions, mergeIntoVariants, unmergePreview, unmergeVariants, importCatalog, importShop, mirrorShop, addMissingShop, movements, reservations, syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode, reorderProposal, reserveOrder, releaseOrder, issueOrder en onDirty.
  */
 function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) {
   /**
@@ -1236,6 +1236,47 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   }
 
   /**
+   * TIJDELIJK (alleen zolang WooCommerce nog draait): maakt een artikel voor elk webshopproduct dat er nog geen heeft.
+   * Raakt bestaande artikelen niet aan: niets wordt gearchiveerd, teruggezet of aangepast. Een product telt als
+   * aanwezig als een artikel eraan gekoppeld is of dezelfde code of sku heeft (zie `matchProduct`).
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object[]} products Alle producten uit de webshop (met variaties).
+   * @param {Function} matchProduct Functie item ({ code }) → webshopproduct of null.
+   * @param {{ vatRate?: number, priceOf?: Function }} [options] Btw-tarief van nieuwe artikelen en product → verkoopprijs excl. btw.
+   * @returns {{ created: number, skippedProducts: number }} Aantallen.
+   */
+  function addMissingShop(tenantId, products, matchProduct, { vatRate = 21, priceOf = (product) => product.price } = {}) {
+    const items = prepare('SELECT id, code, name, shop_product_id, parent_id, has_variants, attributes FROM stock_items WHERE tenant_id = ?').all(tenantId);
+    const matchedProducts = new Set();
+    const parentItems = new Map();
+    const seenCodes = new Set(items.map((item) => item.code));
+    for (const item of items) {
+      const product = matchProduct(item);
+      if (!product) continue;
+      matchedProducts.add(String(product.id));
+      if (!product.parentId) parentItems.set(String(product.id), item);
+    }
+    const productIds = new Set(products.map((product) => String(product.id)));
+    const fresh = [];
+    let skippedProducts = 0;
+    for (const product of products) {
+      if (matchedProducts.has(String(product.id))) continue;
+      const code = shopCodeOf(product);
+      if (!code || code.length > 40 || !/^[A-Z0-9][A-Z0-9 ._\-/+]*$/.test(code) || seenCodes.has(code) || (product.parentId && !productIds.has(String(product.parentId)))) { skippedProducts++; continue; }
+      seenCodes.add(code);
+      fresh.push({ product, code });
+    }
+    let created = 0;
+    transaction(db, () => {
+      const inserted = insertShopProducts(tenantId, fresh, parentItems, { vatRate, priceOf });
+      created = inserted.codes.length;
+      skippedProducts += inserted.skipped;
+      if (inserted.codes.length) resyncOpen(tenantId, inserted.codes, { nested: true });
+    });
+    return { created, skippedProducts };
+  }
+
+  /**
    * Logboek (voor het overzicht en de Excel-export), nieuwste eerst.
    * @param {string} tenantId Id van de omgeving.
    * @param {{ from?: string, to?: string, itemId?: string, workOrderId?: string, limit?: number }} [filters] Periode, artikel, werkorder en maximum.
@@ -1902,7 +1943,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
 
   return {
     units, addUnit, removeUnit, setVariants, articleChoices, mergeSuggestions, mergeIntoVariants, unmergePreview, unmergeVariants,
-    list, get, create, update, remove, move, importCatalog, importShop, mirrorShop, movements, reservations: reservationsOf,
+    list, get, create, update, remove, move, importCatalog, importShop, mirrorShop, addMissingShop, movements, reservations: reservationsOf,
     syncWorkOrder, resyncOpen, complete, onWorkOrderChange, forWorkOrder, issue, syncUsage, book, saleInfo, findCode,
     reorderProposal, reserveOrder, releaseOrder, issueOrder, issueOrderPart, shortageFor, onDirty: setDirtyHook, setPricer, setPriceLogger, setSalePrices, repriceItem, applyAutoPrices, receiptCost,
     addCostPrice, setLayerCost, stockValue: costs.stockValue,
