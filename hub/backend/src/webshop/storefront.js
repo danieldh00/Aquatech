@@ -560,6 +560,8 @@ function createStorefront({ addressLookup = null, addressGuard = null, db, tenan
       if (withSlash(req, res)) return;
       if (!plannerOn()) return sendWithGroups(req, res, 404, (groups) => notFoundPage('../', groups));
       if (accounts.viewer(req)) return res.redirect(302, '../app/beregening/');
+      // Zonder account direct de planner in (tekenen, sproeiers, materiaal bestellen); het aanmeldformulier blijft bereikbaar met ?account=1.
+      if (!Object.prototype.hasOwnProperty.call(req.query, 'account')) return res.redirect(302, '../app/beregening/?tekenen');
       sendWithGroups(req, res, 200, (groups) => plannerPage({}, groups));
     });
     router.post('/planner', form, async (req, res, next) => {

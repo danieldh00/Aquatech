@@ -14,6 +14,7 @@
   const PARAMS = new URLSearchParams(location.search);
   const ANON = PARAMS.has('tekenen');
   const STORAGE_KEY = `aquatech-beregeningsplanner-v1${window.AquatechEnv ? window.AquatechEnv.storageSuffix() : ''}${ANON ? '-tekenen' : ''}`;
+  const ANON_STORAGE_KEY = `aquatech-beregeningsplanner-v1${window.AquatechEnv ? window.AquatechEnv.storageSuffix() : ''}-tekenen`;
   const LEGEND_KEY = 'aquatech-legenda-open';
   const REVIEW_LABEL = { concept: 'Concept', ter_controle: 'Ter controle', goedgekeurd: 'Goedgekeurd' };
   /**
@@ -190,7 +191,7 @@
           if (['bom', 'sprinklers'].includes(STEPS[this.step].id)) this.renderStepPanel();
         });
       }
-      this._loadRights().then(() => { this._restoreOwnedDraft(); this._initReview(); });
+      this._loadRights().then(() => { this._restoreOwnedDraft(); this._adoptAnonymousDraft(); this._initReview(); });
       this._loadShop();
       this._openFromUrl();
       window.addEventListener('beforeunload', () => this._flushSync());
@@ -329,6 +330,33 @@
       this.showStep(this.step);
       this.recalc();
       this.editor.render();
+      this.refreshBackground().then(() => this.editor.fit());
+    },
+    /**
+     * Neemt het ontwerp over dat iemand zonder account in deze browser maakte (?tekenen), zodra die inlogt of registreert.
+     * Alleen in een leeg, nog niet bewaard plan; het lokale ontwerp zonder account wordt daarna gewist.
+     */
+    _adoptAnonymousDraft() {
+      if (ANON || !this.me || !this.me.user || location.protocol === 'file:') return;
+      let data;
+      try {
+        const raw = localStorage.getItem(ANON_STORAGE_KEY);
+        if (!raw) return;
+        data = JSON.parse(raw);
+      } catch (error) { return; }
+      const current = this.state;
+      if (!data || current.serverId || current.areas.length || current.sprinklers.length) return;
+      try { localStorage.removeItem(ANON_STORAGE_KEY); } catch (error) { /* geen opslag */ }
+      if (!Array.isArray(data.areas) || !data.areas.length) return;
+      this._apply(data);
+      this.step = Math.min(STEPS.length - 1, data.step || 0);
+      this.editor.selection = null;
+      this.editor.bgImg = null;
+      this.renderSteps();
+      this.showStep(this.step);
+      this.recalc();
+      this.editor.render();
+      this._saveLocal();
       this.refreshBackground().then(() => this.editor.fit());
     },
     /**
