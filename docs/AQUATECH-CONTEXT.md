@@ -23,6 +23,6 @@ Productspecifieke kennis. De algemene werkwijze staat in `docs/WERKWIJZE.md`; he
 - Huisstijl AquaTech Service, Nunspeet: navy #1B3768, teal #37BAC8, groen #1A9F5B.
 
 ## Projectspecifieke werkafspraken
-- Migraties: `MIGRATIONS` (db.js) én `PG_MIGRATIONS` (pgschema.js), positioneel.
+- Migraties: alleen `PG_MIGRATIONS` (pgschema.js), positioneel.
 - Elke PR met wijziging in `hub/` krijgt een fragment `changes/<naam>.md`; nooit `version`, `CHANGELOG.md` of `releases.js` aanraken.
 - Reviews: de verplichte checks zijn *Claude code review* en *Claude security review*; CodeRabbit is uitgeschakeld.

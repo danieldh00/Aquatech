@@ -11,7 +11,7 @@ Webshop = `/` (hoofdmap), de app = `/app/` (dashboard, modules, `/app/api`). Dra
 | Pad | Inhoud |
 |---|---|
 | `hub/backend/src/server.js` | Express-app, routes samenstellen, `identify()`, CSP (hoofdbeheerroutes `/api/platform` staan in `platform/platform-routes.js`) |
-| `hub/backend/src/<onderwerp>/` | `database/` (db.js migraties `MIGRATIONS`, pgschema.js `PG_MIGRATIONS`), `beveiliging/`, `platform/` (store, instellingen, rollen, mail, nieuws, bewaking, back-ups), `beregening/`, `verkoop/` (offertes, facturen, klanten, Visma), `webshop/`, `uitvoering/` (werkorders, planning, portaal), `artikelen/` (voorraad, inkoop, prijsfactor), `mcp/` (AI-koppeling), `paginas/` (HTML door de server gevuld) |
+| `hub/backend/src/<onderwerp>/` | `database/` (db.js, migraties in pgschema.js `PG_MIGRATIONS`), `beveiliging/`, `platform/` (store, instellingen, rollen, mail, nieuws, bewaking, back-ups), `beregening/`, `verkoop/` (offertes, facturen, klanten, Visma), `webshop/`, `uitvoering/` (werkorders, planning, portaal), `artikelen/` (voorraad, inkoop, prijsfactor), `mcp/` (AI-koppeling), `paginas/` (HTML door de server gevuld) |
 | `hub/backend/test/` | `node --test`; gedeelde hulp in `test/helpers/` (`http-client.js`, fakes voor Mollie/PDOK/VIES/captcha/Google) |
 | `hub/backend/tools/` | `codestyle.js`, `tenant-filter.js`, `release-notes.js`, baselines |
 | `hub/frontend/<module>/` | één map per module met eigen `index.html`; gedeeld in `shared/`; moduleregister `dashboard/modules.js`; rechten `shared/roles.js` |
@@ -21,7 +21,7 @@ Webshop = `/` (hoofdmap), de app = `/app/` (dashboard, modules, `/app/api`). Dra
 
 Per onderdeel staat een korte `CLAUDE.md` met alleen de regels van die map (`hub/backend/src/{webshop,artikelen,verkoop,uitvoering,beregening,platform,mcp}/` en `hub/frontend/`); lees die van de map waarin je werkt in plaats van het grote root-`CLAUDE.md`.
 
-Nieuwe migratie: toevoegen in `MIGRATIONS` (db.js) **én** `PG_MIGRATIONS` (pgschema.js); controleer eerst het laatste vrije nummer (90+ is gereserveerd). Een nieuwe module: map onder `frontend/`, regel in `modules.js`, laadt `dashboard/modules.js` en daarna `shared/sidebar.js`.
+Nieuwe migratie: alleen toevoegen in `PG_MIGRATIONS` (pgschema.js); migraties zijn positioneel, dus neem het eerstvolgende vrije nummer op `master`. Een nieuwe module: map onder `frontend/`, regel in `modules.js`, laadt `dashboard/modules.js` en daarna `shared/sidebar.js`.
 
 ## Commando's
 ```sh
@@ -40,7 +40,6 @@ Docker is niet beschikbaar in de cloud-sandbox. Er is geen aparte linter; `codes
 - Nooit rechtstreeks op `master`. Branch vers vanaf `origin/master` (`feature/<naam>` of `claude/<naam>`), kleine PR's, één onderwerp per PR.
 - Volgorde: wijzigen → `npm test` → `changes/<naam>.md` (als `hub/` wijzigt) → `README.md` bijwerken bij features/setup → push → PR → CI groen + verplichte **Claude code review** en **Claude security review** → bevindingen oplossen vóór auto-merge.
 - **Versie, `CHANGELOG.md` en `frontend/nieuws/releases.js` nooit zelf aanraken**; `release.yml` doet dat na de merge. Alleen docs/CI zonder effect: PR-label `geen-releasenotes`. Enige uitzondering: een vergeten doelgroep (`for: [...]`) toevoegen aan een bestaand punt in `releases.js` mag in een PR (`audienceOnlyChange`); bestaande doelgroepen, tekst, versies en nieuwe punten blijven geweigerd.
-- Geen backwards-compatibiliteit nodig tijdens de ontwikkeling.
 - Geen modelnamen/-ID's in commits, PR's, code of docs. Geen secrets in repo of chat.
 
 ## Servertaken (hosttaken)
@@ -70,8 +69,8 @@ Moet Daniël na een PR iets op de server doen (een serverscript opnieuw draaien,
 `release.yml` bouwt na een merge met fragment het image `ghcr.io/danieldh00/aquatech:<versie>` (+ `:latest`); op de server rolt een timer (`deploy/apps01/update.sh`, ~15 min, met rollback) het uit. Database: eigen PostgreSQL-container naast de app (`deploy/apps01/pve/db-local.sh`), Supabase alleen als terugval. PostgreSQL is de enige database. Scripts voor de beheerder draaien **vanaf de Proxmox-host** (via `pct exec`/`qm guest exec`/ssh naar de gast). Tijdzone Europe/Amsterdam.
 
 ## Zuinig werken (vaste werkwijze, besluit Daniël 2026-11-16)
-1. **Gerichte opdracht**: lees alleen de genoemde bestanden en hun directe afhankelijkheden; geen brede greps, geen subagents tenzij de kwaliteit aantoonbaar stijgt. `CLAUDE.md` is groot: zoek er gericht in (bijv. "Prijsfactor", "Orderpick") in plaats van het hele bestand te lezen.
-2. **Reviews alleen waar het telt**: `claude-review.yml` slaat de Claude-codereview automatisch over als een PR geen code raakt (alleen docs, tests, afbeeldingen of een versie-bump); een label is daarvoor niet nodig. De securityreview draait bij elke wijziging in `hub/backend/src`, `hub/frontend`, `deploy/` of de Docker-bestanden en blijft verplicht. Concept-PR's worden niet gereviewd: werk in een **draft-PR** en zet hem pas op *ready for review* als het werk klaar is, zodat de reviews niet bij elke push draaien. Een nieuwe push annuleert een lopende review (`cancel-in-progress`).
+1. **Gerichte opdracht**: lees alleen de genoemde bestanden en hun directe afhankelijkheden; geen brede greps; subagents en parallelle agents mogen op verschillende bestanden (zie punt 8). `CLAUDE.md` is groot: zoek er gericht in (bijv. "Prijsfactor", "Orderpick") in plaats van het hele bestand te lezen.
+2. **Reviews kosten per run**: elke PR naar `master` krijgt een volledige Claude code review en security review; er is geen skip voor docs, tests of versie-bumps. Concept-PR's worden niet gereviewd: werk in een **draft-PR** en zet hem pas op *ready for review* als het werk klaar is, zodat de reviews niet bij elke push draaien. Een nieuwe push annuleert een lopende review (`cancel-in-progress`).
 3. **Lokaal eerst alleen de geraakte tests** (`node --test test/<bestand>.test.js`), pas daarna pushen naar CI; dat scheelt rondes van push, falen en fixen.
 4. **Kleine PR's**: één afgebakend onderdeel per PR; grote items worden opgesplitst.
 5. **Na de merge direct stoppen**: geen extra samenvattingen of verificatierondes, tenzij Daniël erom vraagt.
