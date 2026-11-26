@@ -123,7 +123,7 @@ function withHiddenCause(outcome, error) {
  * @param {object} req Het verzoek.
  * @returns {string} Het pad.
  */
-const requestPath = (req) => redact(`${req.inApp ? '/app' : ''}${String(req.originalUrl || req.url || '').split('?')[0]}`, 300);
+const requestPath = (req) => redact(`${req.inApp ? '/app' : ''}${String(req.originalUrl || req.url || '').split('?')[0]}`, 300).replace(/[\u0000-\u001f\u007f]/g, ' ');
 
 /**
  * Een nieuwe foutcode: 8 tekens, genoeg om één fout in het log terug te vinden.
@@ -243,7 +243,7 @@ const errorCounter = createErrorCounter();
  * @param {(info: { req: object, errorId: string, error: Error }) => void} [options.onError] Krijgt elke 500-fout (voor het centrale logboek).
  * @returns {{ attach: Function, handler: Function, counter: object }} Middleware (vroeg plaatsen), foutafhandelaar (als laatste) en de teller.
  */
-function createErrorReport({ debugFor, log = (line, detail) => console.error(line, detail), counter = errorCounter, onError = null }) {
+function createErrorReport({ debugFor, log = (line, detail) => console.error('%s %s', line, detail), counter = errorCounter, onError = null }) {
   /**
    * Of dit verzoek details mag zien; een fout bij die controle betekent nee.
    * @param {object} req Het verzoek.
