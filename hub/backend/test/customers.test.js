@@ -337,3 +337,51 @@ test('betalingsherinneringen per klant uitzetten: alleen met het recht klanten, 
   assert.strictEqual((await (await as('planner1')).patch(`/app/api/customers/${id}`, { remindersOff: true })).status, 403, 'zonder recht klanten');
   assert.strictEqual((await (await as('vreemd', 'ander')).patch(`/app/api/customers/${id}`, { remindersOff: true })).status, 404, 'andere organisatie');
 });
+
+test('bulkacties: archiveren en terughalen, verwijderen alleen zonder koppelingen en met wachtwoord door een beheerder', async () => {
+  const { admin, installer, as, store, main } = await setup();
+  /**
+   * Maakt een klant aan en geeft het id.
+   * @param {string} name De naam.
+   * @returns {Promise<string>} Id van de klant.
+   */
+  const make = async (name) => (await installer.post('/app/api/customers', { displayName: name })).body.customer.id;
+  const free = await make('Vrije Klant');
+  const linked = await make('Klant Met Offerte');
+  assert.strictEqual((await installer.post('/app/api/quotes', { customerId: linked, data: { title: 'Tuin', customer: { name: 'Klant Met Offerte' } } })).status, 201);
+  const loginUser = store.listCustomers([main]).find((customer) => customer.username === 'klant1').id;
+
+  // Archiveren: een installateur mag, een klant met een actieve inlog wordt overgeslagen met reden.
+  const archived = await installer.post('/app/api/customers/bulk', { action: 'archiveren', ids: [free, linked, loginUser] });
+  assert.strictEqual(archived.status, 200, JSON.stringify(archived.body));
+  assert.strictEqual(archived.body.done, 2);
+  assert.strictEqual(archived.body.blocked.length, 1);
+  assert.match(archived.body.blocked[0].reason, /actieve inlog/);
+  assert.strictEqual((await installer.get('/app/api/customers?q=Vrije')).body.total, 0, 'gearchiveerd staat niet meer in de lijst');
+  const inArchive = await installer.get('/app/api/customers?archief=alleen');
+  assert.deepStrictEqual(inArchive.body.items.map((item) => item.displayName).sort(), ['Klant Met Offerte', 'Vrije Klant']);
+  assert.ok(inArchive.body.items[0].archivedAt);
+  assert.strictEqual((await installer.post('/app/api/customers/bulk', { action: 'terughalen', ids: [free] })).body.done, 1);
+  assert.strictEqual((await installer.get('/app/api/customers?q=Vrije')).body.total, 1);
+
+  // Verwijderen: installateur 403, zonder of met fout wachtwoord geweigerd.
+  assert.strictEqual((await installer.post('/app/api/customers/bulk', { action: 'verwijderen', ids: [free] })).status, 403);
+  assert.strictEqual((await admin.post('/app/api/customers/bulk', { action: 'verwijderen', ids: [free] })).status, 401);
+  assert.strictEqual((await admin.post('/app/api/customers/bulk', { action: 'verwijderen', ids: [free], password: 'fout' })).status, 401);
+  // Met wachtwoord: de klant zonder koppelingen verdwijnt, die met offerte en die met inlog blijven staan met een reden.
+  const removed = await admin.post('/app/api/customers/bulk', { action: 'verwijderen', ids: [free, linked, loginUser], password: PW });
+  assert.strictEqual(removed.status, 200, JSON.stringify(removed.body));
+  assert.strictEqual(removed.body.done, 1);
+  assert.strictEqual(removed.body.blocked.length, 2);
+  assert.ok(removed.body.blocked.some((item) => /offertes/.test(item.reason)));
+  assert.strictEqual((await admin.get(`/app/api/customers/${free}`)).status, 404);
+  assert.strictEqual((await admin.get(`/app/api/customers/${linked}`)).status, 200, 'gekoppelde klant blijft bestaan');
+
+  // Ongeldige invoer, te veel id's, geen recht en een andere organisatie.
+  assert.strictEqual((await installer.post('/app/api/customers/bulk', { action: 'wissen', ids: [free] })).status, 400);
+  assert.strictEqual((await installer.post('/app/api/customers/bulk', { action: 'archiveren', ids: [] })).status, 400);
+  assert.strictEqual((await installer.post('/app/api/customers/bulk', { action: 'archiveren', ids: Array.from({ length: 101 }, (_, index) => String(index)) })).status, 400);
+  assert.strictEqual((await (await as('planner1')).post('/app/api/customers/bulk', { action: 'archiveren', ids: [linked] })).status, 403);
+  const foreign = await (await as('vreemd', 'ander')).post('/app/api/customers/bulk', { action: 'archiveren', ids: [linked] });
+  assert.strictEqual(foreign.body.done, 0, 'een klant van een andere organisatie wordt niet aangeraakt');
+});

@@ -2320,6 +2320,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // ---------- Klanten (module Klanten, zie customers.js) ----------
   registerCustomerRoutes(app, {
     store, customers: createCustomerStore(database), requireRight, requireJson, audit, addressGuard,
+    // Bulkacties vanuit het klantenoverzicht (archiveren, terughalen, verwijderen) gebruiken het archief; verwijderen vraagt het wachtwoord opnieuw.
+    archive,
+    confirmIdentity: createIdentityConfirm({ store, loginGuard, twoFactor, audit, auditAction: 'klanten_wachtwoord_fout' }),
     // VIES wordt hieronder gemaakt; de verwijzing wordt pas bij een verzoek gebruikt.
     checkVat: (req, vatNumber) => {
       const requester = normalizeVatNumber(settingsFor(req.tenantId || tenant.id).get('quoteProfile').vatNumber);

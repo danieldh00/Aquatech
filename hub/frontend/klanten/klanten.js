@@ -33,7 +33,8 @@
   const WORK_ORDER_STATUS = { open: 'Open', gepland: 'Gepland', bezig: 'Bezig', gereed: 'Gereed', geannuleerd: 'Geannuleerd' };
   const INVOICE_STATUS = { concept: 'Concept', definitief: 'Definitief', betaald: 'Betaald' };
 
-  const state = { items: [], total: 0, offset: 0, search: '', group: '', customer: null, detail: null };
+  const state = { items: [], total: 0, offset: 0, search: '', group: '', archive: '', selected: new Map(), mayDelete: false, customer: null, detail: null };
+  const BULK_MAX = 100;
   // Telt elke lijstopvraging; een antwoord dat na een nieuwere vraag terugkomt wordt genegeerd.
   let listVersion = 0;
   let searchTimer = null;
@@ -102,6 +103,7 @@
       customer.businessRequest === 'aangevraagd' ? '<span class="pill aanvraag">Aanvraag zakelijk</span>' : '',
       customer.hasLogin ? '<span class="pill inlog">Inlog</span>' : '',
       customer.disabled ? '<span class="pill">Uitgeschakeld</span>' : '',
+      customer.archivedAt ? '<span class="pill">Gearchiveerd</span>' : '',
     ].filter(Boolean).join(' ');
   }
 
@@ -114,6 +116,7 @@
     const query = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(state.offset) });
     if (state.search) query.set('q', state.search);
     if (state.group) query.set('group', state.group);
+    if (state.archive) query.set('archief', state.archive);
     try {
       const out = await api(`customers?${query}`);
       if (version !== listVersion) return;
@@ -128,7 +131,8 @@
 
   /** Tekent de tabel met klanten en de knoppen onder de tabel. */
   function renderList() {
-    const rows = state.items.map((customer) => `<tr class="row-link${customer.disabled ? ' off' : ''}" data-id="${esc(customer.id)}">
+    const rows = state.items.map((customer) => `<tr class="row-link${customer.disabled || customer.archivedAt ? ' off' : ''}" data-id="${esc(customer.id)}">
+      <td class="pick"><input type="checkbox" data-pick="${esc(customer.id)}" aria-label="Selecteer ${esc(customer.displayName)}"${state.selected.has(customer.id) ? ' checked' : ''}></td>
       <td><a href="?id=${encodeURIComponent(customer.id)}"><b>${esc(customer.displayName)}</b></a></td>
       <td class="wrap">${esc(customer.companyName || '')}</td>
       <td class="wrap">${esc((customer.address || '').replace(/\n/g, ', '))}</td>
@@ -137,13 +141,55 @@
       <td>${pillsOf(customer)}</td>
     </tr>`).join('');
     const empty = state.search || state.group ? 'Geen klanten gevonden met dit zoekwoord of filter.' : 'Nog geen klanten. Maak de eerste aan met Nieuwe klant.';
-    $('#k-table').innerHTML = `<thead><tr><th>Naam</th><th>Bedrijf</th><th>Adres</th><th>E-mail</th><th>Telefoon</th><th>Groep</th></tr></thead>
-      <tbody>${rows || `<tr><td class="empty" colspan="6">${empty}</td></tr>`}</tbody>`;
+    $('#k-table').innerHTML = `<thead><tr><th class="pick"><input type="checkbox" id="k-pick-all" aria-label="Selecteer alle klanten op deze pagina"${state.items.length && state.items.every((customer) => state.selected.has(customer.id)) ? ' checked' : ''}></th><th>Naam</th><th>Bedrijf</th><th>Adres</th><th>E-mail</th><th>Telefoon</th><th>Groep</th></tr></thead>
+      <tbody>${rows || `<tr><td class="empty" colspan="7">${empty}</td></tr>`}</tbody>`;
     const from = state.total ? state.offset + 1 : 0;
     const to = Math.min(state.total, state.offset + state.items.length);
     $('#k-count').textContent = `${from}–${to} van ${state.total} klanten`;
     $('#k-prev').disabled = state.offset <= 0;
     $('#k-next').disabled = state.offset + PAGE_SIZE >= state.total;
+    renderBulk();
+  }
+
+  /** Toont of verbergt de actiebalk voor de aangevinkte klanten en past de knoppen aan de weergave (actief of archief) aan. */
+  function renderBulk() {
+    const count = state.selected.size;
+    $('#k-bulk').hidden = !count;
+    $('#k-bulk-count').textContent = `${count} ${count === 1 ? 'klant' : 'klanten'} geselecteerd`;
+    const inArchive = state.archive === 'alleen';
+    $('#k-archive').hidden = inArchive;
+    $('#k-restore').hidden = state.archive === '';
+    $('#k-delete').hidden = !state.mayDelete;
+    if (!count) $('#k-delete-form').hidden = true;
+  }
+
+  /**
+   * Toont het resultaat van een bulkactie, met per overgeslagen klant de reden.
+   * @param {string} summary Samenvatting.
+   * @param {{ name: string, reason: string }[]} blocked De overgeslagen klanten.
+   * @param {boolean} offerArchive True = noem archiveren als alternatief voor wat niet verwijderd kon worden.
+   * @returns {void}
+   */
+  function showBulkResult(summary, blocked, offerArchive) {
+    const box = $('#k-bulk-result');
+    box.hidden = false;
+    box.innerHTML = `${esc(summary)}${blocked.length ? `<ul>${blocked.map((item) => `<li><b>${esc(item.name || 'Onbekende klant')}</b>: ${esc(item.reason)}</li>`).join('')}</ul>${offerArchive ? '<p class="muted small">Klanten met stukken blijven bewaard (bewaarplicht). Gebruik Archiveren om ze uit de lijst te halen.</p>' : ''}` : ''}`;
+  }
+
+  /**
+   * Voert een bulkactie uit op de aangevinkte klanten en ververst de lijst.
+   * @param {'archiveren'|'terughalen'|'verwijderen'} action De actie.
+   * @param {object} [extra] Extra velden (wachtwoord en code bij verwijderen).
+   * @returns {Promise<object>} Het antwoord van de server.
+   */
+  async function runBulk(action, extra = {}) {
+    const names = new Map(state.selected);
+    const out = await api('customers/bulk', { method: 'POST', body: { action, ids: [...state.selected.keys()], ...extra } });
+    const verb = { archiveren: 'gearchiveerd', terughalen: 'teruggehaald', verwijderen: 'verwijderd' }[action];
+    state.selected.clear();
+    showBulkResult(`${out.done} ${out.done === 1 ? 'klant' : 'klanten'} ${verb}${out.blocked.length ? `, ${out.blocked.length} overgeslagen:` : '.'}`, out.blocked.map((item) => ({ name: item.name || names.get(item.id) || '', reason: item.reason })), action === 'verwijderen');
+    await loadList();
+    return out;
   }
 
   /**
@@ -553,6 +599,74 @@
      * @returns {void}
      */
     $('#k-group').onchange = () => { state.group = $('#k-group').value; state.offset = 0; loadList(); };
+    /** Past het archieffilter toe (actief, gearchiveerd of alles); de selectie begint opnieuw. */
+    $('#k-archive-filter').onchange = () => { state.archive = $('#k-archive-filter').value; state.offset = 0; state.selected.clear(); $('#k-bulk-result').hidden = true; loadList(); };
+    /**
+     * Vinkt een klant of de hele pagina aan of uit (hoogstens 100 tegelijk).
+     * @param {Event} event De wijziging.
+     * @returns {void}
+     */
+    $('#k-table').onchange = (event) => {
+      const box = event.target;
+      if (box.id === 'k-pick-all') {
+        for (const customer of state.items) {
+          if (box.checked && state.selected.size < BULK_MAX) state.selected.set(customer.id, customer.displayName);
+          else if (!box.checked) state.selected.delete(customer.id);
+        }
+        if (box.checked && state.selected.size >= BULK_MAX) toast(`Hoogstens ${BULK_MAX} klanten tegelijk.`, true);
+        renderList();
+      } else if (box.dataset.pick) {
+        if (box.checked && state.selected.size >= BULK_MAX) { box.checked = false; toast(`Hoogstens ${BULK_MAX} klanten tegelijk.`, true); return; }
+        const customer = state.items.find((item) => item.id === box.dataset.pick);
+        if (box.checked) state.selected.set(box.dataset.pick, customer ? customer.displayName : ''); else state.selected.delete(box.dataset.pick);
+        renderBulk();
+        const all = $('#k-pick-all');
+        if (all) all.checked = state.items.every((item) => state.selected.has(item.id));
+      }
+    };
+    /** Wist de selectie. */
+    $('#k-clear').onclick = () => { state.selected.clear(); renderList(); };
+    /**
+     * Voert een bulkactie uit zonder wachtwoord (archiveren of terughalen).
+     * @param {string} action De actie.
+     * @returns {Function} De klikafhandelaar.
+     */
+    const simpleBulk = (action) => async () => {
+      try { await runBulk(action); } catch (error) { toast(error.message, true); }
+    };
+    $('#k-archive').onclick = simpleBulk('archiveren');
+    $('#k-restore').onclick = simpleBulk('terughalen');
+    /** Opent het bevestigingsformulier voor definitief verwijderen. */
+    $('#k-delete').onclick = () => {
+      const count = state.selected.size;
+      $('#k-delete-text').textContent = `${count} ${count === 1 ? 'klant' : 'klanten'} definitief verwijderen? Dat kan niet ongedaan worden gemaakt. Klanten met offertes, werkorders, facturen of bestellingen worden overgeslagen (bewaarplicht), net als klanten met een actieve inlog.`;
+      $('#k-delete-err').textContent = '';
+      $('#k-delete-form').hidden = false;
+      $('#k-delete-password').focus();
+    };
+    /** Sluit het verwijderformulier. */
+    $('#k-delete-cancel').onclick = () => { $('#k-delete-form').hidden = true; };
+    /**
+     * Verwijdert de selectie na het opnieuw invullen van het wachtwoord.
+     * @param {Event} event Het verzenden van het formulier.
+     * @returns {Promise<void>}
+     */
+    $('#k-delete-form').onsubmit = async (event) => {
+      event.preventDefault();
+      const button = event.target.querySelector('button[type="submit"]');
+      button.disabled = true;
+      try {
+        await runBulk('verwijderen', { password: $('#k-delete-password').value, totp: $('#k-delete-totp').value.trim() });
+        $('#k-delete-form').hidden = true;
+        $('#k-delete-password').value = '';
+        $('#k-delete-totp').value = '';
+      } catch (error) {
+        $('#k-delete-err').textContent = error.message;
+        if (/authenticator/i.test(error.message)) $('#k-delete-totp-row').hidden = false;
+      } finally {
+        button.disabled = false;
+      }
+    };
     /** Opent het formulier voor een nieuwe klant. */
     $('#k-new').onclick = () => { navigate('nieuw'); };
     $('#k-export').onclick = exportExcel;
@@ -575,6 +689,7 @@
      * @returns {void}
      */
     $('#k-table').onclick = (event) => {
+      if (event.target.closest('td.pick, th.pick')) return;
       const link = event.target.closest('a[href^="?id="]');
       if (link && (event.ctrlKey || event.metaKey || event.shiftKey)) return;
       const row = event.target.closest('tr[data-id]');
@@ -598,7 +713,10 @@
     // Een zakelijke klant (prijzen excl. btw) maakt alleen een beheerder aan: voor anderen verdwijnt die keuze.
     if (window.AquatechCommon) {
       window.AquatechCommon.getJson('api/me').then((me) => {
-        if (!((me && me.rights) || []).includes('beheer')) $('#n-form').customerGroup.querySelector('option[value="zakelijk"]').remove();
+        const rights = (me && me.rights) || [];
+        if (!rights.includes('beheer')) $('#n-form').customerGroup.querySelector('option[value="zakelijk"]').remove();
+        state.mayDelete = rights.includes('beheer');
+        renderBulk();
       }).catch(() => {});
     }
     route();

@@ -41,10 +41,32 @@
         <option value="groothandel">Groothandel</option>
         <option value="aanvraag">Aanvraag zakelijk</option>
       </select>
+      <select id="k-archive-filter" aria-label="Archief">
+        <option value="">Actieve klanten</option>
+        <option value="alleen">Gearchiveerd</option>
+        <option value="toon">Alles</option>
+      </select>
       <button id="k-new" class="btn primary" type="button">Nieuwe klant</button>
       <button id="k-export" class="btn" type="button">Exporteer naar Excel</button>
       <button id="k-import" class="btn" type="button" title="Klanten uit een Excel-bestand toevoegen of bijwerken, met eerst een controle">Importeren uit Excel</button>
     </div>
+    <div id="k-bulk" class="klanten-bulk" hidden>
+      <b id="k-bulk-count"></b>
+      <button id="k-archive" class="btn small" type="button">Archiveren</button>
+      <button id="k-restore" class="btn small" type="button" hidden>Terughalen</button>
+      <button id="k-delete" class="btn small danger" type="button" hidden>Verwijderen…</button>
+      <button id="k-clear" class="btn small" type="button">Selectie wissen</button>
+    </div>
+    <form id="k-delete-form" class="card klanten-delete" autocomplete="off" hidden>
+      <p id="k-delete-text" class="small"></p>
+      <div class="form-grid">
+        <label class="field">Je wachtwoord (opnieuw)<input type="password" id="k-delete-password" autocomplete="current-password"></label>
+        <label class="field" id="k-delete-totp-row" hidden>Code uit je authenticator-app<input type="text" id="k-delete-totp" inputmode="numeric" autocomplete="one-time-code"></label>
+      </div>
+      <div class="err" id="k-delete-err" role="alert"></div>
+      <div class="form-actions"><button type="submit" class="btn danger">Definitief verwijderen</button> <button type="button" class="btn" id="k-delete-cancel">Annuleren</button></div>
+    </form>
+    <div id="k-bulk-result" class="klanten-result" role="status" hidden></div>
     <div class="tablewrap"><table class="grid" id="k-table"></table></div>
     <div class="pager">
       <span id="k-count" class="muted small"></span>
