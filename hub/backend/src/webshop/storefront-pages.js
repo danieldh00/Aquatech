@@ -43,7 +43,7 @@ function formatPrice(amount) {
 /** De inhoud (blokken en pagina's uit Beheer) waarmee de pagina's die nu worden opgebouwd, worden getekend. */
 let activeContent = { site: DEFAULT_SITE, pages: [] };
 /** Of bestellen aan staat, hoeveel regels er in de winkelwagen van de bezoeker zitten en of hij een groothandelsklant is, met het kopje Groothandel (voor de pagina's die nu worden opgebouwd). */
-let activeShop = { indexing: false, ordering: false, cartCount: 0, business: false, staff: false, wholesale: false, baseUrl: '', analytics: '', clarity: '', captcha: '', footerMethods: null };
+let activeShop = { indexing: false, ordering: false, cartCount: 0, business: false, staff: false, canStock: false, wholesale: false, baseUrl: '', analytics: '', clarity: '', captcha: '', footerMethods: null };
 
 /**
  * De velden die een formulier nodig heeft voor de onzichtbare captcha: het verborgen veld waar het script een token in zet en de
@@ -935,7 +935,7 @@ function productPage(product, groups, chosenCode = '', details = new Map(), { pa
     <h1>${escapeHtml(product.name)}</h1>
     ${picker}
     <p class="sku">Artikelnummer: ${escapeHtml(shown.code)}${chosen && chosen.meta ? ` | ${escapeHtml(chosen.meta)}` : ''}</p>
-    ${activeShop.staff && shown.itemId ? `<p class="product-edit"><a class="button secondary" href="${root}app/artikelen/?id=${encodeURIComponent(shown.itemId)}" title="Dit artikel bewerken in het beheer">Bewerken in beheer</a></p>` : ''}
+    ${activeShop.canStock && shown.itemId ? `<p class="product-edit"><a class="button secondary" href="${root}app/artikelen/?id=${encodeURIComponent(shown.itemId)}" title="Dit artikel bewerken in het beheer">Bewerken in beheer</a></p>` : ''}
     ${packagingPicker}
     <p class="price">${escapeHtml(formatPrice(pack ? pack.price : shownPrice(shown)))} <small>${activeShop.business ? `excl. ${shown.vatRate}% btw · per ${escapeHtml(pack ? `${pack.name} (${pack.factor} ${product.unit})` : product.unit)}<br><span class="price-incl">incl. btw ${escapeHtml(formatPrice(pack ? pack.priceIncl : shown.priceBusinessIncl))}</span>` : `incl. ${shown.vatRate}% btw · per ${escapeHtml(pack ? `${pack.name} (${pack.factor} ${product.unit})` : product.unit)}`}</small></p>
     <p class="stock ${(pack ? pack.inStock : shown.inStock) ? 'in' : 'out'}">${stockText(pack ? pack.inStock : shown.inStock, pack ? null : (shown.stockQty === undefined ? null : shown.stockQty))}</p>
