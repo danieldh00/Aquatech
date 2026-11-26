@@ -104,6 +104,8 @@ const { createItemTextDraftStore, registerItemTextRoutes } = require('./artikele
 const { registerItemTextBulkRoutes } = require('./artikelen/item-text-bulk');
 const { createRelatedStore } = require('./artikelen/related-items');
 const { registerRelatedRoutes } = require('./artikelen/related-routes');
+const { createWpOrderHistory } = require('./webshop/wp-order-history');
+const { registerWpOrderHistoryRoutes } = require('./webshop/wp-order-history-routes');
 const { createSpecResearcher: createDefaultSpecResearcher } = require('./artikelen/related-research');
 const { createPackagingStore, registerPackagingRoutes } = require('./artikelen/packagings');
 const { createPurchaseOrderStore, registerPurchaseOrderRoutes } = require('./artikelen/purchase-orders');
@@ -2177,6 +2179,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const sprinklerStore = createSprinklerStore(database);
   const stockStore = createStockStore(database);
   const relatedStore = createRelatedStore(database);
+  // Orderhistorie uit de oude WordPress-webshop voor Vaak samen besteld (alleen lezen uit WordPress); na elke ronde wordt Vaak samen besteld opnieuw berekend.
+  const wpOrderHistory = createWpOrderHistory({
+    db: database, settingsFor: (id) => settingsFor(id), fetchImpl: shopFetch, customers: store,
+    afterImport: (tenantId) => asSystem(() => { if (ModuleTools.isOn(moduleFlagsOf(tenantId), 'gerelateerde-artikelen')) relatedStore.refreshTogether(tenantId); }),
+  });
   const itemImageStore = createItemImageStore(database, { vault, fetchImpl: imageFetch });
   const supplierStore = createSupplierStore(database);
   const packagingStore = createPackagingStore(database);
@@ -2698,6 +2705,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   registerPriceFactorRoutes(app, { priceFactors: priceFactorStore, suppliers: supplierStore, settingsOf: (tenantId) => settingsFor(tenantId), treeOf: (tenantId) => shopContentStore.publicContent(tenantId).tree, requireRight, requireJson, audit });
   // Producttekst door de AI: de browser vraagt per portie van 5 artikelen, dus ruimer dan de limiet voor plannen (de dagelijkse limiet telt per artikel).
   const itemTextLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 120, keyFn: (req) => `${req.tenantId || tenant.id}|${clientKey(req)}` });
+  registerWpOrderHistoryRoutes(app, { history: wpOrderHistory, requireRight, requireJson, audit });
   registerRelatedRoutes(app, { related: relatedStore, requireRight, requireJson, audit, settingsFor, aiTenantOf, currentSpecResearcher, limiter: itemTextLimiter, aiUsage });
   const itemTextDrafts = createItemTextDraftStore(database);
   registerItemTextBulkRoutes(app, { drafts: itemTextDrafts, related: relatedStore, stock: stockStore, requireRight, requireJson, audit, settingsFor, aiTenantOf, currentItemTextWriter, currentSpecResearcher, aiUsage });
@@ -3417,6 +3425,11 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     return summary;
   });
   /**
+   * Werkt de WordPress-orderhistorie bij voor omgevingen waar dat aan staat (alleen lezen uit WordPress, uurlijks vanuit het onderhoud).
+   * @returns {Promise<object>} Uitkomst per omgeving.
+   */
+  app.locals.wpOrderHistoryAll = () => asSystem(() => wpOrderHistory.runAll(allEnvironmentIds().filter((tenantId) => ModuleTools.isOn(moduleFlagsOf(tenantId), 'gerelateerde-artikelen'))));
+  /**
    * Berekent "vaak samen besteld" opnieuw voor elke actieve omgeving waar de module Artikelen en het onderdeel gerelateerde artikelen aan staan.
    * @returns {Promise<object>} Per omgeving het aantal artikelen en paren.
    */
@@ -3551,7 +3564,9 @@ if (require.main === module) {
     slowLog.trackTask('verkoopprijzen volgens factor', () => app.locals.pricesRefreshAll())
       .then((changed) => { if (changed && Object.keys(changed).length) console.log(`Verkoopprijzen automatisch bijgewerkt: ${JSON.stringify(changed)}`); })
       .catch((error) => console.error('Verkoopprijzen bijwerken mislukt:', error.message));
-    slowLog.trackTask('vaak samen besteld', () => app.locals.relatedTogetherAll())
+    slowLog.trackTask('WordPress-orders ophalen', () => app.locals.wpOrderHistoryAll())
+      .catch((error) => console.error('WordPress-orders ophalen mislukt:', error.message))
+      .then(() => slowLog.trackTask('vaak samen besteld', () => app.locals.relatedTogetherAll()))
       .catch((error) => console.error('Vaak samen besteld berekenen mislukt:', error.message));
     // Een halve minuut later, zodat de server bij het opstarten eerst luistert (niet blokkerend).
     setTimeout(runPurchaseProposals, 30 * 1000).unref();

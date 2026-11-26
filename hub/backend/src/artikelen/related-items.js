@@ -5,7 +5,7 @@
 // - Past bij handmatig: de gebruiker kiest artikelen (hoogstens MAX_LINKS). Een handmatige koppeling wordt nooit door de AI overschreven of gewist.
 // - Past bij met AI: de AI zoekt specificaties op (related-research.js), de code bepaalt met vaste regels wat past (related-compat.js). Elke koppeling heeft
 //   een reden en bronnen. Zonder gevonden specificaties komt er geen koppeling.
-// - Vaak samen besteld: uit de verzonden bestellingen (web_sale_lines): een artikel telt alleen mee als het relatief vaak samen met het andere voorkomt
+// - Vaak samen besteld: uit de verzonden bestellingen (web_sale_lines) plus de orderhistorie van de oude WordPress-webshop (wp_order_lines, migratie 100): een artikel telt alleen mee als het relatief vaak samen met het andere voorkomt
 //   (minimaal aantal bestellingen, aandeel en lift), niet omdat het populair is. Bestellingen met een retour van dat artikel tellen niet mee.
 // - De webshop toont alleen artikelen die in de catalogus staan (actief, met prijs en in de shop) en leverbaar zijn, met de gewone prijsregels (storefront.js).
 const crypto = require('crypto');
@@ -318,14 +318,23 @@ function createRelatedStore(db) {
    */
   function refreshTogether(tenantId) {
     const since = new Date(); since.setMonth(since.getMonth() - TOGETHER_MONTHS);
-    const rows = prepare(`SELECT l.order_id, l.kind, COALESCE(i.parent_id, i.id) AS main_id FROM web_sale_lines l
+    const rows = prepare(`SELECT l.order_id, l.kind, l.sold_at, COALESCE(i.parent_id, i.id) AS main_id FROM web_sale_lines l
       JOIN stock_items i ON i.tenant_id = l.tenant_id AND i.id = l.item_id
       WHERE l.tenant_id = ? AND l.order_id IS NOT NULL AND l.sold_at >= ? ORDER BY l.sold_at DESC, l.order_id LIMIT ${MAX_SALE_LINES}`).all(tenantId, since.toISOString());
+    // Ook de orderhistorie uit de oude WordPress-webshop (wp_order_lines, alleen gekoppelde regels) telt mee; haar bestelnummers krijgen een voorvoegsel.
+    const wpRows = prepare(`SELECT l.wp_order_id, l.ordered_at, COALESCE(i.parent_id, i.id) AS main_id FROM wp_order_lines l
+      JOIN stock_items i ON i.tenant_id = l.tenant_id AND i.id = l.item_id
+      WHERE l.tenant_id = ? AND l.ordered_at >= ? ORDER BY l.ordered_at DESC, l.wp_order_id LIMIT ${MAX_SALE_LINES}`).all(tenantId, since.toISOString())
+      .map((row) => ({ order_id: `wp:${row.wp_order_id}`, kind: 'verkoop', main_id: row.main_id, sold_at: new Date(row.ordered_at).toISOString() }));
+    const combined = wpRows.length
+      ? [...rows.map((row) => ({ ...row, sold_at: String(row.sold_at) })), ...wpRows]
+        .sort((left, right) => (left.sold_at < right.sold_at ? 1 : left.sold_at > right.sold_at ? -1 : String(left.order_id) < String(right.order_id) ? -1 : 1)).slice(0, MAX_SALE_LINES)
+      : rows;
     // Is er afgekapt, dan blijft de nieuwste periode over en gaat de laatste (mogelijk halve) bestelling niet mee: alle regels van die bestelling gaan eruit (ook de retourregels, die een eigen datum hebben): een bestelling zit er heel in of helemaal niet.
-    let usedRows = rows;
-    if (rows.length >= MAX_SALE_LINES) {
-      const cutOrder = String(rows[rows.length - 1].order_id);
-      usedRows = rows.filter((row) => String(row.order_id) !== cutOrder);
+    let usedRows = combined;
+    if (combined.length >= MAX_SALE_LINES) {
+      const cutOrder = String(combined[combined.length - 1].order_id);
+      usedRows = combined.filter((row) => String(row.order_id) !== cutOrder);
     }
     const lines = usedRows.map((row) => ({ orderId: String(row.order_id), itemId: String(row.main_id), kind: row.kind }));
     const result = computeTogether(lines);

@@ -1878,6 +1878,40 @@ const PG_MIGRATIONS = [
     PRIMARY KEY (tenant_id, kind, head)
   );
   `,
+  // 101: orderhistorie uit de oude WordPress/WooCommerce-webshop, alleen voor "Vaak samen besteld" (geen echte bestellingen: geen voorraad, facturen of mails).
+  // wp_order_lines = één regel per bestelregel (uniek per WP-bestelling en regel, dus opnieuw ophalen maakt geen dubbelingen; item_id leeg = nog niet gekoppeld);
+  // wp_order_import = de stand van het ophalen per omgeving (cursor, aan/uit voor het uurlijks bijwerken, laatste fout, aantal aangemaakte klanten).
+  `
+  CREATE TABLE wp_order_lines (
+    id           UUID PRIMARY KEY,
+    tenant_id    UUID NOT NULL ${references('tenants(id)')},
+    wp_order_id  ${TEXT_TYPE} NOT NULL,
+    wp_line_id   ${TEXT_TYPE} NOT NULL,
+    ordered_at   TIMESTAMPTZ NOT NULL,
+    product_id   ${TEXT_TYPE} NOT NULL DEFAULT '',
+    variation_id ${TEXT_TYPE} NOT NULL DEFAULT '',
+    sku          ${TEXT_TYPE} NOT NULL DEFAULT '',
+    name         ${TEXT_TYPE} NOT NULL DEFAULT '',
+    qty          NUMERIC(14,4) NOT NULL DEFAULT 1,
+    item_id      UUID ${references('stock_items(id)', ' ON DELETE SET NULL')},
+    matched_by   ${TEXT_TYPE} NOT NULL DEFAULT '',
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+  CREATE UNIQUE INDEX wp_order_lines_unique ON wp_order_lines (tenant_id, wp_order_id, wp_line_id);
+  CREATE INDEX wp_order_lines_date ON wp_order_lines (tenant_id, ordered_at);
+  CREATE INDEX wp_order_lines_item ON wp_order_lines (tenant_id, item_id);
+  CREATE TABLE wp_order_import (
+    tenant_id   UUID PRIMARY KEY ${references('tenants(id)')},
+    enabled     BIGINT NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+    months      INTEGER NOT NULL DEFAULT 24,
+    orders_after ${TEXT_TYPE},
+    started_at  TIMESTAMPTZ,
+    finished_at TIMESTAMPTZ,
+    error       ${TEXT_TYPE},
+    orders_seen BIGINT NOT NULL DEFAULT 0,
+    customers_created BIGINT NOT NULL DEFAULT 0
+  );
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS, UUID_COLUMNS, legacyUuid };
