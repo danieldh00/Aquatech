@@ -29,6 +29,8 @@
   let toast = () => {};
   /** Soorten (sleutel → naam) uit de laatste telling. */
   let kinds = {};
+  /** Aantal stukken uit het laatste voorbeeld van de bulkselectie (de server controleert dat het nog klopt). */
+  let previewTotal = null;
   /** Of de knoppen al gekoppeld zijn. */
   let bound = false;
   /** Stand van het archiefoverzicht (soort en aantal getoonde regels). */
@@ -103,6 +105,7 @@
     const rows = Object.values(out.kinds).filter((entry) => entry.count > 0);
     $(target).innerHTML = out.total === 0 ? '<p class="muted">Niets gevonden bij deze selectie.</p>'
       : `<p><strong>${out.total}</strong> stuk${out.total === 1 ? '' : 's'}: ${rows.map((entry) => `${esc(entry.label)} ${entry.count}`).join(', ')}</p>
+        ${Object.values(out.kinds).filter((entry) => entry.notAllowed > 0).map((entry) => `<p class="muted small">${esc(entry.label)}: ${entry.notAllowed} overgeslagen. ${esc(entry.reason)}</p>`).join('')}
         <div class="table-wrap"><table class="list"><tr><th>Soort</th><th>Nummer</th><th>Omschrijving</th><th>Klant</th><th>Aangemaakt</th></tr>${rows
     .flatMap((entry) => entry.sample.map((item) => `<tr><td>${esc(entry.label)}</td><td>${esc(item.number)}</td><td>${esc(item.title)}</td><td>${esc(item.customer)}</td><td>${day(item.created_at)}</td></tr>`)).join('')}</table></div>
         ${rows.some((entry) => entry.count > entry.sample.length) ? '<p class="muted small">Alleen de eerste regels per soort staan hier; de actie geldt voor alles in de selectie.</p>' : ''}`;
@@ -144,21 +147,25 @@
   function bind() {
     if (bound) return;
     bound = true;
+    $('#ar-bulk-card').addEventListener('input', () => { previewTotal = null; $('#ar-bulk-run').disabled = true; });
     $('#ar-bulk-preview').addEventListener('click', async () => {
       $('#ar-bulk-err').textContent = '';
       try {
-        renderPreview(await api('/preview', selectionOf('ar-bulk')), '#ar-bulk-result');
-        $('#ar-bulk-run').disabled = false;
+        const out = await api('/preview', selectionOf('ar-bulk'));
+        renderPreview(out, '#ar-bulk-result');
+        previewTotal = out.total;
+        $('#ar-bulk-run').disabled = out.total === 0;
       } catch (error) { $('#ar-bulk-err').textContent = error.message; }
     });
     $('#ar-bulk-run').addEventListener('click', async () => {
       $('#ar-bulk-err').textContent = '';
       try {
-        const out = await api('/archive', selectionOf('ar-bulk'));
+        const out = await api('/archive', { ...selectionOf('ar-bulk'), expected: previewTotal });
         const total = Object.values(out.archived).reduce((sum, count) => sum + count, 0);
         toast(`${total} gearchiveerd`);
         $('#ar-bulk-result').innerHTML = '';
         $('#ar-bulk-run').disabled = true;
+        previewTotal = null;
         await Promise.all([loadCounts(), loadList(false)]);
       } catch (error) { $('#ar-bulk-err').textContent = error.message; }
     });
@@ -183,8 +190,10 @@
       $('#ar-purge-err').textContent = '';
       if ($('#ar-purge-confirm').value.trim() !== PURGE_WORD) { $('#ar-purge-err').textContent = `Typ ${PURGE_WORD} om te bevestigen.`; return; }
       try {
-        renderPurgeResult(await api('/purge', { ...selectionOf('ar-purge'), confirm: PURGE_WORD }));
+        renderPurgeResult(await api('/purge', { ...selectionOf('ar-purge'), confirm: PURGE_WORD, password: $('#ar-purge-password').value, totp: $('#ar-purge-totp').value.trim() }));
         $('#ar-purge-confirm').value = '';
+        $('#ar-purge-password').value = '';
+        $('#ar-purge-totp').value = '';
         await Promise.all([loadCounts(), loadList(false)]);
       } catch (error) { $('#ar-purge-err').textContent = error.message; }
     });

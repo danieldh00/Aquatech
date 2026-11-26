@@ -1165,12 +1165,12 @@
         </section>
       </section>
       <section id="tab-archief" class="tabpane" hidden>
-        <p class="muted small">Archiveren haalt gegevens uit de lijsten, de zoekfunctie en de KPI's zonder ze te wissen. Nummers blijven bezet, de geleerde gegevens van de planner en de opgezochte artikelspecificaties blijven altijd staan, en alles is terug te halen. Handig om testgegevens weg te zetten vóór go-live. Een enkel stuk archiveer je met de knop Archiveren in de lijst zelf.</p>
+        <p class="muted small">Archiveren haalt gegevens uit de lijsten, de zoekfunctie en de KPI's zonder ze te wissen. Nummers blijven bezet, de geleerde gegevens van de planner en de opgezochte artikelspecificaties blijven altijd staan, en alles is terug te halen. Alleen afgeronde stukken kunnen in het archief (bijvoorbeeld geen nieuwe bestelling, geen onbetaalde definitieve factuur en geen lopende werkorder). Handig om testgegevens weg te zetten vóór go-live. Een enkel stuk archiveer je met de knop Archiveren in de lijst zelf.</p>
         <section class="card" aria-labelledby="ar-title">
           <h3 id="ar-title">Overzicht</h3>
           <div class="table-wrap"><table class="list" id="ar-counts"></table></div>
         </section>
-        <section class="card" aria-labelledby="ar-bulk-title">
+        <section class="card" id="ar-bulk-card" aria-labelledby="ar-bulk-title">
           <h3 id="ar-bulk-title">In bulk archiveren</h3>
           <div class="form-grid">
             <div class="field full"><span>Soorten</span><div id="ar-bulk-kinds" class="row"></div></div>
@@ -1196,12 +1196,14 @@
         </section>
         <section class="card" aria-labelledby="ar-purge-title">
           <h3 id="ar-purge-title">Archief definitief verwijderen</h3>
-          <p class="muted small"><strong>Dit kan niet ongedaan gemaakt worden.</strong> Alleen stukken die al in het archief staan worden verwijderd. Een definitieve factuur moet zeven jaar bewaard blijven (wettelijke bewaarplicht) en wordt daarom overgeslagen; conceptfacturen mogen wel weg. Een stuk dat nog aan ander werk gekoppeld is, wordt ook overgeslagen en met de reden genoemd. De geleerde gegevens van de planner en de artikelspecificaties blijven altijd staan. Maak vooraf een back-up (Beheer &gt; Back-ups).</p>
+          <p class="muted small"><strong>Dit kan niet ongedaan gemaakt worden.</strong> Alleen stukken die al in het archief staan worden verwijderd. Een definitieve factuur moet zeven jaar bewaard blijven (wettelijke bewaarplicht) en wordt daarom overgeslagen; conceptfacturen mogen wel weg. Een stuk dat nog aan ander werk gekoppeld is, wordt ook overgeslagen en met de reden genoemd. De geleerde gegevens van de planner en de artikelspecificaties blijven altijd staan. Vlak vóór het verwijderen maakt de app zelf een veiligheidsback-up.</p>
           <div class="form-grid">
             <div class="field full"><span>Soorten</span><div id="ar-purge-kinds" class="row"></div></div>
             <label class="field">Aangemaakt vóór <input type="date" id="ar-purge-before"></label>
             <label class="field">Zoekterm <input type="text" id="ar-purge-query" maxlength="80"></label>
             <label class="field">Typ VERWIJDEREN om te bevestigen <input type="text" id="ar-purge-confirm" autocomplete="off"></label>
+            <label class="field">Je wachtwoord <input type="password" id="ar-purge-password" autocomplete="current-password"></label>
+            <label class="field">Code tweestapsverificatie (als die aan staat) <input type="text" id="ar-purge-totp" autocomplete="one-time-code" inputmode="numeric"></label>
           </div>
           <div class="form-actions"><button class="btn" type="button" id="ar-purge-preview">Voorbeeld</button><button class="btn danger" type="button" id="ar-purge-run">Archief definitief verwijderen</button></div>
           <div id="ar-purge-result"></div>

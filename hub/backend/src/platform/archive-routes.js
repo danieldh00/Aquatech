@@ -9,10 +9,10 @@ const PURGE_CONFIRMATION = 'VERWIJDEREN';
 /**
  * Registreert de archiefroutes onder /api/admin/archive.
  * @param {import('express').Express} app De app.
- * @param {object} ctx archive (createArchive), audit (req, actie, detail) en recht (req → boolean).
+ * @param {object} ctx archive (createArchive), audit (req, actie, detail), confirmIdentity (req, res → wachtwoord opnieuw vragen) en runBackup (veiligheidsback-up vóór het verwijderen; null als back-ups niet zijn ingesteld).
  * @returns {void}
  */
-function registerArchiveRoutes(app, { archive, audit }) {
+function registerArchiveRoutes(app, { archive, audit, confirmIdentity, runBackup }) {
   const changeLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 120, keyFn: (req) => `archief-wijzig:${req.user ? req.user.id : ''}` });
   const purgeLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10, keyFn: (req) => `archief-wissen:${req.user ? req.user.id : ''}` });
 
@@ -45,15 +45,23 @@ function registerArchiveRoutes(app, { archive, audit }) {
     const body = req.body || {};
     if (body.kind) {
       if (!archive.kinds[body.kind] || !Array.isArray(body.ids) || !body.ids.length || body.ids.length > 500) return res.status(400).json({ error: 'invalid_request', message: 'Kies een soort en één of meer stukken.' });
-      const changed = archive.archive(req.tenantId, body.kind, body.ids);
-      audit(req, 'archief_archiveren', { soort: body.kind, aantal: changed });
-      return res.json({ archived: { [body.kind]: changed } });
+      const out = archive.archive(req.tenantId, body.kind, body.ids);
+      audit(req, 'archief_archiveren', { soort: body.kind, aantal: out.changed, overgeslagen: out.skipped });
+      return res.json({ archived: { [body.kind]: out.changed }, skipped: { [body.kind]: out.skipped } });
     }
     const selection = selectionOf(body);
     if (!selection.before && !selection.query) return res.status(400).json({ error: 'selection_required', message: 'Geef een datum of zoekterm op, zodat niet per ongeluk alles wordt gearchiveerd.' });
-    const archived = archive.archiveMatching(req.tenantId, selection);
+    if (!selection.kinds || !selection.kinds.length) return res.status(400).json({ error: 'kinds_required', message: 'Kies welke soorten je wilt archiveren.' });
+    // Het aantal uit het voorbeeld moet nog kloppen: zo archiveert de server nooit meer dan de beheerder zag.
+    const expected = archive.preview(req.tenantId, selection).total;
+    if (!Number.isInteger(body.expected) || body.expected !== expected) {
+      return res.status(409).json({ error: 'selection_changed', message: `Het voorbeeld klopt niet meer (nu ${expected} stuks). Bekijk het voorbeeld opnieuw.`, expected });
+    }
+    const results = archive.archiveMatching(req.tenantId, selection);
+    const archived = Object.fromEntries(Object.entries(results).map(([kind, out]) => [kind, out.changed]));
+    const skipped = Object.fromEntries(Object.entries(results).map(([kind, out]) => [kind, out.skipped]));
     audit(req, 'archief_archiveren_bulk', { ...archived, voor: selection.before, zoek: selection.query });
-    res.json({ archived });
+    res.json({ archived, skipped });
   });
 
   app.post('/api/admin/archive/restore', changeLimiter, (req, res) => {
@@ -64,13 +72,21 @@ function registerArchiveRoutes(app, { archive, audit }) {
     res.json({ restored: { [body.kind]: changed } });
   });
 
-  app.post('/api/admin/archive/purge', purgeLimiter, (req, res) => {
+  app.post('/api/admin/archive/purge', purgeLimiter, async (req, res) => {
     const body = req.body || {};
     if (body.confirm !== PURGE_CONFIRMATION) return res.status(409).json({ error: 'confirm_required', message: `Typ ${PURGE_CONFIRMATION} om het archief definitief te verwijderen.` });
     const selection = selectionOf(body);
+    if (!selection.kinds || !selection.kinds.length) return res.status(400).json({ error: 'kinds_required', message: 'Kies welke soorten je definitief wilt verwijderen.' });
+    if (!(await confirmIdentity(req, res))) return undefined;
+    let safetyBackup = null;
+    if (runBackup) {
+      try { safetyBackup = (await runBackup(req)).name || true; } catch (error) {
+        return res.status(500).json({ error: 'backup_failed', message: 'De veiligheidsback-up lukte niet, dus er is niets verwijderd. Probeer het opnieuw of maak eerst een back-up in Beheer.' });
+      }
+    }
     const result = archive.purge(req.tenantId, selection);
-    audit(req, 'archief_verwijderd', { ...result.deleted, geblokkeerd: result.blocked.length, voor: selection.before, zoek: selection.query });
-    res.json(result);
+    audit(req, 'archief_verwijderd', { ...result.deleted, geblokkeerd: result.blocked.length, voor: selection.before, zoek: selection.query, back_up: Boolean(safetyBackup) });
+    res.json({ ...result, safetyBackup: Boolean(safetyBackup) });
   });
 }
 

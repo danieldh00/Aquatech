@@ -415,7 +415,7 @@
     },
     {
       "file": "uitvoering/workorders.js",
-      "sql": "SELECT ${} FROM work_orders WHERE share_hash = ? AND deleted_at IS NULL"
+      "sql": "SELECT ${} FROM work_orders WHERE share_hash = ? AND deleted_at IS NULL AND archived_at IS NULL"
     },
     {
       "file": "uitvoering/workorders.js",

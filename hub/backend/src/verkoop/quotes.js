@@ -678,7 +678,7 @@ function createQuoteStore(db, { vault = createVault() } = {}) {
    */
   function byToken(token) {
     if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;
-    const quoteRow = prepare(`${FULL_SQL} WHERE q.share_hash = ? AND q.deleted_at IS NULL`).get(sha256(token)) || null;
+    const quoteRow = prepare(`${FULL_SQL} WHERE q.share_hash = ? AND q.deleted_at IS NULL AND q.archived_at IS NULL`).get(sha256(token)) || null;
     if (!quoteRow) return null;
     // Verlopen link (G-02): 180 dagen na delen, of 90 dagen na de geldigheidsdatum als die later ligt.
     const data = parseJson(quoteRow.data) || {};

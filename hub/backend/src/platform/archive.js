@@ -25,6 +25,30 @@ const KINDS = {
 };
 
 /**
+ * Wat er in het archief mag: alleen afgeronde stukken, zodat een open bestelling (reservering, orderpick), een onbetaalde definitieve factuur
+ * (debiteuren, Visma, herinneringen), een lopende werkorder of een klant met een actieve inlog niet uit het zicht verdwijnt terwijl het systeem ermee verder werkt.
+ */
+const ARCHIVABLE = {
+  werkorders: { sql: "w.status IN ('gereed', 'geannuleerd')", reason: 'Alleen werkorders met status Gereed of Geannuleerd kunnen in het archief.' },
+  facturen: { sql: "i.status <> 'definitief'", reason: 'Een definitieve onbetaalde factuur kan pas in het archief als hij betaald of gecrediteerd is.' },
+  bestellingen: { sql: "o.status <> 'nieuw'", reason: 'Alleen verzonden, afgeronde of geannuleerde bestellingen kunnen in het archief (een nieuwe bestelling houdt voorraad vast).' },
+  klanten: { sql: '(u.disabled = 1 OR u.password_hash IS NULL)', reason: 'Een klant met een actieve inlog kan pas in het archief als het account is uitgezet.' },
+};
+
+/**
+ * Koppelingen waarvoor een stuk niet definitief verwijderd mag worden zolang er nog stukken naar verwijzen (één regel per verwijzing:
+ * tabel, kolom en omschrijving; `viaOrder` vergelijkt met `web:<id>`).
+ */
+const REFERENCES = {
+  plannen: [['quotes', 'plan_id', 'offertes'], ['work_orders', 'plan_id', 'werkorders']],
+  offertes: [['work_orders', 'quote_id', 'werkorders'], ['invoices', 'quote_id', 'facturen']],
+  werkorders: [['invoices', 'work_order_id', 'facturen']],
+  facturen: [['invoices', 'credit_of', 'creditfacturen']],
+  bestellingen: [['invoices', 'shop_order_id', 'facturen', 'web:'], ['quotes', 'order_id', 'offertes']],
+  klanten: [['quotes', 'customer_id', 'offertes'], ['work_orders', 'customer_id', 'werkorders'], ['invoices', 'customer_id', 'facturen'], ['web_orders', 'user_id', 'bestellingen'], ['plans', 'owner_id', 'plannen'], ['service_requests', 'customer_id', 'meldingen']],
+};
+
+/**
  * Maakt een archief-object voor een database.
  * @param {object} db De database.
  * @param {{ customerRoleKeys: function(string): string[], purgePlan: function(string, string): *, today?: function(): Date, audit?: function }} deps customerRoleKeys (rollen van het soort klant per tenant), purgePlan (plan-store, wist het plan en anonimiseert de historie zonder de leerdata te raken) en optioneel today (voor tests).
@@ -83,16 +107,17 @@ function createArchive(db, { customerRoleKeys, purgePlan, today = () => new Date
    * Bouwt de voorwaarden van een selectie.
    * @param {string} tenantId Id van de tenant.
    * @param {string} kind Soortnaam.
-   * @param {{ state?: string, ids?: string[], before?: string, query?: string }} selection state `actief` of `archief`, ids, `before` (aangemaakt vóór deze datum JJJJ-MM-DD) en een zoekterm op nummer, titel en klant.
+   * @param {{ state?: string, ids?: string[], before?: string, query?: string, onlyArchivable?: boolean }} selection state `actief` of `archief`, ids, `before` (aangemaakt vóór deze datum JJJJ-MM-DD), een zoekterm op nummer, titel en klant en onlyArchivable (alleen wat in het archief mag).
    * @returns {{ spec: object, from: string, where: string, args: Array }|null} De delen van de query, of null.
    */
-  function selectionOf(tenantId, kind, { state = 'actief', ids = null, before = '', query = '' } = {}) {
+  function selectionOf(tenantId, kind, { state = 'actief', ids = null, before = '', query = '', onlyArchivable = false } = {}) {
     const spec = kindOf(kind);
     if (!spec) return null;
     const base = baseOf(spec, tenantId, kind);
     if (!base) return null;
     const { where, args } = base;
     where.push(state === 'archief' ? `${spec.alias}.archived_at IS NOT NULL` : `${spec.alias}.archived_at IS NULL`);
+    if (onlyArchivable && ARCHIVABLE[kind]) where.push(ARCHIVABLE[kind].sql);
     if (Array.isArray(ids)) {
       if (!ids.length) return null;
       where.push(`${spec.alias}.id IN (${marks(ids.length)})`);
@@ -108,21 +133,28 @@ function createArchive(db, { customerRoleKeys, purgePlan, today = () => new Date
   }
 
   /**
-   * Zet archived_at voor een selectie.
+   * Zet archived_at voor een selectie. Bij archiveren worden alleen stukken meegenomen die in het archief mogen (zie ARCHIVABLE); de rest telt als overgeslagen.
    * @param {string} tenantId Id van de tenant.
    * @param {string} kind Soortnaam.
    * @param {object} selection Zie selectionOf (state bepaalt de bron: `actief` om te archiveren, `archief` om terug te halen).
    * @param {boolean} archiveIt True = archiveren, false = terughalen.
-   * @returns {number} Aantal gewijzigde regels.
+   * @returns {{ changed: number, skipped: number }} Aantal gewijzigd en aantal overgeslagen omdat het stuk nog niet in het archief mag.
    */
   function setFlag(tenantId, kind, selection, archiveIt) {
-    const part = selectionOf(tenantId, kind, { ...selection, state: archiveIt ? 'actief' : 'archief' });
-    if (!part) return 0;
+    const state = archiveIt ? 'actief' : 'archief';
+    const part = selectionOf(tenantId, kind, { ...selection, state, onlyArchivable: archiveIt });
+    if (!part) return { changed: 0, skipped: 0 };
     const alias = part.spec.alias;
     const ids = prepare(`SELECT ${alias}.id AS id FROM ${part.from} WHERE ${part.where} LIMIT ${MAX_PER_REQUEST}`).all(...part.args).map((row) => row.id);
-    if (!ids.length) return 0;
+    let skipped = 0;
+    if (archiveIt && ARCHIVABLE[kind]) {
+      const all = selectionOf(tenantId, kind, { ...selection, state });
+      skipped = Math.max(0, Number(prepare(`SELECT COUNT(*) AS n FROM ${all.from} WHERE ${all.where}`).get(...all.args).n) - ids.length);
+    }
+    if (!ids.length) return { changed: 0, skipped };
     const value = archiveIt ? new Date().toISOString() : null;
-    return prepare(`UPDATE ${part.spec.table} SET archived_at = ? WHERE tenant_id = ? AND id IN (${marks(ids.length)})`).run(value, tenantId, ...ids).changes;
+    const changed = prepare(`UPDATE ${part.spec.table} SET archived_at = ? WHERE tenant_id = ? AND id IN (${marks(ids.length)})`).run(value, tenantId, ...ids).changes;
+    return { changed, skipped };
   }
 
   /**
@@ -130,7 +162,7 @@ function createArchive(db, { customerRoleKeys, purgePlan, today = () => new Date
    * @param {string} tenantId Id van de tenant.
    * @param {string} kind Soortnaam.
    * @param {string[]} ids Id's.
-   * @returns {number} Aantal gearchiveerd.
+   * @returns {{ changed: number, skipped: number }} Aantal gearchiveerd en overgeslagen.
    */
   const archive = (tenantId, kind, ids) => setFlag(tenantId, kind, { ids }, true);
 
@@ -141,7 +173,7 @@ function createArchive(db, { customerRoleKeys, purgePlan, today = () => new Date
    * @param {string[]} ids Id's.
    * @returns {number} Aantal teruggehaald.
    */
-  const restore = (tenantId, kind, ids) => setFlag(tenantId, kind, { ids }, false);
+  const restore = (tenantId, kind, ids) => setFlag(tenantId, kind, { ids }, false).changed;
 
   /**
    * Telt per soort wat er actief en in het archief staat.
@@ -172,11 +204,15 @@ function createArchive(db, { customerRoleKeys, purgePlan, today = () => new Date
     const out = {};
     let total = 0;
     for (const kind of wanted) {
-      const part = selectionOf(tenantId, kind, { state, before, query });
-      const entry = { label: KINDS[kind].label, count: 0, sample: [] };
+      const part = selectionOf(tenantId, kind, { state, before, query, onlyArchivable: state === 'actief' });
+      const entry = { label: KINDS[kind].label, count: 0, notAllowed: 0, reason: (ARCHIVABLE[kind] || {}).reason || '', sample: [] };
       if (part) {
         const alias = part.spec.alias;
         entry.count = Number(prepare(`SELECT COUNT(*) AS n FROM ${part.from} WHERE ${part.where}`).get(...part.args).n);
+        if (state === 'actief' && ARCHIVABLE[kind]) {
+          const all = selectionOf(tenantId, kind, { state, before, query });
+          entry.notAllowed = Math.max(0, Number(prepare(`SELECT COUNT(*) AS n FROM ${all.from} WHERE ${all.where}`).get(...all.args).n) - entry.count);
+        }
         entry.sample = prepare(`SELECT ${alias}.id AS id, ${part.spec.number} AS number, ${part.spec.title} AS title, ${part.spec.customer} AS customer, ${alias}.created_at::text AS created_at
           FROM ${part.from} WHERE ${part.where} ORDER BY ${alias}.created_at DESC, ${alias}.id LIMIT ${SAMPLE_LIMIT}`).all(...part.args);
       }
@@ -190,7 +226,7 @@ function createArchive(db, { customerRoleKeys, purgePlan, today = () => new Date
    * Archiveert alles wat bij de selectie past (per soort).
    * @param {string} tenantId Id van de tenant.
    * @param {{ kinds?: string[], before?: string, query?: string }} filters Zie preview.
-   * @returns {object} Per soort het aantal gearchiveerde stukken.
+   * @returns {object} Per soort { changed, skipped }.
    */
   function archiveMatching(tenantId, { kinds = null, before = '', query = '' } = {}) {
     const wanted = Array.isArray(kinds) && kinds.length ? kinds.filter((kind) => kindOf(kind)) : Object.keys(KINDS);
@@ -218,6 +254,22 @@ function createArchive(db, { customerRoleKeys, purgePlan, today = () => new Date
   }
 
   /**
+   * Waar een stuk nog naar verwezen wordt (dan wordt het niet definitief verwijderd).
+   * @param {string} tenantId Id van de tenant.
+   * @param {string} kind Soortnaam.
+   * @param {string} id Id van het stuk.
+   * @returns {string[]} Omschrijvingen van de soorten die ernaar verwijzen.
+   */
+  function linkedTo(tenantId, kind, id) {
+    const found = [];
+    for (const [table, column, label, valuePrefix] of REFERENCES[kind] || []) {
+      const value = `${valuePrefix || ''}${id}`;
+      if (prepare(`SELECT 1 AS found FROM ${table} WHERE tenant_id = ? AND ${column}::text = ? LIMIT 1`).get(tenantId, value)) found.push(label);
+    }
+    return found;
+  }
+
+  /**
    * Verwijdert één gearchiveerd stuk definitief (binnen een eigen transactie). Leerdata en artikelspecificaties blijven.
    * @param {string} tenantId Id van de tenant.
    * @param {string} kind Soortnaam.
@@ -229,6 +281,8 @@ function createArchive(db, { customerRoleKeys, purgePlan, today = () => new Date
     if (kind === 'facturen' && row.status !== 'concept' && String(row.invoice_date) > retentionCutoff()) {
       return { deleted: false, reason: `Bewaarplicht: een definitieve factuur wordt ${INVOICE_RETENTION_YEARS} jaar bewaard (tot ${String(Number(String(row.invoice_date).slice(0, 4)) + INVOICE_RETENTION_YEARS)}).` };
     }
+    const linked = linkedTo(tenantId, kind, row.id);
+    if (linked.length) return { deleted: false, reason: `Nog gekoppeld aan ${linked.join(', ')}. Verwijder die eerst (of laat ze eerst verwijderen).` };
     try {
       transaction(db, () => {
         const numberKind = { offertes: 'offertes', werkorders: 'werkorders', facturen: 'facturen', bestellingen: 'bestellingen' }[kind];

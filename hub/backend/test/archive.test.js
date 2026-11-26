@@ -56,10 +56,10 @@ function addInvoice(db, tenantId, number, status, date) {
 test('archiveren haalt een offerte uit de standaardselectie en terughalen zet hem terug', () => {
   const { db, archive, tenantId, ownerId } = setup();
   const id = addQuote(db, tenantId, ownerId, 'T1', 'Test BV');
-  assert.strictEqual(archive.archive(tenantId, 'offertes', [id]), 1);
+  assert.strictEqual(archive.archive(tenantId, 'offertes', [id]).changed, 1);
   assert.strictEqual(archive.counts(tenantId).offertes.active, 0);
   assert.strictEqual(archive.counts(tenantId).offertes.archived, 1);
-  assert.strictEqual(archive.archive(tenantId, 'offertes', [id]), 0, 'al gearchiveerd');
+  assert.strictEqual(archive.archive(tenantId, 'offertes', [id]).changed, 0, 'al gearchiveerd');
   assert.strictEqual(archive.restore(tenantId, 'offertes', [id]), 1);
   assert.strictEqual(archive.counts(tenantId).offertes.active, 1);
 });
@@ -67,7 +67,7 @@ test('archiveren haalt een offerte uit de standaardselectie en terughalen zet he
 test('een andere omgeving kan niets archiveren en niets zien', () => {
   const { db, archive, tenantId, ownerId, otherId } = setup();
   const id = addQuote(db, tenantId, ownerId, 'T1', 'Test BV');
-  assert.strictEqual(archive.archive(otherId, 'offertes', [id]), 0);
+  assert.strictEqual(archive.archive(otherId, 'offertes', [id]).changed, 0);
   assert.strictEqual(archive.preview(otherId, {}).total, 0);
 });
 
@@ -79,15 +79,15 @@ test('bulk: voorbeeld en archiveren op datum en zoekterm', () => {
   const preview = archive.preview(tenantId, { kinds: ['offertes'], before: '2026-10-01', query: 'test' });
   assert.strictEqual(preview.total, 1);
   assert.strictEqual(preview.kinds.offertes.sample[0].number, 'T1');
-  assert.deepStrictEqual(archive.archiveMatching(tenantId, { kinds: ['offertes'], before: '2026-10-01', query: 'test' }), { offertes: 1 });
+  assert.deepStrictEqual(archive.archiveMatching(tenantId, { kinds: ['offertes'], before: '2026-10-01', query: 'test' }), { offertes: { changed: 1, skipped: 0 } });
   assert.strictEqual(archive.counts(tenantId).offertes.active, 2);
 });
 
 test('definitief verwijderen: concept weg, recente definitieve factuur geblokkeerd, oude definitieve factuur weg', () => {
   const { db, archive, tenantId } = setup();
   const concept = addInvoice(db, tenantId, null, 'concept', '2026-11-01');
-  const recent = addInvoice(db, tenantId, 'F2026-0001', 'definitief', '2026-10-01');
-  const old = addInvoice(db, tenantId, 'F2017-0001', 'definitief', '2017-01-01');
+  const recent = addInvoice(db, tenantId, 'F2026-0001', 'betaald', '2026-10-01');
+  const old = addInvoice(db, tenantId, 'F2017-0001', 'betaald', '2017-01-01');
   archive.archive(tenantId, 'facturen', [concept, recent, old]);
   const result = archive.purge(tenantId, { kinds: ['facturen'] });
   assert.strictEqual(result.deleted.facturen, 2);
@@ -140,6 +140,13 @@ test('routes: beheerder archiveert en haalt terug, installateur krijgt 403, verw
     assert.strictEqual((await admin.get('/app/api/quotes?all=1')).body.items.length, 0, 'verborgen in de lijst');
     assert.strictEqual((await admin.get('/app/api/quotes?all=1&archief=toon')).body.items.length, 1);
     assert.strictEqual((await admin.post('/app/api/admin/archive/purge', {})).status, 409, 'zonder bevestiging');
+    assert.strictEqual((await admin.post('/app/api/admin/archive/purge', { confirm: 'VERWIJDEREN' })).status, 400, 'zonder soorten');
+    assert.strictEqual((await admin.post('/app/api/admin/archive/purge', { confirm: 'VERWIJDEREN', kinds: ['offertes'], password: 'fout' })).status, 401, 'verkeerd wachtwoord');
+    assert.strictEqual((await staff.post('/app/api/admin/archive/purge', { confirm: 'VERWIJDEREN', kinds: ['offertes'], password: PW })).status, 403, 'installateur');
+    assert.strictEqual((await admin.post('/app/api/admin/archive/archive', { kinds: ['offertes'], query: 'test' })).status, 409, 'zonder verwacht aantal uit het voorbeeld');
+    assert.strictEqual((await admin.post('/app/api/admin/archive/archive', { query: 'test', expected: 0 })).status, 400, 'bulk zonder soorten');
+    assert.strictEqual((await admin.post('/app/api/admin/archive/archive', { kinds: ['offertes'], query: 'test', expected: 99 })).status, 409, 'voorbeeld klopt niet meer');
+    assert.strictEqual((await admin.post('/app/api/admin/archive/archive', { kinds: ['offertes'], query: 'test', expected: 0 })).body.archived.offertes, 0, 'de offerte is al gearchiveerd, dus het voorbeeld telt 0');
     assert.strictEqual((await admin.post('/app/api/admin/archive/restore', { kind: 'offertes', ids: [quoteId] })).body.restored.offertes, 1);
     assert.strictEqual((await admin.get('/app/api/quotes?all=1')).body.items.length, 1);
   } finally { server.close(); }
@@ -153,4 +160,27 @@ test('een definitief verwijderd nummer komt nooit terug (offerte, factuur)', () 
   archive.purge(tenantId, { kinds: ['offertes'] });
   const { floorOf } = require('../src/platform/number-floors');
   assert.strictEqual(floorOf((sql) => db.prepare(sql), tenantId, 'offertes', 'O2026-'), 2);
+});
+
+test('alleen afgeronde stukken mogen in het archief; open bestelling, onbetaalde definitieve factuur en lopende werkorder blijven zichtbaar', () => {
+  const { db, archive, tenantId } = setup();
+  const open = addInvoice(db, tenantId, 'F2026-0100', 'definitief', '2026-11-01');
+  const paid = addInvoice(db, tenantId, 'F2026-0101', 'betaald', '2026-11-01');
+  const out = archive.archive(tenantId, 'facturen', [open, paid]);
+  assert.deepStrictEqual(out, { changed: 1, skipped: 1 });
+  const preview = archive.preview(tenantId, { kinds: ['facturen'] });
+  assert.strictEqual(preview.kinds.facturen.count, 0);
+  assert.strictEqual(preview.kinds.facturen.notAllowed, 1);
+  assert.match(preview.kinds.facturen.reason, /betaald of gecrediteerd/);
+});
+
+test('definitief verwijderen weigert een offerte waar een werkorder of factuur naar verwijst', () => {
+  const { db, archive, tenantId, ownerId } = setup();
+  const quoteId = addQuote(db, tenantId, ownerId, 'O2026-0050', 'Test BV');
+  const invoiceId = addInvoice(db, tenantId, 'F2026-0050', 'betaald', '2026-11-01');
+  db.prepare('UPDATE invoices SET quote_id = ? WHERE id = ?').run(quoteId, invoiceId);
+  archive.archive(tenantId, 'offertes', [quoteId]);
+  const result = archive.purge(tenantId, { kinds: ['offertes'] });
+  assert.strictEqual(result.deleted.offertes, 0);
+  assert.match(result.blocked[0].reason, /gekoppeld aan facturen/);
 });

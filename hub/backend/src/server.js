@@ -1903,7 +1903,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   app.locals.driveRestoreTest = driveRestoreTest;
   // Archief (platform/archive.js): plannen, offertes, werkorders, facturen, bestellingen en klanten uit het zicht halen, terughalen en definitief verwijderen.
   const archive = createArchive(db, { customerRoleKeys: (tenantId) => store.roles.keysOfKind(tenantId, 'klant'), purgePlan: (tenantId, id) => store.purgePlan(tenantId, id) });
-  registerArchiveRoutes(app, { archive, audit });
+  registerArchiveRoutes(app, { archive, audit, confirmIdentity: createIdentityConfirm({ store, loginGuard, twoFactor, audit, auditAction: 'archief_wachtwoord_fout' }), runBackup: backupDir ? runBackup : null });
   app.locals.archive = archive;
 
   // Terugzetten uit een back-up (volledig of per record/veld): platform/backup-restore.js.

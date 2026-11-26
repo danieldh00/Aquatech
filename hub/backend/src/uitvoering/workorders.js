@@ -628,7 +628,7 @@ function createWorkOrderStore(db, { vault = createVault(), staffRoles = () => ['
    */
   function byToken(token) {
     if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{20,64}$/.test(token)) return null;
-    const workOrderRow = prepare(`SELECT ${PUBLIC_COLS} FROM work_orders WHERE share_hash = ? AND deleted_at IS NULL`).get(sha256(token)) || null;
+    const workOrderRow = prepare(`SELECT ${PUBLIC_COLS} FROM work_orders WHERE share_hash = ? AND deleted_at IS NULL AND archived_at IS NULL`).get(sha256(token)) || null;
     // Verlopen link (G-02): 180 dagen na delen, of 90 dagen na de geplande datum als die later ligt.
     if (workOrderRow && linkExpired({ sharedAt: workOrderRow.shared_at, referenceDate: workOrderRow.planned_date })) return null;
     return workOrderRow;
