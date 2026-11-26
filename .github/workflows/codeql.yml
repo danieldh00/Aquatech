@@ -1,0 +1,45 @@
+name: CodeQL
+
+# Codeanalyse van de hele repository (JavaScript/TypeScript en de workflows zelf) met de uitgebreide beveiligingsregels
+# (security-extended). Draait op master, bij elke PR en wekelijks, zodat nieuwe regels ook oude code bekijken.
+# De uitkomst staat onder Security > Code scanning; vers gevonden meldingen komen daar vanzelf bij en
+# meldingen over code die niet meer bestaat worden bij een nieuwe analyse automatisch gesloten.
+on:
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    - cron: "43 3 * * 2"
+
+concurrency:
+  group: codeql-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript, actions]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: CodeQL starten
+        uses: github/codeql-action/init@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: security-extended
+      - name: Analyseren
+        uses: github/codeql-action/analyze@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4
+        with:
+          category: "/language:${{ matrix.language }}"
