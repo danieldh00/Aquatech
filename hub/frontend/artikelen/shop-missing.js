@@ -55,10 +55,11 @@
     else bar.removeAttribute('value');
     const list = $('#sm-list');
     const skippedItems = state.skippedItems || [];
-    list.hidden = !state.added.length && !skippedItems.length;
+    const restoredItems = state.restoredItems || [];
+    list.hidden = !state.added.length && !skippedItems.length && !restoredItems.length;
     const shown = state.added.slice(-SHOWN).reverse();
-    list.innerHTML = `${skippedReasons(skippedItems)}${state.added.length > SHOWN ? `<div class="muted">Laatste ${SHOWN} van ${state.added.length} binnengehaald; alles staat in de Excel.</div>` : ''}${shown.map((item) => `<div><code>${esc(item.code)}</code> ${esc(item.name)}</div>`).join('')}`;
-    $('#sm-excel').hidden = !state.added.length && !skippedItems.length;
+    list.innerHTML = `${restoredItems.length ? `<div><strong>Gearchiveerd teruggezet: ${restoredItems.length}</strong> (zie tabblad Teruggezet in de Excel)</div>` : ''}${skippedReasons(skippedItems)}${state.added.length > SHOWN ? `<div class="muted">Laatste ${SHOWN} van ${state.added.length} binnengehaald; alles staat in de Excel.</div>` : ''}${shown.map((item) => `<div><code>${esc(item.code)}</code> ${esc(item.name)}</div>`).join('')}`;
+    $('#sm-excel').hidden = !state.added.length && !skippedItems.length && !restoredItems.length;
   }
 
   /**
@@ -120,13 +121,17 @@
    * @returns {Promise<void>}
    */
   async function downloadExcel() {
-    if (!last || (!last.added.length && !(last.skippedItems || []).length)) return;
+    if (!last || (!last.added.length && !(last.skippedItems || []).length && !(last.restoredItems || []).length)) return;
     if (!window.ExcelJS && !(window.AquatechCommon && await window.AquatechCommon.excel())) { toast('Excel-export niet beschikbaar.', true); return; }
     const excelWorkbook = new ExcelJS.Workbook();
     const worksheet = excelWorkbook.addWorksheet('Binnengehaald', { views: [{ state: 'frozen', ySplit: 1 }] });
     worksheet.columns = [{ header: 'Artikelcode', key: 'code', width: 24 }, { header: 'Omschrijving', key: 'name', width: 70 }];
     for (const item of last.added) worksheet.addRow({ code: item.code, name: item.name });
     worksheet.getRow(1).font = { bold: true };
+    const restoredSheet = excelWorkbook.addWorksheet('Teruggezet', { views: [{ state: 'frozen', ySplit: 1 }] });
+    restoredSheet.columns = [{ header: 'Artikelcode', key: 'code', width: 28 }, { header: 'Omschrijving', key: 'name', width: 70 }, { header: 'Webshop-id', key: 'productId', width: 12 }];
+    for (const item of last.restoredItems || []) restoredSheet.addRow(item);
+    restoredSheet.getRow(1).font = { bold: true };
     const skippedSheet = excelWorkbook.addWorksheet('Overgeslagen', { views: [{ state: 'frozen', ySplit: 1 }] });
     skippedSheet.columns = [{ header: 'Webshop-id', key: 'productId', width: 12 }, { header: 'Sku', key: 'sku', width: 28 }, { header: 'Voorgestelde code', key: 'code', width: 28 }, { header: 'Omschrijving', key: 'name', width: 60 }, { header: 'Reden', key: 'reason', width: 70 }, { header: 'Webshopadres', key: 'url', width: 60 }];
     for (const item of last.skippedItems || []) skippedSheet.addRow(item);

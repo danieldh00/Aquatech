@@ -238,7 +238,7 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
     // geen prijzen overnemen, niets archiveren en niets naar de webshop schrijven.
     if (full && addMissing) {
       const added = stock.addMissingShop(tenantId, products, match, { vatRate: shopConfig.vatRate, priceOf: productPrice, onProgress });
-      return { created: added.created, skippedProducts: added.skippedProducts, skippedList: added.skippedList, linked: 0 };
+      return { created: added.created, restored: added.restored, restoredItems: added.restoredItems, skippedProducts: added.skippedProducts, skippedList: added.skippedList, linked: 0 };
     }
     const mirrored = full && mirrorOn
       ? stock.mirrorShop(tenantId, products, match, { vatRate: shopConfig.vatRate, priceOf: productPrice })
