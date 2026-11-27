@@ -39,6 +39,12 @@ test('elke pagina met een lijst laadt pager.js en pager.css', () => {
 });
 
 test('shownIds: "alles selecteren" raakt alleen de rijen op de huidige pagina', () => {
+  /**
+   * Maakt een nagebootste tabelrij.
+   * @param {string} id Het data-id.
+   * @param {boolean} off Of de rij door de paginering verborgen is.
+   * @returns {object} De rij.
+   */
   const makeRow = (id, off) => ({ hidden: false, classList: { contains: (name) => name === 'pager-off' && off }, getAttribute: () => id });
   const table = { querySelectorAll: () => [makeRow('a', false), makeRow('b', false), makeRow('c', true), makeRow('d', true)] };
   assert.deepStrictEqual(Pager.shownIds(table), ['a', 'b']);
