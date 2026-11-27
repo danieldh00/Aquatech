@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.47.3
+
+Derde deel van de leverancier-PDF per artikel: blok `#d-documents` in `frontend/artikelen/` (`documents.js`, `window.ArtikelenDocuments`) boven de API van `item-documents.js` (upload als `application/pdf` met `X-Bestandsnaam`, aan/uit voor de productpagina, weghalen; niet bij een artikelgroep, niet te wijzigen bij een gearchiveerd artikel). Geen migratie.
+
 ## 1.47.2
 
 Tweede deel van de leverancier-PDF per artikel: `readDetails` (storefront-data.js) geeft per artikelcode `documents` mee (alleen `public = 1`; een subartikel toont ook de PDF's van zijn artikelgroep, via dezelfde 30 seconden cache als de specificaties), `detailsSection` toont het blok Downloads en `GET /artikel-pdf/:id/:naam` (storefront.js) levert de PDF als bijlage (`nosniff`, CSP `sandbox`, 5 minuten cache). `itemDocuments.file(…, { publicOnly: true })` weigert nu ook een PDF van een gearchiveerd artikel. Geen migratie.

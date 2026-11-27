@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.47.3',
+      date: '2026-11-27',
+      title: 'PDF\'s van de leverancier beheren in het artikelformulier',
+      items: [
+        { text: 'In het artikelformulier staat nu een blok PDF\'s van de leverancier: PDF toevoegen, kiezen of hij als download op de productpagina staat, en weghalen. [voorraad]' },
+      ],
+    },
+    {
       version: '1.47.2',
       date: '2026-11-27',
       title: 'Productinformatie als PDF downloaden in de webshop',
