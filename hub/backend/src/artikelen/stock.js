@@ -1307,7 +1307,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @returns {{ created: number, restored: number, restoredItems: object[], skippedProducts: number, skippedList: object[] }} Aantallen, de teruggezette gearchiveerde artikelen { code, name, productId } en per overgeslagen product { productId, sku, code, name, reason, url }.
    */
   function addMissingShop(tenantId, products, matchProduct, { vatRate = 21, priceOf = (product) => product.price, onProgress = null } = {}) {
-    const items = prepare('SELECT id, code, name, shop_product_id, group_id, is_group, attributes, archived FROM stock_items WHERE tenant_id = ?').all(tenantId);
+    const items = prepare('SELECT id, code, name, shop_product_id, group_id, is_group, attributes, archived, shop_sync FROM stock_items WHERE tenant_id = ?').all(tenantId);
     const matchedProducts = new Set();
     const groupItems = new Map();
     const itemsByCode = new Map(items.map((item) => [item.code, item]));
@@ -1362,9 +1362,9 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     }
     if (restoredList.length) {
       transaction(db, () => {
-        // Een los artikel gaat mee met de webshop (shop_sync = 1). Een subartikel wordt alleen gekoppeld (shop_sync = 0): zo schrijft de synchronisatie er nooit naar de webshop; de koppeling dient voor de orderhistorie.
+        // Beide gaan mee naar de eigen webshop (shop_sync = 1: zichtbaar en bestelbaar). De synchronisatie schrijft nooit naar de webshop voor een subartikel dat aan een los product hangt (zie sync in shop-sync.js).
         const restoreLoose = prepare('UPDATE stock_items SET archived = 0, shop_product_id = ?, shop_sync = 1, updated_at = ? WHERE tenant_id = ? AND id = ?');
-        const restoreSub = prepare('UPDATE stock_items SET archived = 0, archived_by_parent = 0, shop_product_id = ?, shop_sync = 0, updated_at = ? WHERE tenant_id = ? AND id = ?');
+        const restoreSub = prepare('UPDATE stock_items SET archived = 0, archived_by_parent = 0, shop_product_id = ?, shop_sync = 1, updated_at = ? WHERE tenant_id = ? AND id = ?');
         const reopenGroup = prepare('UPDATE stock_items SET archived = 0, updated_at = ? WHERE tenant_id = ? AND id = ? AND archived = 1');
         for (const entry of restoredList) {
           const timestamp = currentTimestamp();
@@ -1375,7 +1375,18 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         resyncOpen(tenantId, restoredList.map((entry) => entry.code), { nested: true });
       });
     }
-    const restoredItems = restoredList.map((entry) => ({ code: entry.code, name: cleanText(entry.product.name, 200) || entry.code, productId: String(entry.product.id), kind: `${entry.sub ? 'subartikel' : 'los artikel'}${Number(entry.owner.archived) ? ', teruggezet uit archief' : ', gekoppeld'}` }));
+    // Een eerder gekoppeld subartikel (aan een los webshopproduct) kreeg bij een vorige versie shop_sync = 0 en was daardoor niet meer zichtbaar of bestelbaar in de eigen webshop: weer aanzetten.
+    const simpleIds = new Set(products.filter((product) => !product.parentId && product.type !== 'variable').map((product) => String(product.id)));
+    const reshown = items.filter((item) => item.group_id && !Number(item.archived) && !Number(item.is_group) && !Number(item.shop_sync) && item.shop_product_id && simpleIds.has(String(item.shop_product_id)));
+    if (reshown.length) {
+      transaction(db, () => {
+        const timestamp = currentTimestamp();
+        const showAgain = prepare('UPDATE stock_items SET shop_sync = 1, updated_at = ? WHERE tenant_id = ? AND id = ? AND shop_sync = 0');
+        for (const item of reshown) showAgain.run(timestamp, tenantId, item.id);
+      });
+      for (const item of reshown) restoredList.push({ owner: item, product: { id: item.shop_product_id, name: item.name }, code: item.code, sub: true, reshown: true });
+    }
+    const restoredItems = restoredList.map((entry) => ({ code: entry.code, name: cleanText(entry.product.name, 200) || entry.code, productId: String(entry.product.id), kind: `${entry.sub ? 'subartikel' : 'los artikel'}${entry.reshown ? ', weer in de webshop gezet' : Number(entry.owner.archived) ? ', teruggezet uit archief' : ', gekoppeld'}` }));
     if (onProgress) onProgress({ step: 'overgeslagen', items: skippedList, restored: restoredItems });
     // Hoofdproducten eerst, dan de variaties; in porties van 50 (elk in een eigen transactie), zodat de voortgang zichtbaar is.
     const ordered = [...fresh.filter((entry) => !entry.product.parentId), ...fresh.filter((entry) => entry.product.parentId)];
