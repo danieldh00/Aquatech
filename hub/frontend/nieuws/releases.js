@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.47.2',
+      date: '2026-11-27',
+      title: 'Productinformatie als PDF downloaden in de webshop',
+      items: [
+        { text: 'Bij een product in de webshop staat nu een blok Downloads met de PDF\'s van de leverancier (bijvoorbeeld een technische fiche), zodra een PDF voor de webshop is vrijgegeven.' },
+      ],
+    },
+    {
       version: '1.47.1',
       date: '2026-11-27',
       title: 'PDF\'s bij artikelen bewaren',

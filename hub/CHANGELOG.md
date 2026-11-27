@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.47.2
+
+Tweede deel van de leverancier-PDF per artikel: `readDetails` (storefront-data.js) geeft per artikelcode `documents` mee (alleen `public = 1`; een subartikel toont ook de PDF's van zijn artikelgroep, via dezelfde 30 seconden cache als de specificaties), `detailsSection` toont het blok Downloads en `GET /artikel-pdf/:id/:naam` (storefront.js) levert de PDF als bijlage (`nosniff`, CSP `sandbox`, 5 minuten cache). `itemDocuments.file(…, { publicOnly: true })` weigert nu ook een PDF van een gearchiveerd artikel. Geen migratie.
+
 ## 1.47.1
 
 Eerste deel van de leverancier-PDF per artikel (nog geen scherm): migratie 105 `item_documents` (versleuteld via `vault.sealBytes`, AAD `<omgeving>:artikel-pdf:<id>`), `artikelen/item-documents.js` met `POST|GET /api/stock/items/:id/documents` (PDF als body, kop `X-Bestandsnaam`), `GET|PATCH|DELETE /api/stock/documents/:id` (recht `voorraad`). De PDF wordt in de werkthread van `inspectSlip` gecontroleerd en opnieuw opgebouwd (geen annotaties, acties of metadata); hoogstens 10 MB, 40 pagina's en 5 PDF's per artikel, dezelfde inhoud twee keer wordt geweigerd, 60 uploads per uur per omgeving. `inspectSlip` en de werkthread nemen nu eigen grenzen mee (de pakbon blijft 2 MB en 10 pagina's). `public` bepaalt straks of de PDF op de productpagina te downloaden is. Testdata: een PDF bij de tuinslang.
