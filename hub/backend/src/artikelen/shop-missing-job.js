@@ -10,7 +10,7 @@ const MAX_LISTED = 3000;
  * @returns {object} running, phase, message, counters en lege lijst.
  */
 function emptyState() {
-  return { running: false, phase: 'idle', message: '', fetched: 0, variationsDone: 0, variationsTotal: 0, total: 0, created: 0, skipped: 0, added: [], error: null, startedAt: null, finishedAt: null };
+  return { running: false, phase: 'idle', message: '', fetched: 0, variationsDone: 0, variationsTotal: 0, total: 0, created: 0, skipped: 0, added: [], skippedItems: [], error: null, startedAt: null, finishedAt: null };
 }
 
 /**
@@ -28,7 +28,7 @@ function createShopMissingJob({ syncShop, log = console }) {
    */
   function get(tenantId) {
     const state = states.get(tenantId);
-    return state ? { ...state, added: state.added.slice() } : emptyState();
+    return state ? { ...state, added: state.added.slice(), skippedItems: state.skippedItems.slice() } : emptyState();
   }
 
   /**
@@ -47,6 +47,8 @@ function createShopMissingJob({ syncShop, log = console }) {
       state.variationsDone = event.done;
       state.variationsTotal = event.total;
       state.message = `Variaties ophalen (${event.done} van ${event.total} variabele producten)…`;
+    } else if (event.step === 'overgeslagen') {
+      state.skippedItems = event.items.slice(0, MAX_LISTED);
     } else if (event.step === 'toevoegen') {
       state.phase = 'toevoegen';
       state.total = event.total;
@@ -79,8 +81,9 @@ function createShopMissingJob({ syncShop, log = console }) {
         } else {
           state.created = out.created || 0;
           state.skipped = out.skippedProducts || 0;
+          if (out.skippedList) state.skippedItems = out.skippedList.slice(0, MAX_LISTED);
           state.phase = 'klaar';
-          state.message = `Klaar: ${state.created} artikel${state.created === 1 ? '' : 'en'} toegevoegd${state.skipped ? `, ${state.skipped} overgeslagen (geen geldige of dubbele code)` : ''}.`;
+          state.message = `Klaar: ${state.created} artikel${state.created === 1 ? '' : 'en'} toegevoegd${state.skipped ? `, ${state.skipped} overgeslagen (reden per artikel in de Excel)` : ''}.`;
         }
       } catch (error) {
         log.warn(`Ontbrekende webshopproducten toevoegen mislukt: ${error && error.stack ? error.stack : error}`);
