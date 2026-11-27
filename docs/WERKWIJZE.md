@@ -61,6 +61,17 @@ Algemene afspraken voor samenwerken met Claude in een project met een coördinat
 - **Verboden afdwingen met hooks, niet alleen als tekst**: mechanisch controleerbare "niet doen"-regels staan in `.claude/hooks/rules.mjs` en worden door één Node-script (`guard.mjs`, `PreToolUse` in `.claude/settings.json`) geblokkeerd; alleen nieuwe regels in een wijziging tellen. Een nieuw verbod dat zich laat vangen met een patroon: één regel in `rules.mjs` + een test in `guard.test.mjs` (`node --test .claude/hooks/`). Wat oordeel vraagt (merge-voorwaarden, parallelle threads, bedrijfsregels) blijft tekst, CI of branch-protectie. Override alleen door de mens: `AQUATECH_HOOKS_OFF=1`.
 - Een nieuwe externe koppeling: instelling in de app, status en logboek zichtbaar, nooit tokens in de uitvoer.
 
+## Beslisladder vóór nieuwe code (tegen overbouwen)
+Loop vóór het schrijven van nieuwe code deze trap af en stop bij de eerste trede die het oplost:
+1. **Moet het bestaan?** Vraagt de opdracht er echt om? Zo niet: niet bouwen en dat melden.
+2. **Bestaat het al in de codebase?** Zoek eerst en hergebruik of breid uit; geen tweede kopie.
+3. **Kan de standaardbibliotheek het?** Geen eigen hulpfunctie voor wat al ingebouwd is.
+4. **Kan het platform of de browser het native?** (database, HTML/CSS, Web API's) Geen script voor wat CSS of de database kan.
+5. **Kan een al geïnstalleerde dependency het?** Gebruik wat er staat.
+6. **Pas dan een minimale nieuwe wijziging**, zo klein en eenvoudig mogelijk. Geen nieuwe dependency zonder duidelijke reden, die in de PR-beschrijving staat.
+
+Eenvoud is geen code golf: namen, commentaar en leesbaarheid blijven volgens de codestijl. Geen speculatieve opties, abstracties of instellingen "voor later".
+
 ## Standaardvoorkeuren (pas aan per gebruiker)
 - Taal en tijdzone: Nederlands, Europe/Amsterdam.
 - Exports als Excel (.xlsx), geen CSV, tenzij daar expliciet om gevraagd wordt.

@@ -102,6 +102,13 @@ export const FILE_RULES = [
     nietIn: /\/vendor\//,
     patroon: /text\/csv|\.csv['"`]|\bto[A-Z]?[Cc]sv\(/,
   },
+  {
+    id: 'nieuwe-dependency',
+    melding: 'Nieuwe dependency? Loop eerst de beslisladder af (CLAUDE.md): bestaand, standaardbibliotheek, platform of een geïnstalleerde dependency. Zet de reden in de PR-beschrijving.',
+    niveau: 'warn',
+    paden: /^hub\/backend\/package\.json$/,
+    patroon: /^\s*"(?!version")[@\w./-]+"\s*:\s*"[\^~]?\d+\.\d+/m,
+  },
 ];
 
 /** Bestanden die nooit met de hand worden aangepast (release.yml doet dat). */

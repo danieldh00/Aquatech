@@ -779,6 +779,19 @@ wel logisch kloppen, controleer ze met de DOM/CSS of een gerichte meting in plaa
   (echte uitzondering: reden in de PR en `node tools/tenant-filter.js --update`).
 - Links naar de shop in mails en SEO altijd via `publicBaseUrl` (webadres uit Beheer), nooit uit `req.headers.host`.
 
+## Beslisladder vóór nieuwe code (tegen overbouwen, besluit Daniël 2026-11-27)
+Loop vóór het schrijven van nieuwe code deze trap af en stop bij de eerste trede die het oplost:
+1. **Moet het bestaan?** Vraagt de opdracht er echt om? Zo niet: niet bouwen en dat melden.
+2. **Bestaat het al in de codebase?** Zoek eerst (kaart in `AGENTS.md`, `map`-verkenner) en hergebruik of breid uit; geen tweede kopie.
+3. **Kan de standaardbibliotheek het?** Geen eigen hulpfunctie voor wat al ingebouwd is.
+4. **Kan het platform of de browser het native?** (database, HTML/CSS, Web API's) Geen script voor wat CSS of de database kan.
+5. **Kan een al geïnstalleerde dependency het?** Gebruik wat er staat.
+6. **Pas dan een minimale nieuwe wijziging**, zo klein en eenvoudig mogelijk. Geen nieuwe dependency zonder duidelijke reden, die in de PR-beschrijving staat.
+
+Eenvoud is geen code golf: namen, commentaar en leesbaarheid blijven volgens de codestijl. Geen speculatieve opties, abstracties of instellingen "voor later".
+
+Een nieuwe dependency in `hub/backend/package.json` geeft een waarschuwing van de vangrail (`.claude/hooks/rules.mjs`, regel `nieuwe-dependency`).
+
 ## Codestijl (wens Daniël 2026-10-22, geldt voor alle code)
 
 Daniël leest de code zelf na; hij moet zonder zoeken kunnen zien wat iets is.
