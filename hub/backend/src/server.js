@@ -97,6 +97,7 @@ const { registerDeliveryPreviewRoutes } = require('./webshop/delivery-preview');
 const { sanitizeCategoryRules, registerDeliveryRuleRoutes, resolverFor: resolveDeliveryRules } = require('./webshop/delivery-rules');
 const { createSupplierStore, registerSupplierRoutes } = require('./artikelen/suppliers');
 const { createCodeGroupStore, registerCodeGroupRoutes } = require('./artikelen/code-groups');
+const { createCodeConversion, registerCodeConversionRoutes } = require('./artikelen/code-conversion');
 const { createPriceFactorStore, registerPriceFactorRoutes } = require('./artikelen/price-factor');
 const { createOrderReader: createDefaultOrderReader } = require('./artikelen/order-reader');
 const { registerOrderReadRoute } = require('./artikelen/order-read-route');
@@ -2708,6 +2709,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   registerSupplierRoutes(app, { suppliers: supplierStore, requireRight, requireJson, audit });
   // Hoofdgroepen (merken), subgroepen (soorten), het codevoorstel en oude nummers (zie code-groups.js).
   registerCodeGroupRoutes(app, { codeGroups: codeGroupStore, requireRight, requireJson, audit });
+  // Bestaande artikelen omzetten naar sprekende codes (zie code-conversion.js).
+  registerCodeConversionRoutes(app, { codeConversion: createCodeConversion(database), requireRight, audit });
   const priceFactorStore = createPriceFactorStore(database, { stock: stockStore, settingsOf: (tenantId) => settingsFor(tenantId), treeOf: (tenantId) => shopContentStore.publicContent(tenantId).tree });
   stockStore.setPricer((tenantId, item) => priceFactorStore.priceFor(tenantId, item));
   stockStore.setPriceLogger((entries) => store.auditMany(entries));

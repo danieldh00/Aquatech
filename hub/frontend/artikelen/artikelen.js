@@ -477,13 +477,13 @@
   }
 
   /** De tabbladen, ook als #-adres (de zijbalk onder Inkoop wijst naar moves, reorder, suppliers en orders). */
-  const TABS = ['stock', 'reserved', 'moves', 'reorder', 'suppliers', 'orders', 'pricefactor', 'counts', 'media', 'texts', 'related', 'import', 'groups', 'units'];
+  const TABS = ['stock', 'reserved', 'moves', 'reorder', 'suppliers', 'orders', 'pricefactor', 'counts', 'media', 'texts', 'related', 'import', 'groups', 'convert', 'units'];
 
   /** De titel boven de pagina per onderdeel (zonder zijbalk staan de tabbladen er nog; met zijbalk laat de titel zien waar je bent). */
   const TAB_TITLES = {
     stock: 'Artikelen', reserved: 'Artikelen · Gereserveerd', moves: 'Artikelen · Mutaties', reorder: 'Artikelen · Bestelvoorstel', suppliers: 'Artikelen · Leveranciers',
     orders: 'Artikelen · Inkooporders', pricefactor: 'Artikelen · Prijsfactor', counts: 'Artikelen · Telling', media: 'Artikelen · Afbeeldingen',
-    texts: 'Artikelen · Specificaties en teksten', related: 'Artikelen · Past bij', import: 'Artikelen · Import en export', groups: 'Artikelen · Merken en soorten', units: 'Artikelen · Eenheden',
+    texts: 'Artikelen · Specificaties en teksten', related: 'Artikelen · Past bij', import: 'Artikelen · Import en export', groups: 'Artikelen · Merken en soorten', convert: 'Artikelen · Bestaande omzetten', units: 'Artikelen · Eenheden',
   };
 
   /**
@@ -534,6 +534,7 @@
     window.ArtikelenProposals.setTab(name);
     if (name === 'reorder') loadReorder().catch((error) => toast(error.message, true));
     if (name === 'groups') window.ArtikelenCodeGroups.load().catch((error) => toast(error.message, true));
+    if (name === 'convert') window.ArtikelenConvert.load().catch((error) => toast(error.message, true));
     if (name === 'suppliers') window.ArtikelenSuppliers.load().catch((error) => toast(error.message, true));
     if (name === 'orders') window.ArtikelenOrders.load().catch((error) => toast(error.message, true));
     if (name === 'pricefactor') window.ArtikelenPriceFactor.load().catch((error) => toast(error.message, true));
@@ -1213,6 +1214,7 @@
     });
     window.ArtikelenSuppliers.setup({ api, toast, esc, nl, eur });
     window.ArtikelenCodeGroups.setup({ api, toast, esc });
+    window.ArtikelenConvert.setup({ api, toast, esc });
     window.ArtikelenPackagings.setup({ api, toast, esc });
     for (const formId of ['#new-form', '#edit-form']) {
       const pricingForm = $(formId);
