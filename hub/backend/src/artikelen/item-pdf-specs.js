@@ -16,9 +16,11 @@ const MAX_TOTAL_BYTES = 20 * 1024 * 1024;
  */
 function registerItemPdfSpecsRoutes(app, ctx) {
   const { documents, drafts, related, stock, requireRight, audit, settingsFor, aiTenantOf, currentSpecResearcher, aiUsage } = ctx;
-  const limiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: (req) => req.tenantId || req.user.tenant_id });
+  // Een aanroep met PDF's is duur: per omgeving hoogstens 20 per uur en 100 per dag (in het geheugen geteld: één container).
+  const hourLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, keyFn: (req) => req.tenantId || req.user.tenant_id });
+  const dayLimiter = createRateLimiter({ windowMs: 24 * 60 * 60 * 1000, max: 100, keyFn: (req) => req.tenantId || req.user.tenant_id });
 
-  app.post('/api/stock/items/:id/documents/specs', requireRight('voorraad'), limiter, async (req, res) => {
+  app.post('/api/stock/items/:id/documents/specs', requireRight('voorraad'), hourLimiter, dayLimiter, async (req, res) => {
     const tenantId = req.tenantId || req.user.tenant_id;
     const itemId = req.params.id;
     const facts = related.factsFor(tenantId, itemId);
