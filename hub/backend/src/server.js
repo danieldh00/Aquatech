@@ -105,6 +105,7 @@ const { registerOrderReadRoute } = require('./artikelen/order-read-route');
 const { createItemTextWriter: createDefaultItemTextWriter } = require('./artikelen/item-text-writer');
 const { createItemTextDraftStore, registerItemTextRoutes } = require('./artikelen/item-text-drafts');
 const { registerItemTextBulkRoutes } = require('./artikelen/item-text-bulk');
+const { registerItemPdfSpecsRoutes } = require('./artikelen/item-pdf-specs');
 const { sanitizeBackgroundJobs } = require('./artikelen/background-jobs');
 const { createRelatedStore } = require('./artikelen/related-items');
 const { registerRelatedRoutes } = require('./artikelen/related-routes');
@@ -2740,6 +2741,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // PDF's bij artikelen (productinformatie van de leverancier, zie item-documents.js).
   registerItemDocumentRoutes(app, { documents: itemDocumentStore, requireRight, requireJson, audit,
     uploadLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: (req) => req.tenantId || tenant.id }) });
+  registerItemPdfSpecsRoutes(app, { documents: itemDocumentStore, drafts: itemTextDrafts, related: relatedStore, stock: stockStore, requireRight, audit, settingsFor, aiTenantOf, currentSpecResearcher, aiUsage });
 
   // ---------- Facturen en export naar de boekhouding (zie invoices.js) ----------
   const invoiceRoutes = registerInvoiceRoutes(app, {

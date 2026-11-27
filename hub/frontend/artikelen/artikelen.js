@@ -1162,7 +1162,7 @@
     window.ArtikelenCodeGroups.setup({ api, toast, esc });
     window.ArtikelenConvert.setup({ api, toast, esc });
     window.ArtikelenPackagings.setup({ api, toast, esc });
-    window.ArtikelenDocuments.setup({ toast, esc });
+    window.ArtikelenDocuments.setup({ toast, esc, reload: (id) => openItem(id, false, null, { keepScroll: true }) });
     for (const formId of ['#new-form', '#edit-form']) {
       const pricingForm = $(formId);
       pricingForm.addEventListener('input', () => syncPricing(pricingForm));

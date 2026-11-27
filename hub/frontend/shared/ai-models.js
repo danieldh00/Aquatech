@@ -37,6 +37,7 @@
     product_tekst: 'Producttekst schrijven',
     past_bij: 'Past bij: specificaties opzoeken',
     kenmerken_opzoeken: 'Productkenmerken opzoeken',
+    kenmerken_pdf: 'Kenmerken uit PDF lezen',
   };
 
   /**

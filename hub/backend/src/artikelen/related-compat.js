@@ -129,6 +129,32 @@ function validateFeatures(raw, allowedUrls) {
 }
 
 /**
+ * Controleert en schoont de kenmerken die de AI uit een PDF van de leverancier las. Een kenmerk blijft alleen staan als de bron een van de aangeleverde
+ * bestanden is, de bronzin er is en elk getal van de waarde ook in die zin staat; de rest vervalt.
+ * @param {*} raw De lijst uit het JSON-antwoord van de AI ({ name, value, source, quote }).
+ * @param {Set<string>} allowedNames De bestandsnamen van de aangeleverde PDF's.
+ * @returns {{ name: string, value: string, source: string, quote: string }[]} De onderbouwde kenmerken (hoogstens MAX_FEATURES, elke naam één keer).
+ */
+function validatePdfFeatures(raw, allowedNames) {
+  const seen = new Set();
+  const features = [];
+  for (const entry of Array.isArray(raw) ? raw : []) {
+    const name = String((entry && entry.name) || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    const value = String((entry && entry.value) || '').replace(/\s+/g, ' ').trim().slice(0, 150);
+    const source = String((entry && entry.source) || '').slice(0, 120);
+    const quote = String((entry && entry.quote) || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+    if (!name || !value || !quote || !allowedNames.has(source) || seen.has(name.toLowerCase())) continue;
+    const quoteText = quote.toLowerCase().replace(/,/g, '.');
+    const numbers = value.toLowerCase().replace(/(\d),(\d)/g, '$1.$2').match(/\d+(?:\.\d+)?/g) || [];
+    if (!numbers.every((number) => new RegExp(`(^|[^0-9.])${number.replace('.', '\\.')}($|[^0-9])`).test(quoteText))) continue;
+    seen.add(name.toLowerCase());
+    features.push({ name, value, source, quote });
+    if (features.length >= MAX_FEATURES) break;
+  }
+  return features;
+}
+
+/**
  * Of twee bereiken elkaar overlappen (een ontbrekend bereik telt als verenigbaar: er is niets om op af te keuren).
  * @param {?{ min: number, max: number }} left Het ene bereik.
  * @param {?{ min: number, max: number }} right Het andere bereik.
@@ -214,4 +240,4 @@ function suggestLinks(items, { perItem = 6 } = {}) {
   return result;
 }
 
-module.exports = { normalizeSize, quoteSupportsSize, validateSpecs, validateFeatures, compatible, suggestLinks, connectionsFit, KINDS, GENDERS };
+module.exports = { normalizeSize, quoteSupportsSize, validateSpecs, validateFeatures, validatePdfFeatures, compatible, suggestLinks, connectionsFit, KINDS, GENDERS };
