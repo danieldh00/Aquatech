@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.47.7',
+      date: '2026-11-28',
+      title: 'Artikelen als concept',
+      items: [
+        { text: 'Een artikel kan nu een Concept zijn: het staat dan niet in de webshop. Een nieuw artikel begint als concept; haal het vinkje Concept weg om het te publiceren. In de artikellijst staat een label Concept en een filter Alleen concepten.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.47.6',
       date: '2026-11-28',
       title: 'Teruggezette subartikelen weer zichtbaar in de eigen webshop',

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.47.7
+
+Het vinkje *Naar de webshop* (`stock_items.shop_sync`) is in het scherm vervangen door het omgekeerde vinkje *Concept* (geen migratie, de API-veld `shopSync` blijft). Het nieuwe-artikelformulier staat standaard op Concept. Artikellijst: label Concept in de kolom Webshop, filter *Alleen concepten* (ook voor subartikelen) en de Excel-kolom toont `concept`. Bestaande artikelen houden hun zichtbaarheid.
+
 ## 1.47.6
 
 - Ontbrekende webshopartikelen: een teruggezet of gekoppeld subartikel krijgt `shop_sync = 1` (de vorige versie zette het op 0, waardoor het uit de eigen webshop verdween). Een volgende run zet de eerder op 0 gezette gekoppelde subartikelen weer aan (Excel: "weer in de webshop gezet").
