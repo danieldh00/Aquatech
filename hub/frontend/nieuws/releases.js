@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.46.6',
+      date: '2026-11-27',
+      title: 'Orderhistorie uit WordPress naar Import en export',
+      items: [
+        { text: 'De orderhistorie uit WordPress staat niet meer onder *Past bij* maar onder *Import en export*, bij de tijdelijke webshopknoppen. Na *Ontbrekende uit webshop toevoegen* worden de orderregels zonder artikel meteen opnieuw gekoppeld.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.46.5',
       date: '2026-11-27',
       title: 'Past bij: aantal regels per pagina kiezen',

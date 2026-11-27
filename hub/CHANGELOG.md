@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.46.6
+
+- Het blok `#rl-wp` is van het tabblad Past bij naar het tabblad Import verhuisd; `ArtikelenRelated.loadWp` laadt het bij het openen van dat tabblad.
+- `stock-routes.js`: na de taak *Ontbrekende uit webshop toevoegen* roept `ctx.rematchWpOrders` (= `wpOrderHistory.rematch`) de koppeling van de orderregels opnieuw aan.
+
 ## 1.46.5
 
 Tabblad Past bij (`artikelen/related.js`) knipt de lijst in pagina's met dezelfde keuzelijst (25/50/100/300/Alles), dezelfde klassen en dezelfde opslagsleutel (`aquatech_artikelen_paginagrootte`) als de artikellijst; zoeken of filteren springt terug naar pagina 1. Geen serverwijziging.
