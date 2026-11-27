@@ -50,7 +50,6 @@
    * @returns {Promise<void>}
    */
   async function load() {
-    state.page = 1;
     state.data = await context.api(`stock/related?${queryOf()}`);
     state.ai = state.data.ai;
     renderList();
@@ -422,8 +421,13 @@
      */
     const guarded = (work) => (...args) => work(...args).catch((error) => context.toast(error.message, true));
     let searchTimer = 0;
-    $('#rl-search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(guarded(load), 250); });
-    $('#rl-filter').addEventListener('change', guarded(load));
+    /**
+     * Laadt de lijst opnieuw na een ander zoekwoord of filter en begint weer op pagina 1.
+     * @returns {Promise<void>}
+     */
+    const reload = () => { state.page = 1; return load(); };
+    $('#rl-search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(guarded(reload), 250); });
+    $('#rl-filter').addEventListener('change', guarded(reload));
     $('#rl-ai').addEventListener('click', guarded(runAi));
     $('#rl-stop').addEventListener('click', guarded(async () => { await context.api('stock/related-ai/job/stop', { method: 'POST', body: {} }); }));
     $('#rl-clear').addEventListener('click', guarded(clearAi));
