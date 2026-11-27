@@ -44,7 +44,7 @@ function createItemDocumentStore(db, { vault }) {
    * @param {string} tenantId Id van de omgeving.
    * @param {string} itemId Id van het artikel.
    * @param {Buffer} raw De ontvangen bytes.
-   * @param {{ name?: string }} [origin] De bestandsnaam.
+   * @param {{ name?: string }} [options] De bestandsnaam.
    * @returns {Promise<{ document?: object, error?: string, message?: string, status?: number }>} Het bewaarde document (zonder inhoud), of een fout.
    */
   async function add(tenantId, itemId, raw, { name = '' } = {}) {
@@ -63,12 +63,14 @@ function createItemDocumentStore(db, { vault }) {
       return null;
     };
     // Eerst goedkoop weigeren, vóór de zware controle; na de controle (een await) opnieuw, want een gelijktijdige upload kan intussen zijn bewaard.
-    if (refusal()) return refusal();
+    const early = refusal();
+    if (early) return early;
     const checked = await inspectSlip(raw, { maxBytes: MAX_DOCUMENT_BYTES, maxPages: MAX_DOCUMENT_PAGES, label: 'De PDF' });
     if (checked.busy) return { error: 'busy', message: checked.error, status: 429 };
     if (checked.error) return { error: 'invalid_pdf', message: checked.error, status: 400 };
     // Vanaf hier tot de INSERT zit geen await meer: controle en opslag zijn één stap.
-    if (refusal()) return refusal();
+    const late = refusal();
+    if (late) return late;
     const id = crypto.randomUUID();
     const timestamp = new Date().toISOString();
     db.prepare('INSERT INTO item_documents (id, tenant_id, item_id, name, pages, size, content_hash, public, data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)')
@@ -182,7 +184,8 @@ function registerItemDocumentRoutes(app, { documents, requireRight, requireJson,
     if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(415).json({ error: 'invalid_pdf', message: 'Stuur een PDF-bestand (application/pdf).' });
     let name = '';
     try { name = decodeURIComponent(String(req.get('X-Bestandsnaam') || '')); } catch (error) { name = ''; }
-    const out = await documents.add(tenantOf(req), req.params.id, req.body, { name });
+    // Een eigen kopie van de bytes: de PDF is hier zeker een Buffer, nooit een tekst of rij uit het verzoek.
+    const out = await documents.add(tenantOf(req), req.params.id, Buffer.from(req.body), { name });
     if (out.error) {
       if (out.status === 429) res.setHeader('Retry-After', '10');
       return res.status(out.status || 400).json({ error: out.error, message: out.message });
