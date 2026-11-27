@@ -162,3 +162,37 @@ test('artikel-pdf: rechten, andere organisatie en opruimen bij verwijderen van h
   assert.strictEqual((await admin.del(`/app/api/stock/items/${item.id}`)).status, 200);
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM item_documents WHERE tenant_id = ?').get(main).n, 0);
 });
+
+test('artikel-pdf: de openbare shop toont alleen openbare PDF\'s van niet-gearchiveerde artikelen als download', async () => {
+  const world = await setup();
+  const { admin, anonymous } = world;
+  const created = await admin.post('/app/api/stock/items', { code: 'SHOP-1', name: 'Artikel SHOP-1', onHand: 3, salePrice: 10 });
+  const item = created.body;
+  // Pas daarna de shop aanzetten: de catalogus wordt bij het eerste bezoek opgebouwd.
+  await admin.put('/app/api/admin/settings', { storefront: true });
+  const pdf = await upload(world, admin, item.id, await makePdf(2, 'Shop'), { name: 'Technische fiche.pdf' });
+  assert.strictEqual(pdf.status, 201, JSON.stringify(pdf.body));
+  const hidden = await upload(world, admin, item.id, await makePdf(1, 'Intern'), { name: 'Intern.pdf' });
+  assert.strictEqual((await admin.patch(`/app/api/stock/documents/${hidden.body.id}`, { public: false })).status, 200);
+
+  const home = await anonymous.get('/');
+  const category = await anonymous.get(`/${/href="(categorie\/[^"]+)"/.exec(home.text)[1]}`);
+  const slug = /product\/([^/"]+)\//.exec(category.text)[1];
+  const page = await anonymous.get(`/product/${slug}/`);
+  assert.ok(page.text.includes('<h2>Downloads</h2>'), 'het blok Downloads staat op de productpagina');
+  assert.ok(page.text.includes(`href="../../artikel-pdf/${pdf.body.id}/Technische%20fiche.pdf"`), 'de openbare PDF heeft een link');
+  assert.ok(!page.text.includes(hidden.body.id), 'een niet-openbare PDF komt niet op de pagina');
+
+  const download = await anonymous.get(`/artikel-pdf/${pdf.body.id}/Technische%20fiche.pdf`);
+  assert.strictEqual(download.status, 200);
+  assert.match(download.type, /application\/pdf/);
+  assert.match(download.headers.get('content-disposition'), /^attachment/);
+  assert.strictEqual(download.headers.get('x-content-type-options'), 'nosniff');
+  assert.strictEqual((await anonymous.get(`/artikel-pdf/${hidden.body.id}/Intern.pdf`)).status, 404, 'niet openbaar = niet te downloaden');
+  assert.strictEqual((await anonymous.get('/artikel-pdf/geen-id/x.pdf')).status, 404);
+  assert.strictEqual((await anonymous.get('/artikel-pdf/00000000-0000-0000-0000-000000000000/x.pdf')).status, 404);
+
+  // Gearchiveerd: ook de download is dicht, ook als de PDF openbaar staat.
+  assert.strictEqual((await admin.put(`/app/api/stock/items/${item.id}`, { archived: true })).status, 200);
+  assert.strictEqual((await anonymous.get(`/artikel-pdf/${pdf.body.id}/Technische%20fiche.pdf`)).status, 404);
+});

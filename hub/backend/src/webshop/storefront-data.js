@@ -625,8 +625,25 @@ function createStorefrontData(db, { treeOf = () => DEFAULT_TREE, discountsOf = (
      * @returns {object} De rij.
      */
     const shown = (row) => (AI_TEXT_ACTIONS.includes(row.text_action) && (!row.text_hash || row.text_hash === ItemDetails.textHash(row.description)) ? { ...row, description: '' } : row);
-    const articleGroups = new Map(rows.filter((row) => !row.group_id).map((row) => [row.id, ItemDetails.shownDetails(shown(row))]));
-    return new Map(rows.map((row) => [row.code, row.group_id ? ItemDetails.shownDetails(shown(row), articleGroups.get(row.group_id) || null) : articleGroups.get(row.id)]));
+    const documents = publicDocumentsOf(tenantId, rows.map((row) => row.id));
+    const articleGroups = new Map(rows.filter((row) => !row.group_id).map((row) => [row.id, { ...ItemDetails.shownDetails(shown(row)), documents: documents.get(row.id) || [] }]));
+    return new Map(rows.map((row) => [row.code, row.group_id
+      ? { ...ItemDetails.shownDetails(shown(row), articleGroups.get(row.group_id) || null), documents: [...(documents.get(row.id) || []), ...(documents.get(row.group_id) || [])] }
+      : articleGroups.get(row.id)]));
+  }
+
+  /**
+   * De PDF's die op de productpagina getoond mogen worden (zonder inhoud), per artikel-id.
+   * @param {string} tenantId De omgeving.
+   * @param {string[]} itemIds De artikel-id's.
+   * @returns {Map<string, { id: string, name: string, pages: number, size: number }[]>} Per artikel de openbare PDF's, oudste eerst.
+   */
+  function publicDocumentsOf(tenantId, itemIds) {
+    if (!itemIds.length) return new Map();
+    const rows = db.prepare('SELECT id, item_id, name, pages, size FROM item_documents WHERE tenant_id = ? AND public = 1 AND item_id = ANY(?::uuid[]) ORDER BY created_at, id').all(tenantId, itemIds);
+    const byItem = new Map();
+    for (const row of rows) byItem.set(row.item_id, [...(byItem.get(row.item_id) || []), { id: row.id, name: row.name, pages: Number(row.pages), size: Number(row.size) }]);
+    return byItem;
   }
 }
 
