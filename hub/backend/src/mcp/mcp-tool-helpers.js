@@ -100,7 +100,7 @@ function searchArticles(articles, query, limit) {
   const scored = [];
   for (const article of articles) {
     const subItems = Array.isArray(article.subItems) ? article.subItems : [];
-    const haystack = fold([article.code, article.name, ...subItems.map((subItem) => `${subItem.code} ${subItem.name} ${Object.values(subItem.values || {}).join(' ')}`)].join(' '));
+    const haystack = fold([article.code, article.name, ...(article.aliases || []), ...subItems.map((subItem) => `${subItem.code} ${subItem.name} ${Object.values(subItem.values || {}).join(' ')} ${(subItem.aliases || []).join(' ')}`)].join(' '));
     const code = fold(article.code);
     const hits = words.filter((word) => haystack.includes(word)).length;
     if (!hits) continue;
