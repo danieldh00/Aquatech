@@ -128,7 +128,7 @@
       for (const item of items) {
         worksheet.addRow({ ...item, articleGroup: item.groupId ? codeOf.get(item.groupId) || '' : '', subItem: valuesText(item), low: item.low ? 'ja' : '', archived: item.archived ? 'ja' : '', costPrice: item.costPrice, value: item.value, salePrice: item.salePrice,
           vat: `${item.vatRate}%`, group: GROUPS[item.revenueGroup] || item.revenueGroup,
-          shop: !item.shopSync ? 'niet' : item.shop.error ? 'fout' : item.shop.productId ? `product ${item.shop.productId}` : 'niet gekoppeld' });
+          shop: !item.shopSync ? 'concept' : item.shop.error ? 'fout' : item.shop.productId ? `product ${item.shop.productId}` : 'niet gekoppeld' });
       }
       worksheet.getRow(1).font = { bold: true };
       worksheet.autoFilter = `A1:T${items.length + 1}`;

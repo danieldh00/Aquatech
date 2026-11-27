@@ -88,7 +88,7 @@
             <label>Zakelijke prijs excl. btw<input name="businessPrice" type="number" min="0" step="0.01" inputmode="decimal" placeholder="= verkoopprijs"></label>
             <label>Gewicht (gram)<input name="weightGrams" type="number" min="0" max="1000000" step="1" placeholder="standaard"></label>
             <label>Omzetgroep<select name="revenueGroup"><option value="producten">Producten</option><option value="arbeid">Arbeid</option><option value="overig">Overig</option></select></label>
-            <label class="chk"><input type="checkbox" name="shopSync" checked> Naar de webshop</label>
+            <label class="chk" title="Een concept staat niet in de webshop. Haal het vinkje weg om het artikel te publiceren."><input type="checkbox" name="concept" checked> Concept (nog niet in de webshop)</label>
           </div>
           <div class="row pricing-row">
             <label title="Vaste verkoopprijs: je vult de prijs zelf in. Inkoopprijs × factor: de prijs volgt uit de inkoopprijs (zie tabblad Prijsfactor).">Prijsbepaling<select name="priceMode"><option value="vast">Vaste verkoopprijs</option><option value="factor">Inkoopprijs × factor</option></select></label>
@@ -211,6 +211,7 @@
         <div class="filters">
           <input id="f-search" type="search" placeholder="Zoek op code, omschrijving of locatie">
           <label class="chk"><input type="checkbox" id="f-low"> Alleen onder minimum</label>
+          <label class="chk"><input type="checkbox" id="f-concept"> Alleen concepten</label>
           <label class="chk"><input type="checkbox" id="f-archived"> Ook gearchiveerd</label>
           <span class="spacer"></span>
           <button class="btn primary" id="b-new">+ Artikel</button>
@@ -755,7 +756,7 @@
             <legend>Webshop</legend>
             <p class="muted small" id="d-shop"></p>
             <div class="form-grid">
-          <label class="chk"><input type="checkbox" name="shopSync"> Naar de webshop</label>
+          <label class="chk" title="Een concept staat niet in de webshop. Haal het vinkje weg om het artikel te publiceren."><input type="checkbox" name="concept"> Concept (nog niet in de webshop)</label>
           <label title="De titel in zoekresultaten. Leeg = de naam van het artikel met de naam van de shop. Maximaal 70 tekens.">Titel voor zoekmachines<input name="seoTitle" maxlength="70" autocomplete="off" placeholder="Leeg = naam – Aquatechshop.nl"></label>
               <label class="full" title="Staat op de productpagina en in de productfeed. Een lege regel begint een nieuwe alinea, een regel die met • begint is een lijstpunt.">Omschrijving in de webshop<textarea name="description" rows="5" maxlength="5000"></textarea></label>
               <label class="full" title="Eén specificatie per regel, als naam: waarde (bijvoorbeeld Aansluiting: 3/4 inch). Komt als tabel op de productpagina.">Specificaties (naam: waarde per regel)<textarea name="specifications" rows="4" maxlength="8000"></textarea></label>
