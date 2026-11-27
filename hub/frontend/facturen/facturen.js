@@ -188,10 +188,16 @@
        * @param {MouseEvent} event de klik
        */
       selectAllBox.onclick = (event) => { event.stopPropagation(); };
-      /** Selecteert alle zichtbare facturen of heft de selectie op. */
+      /** Selecteert alle facturen op de huidige pagina of heft de selectie daarvan op (nooit de rijen op andere pagina's). */
       selectAllBox.onchange = () => {
-        for (const invoice of items) { if (selectAllBox.checked) state.selected.add(invoice.id); else state.selected.delete(invoice.id); }
+        const shown = new Set(window.AquatechPager.shownIds(table));
+        for (const invoice of items) {
+          if (!shown.has(invoice.id)) continue;
+          if (selectAllBox.checked) state.selected.add(invoice.id); else state.selected.delete(invoice.id);
+        }
         renderList();
+        const header = table.querySelector('input[data-select-all]');
+        if (header) header.checked = selectAllBox.checked;
       };
     }
     renderBulkBar();

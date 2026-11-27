@@ -9,3 +9,4 @@ Alleen de regels voor de frontend; bij tegenspraak geldt de root-`CLAUDE.md`. he
 - Een terugvalmelding bij een status zonder `message` via `AquatechCommon.statusMessage(status)`, nooit `HTTP ${status}`.
 - Een nieuw adresveld: `data-address-lookup` + `shared/address-lookup.js`. Een nieuw afdrukdocument: `AquatechDocLayout`. Excel laden via `excel()` (geen exceljs-scripttag).
 - Rechten verbergen alleen; de server dwingt ze af.
+- Lange lijsten: een `table.grid` krijgt vanzelf paginering (`shared/pager.js` + `pager.css` laden); "alles selecteren" via `AquatechPager.shownIds(table)`; `data-no-pager` alleen voor een lijst die zelf in porties tekent (`AquatechPager.attach`).

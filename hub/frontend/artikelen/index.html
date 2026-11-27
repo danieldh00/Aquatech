@@ -7,6 +7,7 @@
   <meta name="robots" content="noindex">
   <title>Artikelen – AquaTech Hub</title>
   <link rel="stylesheet" href="../shared/brand.css">
+  <link rel="stylesheet" href="../shared/pager.css">
   <link rel="stylesheet" href="../shared/theme.css">
   <link rel="stylesheet" href="../shared/sidebar.css">
   <link rel="stylesheet" href="../dashboard/dashboard.css">
@@ -16,6 +17,7 @@
   <link rel="stylesheet" href="../shared/layout.css">
   <link rel="stylesheet" href="artikelen.css">
   <script src="../shared/common.js"></script>
+  <script src="../shared/pager.js"></script>
 </head>
 <body>
   <header class="topbar">
@@ -225,7 +227,7 @@
         </div>
 
         <div class="pager" id="s-pager-top"></div>
-        <div class="tablewrap"><table class="grid" id="s-table"></table></div>
+        <div class="tablewrap"><table class="grid" id="s-table" data-no-pager></table></div>
         <div class="pager" id="s-pager-bottom"></div>
       </section>
 
@@ -620,7 +622,7 @@
           <span id="rl-count" class="muted small"></span>
         </div>
         <div class="pager" id="rl-pager-top" hidden></div>
-        <div class="tablewrap"><table class="grid" id="rl-table"></table></div>
+        <div class="tablewrap"><table class="grid" id="rl-table" data-no-pager></table></div>
         <div class="pager" id="rl-pager-bottom" hidden></div>
         <section id="rl-detail" class="card" hidden aria-labelledby="rl-detail-title">
           <div class="filters"><h2 id="rl-detail-title"></h2><span class="spacer"></span><button class="btn small" id="rl-close" type="button">Sluiten</button></div>
