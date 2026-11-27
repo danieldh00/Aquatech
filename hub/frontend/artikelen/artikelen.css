@@ -223,3 +223,7 @@ body.has-nav .tabs[role="tablist"] { display: none; }
 .pager-size { display: flex; align-items: center; gap: 8px; }
 .pager-nav { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 @media (max-width: 600px) { .pager-nav { margin-left: 0; width: 100%; justify-content: space-between; } }
+
+/* Merken & soorten: het resultaat van het codevoorstel. */
+.cp-result { font-weight: 600; margin: 0; }
+.cp-result.bad { color: var(--at-danger); }

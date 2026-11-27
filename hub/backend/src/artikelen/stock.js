@@ -591,6 +591,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     costs.removeItem(tenantId, row.id);
     prepare('DELETE FROM item_suppliers WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
     prepare('DELETE FROM item_packagings WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
+    prepare('DELETE FROM item_aliases WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
     prepare('DELETE FROM purchase_proposal_dismissals WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
     prepare('DELETE FROM item_text_drafts WHERE tenant_id = ? AND item_id = ?').run(tenantId, row.id);
     prepare('DELETE FROM stock_items WHERE tenant_id = ? AND id = ?').run(tenantId, row.id);

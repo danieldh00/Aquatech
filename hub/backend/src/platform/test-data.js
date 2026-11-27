@@ -605,14 +605,14 @@ function sitePhotoPng(kind = 'oplevering', seed = 1, imageWidth = 480, imageHeig
  * @returns {object} Aantallen per soort aangemaakte gegevens.
  */
 function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
-  const { db, quotes, quoteOrders, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, stockCounts, suppliers, packagings, purchaseOrders, itemImages, requests, invoices, sprinklers, seasonReminders, paymentReminders, related } = stores;
+  const { db, quotes, quoteOrders, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, stockCounts, suppliers, codeGroups, packagings, purchaseOrders, itemImages, requests, invoices, sprinklers, seasonReminders, paymentReminders, related } = stores;
   /**
    * Bereidt een SQL-opdracht voor.
    * @param {string} sql De SQL.
    * @returns {object} De voorbereide opdracht.
    */
   const prepare = (sql) => db.prepare(sql);
-  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, hours: 0, materialUsage: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0, stockItems: 0, stockMovements: 0, stockReservations: 0, stockCounts: 0, suppliers: 0, purchaseOrders: 0, requests: 0, requestWorkOrders: 0, invoices: 0, debtors: 0, sprinklerParts: 0, seasonReminders: 0, businessCustomers: 0, convertedQuotes: 0 };
+  const counts = { links: 0, responses: 0, workOrders: 0, appointmentLinks: 0, appointments: 0, photos: 0, hours: 0, materialUsage: 0, products: 0, offers: 0, news: 0, aiRequests: 0, recognitions: 0, stockItems: 0, stockMovements: 0, stockReservations: 0, stockCounts: 0, suppliers: 0, codeGroups: 0, purchaseOrders: 0, requests: 0, requestWorkOrders: 0, invoices: 0, debtors: 0, sprinklerParts: 0, seasonReminders: 0, businessCustomers: 0, convertedQuotes: 0 };
   const seededWos = [];
   // Bewaking: één open waarschuwing en één opgelost incident, zodat het scherm in de testomgeving iets laat zien.
   const incidentTime = new Date().toISOString();
@@ -897,6 +897,14 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
         suppliers.setForItem(tenantId, item.id, lines);
       });
       counts.suppliers = suppliers.list(tenantId).length;
+      // Sprekende artikelcodes: een merk met een soort, een soort zonder merk en een oud nummer als zoeknaam.
+      if (codeGroups) {
+        const brand = codeGroups.createMain(tenantId, { code: 'UD', name: 'Unidelta' }).group;
+        codeGroups.createSub(tenantId, { mainGroupId: brand.id, code: 'KBI', name: 'Koppeling met buitendraad' });
+        codeGroups.createSub(tenantId, { code: 'KBI', name: 'Koppeling met buitendraad (zonder merk)' });
+        if (items[0]) codeGroups.setAliases(tenantId, items[0].id, [{ alias: `OUD-${items[0].code}`, kind: 'oud' }]);
+        counts.codeGroups = 3;
+      }
       // Drie inkooporders: een concept, een bestelde en een deels ontvangen (de voorraad gaat daarbij omhoog).
       if (purchaseOrders && items.length >= 4) {
         /**
