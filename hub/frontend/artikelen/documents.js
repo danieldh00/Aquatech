@@ -44,10 +44,11 @@
         <td class="num"><button class="btn small danger" type="button" data-drop="${esc(document_.id)}" ${archived ? 'disabled' : ''}>Weghalen</button></td></tr>`).join('')}</tbody>`
       : '<tbody><tr><td class="muted">Nog geen PDF bij dit artikel.</td></tr></tbody>';
     $('#d-doc-add').hidden = archived || state.documents.length >= 5;
+    $('#d-doc-specs').hidden = archived || !state.documents.length;
   }
 
   /**
-   * Laadt de PDF's van een artikel en toont het blok (niet bij een artikelgroep).
+   * Laadt de PDF's van een artikel en toont het blok (niet bij een subartikel: die toont de PDF's van zijn artikelgroep).
    * @param {object} item Het artikel.
    * @returns {Promise<void>}
    */
@@ -57,8 +58,8 @@
     state.documents = [];
     $('#d-doc-table').innerHTML = '';
     $('.err', section).textContent = '';
-    section.hidden = Boolean(item.isGroup);
-    if (item.isGroup) return;
+    section.hidden = Boolean(item.articleGroup);
+    if (item.articleGroup) return;
     let result;
     try {
       result = await call(`stock/items/${encodeURIComponent(item.id)}/documents`);
@@ -93,7 +94,7 @@
 
   /**
    * Koppelt de knoppen.
-   * @param {{ toast: Function, esc: Function }} options Hulpfuncties van de pagina.
+   * @param {{ toast: Function, esc: Function, reload: Function }} options Hulpfuncties van de pagina (reload = het artikel opnieuw openen).
    */
   function setup(options) {
     Object.assign(context, options);
@@ -126,6 +127,22 @@
         errorBox.textContent = error.message;
       }
       if (state.item) await showItem(state.item);
+    };
+    /** Laat de AI de PDF's lezen en zet de kenmerken als specificaties bij het artikel. */
+    $('#d-doc-specs').onclick = async () => {
+      const errorBox = $('#d-documents .err');
+      const button = $('#d-doc-specs');
+      errorBox.textContent = '';
+      button.disabled = true;
+      try {
+        const result = await call(`stock/items/${encodeURIComponent(state.item.id)}/documents/specs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        context.toast(result.status === 'gevonden' ? `${result.features} kenmerken gelezen, ${result.added} nieuw bij de specificaties gezet` : 'Geen bruikbare kenmerken in de PDF gevonden');
+        if (result.added > 0) await context.reload(state.item.id);
+      } catch (error) {
+        errorBox.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
     };
     $('#d-doc-table').addEventListener('change', act);
     $('#d-doc-table').addEventListener('click', act);

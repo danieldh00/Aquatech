@@ -845,10 +845,13 @@
       </section>
       <section class="card-form" id="d-documents" hidden>
         <h3>PDF's van de leverancier</h3>
-        <p class="muted small">Productinformatie als PDF (hoogstens 5 per artikel, 10 MB per bestand). Een PDF met "Downloaden" aan staat als download op de productpagina in de webshop.</p>
+        <p class="muted small">Productinformatie als PDF (hoogstens 5 per artikel, 10 MB per bestand). Een PDF met "Downloaden" aan staat als download op de productpagina in de webshop. De AI kan de PDF's lezen en de technische kenmerken als specificaties bij het artikel zetten; eigen specificaties blijven staan.</p>
         <div class="tablewrap"><table class="grid" id="d-doc-table"></table></div>
         <div class="row actions" id="d-doc-add">
           <label>PDF toevoegen<input type="file" id="d-doc-file" accept="application/pdf"></label>
+        </div>
+        <div class="row actions">
+          <button class="btn" type="button" id="d-doc-specs" hidden>Specificaties uit PDF lezen</button>
         </div>
         <div class="err" role="alert"></div>
       </section>

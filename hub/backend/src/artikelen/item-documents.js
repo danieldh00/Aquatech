@@ -28,7 +28,7 @@ function cleanName(name) {
  * Maakt de opslag voor PDF's bij artikelen.
  * @param {object} db De database.
  * @param {{ vault: object }} options vault = de kluis (sealBytes/openBytes).
- * @returns {{ add: Function, seed: Function, list: Function, file: Function, setPublic: Function, remove: Function }} De functies.
+ * @returns {{ add: Function, seed: Function, list: Function, file: Function, bodies: Function, setPublic: Function, remove: Function }} De functies.
  */
 function createItemDocumentStore(db, { vault }) {
   /**
@@ -119,6 +119,26 @@ function createItemDocumentStore(db, { vault }) {
   }
 
   /**
+   * De inhoud van alle PDF's van een artikel (voor het lezen door de AI), met unieke bestandsnamen.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string} itemId Id van het artikel.
+   * @returns {{ id: string, name: string, body: Buffer }[]} De PDF's; een PDF die niet te lezen is wordt overgeslagen.
+   */
+  function bodies(tenantId, itemId) {
+    const used = new Set();
+    const out = [];
+    for (const entry of list(tenantId, itemId)) {
+      const found = file(tenantId, entry.id);
+      if (!found) continue;
+      let name = found.name;
+      for (let number = 2; used.has(name); number += 1) name = found.name.replace(/\.pdf$/i, ` (${number}).pdf`);
+      used.add(name);
+      out.push({ id: entry.id, name, body: found.body });
+    }
+    return out;
+  }
+
+  /**
    * Zet een PDF wel of niet op de productpagina.
    * @param {string} tenantId Id van de omgeving.
    * @param {string} documentId Id van het document.
@@ -143,7 +163,7 @@ function createItemDocumentStore(db, { vault }) {
     return Number(result.changes) > 0;
   }
 
-  return { add, seed, list, file, setPublic, remove };
+  return { add, seed, list, file, bodies, setPublic, remove };
 }
 
 /**
