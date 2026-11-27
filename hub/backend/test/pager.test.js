@@ -49,3 +49,24 @@ test('shownIds: "alles selecteren" raakt alleen de rijen op de huidige pagina', 
   const table = { querySelectorAll: () => [makeRow('a', false), makeRow('b', false), makeRow('c', true), makeRow('d', true)] };
   assert.deepStrictEqual(Pager.shownIds(table), ['a', 'b']);
 });
+
+test('sortOrder: getallen en datums op waarde, tekst Nederlands, lege cellen altijd laatst', () => {
+  assert.deepStrictEqual(Pager.sortOrder(['€ 1.234,50', '€ 99,00', '–', '€ 100,00'], 1), [1, 3, 0, 2], 'bedragen oplopend, leeg laatst');
+  assert.deepStrictEqual(Pager.sortOrder(['€ 1.234,50', '€ 99,00', '–', '€ 100,00'], -1), [0, 3, 1, 2], 'aflopend houdt leeg laatst');
+  assert.deepStrictEqual(Pager.sortOrder(['10', '9', '2'], 1), [2, 1, 0], '10 komt na 9');
+  assert.deepStrictEqual(Pager.sortOrder(['27-11-2026', '3-1-2027', '01-12-2025'], 1), [2, 0, 1], 'datums dd-mm-jjjj');
+  assert.deepStrictEqual(Pager.sortOrder(['27 nov. 2026, 10:15', '27 nov. 2026, 09:00', '2 jan. 2026'], 1), [2, 1, 0], 'datums met Nederlandse maand');
+  assert.deepStrictEqual(Pager.sortOrder(['Zand', 'appel', 'Äpfel', 'b10', 'b9'], 1).map((index) => ['Zand', 'appel', 'Äpfel', 'b10', 'b9'][index]), ['Äpfel', 'appel', 'b9', 'b10', 'Zand'], 'tekst zonder hoofdlettergevoel, getallen in de tekst op waarde');
+  assert.deepStrictEqual(Pager.sortOrder(['b', 'a', 'a'], 1), [1, 2, 0], 'gelijke waarden houden hun volgorde');
+  assert.deepStrictEqual(Pager.sortOrder(['12', 'abc', '3'], 1).map((index) => ['12', 'abc', '3'][index]), ['3', '12', 'abc'], 'gemengd: als tekst met getallen op waarde');
+});
+
+test('parseNumber en parseDate: herkennen alleen echte getallen en datums', () => {
+  assert.strictEqual(Pager.parseNumber('€ 1.234,56'), 1234.56);
+  assert.strictEqual(Pager.parseNumber('-12,5 m'), -12.5);
+  assert.strictEqual(Pager.parseNumber('45%'), 45);
+  assert.strictEqual(Pager.parseNumber('12 van 30 opgeleverd'), null);
+  assert.strictEqual(Pager.parseNumber('UD.KBI.20.12'), null);
+  assert.strictEqual(Pager.parseDate('2026-11-27'), Date.UTC(2026, 10, 27));
+  assert.strictEqual(Pager.parseDate('nu'), null);
+});
