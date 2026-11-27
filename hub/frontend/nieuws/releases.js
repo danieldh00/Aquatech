@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.46.7',
+      date: '2026-11-27',
+      title: 'Bestaande artikelen omzetten naar sprekende codes',
+      items: [
+        { text: 'Onder Artikelen > Beheer staat Bestaande omzetten: elk bestaand artikel krijgt een voorstel voor soort, diameter, draadmaat en nieuwe code. Je past aan wat niet klopt, vinkt aan en zet om. De oude code blijft als zoeknaam bestaan, en de lijst is als Excel te bewaren.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.46.6',
       date: '2026-11-27',
       title: 'Orderhistorie uit WordPress naar Import en export',

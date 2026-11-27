@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.46.7
+
+- `artikelen/code-conversion.js`: `GET /api/stock/code-conversion` (voorstel per artikel zonder soort: soort uit woorden in de naam, diameter en draadmaat uit naam en subartikelwaarden, controle op bezette en dubbele codes) en `POST /api/stock/code-conversion/apply` (hoogstens 1000 regels; wat klopt gaat in één transactie, de rest komt terug met de reden; de oude code wordt een oud nummer). Recht `voorraad`, audit `artikelcodes_omgezet`.
+- `stock.findCode` valt terug op een oud nummer (soort `oud`), zodat verwijzingen naar een oude code het omgezette artikel blijven vinden.
+- Frontend: tabblad `convert` in Artikelen met zijbalkregel `artikelen-omzetten`.
+
 ## 1.46.6
 
 - Het blok `#rl-wp` is van het tabblad Past bij naar het tabblad Import verhuisd; `ArtikelenRelated.loadWp` laadt het bij het openen van dat tabblad.
