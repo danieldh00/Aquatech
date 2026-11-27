@@ -133,6 +133,15 @@
     };
   }
 
+  /**
+   * Geeft de id's (`data-id`) van de rijen die nu op de pagina staan; voor "alles selecteren", dat alleen de zichtbare rijen mag raken.
+   * @param {Element} table De tabel.
+   * @returns {string[]} De id's van de rijen buiten de verborgen pagina's.
+   */
+  function shownIds(table) {
+    return Array.from(table.querySelectorAll(':scope > tbody > tr[data-id]')).filter((row) => !row.classList.contains('pager-off') && !row.hidden).map((row) => row.getAttribute('data-id'));
+  }
+
   /** Het aantal rijen waarboven de balken verschijnen bij automatische paginering. */
   const AUTO_MIN_ROWS = 25;
 
@@ -254,7 +263,7 @@
     new root.MutationObserver(onMutations).observe(root.document.body, { childList: true, subtree: true });
   }
 
-  const api = { PAGE_SIZES, PAGE_SIZE_KEY, storedSize, windowOf, groupRows, attach };
+  const api = { PAGE_SIZES, PAGE_SIZE_KEY, storedSize, windowOf, groupRows, attach, shownIds };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (root.document) {
     root.AquatechPager = api;

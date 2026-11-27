@@ -37,3 +37,9 @@ test('elke pagina met een lijst laadt pager.js en pager.css', () => {
     assert.ok(html.includes('../shared/pager.css'), `${name}: laadt shared/pager.css niet`);
   }
 });
+
+test('shownIds: "alles selecteren" raakt alleen de rijen op de huidige pagina', () => {
+  const makeRow = (id, off) => ({ hidden: false, classList: { contains: (name) => name === 'pager-off' && off }, getAttribute: () => id });
+  const table = { querySelectorAll: () => [makeRow('a', false), makeRow('b', false), makeRow('c', true), makeRow('d', true)] };
+  assert.deepStrictEqual(Pager.shownIds(table), ['a', 'b']);
+});
