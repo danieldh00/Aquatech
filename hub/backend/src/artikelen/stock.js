@@ -100,7 +100,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    */
   const dirty = (tenantId) => { if (dirtyHook) dirtyHook(tenantId); };
   const SALE_COLS = 'stock_managed, sale_price, business_price, vat_rate, revenue_group, weight_grams, shop_sync, shop_product_id, shop_dirty, shop_synced_at, shop_error, order_pack_size, order_min_qty, price_tiers, unit_content, ean, price_mode, price_factor';
-  const GROUP_COLS = 'group_id, is_group, attributes, sub_values, image_id';
+  const GROUP_COLS = 'group_id, is_group, attributes, sub_values, image_id, main_group_id, sub_group_id';
   const ITEM_COLS = `id, code, name, unit, location, min_qty, reorder_qty, on_hand, cost_price, notes, archived, created_at, updated_at, ${SALE_COLS}, ${GROUP_COLS}`;
   const MOVE_COLS = 'm.id, m.item_id, m.kind, m.qty, m.balance, m.work_order_id, m.work_order_number, m.source, m.note, m.user_name, m.created_at';
 
@@ -130,7 +130,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       stockManaged: itemRow.stock_managed === undefined ? true : Boolean(Number(itemRow.stock_managed)),
       shopSync: itemRow.shop_sync === undefined ? true : Boolean(Number(itemRow.shop_sync)),
       shop: { productId: itemRow.shop_product_id || null, pending: Boolean(Number(itemRow.shop_dirty)), syncedAt: itemRow.shop_synced_at || null, error: itemRow.shop_error || '' },
-      groupId: itemRow.group_id || null, imageId: itemRow.image_id || null, isGroup: Boolean(Number(itemRow.is_group)),
+      groupId: itemRow.group_id || null, mainGroupId: itemRow.main_group_id || null, subGroupId: itemRow.sub_group_id || null, imageId: itemRow.image_id || null, isGroup: Boolean(Number(itemRow.is_group)),
       attributes: Number(itemRow.is_group) ? parseJson(itemRow.attributes, []) : [],
       values: itemRow.group_id ? parseJson(itemRow.sub_values, {}) : null,
       createdAt: itemRow.created_at, updatedAt: itemRow.updated_at,
@@ -206,7 +206,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     if (family) { where += ' AND i.group_id = ?'; args.push(family); }
     return prepare(`SELECT i.id, i.code, i.name, i.unit, i.location, i.min_qty, i.reorder_qty, i.on_hand, i.cost_price, i.notes, i.archived, i.created_at, i.updated_at,
         i.sale_price, i.business_price, i.vat_rate, i.revenue_group, i.weight_grams, i.shop_sync, i.shop_product_id, i.shop_dirty, i.shop_synced_at, i.shop_error,
-        i.order_pack_size, i.order_min_qty, i.price_tiers, i.unit_content, i.ean, i.price_mode, i.price_factor, i.group_id, i.is_group, i.attributes, i.sub_values, i.image_id,
+        i.order_pack_size, i.order_min_qty, i.price_tiers, i.unit_content, i.ean, i.price_mode, i.price_factor, i.group_id, i.is_group, i.attributes, i.sub_values, i.image_id, i.main_group_id, i.sub_group_id,
         COALESCE(r.qty, 0) AS reserved, COALESCE(r.orders, 0) AS orders, COALESCE(f.orders, 0) AS family_orders
       FROM stock_items i
       LEFT JOIN (SELECT item_id, SUM(qty) AS qty, COUNT(*) AS orders FROM stock_reservations WHERE tenant_id = ?${reservedFilter} GROUP BY item_id) r ON r.item_id = i.id
@@ -401,6 +401,33 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
   }
 
   /**
+   * Controleert of een code al als oud nummer (zoeknaam) van een ander artikel bestaat: één scan mag nooit naar twee artikelen wijzen.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {string|null} itemId Het artikel dat de code krijgt (null bij een nieuw artikel).
+   * @param {string} code De nieuwe artikelcode.
+   * @returns {object|null} { error, field, status } als de code een oud nummer van een ander artikel is, anders null.
+   */
+  function aliasTaken(tenantId, itemId, code) {
+    const row = prepare('SELECT item_id FROM item_aliases WHERE tenant_id = ? AND LOWER(alias) = LOWER(?)').get(tenantId, code);
+    if (!row || (itemId && row.item_id === itemId)) return null;
+    return { error: 'Deze code is al een oud nummer van een ander artikel.', field: 'code', status: 409 };
+  }
+
+  /**
+   * Zoekt de soort (en daarmee het merk) voor een artikel op, binnen de omgeving.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {*} subGroupId Het gekozen soort-id (leeg = geen soort).
+   * @returns {{ subGroupId: string|null, mainGroupId: string|null }|{ error: string, field: string, status: number }} Het soort- en merk-id, of een fout.
+   */
+  function groupsOf(tenantId, subGroupId) {
+    if (!subGroupId) return { subGroupId: null, mainGroupId: null };
+    const row = prepare('SELECT id, main_group_id, archived FROM sub_groups WHERE tenant_id = ? AND id = ?').get(tenantId, String(subGroupId));
+    if (!row) return { error: 'Deze soort bestaat niet.', field: 'subGroupId', status: 404 };
+    if (row.archived) return { error: 'Deze soort is gearchiveerd.', field: 'subGroupId', status: 409 };
+    return { subGroupId: row.id, mainGroupId: row.main_group_id || null };
+  }
+
+  /**
    * Nieuw voorraadartikel (met eventueel een beginvoorraad in raw.onHand).
    * @param {string} tenantId Id van de omgeving.
    * @param {object} user Wie het aanmaakt.
@@ -414,8 +441,12 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     const fields = checked.value;
     const out = withEanGuard(() => transaction(db, () => {
       if (findCode(tenantId, fields.code)) return { error: 'Er is al een voorraadartikel met deze code.', field: 'code', status: 409 };
+      const aliasProblem = aliasTaken(tenantId, null, fields.code);
+      if (aliasProblem) return aliasProblem;
       const eanProblem = eanTaken(tenantId, null, fields.ean);
       if (eanProblem) return eanProblem;
+      const groups = groupsOf(tenantId, raw && raw.subGroupId);
+      if (groups.error) return groups;
       rememberUnit(tenantId, fields.unit);
       const id = crypto.randomUUID();
       const timestamp = currentTimestamp();
@@ -426,6 +457,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
            sale_price, business_price, vat_rate, revenue_group, shop_sync, weight_grams, order_pack_size, order_min_qty, price_tiers, unit_content, ean, price_mode, price_factor)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(id, tenantId, fields.code, fields.name, fields.unit, fields.location, fields.minQty, fields.reorderQty, fields.costPrice, fields.notes, timestamp, timestamp, fields.salePrice, fields.businessPrice ?? null, fields.vatRate, fields.revenueGroup, fields.shopSync ? 1 : 0, fields.weightGrams ?? null, fields.packSize ?? 1, fields.orderMinQty ?? 1, JSON.stringify(fields.priceTiers || []), fields.unitContent ?? null, fields.ean || null, fields.priceMode || 'vast', fields.priceFactor ?? null);
+      if (groups.subGroupId) prepare('UPDATE stock_items SET main_group_id = ?, sub_group_id = ? WHERE tenant_id = ? AND id = ?').run(groups.mainGroupId, groups.subGroupId, tenantId, id);
       if (fields.description || fields.specifications.length || fields.seoTitle || fields.seoDescription || fields.brand || fields.deliveryRules.length || fields.leadDays) saveDetails(tenantId, id, fields);
       costs.noteFormPrice(tenantId, id, null, fields.costPrice, user);
       const start = Number(raw && raw.onHand);
@@ -454,11 +486,22 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       const existing = findItem(tenantId, id);
       if (!existing) return { error: 'not_found', status: 404 };
       if (fields.code && fields.code !== existing.code) {
+        // Een uitgegeven sprekende code (artikel met een soort) verandert nooit meer.
+        if (existing.sub_group_id) return { error: 'De code van een artikel met een merk en soort is uitgegeven en verandert niet meer.', field: 'code', status: 409 };
+        const aliasProblem = aliasTaken(tenantId, existing.id, fields.code);
+        if (aliasProblem) return aliasProblem;
         // De code is de koppeling met werkorders en verbruik: alleen zolang er niets op geboekt is.
         if (findCode(tenantId, fields.code)) return { error: 'Er is al een voorraadartikel met deze code.', field: 'code', status: 409 };
         const used = prepare('SELECT EXISTS (SELECT 1 FROM stock_movements WHERE tenant_id = ? AND item_id = ? AND work_order_id IS NOT NULL) OR EXISTS (SELECT 1 FROM stock_reservations WHERE tenant_id = ? AND item_id = ?) AS n')
           .get(tenantId, existing.id, tenantId, existing.id).n;
         if (used) return { error: 'De code van een artikel dat al op werkorders is gereserveerd of afgeboekt, kan niet meer veranderen.', field: 'code', status: 409 };
+      }
+      // Een soort kiezen kan alleen als het artikel er nog geen heeft (en dan wordt de code vast); daarna niet meer wisselen.
+      let groups = null;
+      if (raw && raw.subGroupId !== undefined && (raw.subGroupId || null) !== (existing.sub_group_id || null)) {
+        if (existing.sub_group_id) return { error: 'De soort van een artikel met een uitgegeven code verandert niet meer.', field: 'subGroupId', status: 409 };
+        groups = groupsOf(tenantId, raw.subGroupId);
+        if (groups.error) return groups;
       }
       const merged = {
         code: existing.code, name: existing.name, unit: existing.unit, location: existing.location, minQty: existing.min_qty, reorderQty: existing.reorder_qty, costPrice: existing.cost_price, notes: existing.notes,
@@ -515,6 +558,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         .run(merged.code, merged.name, merged.unit, merged.location, merged.minQty, merged.reorderQty ?? null, merged.costPrice, merged.notes, archived, currentTimestamp(), merged.salePrice, merged.businessPrice, merged.vatRate, merged.revenueGroup, merged.shopSync ? 1 : 0, merged.weightGrams,
           merged.packSize, mergedTerms.orderMinQty, JSON.stringify(merged.priceTiers), merged.unitContent ?? null, ean, merged.priceMode, merged.priceFactor ?? null,
           toShop && merged.shopSync ? 1 : 0, tenantId, existing.id);
+      if (groups && groups.subGroupId) prepare('UPDATE stock_items SET main_group_id = ?, sub_group_id = ? WHERE tenant_id = ? AND id = ?').run(groups.mainGroupId, groups.subGroupId, tenantId, existing.id);
       if (['description', 'specifications', 'seoTitle', 'seoDescription', 'brand', 'deliveryRules', 'leadDays'].some((key) => fields[key] !== undefined)) saveDetails(tenantId, existing.id, fields);
       // Een andere inkoopprijs komt als nieuwe regel in de historie (de oude blijft staan).
       costs.noteFormPrice(tenantId, existing.id, existing.cost_price, merged.costPrice, user);

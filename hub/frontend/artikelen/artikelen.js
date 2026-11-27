@@ -243,7 +243,7 @@
   function visible() {
     const term = $('#f-search').value.trim().toLowerCase();
     const low = $('#f-low').checked;
-    return state.items.filter((item) => (!low || item.low) && (!term || `${item.code} ${item.name} ${item.location}`.toLowerCase().includes(term)));
+    return state.items.filter((item) => (!low || item.low) && (!term || `${item.code} ${item.name} ${item.location} ${(item.aliases || []).join(' ')}`.toLowerCase().includes(term)));
   }
 
   /**
@@ -260,7 +260,7 @@
      * @param {object} item het artikel
      * @returns {boolean} true als het in beeld moet
      */
-    const matches = (item) => (!low || item.low) && (!term || `${item.code} ${item.name} ${item.location}`.toLowerCase().includes(term));
+    const matches = (item) => (!low || item.low) && (!term || `${item.code} ${item.name} ${item.location} ${(item.aliases || []).join(' ')}`.toLowerCase().includes(term));
     const groupIds = new Set(state.items.filter((item) => item.isGroup).map((item) => item.id));
     const subItemsOf = new Map();
     for (const item of state.items) {
@@ -667,6 +667,9 @@
     const formElement = $('#edit-form');
     fillUnits(item.unit);
     for (const key of ['code', 'name', 'unit', 'location', 'notes']) formElement[key].value = item[key] || '';
+    // Een uitgegeven sprekende code (artikel met een soort) verandert nooit meer.
+    formElement.code.readOnly = Boolean(item.subGroupId);
+    formElement.code.title = item.subGroupId ? 'Deze code is uitgegeven en verandert niet meer.' : '';
     formElement.minQty.value = item.minQty || '';
     formElement.reorderQty.value = item.reorderQty == null ? '' : item.reorderQty;
     formElement.costPrice.value = item.costPrice == null ? '' : item.costPrice;

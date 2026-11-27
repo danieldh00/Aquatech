@@ -123,3 +123,52 @@ test('oude nummers: vervangen, uniek per omgeving, rechten en andere organisatie
     server.close();
   }
 });
+
+test('artikel met soort: code wordt vast, soort kiezen en oude nummers als code geweigerd', async () => {
+  const { server, as } = await setup();
+  try {
+    const kees = await as('kees');
+    const brand = (await kees.post('/app/api/stock/main-groups', { code: 'UD', name: 'Unidelta' })).body;
+    const kind = (await kees.post('/app/api/stock/sub-groups', { mainGroupId: brand.id, code: 'KBI', name: 'Koppeling buitendraad' })).body;
+    const created = await kees.post('/app/api/stock/items', { code: 'UD.KBI.20.34', name: 'KBI 20 x 3/4"', subGroupId: kind.id });
+    assert.strictEqual(created.status, 201, JSON.stringify(created.body));
+    const item = created.body.item || created.body;
+    assert.strictEqual(item.subGroupId, kind.id);
+    assert.strictEqual(item.mainGroupId, brand.id);
+    // De uitgegeven code verandert nooit meer, de soort ook niet.
+    const rename = await kees.put(`/app/api/stock/items/${item.id}`, { code: 'UD.KBI.20.12' });
+    assert.strictEqual(rename.status, 409);
+    assert.strictEqual(rename.body.field, 'code');
+    assert.strictEqual((await kees.put(`/app/api/stock/items/${item.id}`, { subGroupId: null })).status, 409);
+    assert.strictEqual((await kees.put(`/app/api/stock/items/${item.id}`, { name: 'Nieuwe naam' })).status, 200);
+    // Een soort met artikelen houdt zijn code en wordt gearchiveerd.
+    const removed = await kees.del(`/app/api/stock/sub-groups/${kind.id}`);
+    assert.strictEqual(removed.body.archived, true);
+    assert.strictEqual((await kees.post('/app/api/stock/items', { code: 'UD.KBI.25', name: 'x', subGroupId: kind.id })).status, 409);
+    // Een code die al een oud nummer van een ander artikel is, kan niet.
+    const other = (await kees.post('/app/api/stock/items', { code: 'LOS-1', name: 'Los artikel' })).body;
+    const otherItem = other.item || other;
+    assert.strictEqual((await kees.put(`/app/api/stock/items/${otherItem.id}/aliases`, { aliases: ['OUD-77'] })).status, 200);
+    assert.strictEqual((await kees.post('/app/api/stock/items', { code: 'oud-77', name: 'Dubbel' })).status, 409);
+    assert.strictEqual((await kees.put(`/app/api/stock/items/${item.id}`, { code: 'OUD-77' })).status, 409);
+    const free = (await kees.post('/app/api/stock/items', { code: 'LOS-2', name: 'Tweede' })).body;
+    assert.strictEqual((await kees.put(`/app/api/stock/items/${(free.item || free).id}`, { code: 'OUD-77' })).status, 409);
+    assert.strictEqual((await kees.post('/app/api/stock/items', { code: 'X1', name: 'x', subGroupId: 'bestaat-niet' })).status, 404);
+  } finally {
+    server.close();
+  }
+});
+
+test('artikellijst: oude nummers komen mee om op te zoeken', async () => {
+  const { server, as } = await setup();
+  try {
+    const kees = await as('kees');
+    const made = (await kees.post('/app/api/stock/items', { code: 'LIJST-1', name: 'Lijstartikel' })).body;
+    const item = made.item || made;
+    assert.strictEqual((await kees.put(`/app/api/stock/items/${item.id}/aliases`, { aliases: ['OUD-1', { alias: '8712345678906', kind: 'ean' }] })).status, 200);
+    const list = (await kees.get('/app/api/stock')).body.items;
+    assert.deepStrictEqual(list.find((row) => row.id === item.id).aliases.sort(), ['8712345678906', 'OUD-1']);
+  } finally {
+    server.close();
+  }
+});

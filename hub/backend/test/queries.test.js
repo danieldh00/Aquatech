@@ -154,8 +154,9 @@ test('queries: sessie in één query, opslaan zonder het plan terug te lezen, ov
     assert.strictEqual((await client.post('/app/api/stock/import', { codes: ['PE-25', 'PE-32', 'FIT-T-25', 'VAL-24V', 'BOX-STD'] })).status, 200);
     probe.reset();
     const stock = (await client.get('/app/api/stock')).body.items;
+    // De lijst telt drie queries: artikelen, reserveringen en de oude nummers (één query voor alle artikelen).
     assert.strictEqual(stock.length, 5);
-    assert.strictEqual(probe.stats.queries, 2, probe.stats.sql.join('\n'));
+    assert.strictEqual(probe.stats.queries, 3, probe.stats.sql.join('\n'));
     probe.reset();
     assert.strictEqual((await client.get(`/app/api/stock/items/${stock[0].id}`)).status, 200);
     assert.strictEqual(probe.stats.queries, 5, probe.stats.sql.join('\n'));
