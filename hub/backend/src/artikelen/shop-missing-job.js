@@ -86,7 +86,7 @@ function createShopMissingJob({ syncShop, log = console }) {
           state.restored = out.restored || 0;
           state.restoredItems = (out.restoredItems || []).slice(0, MAX_LISTED);
           state.phase = 'klaar';
-          state.message = `Klaar: ${state.created} artikel${state.created === 1 ? '' : 'en'} toegevoegd${state.restored ? `, ${state.restored} gearchiveerde teruggezet` : ''}${state.skipped ? `, ${state.skipped} overgeslagen (reden per artikel in de Excel)` : ''}.`;
+          state.message = `Klaar: ${state.created} artikel${state.created === 1 ? '' : 'en'} toegevoegd${state.restored ? `, ${state.restored} teruggezet of gekoppeld` : ''}${state.skipped ? `, ${state.skipped} overgeslagen (reden per artikel in de Excel)` : ''}.`;
         }
       } catch (error) {
         log.warn(`Ontbrekende webshopproducten toevoegen mislukt: ${error && error.stack ? error.stack : error}`);
