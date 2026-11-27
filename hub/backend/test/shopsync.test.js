@@ -361,6 +361,38 @@ test('webshop: een gearchiveerd los artikel met de code van een webshopproduct w
   assert.strictEqual(Number(row.sale_price), 5, 'de prijs blijft zoals hij was');
 });
 
+test('webshop: gearchiveerde en losse subartikelen met de code van een webshopproduct worden teruggezet en gekoppeld zonder naar de webshop te schrijven', () => {
+  const { tid, stock, db } = setup(new Map(), { url: 'http://shop.test', mode: 'rest', mirror: false });
+  const user = { id: null, display_name: 'Test' };
+  const articleGroup = stock.create(tid, user, { code: 'BRONKOP', name: 'Bronkop', salePrice: 5 }).item;
+  const hidden = stock.create(tid, user, { code: '110-12', name: 'Bronkop 110', salePrice: 5 }).item;
+  const visible = stock.create(tid, user, { code: '110-14', name: 'Bronkop 110 b', salePrice: 5 }).item;
+  const linkedElsewhere = stock.create(tid, user, { code: '110-16', name: 'Bronkop 110 c', salePrice: 5 }).item;
+  db.prepare('UPDATE stock_items SET is_group = 1, archived = 1 WHERE tenant_id = ? AND id = ?').run(tid, articleGroup.id);
+  for (const item of [hidden, visible, linkedElsewhere]) db.prepare('UPDATE stock_items SET group_id = ?, shop_sync = 1 WHERE tenant_id = ? AND id = ?').run(articleGroup.id, tid, item.id);
+  db.prepare('UPDATE stock_items SET archived = 1, archived_by_parent = 1 WHERE tenant_id = ? AND id = ?').run(tid, hidden.id);
+  db.prepare('UPDATE stock_items SET shop_product_id = ? WHERE tenant_id = ? AND id = ?').run('9001', tid, linkedElsewhere.id);
+  const products = [
+    { id: '6845', type: 'simple', sku: '110-12', code: '', name: 'Bronkop 110 mm', price: 6, attributes: [], parentId: null },
+    { id: '6846', type: 'simple', sku: '110-14', code: '', name: 'Bronkop 110 b', price: 6, attributes: [], parentId: null },
+    { id: '9001', type: 'simple', sku: 'ANDERS', code: '', name: 'Ander product', price: 6, attributes: [], parentId: null },
+    { id: '6848', type: 'simple', sku: '110-16', code: '', name: 'Bronkop 110 c', price: 6, attributes: [], parentId: null },
+  ];
+  const out = stock.addMissingShop(tid, products, () => null, { vatRate: 21, priceOf: (item) => item.price });
+  assert.strictEqual(out.restored, 2);
+  /**
+   * Leest de koppelingsvelden van een artikel.
+   * @param {string} id Id van het artikel.
+   * @returns {object} De rij.
+   */
+  const row = (id) => db.prepare('SELECT archived, archived_by_parent, shop_product_id, shop_sync FROM stock_items WHERE tenant_id = ? AND id = ?').get(tid, id);
+  assert.deepStrictEqual([Number(row(hidden.id).archived), Number(row(hidden.id).archived_by_parent), String(row(hidden.id).shop_product_id), Number(row(hidden.id).shop_sync)], [0, 0, '6845', 0]);
+  assert.deepStrictEqual([String(row(visible.id).shop_product_id), Number(row(visible.id).shop_sync)], ['6846', 0], 'een zichtbaar subartikel wordt alleen gekoppeld');
+  assert.strictEqual(Number(db.prepare('SELECT archived FROM stock_items WHERE tenant_id = ? AND id = ?').get(tid, articleGroup.id).archived), 0, 'de artikelgroep gaat mee terug');
+  assert.strictEqual(String(row(linkedElsewhere.id).shop_product_id), '9001', 'een artikel dat al aan een ander product hangt blijft zoals het was');
+  assert.ok(out.skippedList.some((entry) => entry.productId === '6848'));
+});
+
 test('webshop: een nieuwe variatie bij een bestaand variabel artikel krijgt de naam hoofdnaam + waarde', () => {
   const { tid, stock, db } = setup(new Map(), { url: 'http://shop.test', mode: 'rest', mirror: false });
   const user = { id: null, display_name: 'Test' };
