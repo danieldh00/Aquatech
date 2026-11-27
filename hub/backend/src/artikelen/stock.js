@@ -43,6 +43,8 @@
 //   afboeking gebruikt de oudste laag eerst; een nieuwe inkoopprijs komt in de
 //   historie en overschrijft de oude niet.
 const crypto = require('crypto');
+const path = require('path');
+const { FRONTEND_DIR } = require('../paths');
 const { transaction } = require('../database/db');
 const { loadArticles } = require('../webshop/shop');
 const { suggestGroups, MAX_GROUP_SIZE } = require('./group-suggestions');
@@ -51,6 +53,7 @@ const ItemDetails = require('./item-details');
 const { createStockCosts, parsePrice } = require('./stock-costs');
 const PriceFactor = require('./price-factor');
 const DeliveryRules = require('../webshop/delivery-rules');
+const ArticleCode = require(path.join(FRONTEND_DIR, 'shared', 'article-code.js'));
 const { MANUAL, OPEN, MAX_QTY, LIST_LIMIT, EXPORT_LIMIT, BATCH, currentTimestamp, round3, normalizeCode, shopCodeOf, cleanText, isDate, sumQty, DEFAULT_UNITS, parseJson, sanitizeAttributes, combinations, shopAttributesOf, mergeAttributes, valuesKey, codePart, subItemName, placeholders, sanitizeItem, needsOf } = require('./stock-helpers');
 const { registerStockRoutes } = require('./stock-routes');
 const { KINDS, GROUPS, VAT_RATES } = require('./stock-helpers');
@@ -998,12 +1001,15 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    */
   function articleChoices(tenantId) {
     const items = listRows(tenantId);
+    const aliasRows = prepare('SELECT item_id, alias FROM item_aliases WHERE tenant_id = ?').all(tenantId);
+    const aliasesOf = new Map();
+    for (const row of aliasRows) aliasesOf.set(row.item_id, [...(aliasesOf.get(row.item_id) || []), row.alias]);
     /**
      * De velden van een artikel die de keuzelijst nodig heeft.
      * @param {object} item Het artikel (shapeItem).
      * @returns {object} code, name, unit, salePrice, vatRate en available.
      */
-    const pick = (item) => ({ code: item.code, name: item.name, unit: item.unit, salePrice: item.salePrice, vatRate: item.vatRate, available: item.available });
+    const pick = (item) => ({ code: item.code, name: item.name, unit: item.unit, salePrice: item.salePrice, vatRate: item.vatRate, available: item.available, ...(aliasesOf.has(item.id) ? { aliases: aliasesOf.get(item.id) } : {}) });
     const articleGroups = new Map(items.filter((item) => item.isGroup).map((item) => [item.id, { ...pick(item), attributes: item.attributes, subItems: [] }]));
     const out = [];
     for (const item of items) {
@@ -1011,6 +1017,8 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       else if (item.groupId && articleGroups.has(item.groupId)) articleGroups.get(item.groupId).subItems.push({ ...pick(item), values: item.values });
       else out.push(pick(item));
     }
+    // Subartikelen van klein naar groot, gelezen uit de code (diameter, dan draadmaat).
+    for (const articleGroup of articleGroups.values()) articleGroup.subItems.sort((left, right) => ArticleCode.compareCodes(left.code, right.code));
     for (const articleGroup of articleGroups.values()) articleGroup.available = round3(articleGroup.subItems.reduce((sum, subItem) => sum + subItem.available, 0));
     return out;
   }
