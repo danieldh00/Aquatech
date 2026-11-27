@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.46.1',
+      date: '2026-11-27',
+      title: 'Artikelen: code laten voorstellen en oude nummers zoeken',
+      items: [
+        { text: 'Bij een nieuw artikel kies je een soort, diameter en draadmaat en het formulier stelt de code voor (bijvoorbeeld UD.KBI.20.34). Een uitgegeven code verandert niet meer.', for: ['voorraad'] },
+        { text: 'In de artikellijst zoek je ook op oude nummers.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.46.0',
       date: '2026-11-27',
       title: 'Merken en soorten voor sprekende artikelcodes',

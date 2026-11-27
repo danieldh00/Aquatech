@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.46.1
+
+- Artikel aanmaken en wijzigen: `subGroupId` zet merk en soort; een artikel met een soort houdt zijn code (409 bij wijzigen) en de soort wisselt niet meer.
+- Een nieuwe of gewijzigde artikelcode die al een oud nummer van een ander artikel is, wordt geweigerd (409).
+- `GET /api/stock` geeft per artikel de oude nummers (`aliases`) mee; de lijst zoekt erop.
+
 ## 1.46.0
 
 Migratie 104: tabellen `main_groups` (merken) en `sub_groups` (soorten, met of zonder merk), `stock_items.main_group_id`/`sub_group_id` en `item_aliases` (oude nummers en EAN als zoeknaam, uniek per omgeving). Nieuw `frontend/shared/article-code.js` (UMD: `buildCode`, `parseCode`, `threadCode` voor BSP-duimen als cijfers (½" = 12, ¾" = 34, 1¼" = 114), `compareCodes` voor de volgorde klein naar groot) en `backend/src/artikelen/code-groups.js` met routes `GET /api/stock/code-groups`, `POST|PATCH|DELETE /api/stock/main-groups|sub-groups`, `GET /api/stock/code-proposal` (voorstel + uniciteitscontrole; een artikelgroep krijgt MERK.SOORT, daarna een volgnummer) en `GET|PUT /api/stock/items/:id/aliases`. Een merk of soort waar artikelen aan hangen houdt zijn code en wordt gearchiveerd i.p.v. verwijderd. Nieuw tabblad Merken & soorten in Artikelen (zijbalk, Beheer) en testdata.
