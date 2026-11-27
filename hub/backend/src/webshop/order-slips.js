@@ -24,14 +24,15 @@ let runningInspections = 0;
  * Controleert een geüploade pakbon in een aparte werkthread met begrensd geheugen en een tijdslimiet (een PDF met gecomprimeerde
  * objectstromen kan veel groter uitpakken dan hij is, en pdf-lib leest synchroon: zo blijft de server er niet door hangen).
  * @param {Buffer} buffer De ontvangen bytes.
+ * @param {{ maxBytes?: number, maxPages?: number, label?: string }} [limits] Andere grenzen dan voor een pakbon (standaard 2 MB en 10 pagina's) en de naam van het document in meldingen.
  * Er lopen hoogstens MAX_PARALLEL_INSPECTIONS controles tegelijk; is het vol, dan komt er meteen een melding terug (busy) in plaats van nog een werkthread.
  * @returns {Promise<{ bytes?: Buffer, pages?: number, error?: string, busy?: boolean }>} De schone PDF en het aantal pagina's, of een melding in gewone taal (busy: het is nu te druk, later opnieuw).
  */
-function inspectSlip(buffer) {
+function inspectSlip(buffer, { maxBytes = MAX_SLIP_BYTES, maxPages = MAX_SLIP_PAGES, label = 'De pakbon' } = {}) {
   if (!Buffer.isBuffer(buffer) || buffer.length < 64) return Promise.resolve({ error: 'Het bestand is leeg.' });
-  if (buffer.length > MAX_SLIP_BYTES) return Promise.resolve({ error: `De pakbon is te groot (hoogstens ${MAX_SLIP_BYTES / 1024 / 1024} MB).` });
+  if (buffer.length > maxBytes) return Promise.resolve({ error: `${label} is te groot (hoogstens ${maxBytes / 1024 / 1024} MB).` });
   if (buffer.subarray(0, 5).toString('latin1') !== '%PDF-') return Promise.resolve({ error: 'Dit is geen PDF-bestand.' });
-  if (runningInspections >= MAX_PARALLEL_INSPECTIONS) return Promise.resolve({ busy: true, error: 'Er worden op dit moment al pakbonnen gecontroleerd. Probeer het over een paar tellen opnieuw.' });
+  if (runningInspections >= MAX_PARALLEL_INSPECTIONS) return Promise.resolve({ busy: true, error: 'Er worden op dit moment al PDF-bestanden gecontroleerd. Probeer het over een paar tellen opnieuw.' });
   runningInspections += 1;
   return new Promise((resolve) => {
     const unusable = { error: 'Deze PDF kan niet worden verwerkt.' };
@@ -51,7 +52,7 @@ function inspectSlip(buffer) {
     let worker;
     const timer = setTimeout(() => { if (worker) worker.terminate(); finish(unusable); }, WORKER_TIMEOUT_MS);
     try {
-      worker = new Worker(path.join(__dirname, 'order-slips-worker.js'), { workerData: buffer, resourceLimits: { maxOldGenerationSizeMb: 192 } });
+      worker = new Worker(path.join(__dirname, 'order-slips-worker.js'), { workerData: { data: buffer, maxBytes, maxPages, label }, resourceLimits: { maxOldGenerationSizeMb: 192 } });
     } catch { return finish(unusable); }
     worker.once('message', (result) => finish(result && result.bytes ? { bytes: Buffer.from(result.bytes), pages: result.pages } : { error: String((result && result.error) || unusable.error) }));
     worker.once('error', () => finish(unusable));

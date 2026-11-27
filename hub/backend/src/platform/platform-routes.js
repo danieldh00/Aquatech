@@ -12,7 +12,7 @@ const { validShareBase } = require('../verkoop/quotes');
  * @param {object} deps De opslag en hulpfuncties uit createApp (store, tenant, settings, audit, de opslagobjecten voor testdata, enz.).
  * @returns {void}
  */
-function registerPlatformRoutes(app, { store, tenant, settings, settingsFor, settingsCache, dailyCounts, requirePlatformAdmin, requireJson, wrap, audit, inScope, inScopeOnly, multitenancyOn, itemImageStore, shopContentStore, database, quoteStore, quoteOrders, workOrderStore, shopStore, photoStore, workLogStore, outsourcingStore, newsStore, aiUsage, recognitions, stockStore, stockCounts, supplierStore, codeGroupStore, packagingStore, purchaseOrderStore, serviceRequestStore, invoiceStore, sprinklerStore, seasonReminderStore, paymentReminderStore, relatedStore, impersonation, withMustChange, auditUserChange, deleteUser }) {
+function registerPlatformRoutes(app, { store, tenant, settings, settingsFor, settingsCache, dailyCounts, requirePlatformAdmin, requireJson, wrap, audit, inScope, inScopeOnly, multitenancyOn, itemImageStore, itemDocumentStore, shopContentStore, database, quoteStore, quoteOrders, workOrderStore, shopStore, photoStore, workLogStore, outsourcingStore, newsStore, aiUsage, recognitions, stockStore, stockCounts, supplierStore, codeGroupStore, packagingStore, purchaseOrderStore, serviceRequestStore, invoiceStore, sprinklerStore, seasonReminderStore, paymentReminderStore, relatedStore, impersonation, withMustChange, auditUserChange, deleteUser }) {
   app.use('/api/platform', (req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); }, requirePlatformAdmin);
 
   /**
@@ -175,7 +175,7 @@ function registerPlatformRoutes(app, { store, tenant, settings, settingsFor, set
     // De klantlink heeft het adres van de openbare pagina nodig; dat kent
     // alleen de browser (padprefix achter een proxy).
     const extra = testdata.seedFeatures(
-      { db: database, quotes: quoteStore, quoteOrders, workorders: workOrderStore, shop: shopStore, photos: photoStore, worklog: workLogStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, stock: stockStore, stockCounts, suppliers: supplierStore, codeGroups: codeGroupStore, packagings: packagingStore, purchaseOrders: purchaseOrderStore, itemImages: itemImageStore, requests: serviceRequestStore, invoices: invoiceStore, sprinklers: sprinklerStore, seasonReminders: seasonReminderStore, paymentReminders: paymentReminderStore, related: relatedStore, settings: settingsFor(tenantRow.id) },
+      { db: database, quotes: quoteStore, quoteOrders, workorders: workOrderStore, shop: shopStore, photos: photoStore, worklog: workLogStore, outsourcing: outsourcingStore, news: newsStore, aiUsage, recognitions, stock: stockStore, stockCounts, suppliers: supplierStore, codeGroups: codeGroupStore, packagings: packagingStore, purchaseOrders: purchaseOrderStore, itemImages: itemImageStore, itemDocuments: itemDocumentStore, requests: serviceRequestStore, invoices: invoiceStore, sprinklers: sprinklerStore, seasonReminders: seasonReminderStore, paymentReminders: paymentReminderStore, related: relatedStore, settings: settingsFor(tenantRow.id) },
       testSet, { users: out.byKey, quoteIds: out.quoteIds, tenantId: tenantRow.id },
       { shareBase: validShareBase(req.body?.shareBase) },
     );

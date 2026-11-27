@@ -1996,6 +1996,23 @@ const PG_MIGRATIONS = [
   CREATE UNIQUE INDEX item_aliases_alias ON item_aliases (tenant_id, LOWER(alias));
   CREATE INDEX item_aliases_item ON item_aliases (tenant_id, item_id);
   `,
+  // 105: PDF's bij artikelen (productinformatie van de leverancier): versleuteld bewaard, hoogstens een paar per artikel; `public` = te downloaden op de productpagina.
+  `
+  CREATE TABLE item_documents (
+    id           UUID PRIMARY KEY,
+    tenant_id    UUID NOT NULL ${references('tenants(id)')},
+    item_id      UUID NOT NULL ${references('stock_items(id)')},
+    name         ${TEXT_TYPE} NOT NULL,
+    pages        BIGINT NOT NULL,
+    size         BIGINT NOT NULL,
+    content_hash ${TEXT_TYPE} NOT NULL,
+    public       BIGINT NOT NULL DEFAULT 1,
+    data         ${TEXT_TYPE} NOT NULL,
+    created_at   ${TEXT_TYPE} NOT NULL
+  );
+  CREATE UNIQUE INDEX item_documents_hash ON item_documents (tenant_id, item_id, content_hash);
+  CREATE INDEX item_documents_item ON item_documents (tenant_id, item_id);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS, UUID_COLUMNS, RENAMED_COLUMNS, RENAMED_COLUMNS_VERSION, legacyUuid };
