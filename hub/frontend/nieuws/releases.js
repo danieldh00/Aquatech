@@ -13,6 +13,22 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.46.5',
+      date: '2026-11-27',
+      title: 'Past bij: aantal regels per pagina kiezen',
+      items: [
+        { text: 'Bij Artikelen > Past bij kies je nu hoeveel regels je per pagina ziet, net als bij de artikellijst. De keuze geldt voor beide lijsten.', for: ['voorraad'] },
+      ],
+    },
+    {
+      version: '1.46.4',
+      date: '2026-11-27',
+      title: 'Gearchiveerde webshopartikelen terugzetten',
+      items: [
+        { text: '*Ontbrekende uit webshop toevoegen* zet artikelen die wel bestaan maar gearchiveerd zijn (bijvoorbeeld 110-12) weer terug als de webshop ze nog verkoopt, en koppelt ze aan het webshopproduct. Prijs en voorraad blijven zoals ze waren. De Excel heeft een tabblad *Teruggezet*; voor wat overblijft staat de reden duidelijker in *Overgeslagen* (bijvoorbeeld al een subartikel van een artikelgroep).', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.46.3',
       date: '2026-11-27',
       title: 'Subartikelen van klein naar groot en oude nummers in de keuzelijst',

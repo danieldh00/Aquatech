@@ -1,6 +1,6 @@
 {
   "name": "aquatech-hub-backend",
-  "version": "1.46.3",
+  "version": "1.46.5",
   "private": true,
   "description": "Aquatech-webserver: dashboard, modules, accounts en API",
   "main": "src/server.js",

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.46.5
+
+Tabblad Past bij (`artikelen/related.js`) knipt de lijst in pagina's met dezelfde keuzelijst (25/50/100/300/Alles), dezelfde klassen en dezelfde opslagsleutel (`aquatech_artikelen_paginagrootte`) als de artikellijst; zoeken of filteren springt terug naar pagina 1. Geen serverwijziging.
+
+## 1.46.4
+
+- `stock.addMissingShop`: een gearchiveerd los artikel (geen artikelgroep of subartikel) met dezelfde code als een webshopproduct (geen variatie) wordt teruggezet (`archived = 0`, `shop_product_id`, `shop_sync = 1`) en meldt zich als `restoredItems`; de overgeslagen-redenen noemen nu ook gearchiveerde en subartikel-eigenaars. De oorzaak van de 570 overgeslagen producten: 366 artikelen stonden gearchiveerd in de voorraad (de voorraadlijst toont die niet) en 201 zijn subartikelen van een artikelgroep zonder koppeling.
+
 ## 1.46.3
 
 - `GET /api/stock/articles` geeft `aliases` mee en sorteert subartikelen met `ArticleCode.compareCodes`; de lijst in Artikelen sorteert subartikelen ook zo.
