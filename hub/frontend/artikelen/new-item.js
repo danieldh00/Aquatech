@@ -95,7 +95,7 @@
         const item = await api('stock/items', { method: 'POST', body: {
           code: formElement.code.value, name: formElement.name.value, unit: formElement.unit.value, location: formElement.location.value,
           onHand: num(formElement.onHand.value), minQty: num(formElement.minQty.value), reorderQty: num(formElement.reorderQty.value), costPrice: num(formElement.costPrice.value),
-          salePrice: num(formElement.salePrice.value), vatRate: Number(formElement.vatRate.value), weightGrams: num(formElement.weightGrams.value), businessPrice: num(formElement.businessPrice.value), revenueGroup: formElement.revenueGroup.value, shopSync: formElement.shopSync.checked,
+          salePrice: num(formElement.salePrice.value), vatRate: Number(formElement.vatRate.value), weightGrams: num(formElement.weightGrams.value), businessPrice: num(formElement.businessPrice.value), revenueGroup: formElement.revenueGroup.value, shopSync: !formElement.concept.checked,
           packSize: num(formElement.packSize.value), orderMinQty: num(formElement.orderMinQty.value), priceTiers: parseTiers(formElement.priceTiers.value), unitContent: num(formElement.unitContent.value), ean: formElement.ean.value,
           priceMode: formElement.priceMode.value, priceFactor: num(formElement.priceFactor.value), subGroupId: formElement.subGroupId.value || null,
         } });

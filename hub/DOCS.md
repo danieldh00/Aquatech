@@ -581,7 +581,7 @@ Openbare, alleen-lezen pagina's op de hoofdmap `/` (sinds 1.7.1; voorheen `winke
 winkelwagen, betaling en subartikelen volgen). Aanzetten: Beheer → Integraties →
 Webshop en WooCommerce → *Eigen webshop tonen*; uit = overal 404. De shop toont de
 voorraadartikelen van de hoofdtenant die een verkoopprijs hebben, niet
-gearchiveerd zijn en *Naar de webshop* aan hebben. Categorie en afbeelding
+gearchiveerd zijn en geen *Concept* zijn. Categorie en afbeelding
 komen uit het gekoppelde WooCommerce-product (na een synchronisatie); zonder
 koppeling staat een artikel onder *Overig*. Ontwerp: woordmerk Aquatechshop.nl,
 zoekveld, menu van hoofdcategorieën (Beregening, Elektra, Pomp & techniek,

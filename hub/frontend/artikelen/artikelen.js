@@ -222,7 +222,7 @@
    * @returns {string} HTML van het label
    */
   const shopPill = (item) => {
-    if (!item.shopSync) return '<span class="muted small">niet</span>';
+    if (!item.shopSync) return '<span class="pill" title="Concept: staat niet in de webshop">Concept</span>';
     if (item.shop.error) return `<span class="pill low" title="${esc(item.shop.error)}">Fout</span>`;
     if (!item.shop.productId) return '<span class="muted small">niet gekoppeld</span>';
     if (item.shop.pending) return '<span class="pill">Wordt bijgewerkt</span>';
@@ -243,7 +243,8 @@
   function visible() {
     const term = $('#f-search').value.trim().toLowerCase();
     const low = $('#f-low').checked;
-    return state.items.filter((item) => (!low || item.low) && (!term || `${item.code} ${item.name} ${item.location} ${(item.aliases || []).join(' ')}`.toLowerCase().includes(term)));
+    const conceptOnly = $('#f-concept').checked;
+    return state.items.filter((item) => (!low || item.low) && (!conceptOnly || !item.shopSync) && (!term || `${item.code} ${item.name} ${item.location} ${(item.aliases || []).join(' ')}`.toLowerCase().includes(term)));
   }
 
   /**
@@ -255,12 +256,13 @@
   function stockRows() {
     const term = $('#f-search').value.trim().toLowerCase();
     const low = $('#f-low').checked;
+    const conceptOnly = $('#f-concept').checked;
     /**
      * Past een artikel bij de zoekterm en het filter?
      * @param {object} item het artikel
      * @returns {boolean} true als het in beeld moet
      */
-    const matches = (item) => (!low || item.low) && (!term || `${item.code} ${item.name} ${item.location} ${(item.aliases || []).join(' ')}`.toLowerCase().includes(term));
+    const matches = (item) => (!low || item.low) && (!conceptOnly || !item.shopSync) && (!term || `${item.code} ${item.name} ${item.location} ${(item.aliases || []).join(' ')}`.toLowerCase().includes(term));
     const groupIds = new Set(state.items.filter((item) => item.isGroup).map((item) => item.id));
     const subItemsOf = new Map();
     for (const item of state.items) {
@@ -279,7 +281,7 @@
       }
       const subItems = subItemsOf.get(item.id) || [];
       const found = subItems.filter(matches);
-      const filtered = Boolean(term || low);
+      const filtered = Boolean(term || low || conceptOnly);
       if (!matches(item) && !found.length) continue;
       const open = state.open.has(item.id) || (filtered && found.length > 0);
       rows.push({ item, open, count: subItems.filter((subItem) => !subItem.archived).length });
@@ -630,7 +632,7 @@
     formElement.weightGrams.value = item.weightGrams == null ? '' : item.weightGrams;
     formElement.businessPrice.value = item.businessPrice == null ? '' : item.businessPrice;
     formElement.revenueGroup.value = item.revenueGroup;
-    formElement.shopSync.checked = item.shopSync;
+    formElement.concept.checked = !item.shopSync;
     formElement.packSize.value = item.packSize > 1 ? item.packSize : '';
     formElement.unitContent.value = item.unitContent == null ? '' : item.unitContent;
     formElement.ean.value = item.ean || '';
@@ -641,7 +643,8 @@
     formElement.priceTiers.value = tiersText(item.priceTiers);
     renderDetails(formElement, item);
     $('#d-shop').innerHTML = item.shop.error ? `Webshop: <span class="err">${esc(item.shop.error)}</span>`
-      : !item.shop.productId ? (item.shopSync ? 'Nog niet gekoppeld aan een webshopproduct (koppelen gaat op SKU = artikelcode).' : '')
+      : !item.shopSync ? 'Concept: dit artikel staat niet in de webshop. Haal het vinkje Concept weg om het te publiceren.'
+      : !item.shop.productId ? 'Nog niet gekoppeld aan een webshopproduct (koppelen gaat op SKU = artikelcode).'
         : item.shop.pending ? 'Webshop: wijziging wordt binnen enkele seconden verstuurd.'
           : `Webshop: gekoppeld (product ${esc(item.shop.productId)})${item.shop.syncedAt ? `, bijgewerkt ${esc(when(item.shop.syncedAt))}` : ''}.`;
     window.ArtikelenMedia.renderImage();
@@ -904,7 +907,7 @@
         state.item = { ...state.item, ...await api(`stock/items/${encodeURIComponent(state.item.id)}`, { method: 'PUT', body: {
           code: editForm.code.value, name: editForm.name.value, unit: editForm.unit.value, location: editForm.location.value, notes: editForm.notes.value,
           minQty: num(editForm.minQty.value), reorderQty: num(editForm.reorderQty.value), costPrice: num(editForm.costPrice.value),
-          salePrice: num(editForm.salePrice.value), vatRate: Number(editForm.vatRate.value), weightGrams: num(editForm.weightGrams.value), businessPrice: num(editForm.businessPrice.value), revenueGroup: editForm.revenueGroup.value, shopSync: editForm.shopSync.checked,
+          salePrice: num(editForm.salePrice.value), vatRate: Number(editForm.vatRate.value), weightGrams: num(editForm.weightGrams.value), businessPrice: num(editForm.businessPrice.value), revenueGroup: editForm.revenueGroup.value, shopSync: !editForm.concept.checked,
           packSize: num(editForm.packSize.value), orderMinQty: num(editForm.orderMinQty.value), priceTiers: parseTiers(editForm.priceTiers.value), unitContent: num(editForm.unitContent.value), ean: editForm.ean.value,
           priceMode: editForm.priceMode.value, priceFactor: num(editForm.priceFactor.value),
           description: editForm.description.value, specifications: editForm.specifications.value,
@@ -1078,6 +1081,7 @@
     const restartList = () => { pager.reset(); renderStock(); };
     $('#f-search').oninput = restartList;
     $('#f-low').onchange = restartList;
+    $('#f-concept').onchange = restartList;
     /**
      * Laadt het overzicht opnieuw (met of zonder gearchiveerde artikelen).
      * @returns {Promise<void>}
