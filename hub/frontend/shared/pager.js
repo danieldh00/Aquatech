@@ -290,12 +290,14 @@
    * Sorteert de rijen van de tabel op de gekozen kolom; zonder sortering komt de oorspronkelijke volgorde terug. Een rij die bij de
    * vorige hoort (`sub-item`, `data-pager-join`, verborgen) blijft erbij.
    * @param {HTMLTableElement} table De tabel.
-   * @param {{ origin: WeakMap<Element, number>, nextOrder: number, sort: object|null }} info De stand van de tabel.
+   * @param {{ origin: WeakMap<Element, number>, nextOrder: number, sort: object|null, sorted: boolean }} info De stand van de tabel.
    */
   function sortRows(table, info) {
     const body = table.tBodies[0];
     const rows = Array.from(body.rows);
     for (const row of rows) if (!info.origin.has(row)) info.origin.set(row, info.nextOrder++);
+    if (!info.sort && !info.sorted) return;
+    info.sorted = Boolean(info.sort);
     const groups = groupRows(rows, (row) => row.classList.contains('sub-item') || row.hasAttribute('data-pager-join') || row.hidden);
     let order = null;
     const column = info.sort ? headerCells(table).findIndex((cell) => cell && cell.textContent.trim() === info.sort.label) : -1;
@@ -353,7 +355,7 @@
     const sortable = isSortable(table);
     if (!paged && !sortable) return;
     let info = tables.get(table);
-    if (!info) { info = { page: 1, size: storedSize(), count: -1, bars: null, origin: new WeakMap(), nextOrder: 0, sort: sortable ? storedSort(table) : null }; tables.set(table, info); }
+    if (!info) { info = { page: 1, size: storedSize(), count: -1, bars: null, origin: new WeakMap(), nextOrder: 0, sorted: false, sort: sortable ? storedSort(table) : null }; tables.set(table, info); }
     if (sortable) {
       decorateHeaders(table, info.sort);
       sortRows(table, info);
