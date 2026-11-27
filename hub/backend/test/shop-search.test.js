@@ -182,3 +182,13 @@ test('zoekpagina telt een lege zoekopdracht, suggesties en het overzicht in Behe
   assert.strictEqual(script.status, 200);
   assert.match(script.type, /javascript/);
 });
+
+test('een oud nummer (alias) vindt het artikel, ook via een subartikel', () => {
+  const catalog = [
+    { code: 'UD.KBI', name: 'Kogelkraan binnendraad', categoryName: 'Kranen', inStock: true, aliases: 'KB-100', subItems: [{ code: 'UD.KBI.20.12', label: '20 mm', inStock: true, aliases: 'KB-20 8712345678906' }] },
+    { code: 'DR16', name: 'Druppelslang 16 mm', categoryName: 'Druppelleiding', inStock: true },
+  ];
+  assert.deepStrictEqual(searchProducts(catalog, 'KB-100').products.map((product) => product.code), ['UD.KBI']);
+  assert.deepStrictEqual(searchProducts(catalog, 'kb20').products.map((product) => product.code), []);
+  assert.deepStrictEqual(searchProducts(catalog, 'KB-20').products.map((product) => product.code), ['UD.KBI']);
+});

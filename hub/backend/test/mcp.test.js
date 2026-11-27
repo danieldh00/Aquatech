@@ -1144,3 +1144,9 @@ test('plan_details: het 31e verzoek binnen een uur wordt geweigerd', async () =>
   }
   assert.strictEqual(refused, 1);
 });
+
+test('zoek_artikelen vindt een artikel ook op zijn oude nummer', () => {
+  const { searchArticles } = require('../src/mcp/mcp-tool-helpers');
+  const articles = [{ code: 'UD.KBI.20.12', name: 'Kogelkraan', aliases: ['KB-20'], subItems: [] }, { code: 'DR16', name: 'Druppelslang', subItems: [] }];
+  assert.deepStrictEqual(searchArticles(articles, 'KB-20', 5).items.map((article) => article.code), ['UD.KBI.20.12']);
+});

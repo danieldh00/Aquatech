@@ -337,7 +337,7 @@ function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE, discoun
     // De prijs voor een zakelijke klant (excl. btw): de zakelijke prijs van het artikel, anders de gewone verkoopprijs.
     const priceBusiness = Math.round((row.business_price != null ? Number(row.business_price) : priceExcl) * 100) / 100;
     return {
-      slug: uniqueSlug(row.name, row.code), itemId: String(row.id), code: String(row.code), name: decodeHtmlEntities(row.name), unit: String(row.unit || 'st'),
+      slug: uniqueSlug(row.name, row.code), itemId: String(row.id), code: String(row.code), aliases: String(row.aliases || ''), name: decodeHtmlEntities(row.name), unit: String(row.unit || 'st'),
       ...placementOf(row.categories), priceExcl, vatRate,
       priceIncl: Math.round(priceExcl * (1 + vatRate / 100) * 100) / 100,
       priceBusiness, priceBusinessIncl: Math.round(priceBusiness * (1 + vatRate / 100) * 100) / 100,
@@ -385,7 +385,7 @@ function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE, discoun
     const cheapest = subItems.reduce((lowest, subItem) => (subItem.priceIncl < lowest.priceIncl ? subItem : lowest), subItems[0]);
     const cheapestBusiness = subItems.reduce((lowest, subItem) => (subItem.priceBusiness < lowest.priceBusiness ? subItem : lowest), subItems[0]);
     const group = {
-      slug: uniqueSlug(articleGroup.name, articleGroup.code), itemId: String(articleGroup.id), code: String(articleGroup.code), name: decodeHtmlEntities(articleGroup.name), unit: String(articleGroup.unit || subItems[0].unit),
+      slug: uniqueSlug(articleGroup.name, articleGroup.code), itemId: String(articleGroup.id), code: String(articleGroup.code), aliases: String(articleGroup.aliases || ''), name: decodeHtmlEntities(articleGroup.name), unit: String(articleGroup.unit || subItems[0].unit),
       ...placement,
       priceExcl: cheapest.priceExcl, vatRate: cheapest.vatRate, priceIncl: cheapest.priceIncl,
       priceBusiness: cheapestBusiness.priceBusiness, priceBusinessIncl: cheapestBusiness.priceBusinessIncl,
@@ -393,7 +393,7 @@ function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE, discoun
       inStock: subItems.some((subItem) => subItem.inStock), image: imageOf(articleGroup) || (subItems.find((subItem) => subItem.image) || {}).image || '',
       attributeName: attributeNames.length === 1 ? attributeNames[0] : 'Uitvoeringen',
       subItems: subItems.map((subItem) => ({
-        slug: subItem.slug, itemId: subItem.itemId, code: subItem.code, label: Object.values(subItem.values).join(' / ') || subItem.code,
+        slug: subItem.slug, itemId: subItem.itemId, code: subItem.code, aliases: subItem.aliases, label: Object.values(subItem.values).join(' / ') || subItem.code,
         meta: Object.entries(subItem.values).map(([name, value]) => `${name}: ${value}`).join(' | '),
         priceIncl: subItem.priceIncl, priceBusiness: subItem.priceBusiness, priceBusinessIncl: subItem.priceBusinessIncl, vatRate: subItem.vatRate, inStock: subItem.inStock, stockQty: subItem.stockQty, image: subItem.image || imageOf(articleGroup),
       })),
@@ -421,7 +421,8 @@ function buildCatalog(rows, soldByCode = new Map(), tree = DEFAULT_TREE, discoun
 
 // De catalogus van een omgeving (parameters: tenant, tenant): niet-gearchiveerde artikelen met verkoopprijs die naar de
 // webshop mogen, met reservering, categorie en afbeelding van het gekoppelde webshopproduct.
-const CATALOG_SQL = `SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.stock_managed, p.in_stock AS shop_in_stock, i.group_id, i.is_group, i.attributes, i.sub_values, COALESCE(r.qty, 0) AS reserved, i.sale_price, i.business_price, i.vat_rate, i.image_id, i.order_pack_size, i.order_min_qty, i.price_tiers, i.updated_at, p.categories, p.image
+const CATALOG_SQL = `SELECT i.id, i.code, i.name, i.unit, i.on_hand, i.stock_managed, p.in_stock AS shop_in_stock, i.group_id, i.is_group, i.attributes, i.sub_values, COALESCE(r.qty, 0) AS reserved, i.sale_price, i.business_price, i.vat_rate, i.image_id, i.order_pack_size, i.order_min_qty, i.price_tiers, i.updated_at, p.categories, p.image,
+        (SELECT string_agg(a.alias, ' ') FROM item_aliases a WHERE a.tenant_id = i.tenant_id AND a.item_id = i.id) AS aliases
         FROM stock_items i
         LEFT JOIN (SELECT item_id, SUM(qty) AS qty FROM stock_reservations WHERE tenant_id = ? GROUP BY item_id) r ON r.item_id = i.id
         LEFT JOIN shop_products p ON p.tenant_id = i.tenant_id AND p.id = i.shop_product_id

@@ -111,7 +111,7 @@ function withinDistance(left, right, limit) {
 
 /**
  * Bereidt één zoekbare eenheid voor (een product, of een product met één subartikel): genormaliseerde naam, code en woorden.
- * @param {object} product De artikelgroep (code, name, categoryName).
+ * @param {object} product De artikelgroep (code, name, categoryName, aliases = oude nummers).
  * @param {?object} subartikel Het subartikel (code, label) of null.
  * @returns {{ code: string, compactCode: string, haystack: string, tokens: string[], inStock: boolean }} De eenheid.
  */
@@ -119,7 +119,7 @@ function candidateOf(product, subItem) {
   const code = normalize(subItem ? subItem.code : product.code);
   // Een code met streepje of spatie (SPR-10) is ook zonder te vinden (SPR10): de samengevoegde code is een eigen woord.
   const compactCode = code.replace(/ /g, '');
-  const haystack = normalize(`${product.name} ${product.code} ${product.categoryName || ''} ${subItem ? `${subItem.code} ${subItem.label}` : ''} ${compactCode}`);
+  const haystack = normalize(`${product.name} ${product.code} ${product.categoryName || ''} ${subItem ? `${subItem.code} ${subItem.label}` : ''} ${compactCode} ${product.aliases || ''} ${subItem ? subItem.aliases || '' : ''}`);
   return { code, compactCode, haystack, tokens: haystack.split(' ').filter(Boolean), inStock: subItem ? Boolean(subItem.inStock) : Boolean(product.inStock) };
 }
 
