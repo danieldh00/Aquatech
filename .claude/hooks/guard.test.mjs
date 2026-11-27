@@ -129,3 +129,11 @@ test('Bash: waarschuwing zonder changes-fragment', () => {
   const result = checkBash('git push -u origin claude/x', { branch: 'claude/x', hubChangedWithoutFragment: true });
   assert.equal(result.warn.length, 1);
 });
+
+test('een nieuwe dependency geeft een waarschuwing (geen blokkade)', () => {
+  const result = checkFile('hub/backend/package.json', edit('"a": 1', '"a": 1,\n    "left-pad": "^1.3.0"'));
+  assert.equal(result.warn.length, 1);
+  assert.ok(!denied(result));
+  assert.equal(checkFile('hub/backend/package.json', edit('"a": 1', '"a": 2')).warn.length, 0);
+  assert.equal(checkFile('hub/backend/package.json', edit('"a": 1', '"a": 1,\n    "scripts": {}')).warn.length, 0);
+});
