@@ -77,7 +77,7 @@
         <td><select data-field="subGroupId" ${done ? 'disabled' : ''}>${options.replace(`value="${esc(row.subGroupId)}"`, `value="${esc(row.subGroupId)}" selected`)}</select></td>
         <td><input data-field="diameter" size="4" inputmode="numeric" value="${esc(row.diameter)}" ${done || row.isGroup ? 'disabled' : ''}></td>
         <td><input data-field="thread" size="6" value="${esc(row.thread)}" ${done || row.isGroup ? 'disabled' : ''}></td>
-        <td data-code><b>${esc(code)}</b></td><td class="small ${done ? '' : 'muted'}" data-note>${esc(done ? 'Omgezet' : row.note)}</td></tr>`;
+        <td data-code><b>${esc(code)}</b></td><td class="small ${done ? '' : 'muted'}" data-note>${esc(done ? row.note || 'Omgezet' : row.note)}</td></tr>`;
   }).join('')}</tbody>`
       : '<tbody><tr><td class="muted">Geen artikelen om te tonen.</td></tr></tbody>';
     renderSummary();
@@ -131,7 +131,7 @@
         for (const outcome of result.results) {
           const row = state.rows.find((entry) => entry.id === outcome.id);
           if (!row) continue;
-          if (outcome.ok) Object.assign(row, { status: 'omgezet', newCode: outcome.code, selected: false });
+          if (outcome.ok) Object.assign(row, { status: 'omgezet', newCode: outcome.code, selected: false, note: outcome.warning || '' });
           else Object.assign(row, { status: outcome.status || 'fout', note: outcome.error, selected: false });
         }
         converted += result.converted;

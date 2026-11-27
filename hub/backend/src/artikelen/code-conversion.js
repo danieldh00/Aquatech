@@ -204,6 +204,19 @@ function createCodeConversion(db) {
   function apply(tenantId, rows) {
     if (!Array.isArray(rows) || !rows.length) return { error: 'Er zijn geen regels om om te zetten.', status: 400 };
     if (rows.length > MAX_ROWS_PER_APPLY) return { error: `Hoogstens ${MAX_ROWS_PER_APPLY} regels per keer.`, status: 400 };
+    // Controle en schrijven in één transactie: een gelijktijdige aanroep of een tussendoor vergeven code geeft een melding per regel, geen databasefout.
+    let outcome = null;
+    transaction(db, () => { outcome = convert(tenantId, rows); });
+    return outcome;
+  }
+
+  /**
+   * Controleert de regels en zet wat klopt om. Draait binnen de transactie van `apply`.
+   * @param {string} tenantId Id van de omgeving.
+   * @param {object[]} rows De bevestigde regels.
+   * @returns {{ converted: number, results: object[] }} Per regel de uitkomst (met een waarschuwing als de oude code geen zoeknaam kon worden).
+   */
+  function convert(tenantId, rows) {
     const { mainGroups, subGroups } = groupsOf(tenantId);
     const taken = takenOf(tenantId);
     const batch = new Map();
@@ -224,22 +237,22 @@ function createCodeConversion(db) {
       if (built && !built.code) problem = built;
       if (problem) { results.push({ id, ok: false, error: problem.error, status: problem.status }); continue; }
       batch.set(built.code.toLowerCase(), item.id);
-      plan.push({ item, sub, main, code: built.code });
-      results.push({ id, ok: true, code: built.code, oldCode: item.code });
+      const result = { id, ok: true, code: built.code, oldCode: item.code };
+      plan.push({ item, sub, main, code: built.code, result });
+      results.push(result);
     }
-    transaction(db, () => {
-      const at = new Date().toISOString();
-      for (const entry of plan) {
-        prepare('UPDATE stock_items SET code = ?, main_group_id = ?, sub_group_id = ?, updated_at = ? WHERE tenant_id = ? AND id::text = ?')
-          .run(entry.code, entry.main ? entry.main.id : null, entry.sub.id, at, tenantId, entry.item.id);
-        const alreadyThere = prepare('SELECT 1 AS found FROM item_aliases WHERE tenant_id = ? AND LOWER(alias) = LOWER(?)').get(tenantId, entry.item.code);
-        if (entry.item.code !== entry.code && !alreadyThere) {
-          prepare('INSERT INTO item_aliases (id, tenant_id, item_id, alias, kind, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(crypto.randomUUID(), tenantId, entry.item.id, entry.item.code, 'oud', at);
-        }
-      }
+    const at = new Date().toISOString();
+    plan.forEach((entry, index) => {
+      const written = prepare('UPDATE stock_items SET code = ?, main_group_id = ?, sub_group_id = ?, updated_at = ? WHERE tenant_id = ? AND id::text = ? AND sub_group_id IS NULL')
+        .run(entry.code, entry.main ? entry.main.id : null, entry.sub.id, at, tenantId, entry.item.id);
+      const result = entry.result;
+      if (!written || written.changes === 0) { Object.assign(result, { ok: false, status: 'al_omgezet', error: 'Dit artikel is intussen al omgezet.' }); delete result.code; return; }
+      const alreadyThere = prepare('SELECT 1 AS found FROM item_aliases WHERE tenant_id = ? AND LOWER(alias) = LOWER(?)').get(tenantId, entry.item.code);
+      if (entry.item.code === entry.code) return;
+      if (alreadyThere) result.warning = `De oude code ${entry.item.code} was al een zoeknaam van een ander artikel en is niet bewaard.`;
+      else prepare('INSERT INTO item_aliases (id, tenant_id, item_id, alias, kind, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(crypto.randomUUID(), tenantId, entry.item.id, entry.item.code, 'oud', at);
     });
-    return { converted: plan.length, results };
+    return { converted: results.filter((result) => result.ok).length, results };
   }
 
   return { proposals, apply };
