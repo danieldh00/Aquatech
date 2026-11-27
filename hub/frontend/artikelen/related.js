@@ -54,7 +54,6 @@
     state.ai = state.data.ai;
     renderList();
     followAi().catch(() => {});
-    await loadWp();
   }
 
   /**
@@ -465,5 +464,5 @@
     $('#rl-close').addEventListener('click', () => { state.openId = null; state.detail = null; renderDetail(); });
   }
 
-  window.ArtikelenRelated = { setup, load };
+  window.ArtikelenRelated = { setup, load, loadWp };
 })();
