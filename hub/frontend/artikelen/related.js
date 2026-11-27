@@ -4,7 +4,10 @@
 // Praat met /api/stock/related en /api/stock/related-ai (recht voorraad).
 (function () {
   const context = { api: null, toast: null, esc: null };
-  const state = { data: null, ai: null, openId: null, detail: null, busy: false, polling: false, seen: false, wp: null, wpPick: null, wpTimer: 0 };
+  const state = { data: null, ai: null, openId: null, detail: null, busy: false, polling: false, seen: false, wp: null, wpPick: null, wpTimer: 0, page: 1, pageSize: 50 };
+  // Zelfde keuzes en dezelfde bewaarsleutel als de artikellijst: één instelling voor beide lijsten.
+  const PAGE_SIZES = [25, 50, 100, 300, 0];
+  const PAGE_SIZE_KEY = 'aquatech_artikelen_paginagrootte';
 
   /**
    * Zoekt het eerste element dat bij de selector past.
@@ -47,6 +50,7 @@
    * @returns {Promise<void>}
    */
   async function load() {
+    state.page = 1;
     state.data = await context.api(`stock/related?${queryOf()}`);
     state.ai = state.data.ai;
     renderList();
@@ -140,7 +144,55 @@
     await loadWp();
   }
 
-  /** Tekent de melding over AI, de knoppen en de tabel. */
+  /**
+   * Leest de bewaarde paginagrootte (0 = alles); een ongeldige of ontbrekende waarde geeft 50.
+   * @returns {number} Het aantal artikelen per pagina.
+   */
+  function storedPageSize() {
+    try {
+      const value = Number(localStorage.getItem(PAGE_SIZE_KEY));
+      if (PAGE_SIZES.includes(value) && localStorage.getItem(PAGE_SIZE_KEY) !== null) return value;
+    } catch (_) { /* opslag niet beschikbaar: standaard */ }
+    return 50;
+  }
+
+  /**
+   * Tekent de bediening boven en onder de tabel: aantal per pagina, teller en vorige/volgende.
+   * @param {number} total Het aantal artikelen in de lijst.
+   * @param {number} pages Het aantal pagina's.
+   * @param {number} from Het eerste getoonde nummer (0 bij een lege lijst).
+   * @param {number} to Het laatste getoonde nummer.
+   */
+  function renderPager(total, pages, from, to) {
+    const html = `<label class="pager-size">Per pagina <select data-pager-size>${PAGE_SIZES.map((size) => `<option value="${size}"${size === state.pageSize ? ' selected' : ''}>${size || 'Alles'}</option>`).join('')}</select></label>
+      <span class="muted small pager-count">${total ? `${from}–${to} van ${total}` : 'Geen artikelen'}</span>
+      <span class="pager-nav"><button class="btn" type="button" data-pager="prev"${state.page <= 1 ? ' disabled' : ''}>‹ Vorige</button><span class="small">Pagina ${state.page} van ${pages}</span><button class="btn" type="button" data-pager="next"${state.page >= pages ? ' disabled' : ''}>Volgende ›</button></span>`;
+    for (const id of ['#rl-pager-top', '#rl-pager-bottom']) {
+      const box = $(id);
+      box.innerHTML = html;
+      box.hidden = !total;
+      /**
+       * Past het aantal per pagina aan en bewaart de keuze voor de volgende keer.
+       * @param {Event} event de wijziging van de keuzelijst
+       */
+      box.querySelector('[data-pager-size]').onchange = (event) => {
+        state.pageSize = Number(event.target.value);
+        state.page = 1;
+        try { localStorage.setItem(PAGE_SIZE_KEY, String(state.pageSize)); } catch (_) { /* niet bewaard */ }
+        renderList();
+      };
+      box.querySelectorAll('[data-pager]').forEach((button) => {
+        /** Gaat een pagina terug of vooruit; onderaan scrollt hij terug naar de bovenkant van de lijst. */
+        button.onclick = () => {
+          state.page += button.dataset.pager === 'next' ? 1 : -1;
+          renderList();
+          if (id === '#rl-pager-bottom') $('#rl-pager-top').scrollIntoView({ block: 'start' });
+        };
+      });
+    }
+  }
+
+  /** Tekent de melding over AI, de knoppen en de tabel (met paginering). */
   function renderList() {
     const { data } = state;
     const notice = $('#rl-notice');
@@ -153,8 +205,14 @@
     modelSelect.innerHTML = data.ai.models.map((model) => `<option value="${context.esc(model.id)}">${context.esc(model.label)}</option>`).join('');
     modelSelect.value = data.ai.model;
     $('#rl-count').textContent = `${data.total} artikel${data.total === 1 ? '' : 'en'}${data.truncated ? ` (eerste ${data.items.length} getoond: verfijn het filter)` : ''}`;
+    const size = state.pageSize || data.items.length || 1;
+    const pages = Math.max(1, Math.ceil(data.items.length / size));
+    state.page = Math.min(Math.max(1, state.page), pages);
+    const start = (state.page - 1) * size;
+    const shown = data.items.slice(start, start + size);
+    renderPager(data.items.length, pages, data.items.length ? start + 1 : 0, start + shown.length);
     $('#rl-table').innerHTML = data.items.length
-      ? `<thead><tr><th>Code</th><th>Naam</th><th>Past bij (handmatig)</th><th>Past bij (AI)</th><th>Vaak samen besteld</th><th>Specificaties</th><th></th></tr></thead><tbody>${data.items.map((item) => `<tr>
+      ? `<thead><tr><th>Code</th><th>Naam</th><th>Past bij (handmatig)</th><th>Past bij (AI)</th><th>Vaak samen besteld</th><th>Specificaties</th><th></th></tr></thead><tbody>${shown.map((item) => `<tr>
           <td>${context.esc(item.code)}</td><td class="wrap">${context.esc(item.name)}</td>
           <td>${item.manual || '<span class="muted">0</span>'}</td><td>${item.ai || '<span class="muted">0</span>'}</td><td>${item.together || '<span class="muted">0</span>'}</td>
           <td>${item.specStatus === 'gevonden' ? '<span class="pill ok">Gevonden</span>' : item.specStatus === 'niet_gevonden' ? '<span class="pill warn">Niet gevonden</span>' : '<span class="muted">Nog niet opgezocht</span>'}</td>
@@ -356,6 +414,7 @@
    */
   function setup(helpers) {
     Object.assign(context, helpers);
+    state.pageSize = storedPageSize();
     /**
      * Verpakt een handeling zodat een fout als melding verschijnt.
      * @param {Function} work De async handeling.
