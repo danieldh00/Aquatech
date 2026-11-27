@@ -750,7 +750,6 @@ wel logisch kloppen, controleer ze met de DOM/CSS of een gerichte meting in plaa
   ophalen terwijl de login-check loopt. Na terugkeer verversen met `onReturn()`.
 - Scripts/CSS met `?v=<versie>`; zware bibliotheken pas laden bij gebruik
   (zoals `excel()`). Geen bevestigingsvraag als er niets verloren gaat.
-- Een nieuwe lange tabel is een `table.grid` en krijgt vanzelf paginering. `data-no-pager` zet dat uit.
 
 **Beveiliging** (ASVS L2 + AVG):
 - Tenant-isolatie: elke query filtert op `tenant_id = req.tenantId`
