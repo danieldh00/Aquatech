@@ -79,6 +79,7 @@
         formElement.unit.value = article.unit || 'st';
       }
     };
+    setupCodeProposal(formElement);
     /** Sluit het formulier. */
     $('[data-cancel]', formElement).onclick = () => { formElement.hidden = true; };
     /**
@@ -96,7 +97,7 @@
           onHand: num(formElement.onHand.value), minQty: num(formElement.minQty.value), reorderQty: num(formElement.reorderQty.value), costPrice: num(formElement.costPrice.value),
           salePrice: num(formElement.salePrice.value), vatRate: Number(formElement.vatRate.value), weightGrams: num(formElement.weightGrams.value), businessPrice: num(formElement.businessPrice.value), revenueGroup: formElement.revenueGroup.value, shopSync: formElement.shopSync.checked,
           packSize: num(formElement.packSize.value), orderMinQty: num(formElement.orderMinQty.value), priceTiers: parseTiers(formElement.priceTiers.value), unitContent: num(formElement.unitContent.value), ean: formElement.ean.value,
-          priceMode: formElement.priceMode.value, priceFactor: num(formElement.priceFactor.value),
+          priceMode: formElement.priceMode.value, priceFactor: num(formElement.priceFactor.value), subGroupId: formElement.subGroupId.value || null,
         } });
         formElement.hidden = true;
         toast(`${item.code} toegevoegd`);
@@ -107,6 +108,62 @@
         if (error.field && formElement[error.field]) formElement[error.field].focus();
       }
     };
+  }
+
+  /**
+   * Koppelt de keuze van soort, diameter en draadmaat aan het codevoorstel: bij elke wijziging vraagt het formulier de server om een
+   * vrije code en vult het codeveld, zolang de gebruiker de code niet zelf heeft getypt.
+   * @param {HTMLFormElement} formElement Het formulier voor een nieuw artikel.
+   * @returns {void}
+   */
+  function setupCodeProposal(formElement) {
+    const hint = $('#n-code-hint');
+    let loaded = false;
+    let typedByHand = false;
+    /**
+     * Vult de keuzelijst met de soorten (eenmalig, pas als het formulier gebruikt wordt).
+     * @returns {Promise<void>}
+     */
+    const loadKinds = async () => {
+      if (loaded) return;
+      loaded = true;
+      try {
+        const { mainGroups, subGroups } = await api('stock/code-groups');
+        /**
+         * Het merk van een soort, als voorvoegsel voor de keuzelijst.
+         * @param {object} kind De soort.
+         * @returns {string} Merkcode met scheidingsteken, of leeg zonder merk.
+         */
+        const brandOf = (kind) => { const brand = mainGroups.find((group) => group.id === kind.mainGroupId); return brand ? `${brand.code} · ` : ''; };
+        formElement.subGroupId.innerHTML = `<option value="">Geen (eigen code)</option>${subGroups.map((kind) => `<option value="${esc(kind.id)}">${esc(brandOf(kind))}${esc(kind.code)} · ${esc(kind.name)}</option>`).join('')}`;
+      } catch (error) {
+        loaded = false;
+      }
+    };
+    /**
+     * Vraagt een codevoorstel en zet het in het codeveld.
+     * @returns {Promise<void>}
+     */
+    const propose = async () => {
+      hint.textContent = '';
+      if (!formElement.subGroupId.value) return;
+      const query = new URLSearchParams({ subGroupId: formElement.subGroupId.value, diameter: formElement.diameter.value.trim(), thread: formElement.thread.value.trim() });
+      try {
+        const result = await api(`stock/code-proposal?${query}`);
+        hint.textContent = result.taken ? `${result.code} bestaat al als artikel.` : '';
+        if (!typedByHand || !formElement.code.value) { formElement.code.value = result.code; typedByHand = false; }
+      } catch (error) {
+        hint.textContent = error.message;
+      }
+    };
+    formElement.subGroupId.onfocus = loadKinds;
+    formElement.subGroupId.onmousedown = loadKinds;
+    formElement.subGroupId.onchange = propose;
+    formElement.diameter.oninput = propose;
+    formElement.thread.oninput = propose;
+    formElement.code.addEventListener('input', (event) => { if (event.isTrusted) typedByHand = true; });
+    formElement.addEventListener('reset', () => { typedByHand = false; hint.textContent = ''; });
+    loadKinds();
   }
 
   // ---------- Uit de webshop ----------

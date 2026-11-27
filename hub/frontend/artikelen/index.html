@@ -67,6 +67,12 @@
             <label title="Het artikelnummer van de fabrikant (8 of 13 cijfers, staat onder de streepjescode op de verpakking). Leeg = het etiket krijgt de artikelcode als streepjescode.">EAN<input name="ean" maxlength="20" inputmode="numeric" autocomplete="off" placeholder="8 of 13 cijfers"></label>
           </div>
           <div class="row">
+            <label title="Kies een soort (en merk) om een sprekende code te laten voorstellen: MERK.SOORT.DIAMETER.DRAADMAAT. Een uitgegeven code verandert nooit meer.">Soort<select name="subGroupId"><option value="">Geen (eigen code)</option></select></label>
+            <label>Diameter (mm)<input name="diameter" maxlength="4" inputmode="numeric" autocomplete="off" placeholder="Bijv. 20"></label>
+            <label title="BSP in duimen, bijvoorbeeld 3/4&quot; of 1 1/4&quot;. Bij een metrische maat het getal zelf.">Draadmaat<input name="thread" maxlength="12" autocomplete="off" placeholder="Bijv. 3/4&quot;"></label>
+            <span class="hint cp-result" id="n-code-hint" aria-live="polite"></span>
+          </div>
+          <div class="row">
             <label>Locatie<input name="location" maxlength="60" placeholder="Bijv. magazijn A3, bus 1"></label>
             <label>Beginvoorraad<input name="onHand" type="number" min="0" step="any" inputmode="decimal"></label>
             <label>Minimumvoorraad<input name="minQty" type="number" min="0" step="any" inputmode="decimal"></label>

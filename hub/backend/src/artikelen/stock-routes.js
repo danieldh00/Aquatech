@@ -50,7 +50,10 @@ function registerStockRoutes(app, ctx) {
 
   app.get('/api/stock', requireStock, (req, res) => {
     noStore(res);
-    res.json({ items: stock.list(tenantOf(req), { archived: req.query.archived === '1' }), kinds: KINDS, groups: GROUPS });
+    const items = stock.list(tenantOf(req), { archived: req.query.archived === '1' });
+    // Oude nummers (zoeknamen) per artikel, zodat de lijst er ook op kan zoeken.
+    const aliases = ctx.codeGroups ? ctx.codeGroups.aliasesByItem(tenantOf(req)) : new Map();
+    res.json({ items: items.map((item) => (aliases.has(item.id) ? { ...item, aliases: aliases.get(item.id) } : item)), kinds: KINDS, groups: GROUPS });
   });
 
   // Eenheden (st, m, rol, ...) waaruit een artikel er een kiest.
