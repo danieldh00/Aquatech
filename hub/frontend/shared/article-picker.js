@@ -112,7 +112,7 @@
   /** Tekent de artikellijst (stap 1) met de zoekterm. */
   function renderList() {
     const term = dialog.querySelector('.ap-search').value.trim().toLowerCase();
-    const found = (items || []).filter((article) => !term || `${article.code} ${article.name}`.toLowerCase().includes(term)).slice(0, 60);
+    const found = (items || []).filter((article) => !term || `${article.code} ${article.name} ${(article.aliases || []).join(' ')} ${(article.subItems || []).map((subItem) => `${subItem.code} ${(subItem.aliases || []).join(' ')}`).join(' ')}`.toLowerCase().includes(term)).slice(0, 60);
     dialog.querySelector('.ap-list').innerHTML = found.map((article) => `<li><button type="button" data-code="${esc(article.code)}">
         <b class="code">${esc(article.code)}</b> ${esc(article.name)}
         <span class="ap-meta">${article.subItems ? `${article.subItems.length} subartikelen · kies daarna de ${esc((article.attributes || []).map((attribute) => attribute.name.toLowerCase()).join(' en ') || 'subItem')}` : `${esc(eur(article.salePrice))} · ${esc(nl(article.available))} ${esc(article.unit)} beschikbaar`}</span>

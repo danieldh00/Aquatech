@@ -172,3 +172,24 @@ test('artikellijst: oude nummers komen mee om op te zoeken', async () => {
     server.close();
   }
 });
+
+test('keuzelijst: subartikelen van klein naar groot uit de code en zoeken op oude nummers', async () => {
+  const { server, as } = await setup();
+  try {
+    const kees = await as('kees');
+    const codes = [['KBI.100.2', '100 mm'], ['KBI.20.12', '20 mm'], ['KBI.20.1', '20 mm 1"'], ['KBI.25.34', '25 mm']];
+    const made = [];
+    for (const [code, size] of codes) made.push((await kees.post('/app/api/stock/items', { code, name: `Koppeling ${size}`, unit: 'st', salePrice: 5, vatRate: 21 })).body);
+    const items = made.map((entry) => entry.item || entry);
+    const merged = await kees.post('/app/api/stock/merge', { ids: items.map((item) => item.id), code: 'KBI', name: 'Koppeling', attributeName: 'Maat',
+      values: Object.fromEntries(items.map((item, index) => [item.id, codes[index][1]])) });
+    assert.strictEqual(merged.status, 201);
+    assert.strictEqual((await kees.put(`/app/api/stock/items/${items[1].id}/aliases`, { aliases: ['OUD-20'] })).status, 200);
+    const choices = (await kees.get('/app/api/stock/articles')).body.items;
+    const articleGroup = choices.find((choice) => choice.code === 'KBI');
+    assert.deepStrictEqual(articleGroup.subItems.map((subItem) => subItem.code), ['KBI.20.12', 'KBI.20.1', 'KBI.25.34', 'KBI.100.2']);
+    assert.deepStrictEqual(articleGroup.subItems.find((subItem) => subItem.code === 'KBI.20.12').aliases, ['OUD-20']);
+  } finally {
+    server.close();
+  }
+});

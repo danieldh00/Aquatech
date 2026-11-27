@@ -268,6 +268,8 @@
       if (!subItemsOf.has(item.groupId)) subItemsOf.set(item.groupId, []);
       subItemsOf.get(item.groupId).push(item);
     }
+    // Subartikelen van klein naar groot, gelezen uit de code (diameter, dan draadmaat).
+    for (const subItems of subItemsOf.values()) subItems.sort((left, right) => ArticleCode.compareCodes(left.code, right.code));
     const rows = [];
     for (const item of state.items) {
       if (item.groupId && groupIds.has(item.groupId)) continue;
