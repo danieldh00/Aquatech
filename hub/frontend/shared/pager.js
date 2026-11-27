@@ -5,7 +5,7 @@
 // paginering wil krijgt `data-no-pager`.
 // Sorteren staat op dezelfde plek: elke `table.grid` krijgt sorteerbare kolomkoppen (klik: oplopend, aflopend, uit; pijl in de kop). De
 // rijen worden vóór het pagineren gesorteerd, dus over de hele lijst en niet alleen over de pagina; de keuze wordt per tabel onthouden.
-// Een tabel waarvan de pagina zelf sorteert (`th[data-sort]`) of die `data-no-sort` heeft blijft ongemoeid.
+// Een tabel waarvan de pagina zelf sorteert (`th[data-sort]`) of die `data-no-sort` heeft blijft ongemoeid; zo'n pagina kan `sortOrder`, `storedSort` en `storeSort` gebruiken (de artikellijst).
 (function (root) {
   /** De keuzes voor het aantal per pagina (0 = alles). */
   const PAGE_SIZES = [25, 50, 100, 300, 0];
@@ -483,7 +483,7 @@
     root.document.addEventListener('keydown', onHeaderEvent);
   }
 
-  const api = { PAGE_SIZES, PAGE_SIZE_KEY, storedSize, windowOf, groupRows, attach, shownIds, sortOrder, parseNumber, parseDate };
+  const api = { PAGE_SIZES, PAGE_SIZE_KEY, storedSize, windowOf, groupRows, attach, shownIds, sortOrder, parseNumber, parseDate, storedSort, storeSort };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (root.document) {
     root.AquatechPager = api;
