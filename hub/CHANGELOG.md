@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.46.2
+
+- `stock.addMissingShop` geeft naast `skippedProducts` de lijst `skippedList` ({ productId, sku, code, name, reason, url }) terug en meldt hem als voortgangsstap `overgeslagen`; de taak bewaart hem als `skippedItems` (max. 3000). Reden bij een bestaande code noemt het artikel dat de code al heeft. Geen wijziging in welke producten worden toegevoegd.
+- Frontend: samenvatting per reden in het venster en tabblad *Overgeslagen* in de Excel (`artikelen/shop-missing.js`).
+
 ## 1.46.1
 
 - Artikel aanmaken en wijzigen: `subGroupId` zet merk en soort; een artikel met een soort houdt zijn code (409 bij wijzigen) en de soort wisselt niet meer.

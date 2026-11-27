@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.46.2',
+      date: '2026-11-27',
+      title: 'Reden per overgeslagen webshopartikel',
+      items: [
+        { text: '*Ontbrekende uit webshop toevoegen* toont nu per overgeslagen artikel waarom het niet is toegevoegd (code bestaat al, ongeldige of te lange code, hoofdproduct ontbreekt). Het venster telt de redenen en de Excel heeft een tabblad *Overgeslagen* met sku, voorgestelde code, omschrijving, reden en webshopadres.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.46.1',
       date: '2026-11-27',
       title: 'Artikelen: code laten voorstellen en oude nummers zoeken',
