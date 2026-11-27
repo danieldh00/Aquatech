@@ -661,6 +661,7 @@
     renderCosts();
     window.ArtikelenSuppliers.showItem(item).catch((error) => toast(error.message, true));
     window.ArtikelenPackagings.showItem(item).catch((error) => toast(error.message, true));
+    window.ArtikelenDocuments.showItem(item).catch((error) => toast(error.message, true));
     window.ArtikelenTexts.showItem(item).catch((error) => toast(error.message, true));
     $('#d-res').innerHTML = item.reservations.length ? `<thead><tr><th>Werkorder</th><th>Status</th><th>Gepland</th><th class="num">Gereserveerd</th></tr></thead>
       <tbody>${item.reservations.map((reservation) => `<tr><td class="wrap">${woLink(reservation.workOrder)}<span class="sub">${esc(reservation.workOrder.title)}</span></td>
@@ -1161,6 +1162,7 @@
     window.ArtikelenCodeGroups.setup({ api, toast, esc });
     window.ArtikelenConvert.setup({ api, toast, esc });
     window.ArtikelenPackagings.setup({ api, toast, esc });
+    window.ArtikelenDocuments.setup({ toast, esc });
     for (const formId of ['#new-form', '#edit-form']) {
       const pricingForm = $(formId);
       pricingForm.addEventListener('input', () => syncPricing(pricingForm));
