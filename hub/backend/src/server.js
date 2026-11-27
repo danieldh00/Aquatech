@@ -3175,7 +3175,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   const accountTokens = createAccountTokens(database);
   const shopAccounts = createShopAccounts({ store, auth, tenant, audit, clearEnvironment, impersonation, loginGuard, twoFactor, tokens: accountTokens, mailerFor, settingsFor: (id) => settingsFor(id), mailBody });
   storefrontRouter = createStorefront({
-    addressLookup, addressGuard, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore, data: storefrontData, itemImages: itemImageStore,
+    addressLookup, addressGuard, db: database, tenantId: tenant.id, settingsFor: (id) => settingsFor(id), accounts: shopAccounts, content: shopContentStore, data: storefrontData, itemImages: itemImageStore, itemDocuments: itemDocumentStore,
     orders: webOrders, orderMail: webOrderMail, orderInvoices: webOrderInvoices, orderSlips, returns: webReturns, guestOrders, stockAlerts, searchMisses, funnel, quoteRequests, payments: webPayments,
     featureOn: (id) => ModuleTools.isOn(moduleFlagsOf(tenant.id), id),
     vies, captcha, captchaGate,

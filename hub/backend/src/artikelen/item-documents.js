@@ -109,12 +109,12 @@ function createItemDocumentStore(db, { vault }) {
    * @param {string} tenantId Id van de omgeving.
    * @param {string} documentId Id van het document.
    * @param {{ publicOnly?: boolean }} [options] publicOnly = alleen als hij op de productpagina getoond mag worden.
-   * @returns {?{ name: string, body: Buffer }} De PDF, of null als hij niet bestaat, niet openbaar is of niet te lezen is.
+   * @returns {?{ name: string, body: Buffer }} De PDF, of null als hij niet bestaat, niet openbaar is (ook niet als het artikel gearchiveerd is) of niet te lezen is.
    */
   function file(tenantId, documentId, { publicOnly = false } = {}) {
     if (!DOCUMENT_ID_PATTERN.test(String(documentId))) return null;
-    const row = db.prepare('SELECT name, public, data FROM item_documents WHERE tenant_id = ? AND id = ?').get(tenantId, String(documentId));
-    if (!row || (publicOnly && Number(row.public) !== 1)) return null;
+    const row = db.prepare('SELECT d.name, d.public, d.data, i.archived FROM item_documents d JOIN stock_items i ON i.tenant_id = d.tenant_id AND i.id = d.item_id WHERE d.tenant_id = ? AND d.id = ?').get(tenantId, String(documentId));
+    if (!row || (publicOnly && (Number(row.public) !== 1 || Number(row.archived) === 1))) return null;
     try { return { name: row.name, body: vault.openBytes(row.data, aadOf(tenantId, String(documentId))) }; } catch (error) { return null; }
   }
 

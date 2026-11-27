@@ -40,6 +40,16 @@ function formatPrice(amount) {
   return `€ ${Number(amount).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/**
+ * Zet een bestandsgrootte om naar een korte tekst (bijvoorbeeld 1,2 MB).
+ * @param {number} bytes De grootte in bytes.
+ * @returns {string} De grootte in kB of MB.
+ */
+function formatFileSize(bytes) {
+  const size = Number(bytes) || 0;
+  return size >= 1024 * 1024 ? `${(size / 1024 / 1024).toLocaleString('nl-NL', { maximumFractionDigits: 1 })} MB` : `${Math.max(1, Math.round(size / 1024))} kB`;
+}
+
 /** De inhoud (blokken en pagina's uit Beheer) waarmee de pagina's die nu worden opgebouwd, worden getekend. */
 let activeContent = { site: DEFAULT_SITE, pages: [] };
 /** Of bestellen aan staat, hoeveel regels er in de winkelwagen van de bezoeker zitten en of hij een groothandelsklant is, met het kopje Groothandel (voor de pagina's die nu worden opgebouwd). */
@@ -881,18 +891,20 @@ function shortText(text, maxLength) {
 /**
  * Het blok Omschrijving en Specificaties onder een product (12): alinea's uit de platte tekst (lege regel = nieuwe
  * alinea, een regel met • = lijstpunt) en een tabel met de specificaties.
- * @param {{ description: string, specifications: { name: string, value: string }[] }} details Wat het artikel toont.
+ * @param {{ description: string, specifications: { name: string, value: string }[], documents?: { id: string, name: string, size: number }[] }} details Wat het artikel toont (documents = de PDF's die openbaar staan).
+ * @param {string} root Relatief pad naar de hoofdmap van de shop.
  * @returns {string} De HTML, leeg als er niets is.
  */
-function detailsSection(details) {
+function detailsSection(details, root) {
   const blocks = details.description ? details.description.split(/\n{2,}/).map((block) => {
     const lines = block.split('\n');
     if (lines.every((line) => line.startsWith('• '))) return `<ul>${lines.map((line) => `<li>${escapeHtml(line.slice(2))}</li>`).join('')}</ul>`;
     return `<p>${lines.map(escapeHtml).join('<br>')}</p>`;
   }).join('\n') : '';
   const specs = details.specifications.length ? `<table class="product-specs"><tbody>${details.specifications.map((entry) => `<tr><th scope="row">${escapeHtml(entry.name)}</th><td>${escapeHtml(entry.value)}</td></tr>`).join('')}</tbody></table>` : '';
-  if (!blocks && !specs) return '';
-  return `<section class="product-details">${blocks ? `<h2>Omschrijving</h2>\n${blocks}` : ''}${specs ? `<h2>Specificaties</h2>\n${specs}` : ''}</section>`;
+  const documents = (details.documents || []).length ? `<ul class="product-downloads">${details.documents.map((document) => `<li><a href="${root}artikel-pdf/${encodeURIComponent(document.id)}/${encodeURIComponent(document.name)}" rel="nofollow">${escapeHtml(document.name.replace(/\.pdf$/i, ''))}</a> <small>(PDF, ${escapeHtml(formatFileSize(document.size))})</small></li>`).join('')}</ul>` : '';
+  if (!blocks && !specs && !documents) return '';
+  return `<section class="product-details">${blocks ? `<h2>Omschrijving</h2>\n${blocks}` : ''}${specs ? `<h2>Specificaties</h2>\n${specs}` : ''}${documents ? `<h2>Downloads</h2>\n${documents}` : ''}</section>`;
 }
 
 /**
@@ -947,7 +959,7 @@ function productPage(product, groups, chosenCode = '', details = new Map(), { pa
     ${trustStrip(root, { freeFrom: trust.freeFrom || 0, online: Boolean(trust.online), business: activeShop.business })}
   </div>
 </article>
-${detailsSection(shownDetails)}
+${detailsSection(shownDetails, root)}
 ${related ? relatedSections(related, root, shown, product) : ''}`;
   const productPath = `product/${product.slug}/`;
   // Een subartikelpagina heeft één aanbieding (de eigen prijs en voorraad); een artikelgroep een prijsbereik over de subartikelen.
