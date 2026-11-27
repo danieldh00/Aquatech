@@ -6,3 +6,11 @@
 tr.pager-off { display: none; }
 @media (max-width: 600px) { .pager-nav { margin-left: 0; width: 100%; justify-content: space-between; } }
 @media print { tr.pager-off { display: table-row; } .pager { display: none; } }
+/* Sorteren (shared/pager.js): klikbare kolomkoppen met een pijl; de pijl van de gekozen kolom is vol, de rest is gedempt. */
+th.sort-th { cursor: pointer; user-select: none; white-space: nowrap; }
+th.sort-th:hover { color: var(--primary-dark, inherit); }
+th.sort-th:focus-visible { outline: 2px solid var(--primary, currentColor); outline-offset: -2px; }
+th.sort-th::after { content: " ↕"; font-size: 10px; opacity: .35; }
+th.sort-th.sort-asc::after { content: " ▲"; opacity: 1; }
+th.sort-th.sort-desc::after { content: " ▼"; opacity: 1; }
+@media print { th.sort-th::after { content: none; } }
