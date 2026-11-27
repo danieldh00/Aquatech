@@ -309,6 +309,17 @@
       right: 'voorraad',
     },
     {
+      id: 'artikelen-merken',
+      navGroup: 'artikelen',
+      partOf: 'voorraad',
+      title: 'Merken & soorten',
+      description: 'Merken (hoofdgroepen) en soorten (subgroepen) waaruit de artikelcodes worden opgebouwd.',
+      href: 'artikelen/#groups',
+      icon: 'tag',
+      status: 'actief',
+      right: 'voorraad',
+    },
+    {
       id: 'artikelen-eenheden',
       navGroup: 'artikelen',
       partOf: 'voorraad',

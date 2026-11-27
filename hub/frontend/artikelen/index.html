@@ -51,6 +51,7 @@
         <button class="tab" data-tab="texts" role="tab">Teksten <span id="t-texts" class="count"></span></button>
         <button class="tab" data-tab="related" data-feature="gerelateerde-artikelen" role="tab">Past bij</button>
         <button class="tab" data-tab="import" role="tab">Import &amp; export</button>
+        <button class="tab" data-tab="groups" role="tab">Merken &amp; soorten</button>
         <button class="tab" data-tab="units" role="tab">Eenheden</button>
       </nav>
 
@@ -239,6 +240,55 @@
             <p class="muted small">Losse artikelen die eigenlijk maten of kleuren van één product zijn, in één artikelgroep zetten.</p>
             <div class="form-actions"><button class="btn" id="b-merge" title="Losse artikelen die eigenlijk maten of kleuren van één product zijn onder één artikelgroep zetten">Artikelen groeperen (subartikelen)</button></div></div>
         </div>
+      </section>
+
+      <section id="tab-groups" class="tabpane" hidden>
+        <div class="card-grid">
+          <form id="mg-form" class="card card-form" novalidate>
+            <h3>Merken (hoofdgroepen)</h3>
+            <p class="muted small">Het eerste deel van een artikelcode, bijvoorbeeld UD voor Unidelta. Een merk waar artikelen of soorten aan hangen houdt zijn code.</p>
+            <div class="form-grid">
+              <label class="field">Code<input name="code" maxlength="8" required autocomplete="off" placeholder="UD"><span class="hint">Letters en cijfers, begint met een letter.</span></label>
+              <label class="field span-2">Naam<input name="name" maxlength="120" required autocomplete="off" placeholder="Unidelta"></label>
+            </div>
+            <div class="row actions">
+              <button class="btn primary" type="submit">Bewaren</button>
+              <button class="btn" type="button" data-cancel hidden>Annuleren</button>
+              <button class="btn danger" type="button" id="mg-remove" hidden title="Een merk met artikelen of soorten wordt gearchiveerd">Verwijderen</button>
+              <button class="btn" type="button" id="mg-restore" hidden>Terugzetten uit archief</button>
+            </div>
+            <div class="err" role="alert"></div>
+            <div class="tablewrap"><table class="grid" id="mg-table"></table></div>
+          </form>
+          <form id="sg-form" class="card card-form" novalidate>
+            <h3>Soorten (subgroepen)</h3>
+            <p class="muted small">Het tweede deel van de code, bijvoorbeeld KBI. Een soort hoort bij een merk, of bij geen merk: dan begint de code direct met de soort (KBI.20.12).</p>
+            <div class="form-grid">
+              <label class="field">Merk<select name="mainGroupId"></select></label>
+              <label class="field">Code<input name="code" maxlength="8" required autocomplete="off" placeholder="KBI"></label>
+              <label class="field span-2">Naam<input name="name" maxlength="120" required autocomplete="off" placeholder="Koppeling met buitendraad"></label>
+            </div>
+            <div class="row actions">
+              <button class="btn primary" type="submit">Bewaren</button>
+              <button class="btn" type="button" data-cancel hidden>Annuleren</button>
+              <button class="btn danger" type="button" id="sg-remove" hidden title="Een soort met artikelen wordt gearchiveerd">Verwijderen</button>
+              <button class="btn" type="button" id="sg-restore" hidden>Terugzetten uit archief</button>
+            </div>
+            <div class="err" role="alert"></div>
+            <div class="tablewrap"><table class="grid" id="sg-table"></table></div>
+          </form>
+          <form id="cp-form" class="card card-form" novalidate>
+            <h3>Codevoorstel proberen</h3>
+            <p class="muted small">Code = merk . soort . diameter (mm) . draadmaat in duimen als cijfers: ½" is 12, ¾" is 34, 1" is 1, 1¼" is 114, 1½" is 112, 2" is 2. Een metrische maat is het getal zelf. Een uitgegeven code verandert nooit meer.</p>
+            <div class="form-grid">
+              <label class="field span-2">Soort<select name="subGroupId"></select></label>
+              <label class="field">Diameter (mm)<input name="diameter" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="20"></label>
+              <label class="field">Draadmaat<input name="thread" maxlength="12" autocomplete="off" placeholder='3/4"'></label>
+            </div>
+            <p class="cp-result" id="cp-result" aria-live="polite"></p>
+          </form>
+        </div>
+        <label class="chk"><input type="checkbox" id="cg-archived"> Ook gearchiveerd</label>
       </section>
 
       <section id="tab-units" class="tabpane" hidden>
@@ -829,6 +879,8 @@
   <script src="labels.js"></script>
   <script src="bulk.js"></script>
   <script src="merge.js"></script>
+  <script src="../shared/article-code.js"></script>
+  <script src="code-groups.js"></script>
   <script src="suppliers.js"></script>
   <script src="packagings.js"></script>
   <script src="orders.js"></script>

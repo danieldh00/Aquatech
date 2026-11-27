@@ -1957,6 +1957,45 @@ const PG_MIGRATIONS = [
   ALTER TABLE stock_merges RENAME COLUMN parent_name TO group_name;
   ALTER INDEX stock_merges_parent RENAME TO stock_merges_group;
   `,
+  // 104: sprekende artikelcodes (MERK.SOORT.DIAMETER.DRAADMAAT): hoofdgroepen (merken), subgroepen (soorten, met of zonder merk) en oude nummers als zoeknaam.
+  // Een artikel met een subgroep heeft een sprekende code die niet meer verandert; diameter en draadmaat staan alleen in naam en code.
+  `
+  CREATE TABLE main_groups (
+    id         UUID PRIMARY KEY,
+    tenant_id  UUID NOT NULL ${references('tenants(id)')},
+    code       ${TEXT_TYPE} NOT NULL,
+    name       ${TEXT_TYPE} NOT NULL,
+    sort       BIGINT NOT NULL DEFAULT 0,
+    archived   BIGINT NOT NULL DEFAULT 0,
+    created_at ${TEXT_TYPE} NOT NULL
+  );
+  CREATE UNIQUE INDEX main_groups_code ON main_groups (tenant_id, code);
+  CREATE TABLE sub_groups (
+    id            UUID PRIMARY KEY,
+    tenant_id     UUID NOT NULL ${references('tenants(id)')},
+    main_group_id UUID ${references('main_groups(id)')},
+    code          ${TEXT_TYPE} NOT NULL,
+    name          ${TEXT_TYPE} NOT NULL,
+    sort          BIGINT NOT NULL DEFAULT 0,
+    archived      BIGINT NOT NULL DEFAULT 0,
+    created_at    ${TEXT_TYPE} NOT NULL
+  );
+  CREATE UNIQUE INDEX sub_groups_code ON sub_groups (tenant_id, main_group_id, code) WHERE main_group_id IS NOT NULL;
+  CREATE UNIQUE INDEX sub_groups_code_no_brand ON sub_groups (tenant_id, code) WHERE main_group_id IS NULL;
+  ALTER TABLE stock_items ADD COLUMN main_group_id UUID ${references('main_groups(id)')};
+  ALTER TABLE stock_items ADD COLUMN sub_group_id UUID ${references('sub_groups(id)')};
+  CREATE INDEX stock_items_sub_group ON stock_items (tenant_id, sub_group_id);
+  CREATE TABLE item_aliases (
+    id         UUID PRIMARY KEY,
+    tenant_id  UUID NOT NULL ${references('tenants(id)')},
+    item_id    UUID NOT NULL ${references('stock_items(id)')},
+    alias      ${TEXT_TYPE} NOT NULL,
+    kind       ${TEXT_TYPE} NOT NULL DEFAULT 'oud',
+    created_at ${TEXT_TYPE} NOT NULL
+  );
+  CREATE UNIQUE INDEX item_aliases_alias ON item_aliases (tenant_id, LOWER(alias));
+  CREATE INDEX item_aliases_item ON item_aliases (tenant_id, item_id);
+  `,
 ];
 
 module.exports = { PG_BASE, PG_BASE_VERSION, PG_MIGRATIONS, UUID_COLUMNS, RENAMED_COLUMNS, RENAMED_COLUMNS_VERSION, legacyUuid };

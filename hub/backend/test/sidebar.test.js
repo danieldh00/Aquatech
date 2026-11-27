@@ -108,7 +108,7 @@ test('Artikelen: onderdelen staan als subpagina in de zijbalk, met tussenkoppen 
   const sections = sectionsFor({ role: 'beheerder' });
   const items = sections.find((section) => section.key === 'artikelen').items;
   assert.deepStrictEqual(idsOf(items), [
-    'voorraad', 'artikelen-gereserveerd', 'artikelen-telling', 'artikelen-teksten', 'artikelen-afbeeldingen', 'artikelen-pastbij', 'artikelen-import', 'artikelen-eenheden',
+    'voorraad', 'artikelen-gereserveerd', 'artikelen-telling', 'artikelen-teksten', 'artikelen-afbeeldingen', 'artikelen-pastbij', 'artikelen-import', 'artikelen-merken', 'artikelen-eenheden',
   ]);
   assert.deepStrictEqual(items.filter((module) => module.navSection).map((module) => module.navSection), ['Voorraad', 'Inhoud', 'Beheer']);
   const html = require('node:fs').readFileSync(path.join(FRONTEND_DIR, 'artikelen', 'index.html'), 'utf8');

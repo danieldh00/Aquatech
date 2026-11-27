@@ -96,6 +96,7 @@ const { sanitizeCategoryDiscounts, registerCategoryDiscountRoutes, flatten: flat
 const { registerDeliveryPreviewRoutes } = require('./webshop/delivery-preview');
 const { sanitizeCategoryRules, registerDeliveryRuleRoutes, resolverFor: resolveDeliveryRules } = require('./webshop/delivery-rules');
 const { createSupplierStore, registerSupplierRoutes } = require('./artikelen/suppliers');
+const { createCodeGroupStore, registerCodeGroupRoutes } = require('./artikelen/code-groups');
 const { createPriceFactorStore, registerPriceFactorRoutes } = require('./artikelen/price-factor');
 const { createOrderReader: createDefaultOrderReader } = require('./artikelen/order-reader');
 const { registerOrderReadRoute } = require('./artikelen/order-read-route');
@@ -2187,6 +2188,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   });
   const itemImageStore = createItemImageStore(database, { vault, fetchImpl: imageFetch });
   const supplierStore = createSupplierStore(database);
+  const codeGroupStore = createCodeGroupStore(database);
   const packagingStore = createPackagingStore(database);
   /**
    * Of de automatische bestelvoorstellen in een omgeving aan staan: de instelling `purchaseProposals.enabled` en de
@@ -2703,6 +2705,8 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   // Leveranciers en welke leverancier welk artikel levert (zie suppliers.js).
   registerSupplierRoutes(app, { suppliers: supplierStore, requireRight, requireJson, audit });
+  // Hoofdgroepen (merken), subgroepen (soorten), het codevoorstel en oude nummers (zie code-groups.js).
+  registerCodeGroupRoutes(app, { codeGroups: codeGroupStore, requireRight, requireJson, audit });
   const priceFactorStore = createPriceFactorStore(database, { stock: stockStore, settingsOf: (tenantId) => settingsFor(tenantId), treeOf: (tenantId) => shopContentStore.publicContent(tenantId).tree });
   stockStore.setPricer((tenantId, item) => priceFactorStore.priceFor(tenantId, item));
   stockStore.setPriceLogger((entries) => store.auditMany(entries));
@@ -3133,7 +3137,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     store, tenant, settings, settingsFor, settingsCache, dailyCounts, requirePlatformAdmin, requireJson, wrap, audit,
     inScope, inScopeOnly, multitenancyOn, itemImageStore, shopContentStore, database, quoteStore, quoteOrders,
     workOrderStore, shopStore, photoStore, workLogStore, outsourcingStore, newsStore, aiUsage, recognitions,
-    stockStore, stockCounts, supplierStore, packagingStore, purchaseOrderStore, serviceRequestStore, invoiceStore, sprinklerStore,
+    stockStore, stockCounts, supplierStore, codeGroupStore, packagingStore, purchaseOrderStore, serviceRequestStore, invoiceStore, sprinklerStore,
     seasonReminderStore, paymentReminderStore, relatedStore, impersonation, withMustChange, auditUserChange, deleteUser,
   });
 
