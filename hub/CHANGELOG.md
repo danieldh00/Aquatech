@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.47.4
+
+Vierde deel van de leverancier-PDF per artikel: `POST /api/stock/items/:id/documents/specs` (`artikelen/item-pdf-specs.js`, recht `voorraad`, 20 per uur en 100 per dag per omgeving, audit `voorraad_pdf_specs`). `researchPdfFeatures` (related-research.js) geeft de PDF's als bijlage aan de AI (zonder zoeken op internet); `validatePdfFeatures` (related-compat.js) houdt alleen kenmerken met een aangeleverd bestand als bron, een bronzin en alle getallen uit die zin. Een kenmerk uit de PDF gaat voor een eerder opgezocht kenmerk met dezelfde naam, de overige eerder opgezochte kenmerken blijven bewaard; `drafts.applySpecs` voegt alleen nieuwe namen toe (eigen specificaties nooit overschreven). Verbruik als `kenmerken_pdf`. Het blok PDF's staat nu ook bij een artikelgroep. Geen migratie.
+
 ## 1.47.3
 
 Derde deel van de leverancier-PDF per artikel: blok `#d-documents` in `frontend/artikelen/` (`documents.js`, `window.ArtikelenDocuments`) boven de API van `item-documents.js` (upload als `application/pdf` met `X-Bestandsnaam`, aan/uit voor de productpagina, weghalen; niet bij een artikelgroep, niet te wijzigen bij een gearchiveerd artikel). Geen migratie.

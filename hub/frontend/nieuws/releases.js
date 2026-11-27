@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.47.4',
+      date: '2026-11-27',
+      title: 'Specificaties uit de PDF van de leverancier lezen',
+      items: [
+        { text: 'In het artikelformulier staat bij de PDF\'s een knop Specificaties uit PDF lezen: de AI leest de PDF en zet de technische kenmerken (materiaal, druk, afmetingen) bij de specificaties van het artikel. Eigen specificaties blijven staan. [voorraad]' },
+      ],
+    },
+    {
       version: '1.47.3',
       date: '2026-11-27',
       title: 'PDF\'s van de leverancier beheren in het artikelformulier',
