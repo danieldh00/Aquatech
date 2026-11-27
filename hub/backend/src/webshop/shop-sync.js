@@ -273,6 +273,11 @@ function createShopSync({ db, shop, stock, settingsFor, fetchImpl, log = console
           updates.push({ id: String(product.id), itemId: item.id, priceSeen: null, stockSeen: null });
           continue;
         }
+        if (item.group_id && !product.parentId) {
+          // Een subartikel dat aan een los webshopproduct hangt (alleen voor de orderhistorie en de eigen webshop): alleen koppelen, nooit prijs of voorraad naar WordPress.
+          links.push({ itemId: item.id, productId: String(product.id), error: '' });
+          continue;
+        }
         if (product.type === 'variable') {
           // Gewoon artikel bij een product met variaties (van vóór de subartikelen, met voorraad): alleen koppelen, geen prijs of stand.
           links.push({ itemId: item.id, productId: String(product.id), error: VARIABLE_ON_PLAIN });
