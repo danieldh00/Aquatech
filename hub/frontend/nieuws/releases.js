@@ -13,6 +13,15 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.46.3',
+      date: '2026-11-27',
+      title: 'Subartikelen van klein naar groot en oude nummers in de keuzelijst',
+      items: [
+        { text: 'In de artikellijst en de keuzelijst (offerte, werkorder) zoek je ook op oude nummers, en subartikelen staan van klein naar groot.', for: ['voorraad'] },
+        { text: 'Het formulier Nieuw voorraadartikel sluit nu bij het wisselen van pagina en blijft niet meer staan.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.46.2',
       date: '2026-11-27',
       title: 'Reden per overgeslagen webshopartikel',

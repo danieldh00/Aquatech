@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.46.3
+
+- `GET /api/stock/articles` geeft `aliases` mee en sorteert subartikelen met `ArticleCode.compareCodes`; de lijst in Artikelen sorteert subartikelen ook zo.
+- Artikelen: `showTab` sluit alle formulieren in `#v-forms` bij het wisselen van tabblad.
+
 ## 1.46.2
 
 - `stock.addMissingShop` geeft naast `skippedProducts` de lijst `skippedList` ({ productId, sku, code, name, reason, url }) terug en meldt hem als voortgangsstap `overgeslagen`; de taak bewaart hem als `skippedItems` (max. 3000). Reden bij een bestaande code noemt het artikel dat de code al heeft. Geen wijziging in welke producten worden toegevoegd.
