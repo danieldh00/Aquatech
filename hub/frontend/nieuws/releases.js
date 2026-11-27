@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.46.9',
+      date: '2026-11-27',
+      title: 'Ontbrekende webshopartikelen: subartikelen terugzetten en koppelen',
+      items: [
+        { text: '*Ontbrekende uit webshop toevoegen* zet nu ook gearchiveerde subartikelen terug en koppelt subartikelen die nog niet aan hun webshopproduct hangen. Zo komen ook de artikelen terug die bij het samenvoegen in een artikelgroep zijn gekomen. De Excel (tabblad *Teruggezet*) toont per artikel wat er is gebeurd.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.46.8',
       date: '2026-11-27',
       title: 'Oude artikelnummers vindbaar in de shop en de AI-koppeling',
