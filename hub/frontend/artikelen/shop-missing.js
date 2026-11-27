@@ -54,10 +54,26 @@
     else if (!state.running) bar.value = state.error ? 0 : 1;
     else bar.removeAttribute('value');
     const list = $('#sm-list');
-    list.hidden = !state.added.length;
+    const skippedItems = state.skippedItems || [];
+    list.hidden = !state.added.length && !skippedItems.length;
     const shown = state.added.slice(-SHOWN).reverse();
-    list.innerHTML = `${state.added.length > SHOWN ? `<div class="muted">Laatste ${SHOWN} van ${state.added.length} binnengehaald; alles staat in de Excel.</div>` : ''}${shown.map((item) => `<div><code>${esc(item.code)}</code> ${esc(item.name)}</div>`).join('')}`;
-    $('#sm-excel').hidden = !state.added.length;
+    list.innerHTML = `${skippedReasons(skippedItems)}${state.added.length > SHOWN ? `<div class="muted">Laatste ${SHOWN} van ${state.added.length} binnengehaald; alles staat in de Excel.</div>` : ''}${shown.map((item) => `<div><code>${esc(item.code)}</code> ${esc(item.name)}</div>`).join('')}`;
+    $('#sm-excel').hidden = !state.added.length && !skippedItems.length;
+  }
+
+  /**
+   * Telt de overgeslagen artikelen per reden, zodat in het venster te zien is waarom ze niet zijn toegevoegd.
+   * @param {object[]} skippedItems De overgeslagen artikelen met reden.
+   * @returns {string} HTML met één regel per reden, of leeg.
+   */
+  function skippedReasons(skippedItems) {
+    if (!skippedItems.length) return '';
+    const counts = new Map();
+    for (const item of skippedItems) {
+      const group = String(item.reason).replace(/«.*»/, '…').replace(/\(\d+\)/, '').trim();
+      counts.set(group, (counts.get(group) || 0) + 1);
+    }
+    return `<div><strong>Overgeslagen: ${skippedItems.length}</strong> (per artikel met reden in de Excel)</div>${[...counts].map(([group, count]) => `<div class="muted">${count}× ${esc(group)}</div>`).join('')}`;
   }
 
   /**
@@ -104,13 +120,17 @@
    * @returns {Promise<void>}
    */
   async function downloadExcel() {
-    if (!last || !last.added.length) return;
+    if (!last || (!last.added.length && !(last.skippedItems || []).length)) return;
     if (!window.ExcelJS && !(window.AquatechCommon && await window.AquatechCommon.excel())) { toast('Excel-export niet beschikbaar.', true); return; }
     const excelWorkbook = new ExcelJS.Workbook();
     const worksheet = excelWorkbook.addWorksheet('Binnengehaald', { views: [{ state: 'frozen', ySplit: 1 }] });
     worksheet.columns = [{ header: 'Artikelcode', key: 'code', width: 24 }, { header: 'Omschrijving', key: 'name', width: 70 }];
     for (const item of last.added) worksheet.addRow({ code: item.code, name: item.name });
     worksheet.getRow(1).font = { bold: true };
+    const skippedSheet = excelWorkbook.addWorksheet('Overgeslagen', { views: [{ state: 'frozen', ySplit: 1 }] });
+    skippedSheet.columns = [{ header: 'Webshop-id', key: 'productId', width: 12 }, { header: 'Sku', key: 'sku', width: 28 }, { header: 'Voorgestelde code', key: 'code', width: 28 }, { header: 'Omschrijving', key: 'name', width: 60 }, { header: 'Reden', key: 'reason', width: 70 }, { header: 'Webshopadres', key: 'url', width: 60 }];
+    for (const item of last.skippedItems || []) skippedSheet.addRow(item);
+    skippedSheet.getRow(1).font = { bold: true };
     const buffer = await excelWorkbook.xlsx.writeBuffer();
     const link = document.createElement('a');
     link.href = URL.createObjectURL(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));

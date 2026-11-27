@@ -302,6 +302,9 @@ test('webshop: ontbrekende producten toevoegen schrijft niets terug, archiveert 
   const out = await sync.run(tid, { addMissing: true });
   assert.strictEqual(out.created, 1, '110-12 is nieuw');
   assert.strictEqual(out.skippedProducts, 1, 'de sku met een komma kan geen artikelcode zijn');
+  assert.strictEqual(out.skippedList.length, 1);
+  assert.match(out.skippedList[0].reason, /tekens die niet mogen/, 'de reden staat per product');
+  assert.strictEqual(out.skippedList[0].sku, '10,62');
   assert.ok(fake.calls.every((call) => call.method === 'GET'), 'er wordt niets naar de webshop geschreven, ook niet met terugschrijven aan');
   assert.strictEqual(products.get('21').regular_price, '12.10');
   assert.strictEqual(products.get('21').stock_quantity, 4);
@@ -320,6 +323,26 @@ test('webshop: ontbrekende producten toevoegen schrijft niets terug, archiveert 
   settings.set('shopSource', sanitizeShop({ ...source, push: false }));
   await sync.run(tid);
   assert.strictEqual(stock.get(tid, wooCoded.id).shop.productId, '22');
+});
+
+test('webshop: een overgeslagen product krijgt de reden, ook als de code al bij een ander artikel hoort', () => {
+  const { tid, stock } = setup(new Map(), { url: 'http://shop.test', mode: 'rest', mirror: false });
+  const user = { id: null, display_name: 'Test' };
+  stock.create(tid, user, { code: 'DUBBEL', name: 'Eigen artikel', salePrice: 1 });
+  const products = [
+    { id: '70', type: 'simple', sku: 'DUBBEL', code: '', name: 'Zelfde sku', price: 1, attributes: [], parentId: null },
+    { id: '71', type: 'simple', sku: 'X'.repeat(41), code: '', name: 'Te lange sku', price: 1, attributes: [], parentId: null },
+    { id: '72', type: 'variation', sku: 'LOS-1', code: '', name: 'Wees', price: 1, attributes: [], parentId: '999' },
+  ];
+  const events = [];
+  const out = stock.addMissingShop(tid, products, () => null, { onProgress: (event) => events.push(event) });
+  assert.strictEqual(out.created, 0);
+  assert.strictEqual(out.skippedProducts, 3);
+  const reasons = Object.fromEntries(out.skippedList.map((entry) => [entry.productId, entry.reason]));
+  assert.match(reasons['70'], /bestaat al als artikel «Eigen artikel»/);
+  assert.match(reasons['71'], /langer dan 40/);
+  assert.match(reasons['72'], /hoofdproduct/);
+  assert.ok(events.some((event) => event.step === 'overgeslagen' && event.items.length === 3), 'de lijst komt ook als voortgangsmelding');
 });
 
 test('webshop: een nieuwe variatie bij een bestaand variabel artikel krijgt de naam hoofdnaam + waarde', () => {

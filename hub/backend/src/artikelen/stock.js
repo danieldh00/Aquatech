@@ -1091,7 +1091,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @param {{ product: object, code: string }[]} fresh De nieuwe producten met hun voorraadcode.
    * @param {Map<string, object>} groupItems Bestaande artikelgroepen per webshop-product-id ({ id, name, is_group, attributes }).
    * @param {{ vatRate: number, priceOf: Function }} options Btw-tarief van nieuwe artikelen en product → verkoopprijs excl. btw.
-   * @returns {{ codes: string[], skipped: number }} De codes van de nieuwe artikelen en het aantal overgeslagen variaties.
+   * @returns {{ codes: string[], skipped: number, skippedEntries: object[] }} De codes van de nieuwe artikelen, het aantal overgeslagen variaties en die variaties zelf.
    */
   function insertShopProducts(tenantId, fresh, groupItems, { vatRate, priceOf }) {
     const timestamp = currentTimestamp();
@@ -1099,9 +1099,11 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         sale_price, vat_rate, revenue_group, shop_sync, shop_product_id, group_id, is_group, attributes, sub_values, stock_managed)
       VALUES (?, ?, ?, ?, 'st', '', 0, 0, NULL, '', 0, ?, ?, ?, ?, 'producten', 1, ?, ?, ?, ?, ?, ?)`);
     const codes = [];
+    const skippedEntries = [];
     let skipped = 0;
     const ordered = [...fresh.filter((entry) => !entry.product.parentId), ...fresh.filter((entry) => entry.product.parentId)];
     for (const { product, code } of ordered) {
+      const entry = { product, code };
       const price = priceOf(product);
       const salePrice = price == null ? null : Math.round(price * 100) / 100;
       // Geen aantal in de webshop (geen voorraadbeheer daar): Aquatech houdt de voorraad nog niet bij, de status volgt de webshop.
@@ -1113,7 +1115,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
         groupItems.set(String(product.id), { id, name: cleanText(product.name, 200) || code, is_group: 1, attributes: JSON.stringify(attributes) });
       } else if (product.parentId) {
         const articleGroup = groupItems.get(String(product.parentId));
-        if (!articleGroup || !Number(articleGroup.is_group)) { skipped++; continue; }
+        if (!articleGroup || !Number(articleGroup.is_group)) { skipped++; skippedEntries.push(entry); continue; }
         const values = {};
         for (const attribute of product.attributes || []) if (attribute.name && attribute.option) values[cleanText(attribute.name, 40)] = cleanText(attribute.option, 40);
         put.run(crypto.randomUUID(), tenantId, code, Object.keys(values).length ? subItemName(articleGroup.name, values) : cleanText(product.name, 200) || code, timestamp, timestamp,
@@ -1123,7 +1125,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       }
       codes.push(code);
     }
-    return { codes, skipped };
+    return { codes, skipped, skippedEntries };
   }
 
   /**
@@ -1288,13 +1290,13 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @param {object[]} products Alle producten uit de webshop (met variaties).
    * @param {Function} matchProduct Functie item ({ code }) → webshopproduct of null.
    * @param {{ vatRate?: number, priceOf?: Function, onProgress?: Function }} [options] Btw-tarief van nieuwe artikelen, product → verkoopprijs excl. btw en onProgress (krijgt { step: 'toevoegen', total, created, skipped, added: [{ code, name }] } na elke portie van 50).
-   * @returns {{ created: number, skippedProducts: number }} Aantallen.
+   * @returns {{ created: number, skippedProducts: number, skippedList: object[] }} Aantallen en per overgeslagen product { productId, sku, code, name, reason, url }.
    */
   function addMissingShop(tenantId, products, matchProduct, { vatRate = 21, priceOf = (product) => product.price, onProgress = null } = {}) {
     const items = prepare('SELECT id, code, name, shop_product_id, group_id, is_group, attributes FROM stock_items WHERE tenant_id = ?').all(tenantId);
     const matchedProducts = new Set();
     const groupItems = new Map();
-    const seenCodes = new Set(items.map((item) => item.code));
+    const seenCodes = new Map(items.map((item) => [item.code, `bestaat al als artikel «${item.name}»`]));
     for (const item of items) {
       const product = matchProduct(item);
       if (!product) continue;
@@ -1303,14 +1305,29 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     }
     const productIds = new Set(products.map((product) => String(product.id)));
     const fresh = [];
-    let skippedProducts = 0;
+    const skippedList = [];
+    /**
+     * Zet een overgeslagen webshopproduct met de reden in de lijst.
+     * @param {object} product Het webshopproduct.
+     * @param {string} code De voorgestelde voorraadcode.
+     * @param {string} reason De reden in gewone taal.
+     * @returns {void}
+     */
+    const skip = (product, code, reason) => skippedList.push({ productId: String(product.id), sku: product.sku || '', code, name: cleanText(product.name, 200), reason, url: product.url || product.permalink || '' });
     for (const product of products) {
       if (matchedProducts.has(String(product.id))) continue;
       const code = shopCodeOf(product);
-      if (!code || code.length > 40 || !/^[A-Z0-9][A-Z0-9 ._\-/+]*$/.test(code) || seenCodes.has(code) || (product.parentId && !productIds.has(String(product.parentId)))) { skippedProducts++; continue; }
-      seenCodes.add(code);
+      let reason = '';
+      if (!code) reason = 'geen code of sku';
+      else if (code.length > 40) reason = `code langer dan 40 tekens (${code.length})`;
+      else if (!/^[A-Z0-9][A-Z0-9 ._\-/+]*$/.test(code)) reason = 'code bevat tekens die niet mogen (toegestaan: letters, cijfers, spatie en . _ - / +)';
+      else if (seenCodes.has(code)) reason = `code ${seenCodes.get(code)}`;
+      else if (product.parentId && !productIds.has(String(product.parentId))) reason = 'het hoofdproduct van deze variatie staat niet in de webshoplijst';
+      if (reason) { skip(product, code, reason); continue; }
+      seenCodes.set(code, 'komt dubbel voor in de webshop (zelfde sku bij een ander product)');
       fresh.push({ product, code });
     }
+    if (onProgress) onProgress({ step: 'overgeslagen', items: skippedList });
     // Hoofdproducten eerst, dan de variaties; in porties van 50 (elk in een eigen transactie), zodat de voortgang zichtbaar is.
     const ordered = [...fresh.filter((entry) => !entry.product.parentId), ...fresh.filter((entry) => entry.product.parentId)];
     let created = 0;
@@ -1319,16 +1336,16 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       transaction(db, () => {
         const inserted = insertShopProducts(tenantId, chunk, groupItems, { vatRate, priceOf });
         created += inserted.codes.length;
-        skippedProducts += inserted.skipped;
+        for (const entry of inserted.skippedEntries) skip(entry.product, entry.code, 'de variatie hoort bij een hoofdproduct dat niet als artikelgroep is toegevoegd');
         if (inserted.codes.length) resyncOpen(tenantId, inserted.codes, { nested: true });
         if (onProgress) {
           const names = new Map(chunk.map((entry) => [entry.code, cleanText(entry.product.name, 200) || entry.code]));
-          onProgress({ step: 'toevoegen', total: ordered.length, created, skipped: skippedProducts, added: inserted.codes.map((code) => ({ code, name: names.get(code) })) });
+          onProgress({ step: 'toevoegen', total: ordered.length, created, skipped: skippedList.length, added: inserted.codes.map((code) => ({ code, name: names.get(code) })) });
         }
       });
     }
-    if (onProgress && !ordered.length) onProgress({ step: 'toevoegen', total: 0, created: 0, skipped: skippedProducts, added: [] });
-    return { created, skippedProducts };
+    if (onProgress && !ordered.length) onProgress({ step: 'toevoegen', total: 0, created: 0, skipped: skippedList.length, added: [] });
+    return { created, skippedProducts: skippedList.length, skippedList };
   }
 
   /**
