@@ -158,21 +158,6 @@
   }
 
   /**
-   * Herkent of de inhoud van een tabel is vervangen (ander zoekwoord of filter) of alleen is bijgewerkt: dezelfde aantallen met dezelfde eerste en laatste rij.
-   * @param {HTMLTableRowElement[]} rows De rijen.
-   * @returns {string} Een sleutel; verandert de sleutel dan gaat de tabel terug naar pagina 1.
-   */
-  function keyOf(rows) {
-    /**
-     * De naam van een rij: haar id of de tekst van de eerste cel.
-     * @param {HTMLTableRowElement|undefined} row De rij.
-     * @returns {string} De naam.
-     */
-    const label = (row) => (row ? row.getAttribute('data-id') || (row.cells[0] ? row.cells[0].textContent.trim() : '') : '');
-    return `${rows.length}|${label(rows[0])}|${label(rows[rows.length - 1])}`;
-  }
-
-  /**
    * Maakt een balk en zet hem in de pagina vóór of na de tabel (of de omhullende `.tablewrap`).
    * @param {Element} table De tabel.
    * @param {boolean} before True voor boven de tabel.
@@ -194,11 +179,10 @@
   function applyTable(table) {
     if (!isPaged(table)) return;
     let info = tables.get(table);
-    if (!info) { info = { page: 1, size: storedSize(), key: '', bars: null }; tables.set(table, info); }
+    if (!info) { info = { page: 1, size: storedSize(), count: -1, bars: null }; tables.set(table, info); }
     const rows = bodyRows(table);
     const groups = groupRows(rows, (row) => row.classList.contains('sub-item') || row.hasAttribute('data-pager-join'));
-    const key = keyOf(rows);
-    if (key !== info.key) { info.page = 1; info.key = key; }
+    if (rows.length !== info.count) { info.page = 1; info.count = rows.length; }
     const view = windowOf(groups.length, info.page, info.size);
     info.page = view.page;
     groups.forEach((group, index) => {

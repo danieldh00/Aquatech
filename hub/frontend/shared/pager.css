@@ -5,3 +5,4 @@
 .pager-nav { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 tr.pager-off { display: none; }
 @media (max-width: 600px) { .pager-nav { margin-left: 0; width: 100%; justify-content: space-between; } }
+@media print { tr.pager-off { display: table-row; } .pager { display: none; } }
