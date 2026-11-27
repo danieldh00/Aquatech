@@ -29,7 +29,8 @@ let runningInspections = 0;
  * @returns {Promise<{ bytes?: Buffer, pages?: number, error?: string, busy?: boolean }>} De schone PDF en het aantal pagina's, of een melding in gewone taal (busy: het is nu te druk, later opnieuw).
  */
 function inspectSlip(buffer, { maxBytes = MAX_SLIP_BYTES, maxPages = MAX_SLIP_PAGES, label = 'De pakbon' } = {}) {
-  if (!Buffer.isBuffer(buffer) || buffer.length < 64) return Promise.resolve({ error: 'Het bestand is leeg.' });
+  if (typeof buffer === 'string' || Array.isArray(buffer) || !Buffer.isBuffer(buffer)) return Promise.resolve({ error: 'Het bestand is leeg.' });
+  if (buffer.length < 64) return Promise.resolve({ error: 'Het bestand is leeg.' });
   if (buffer.length > maxBytes) return Promise.resolve({ error: `${label} is te groot (hoogstens ${maxBytes / 1024 / 1024} MB).` });
   if (buffer.subarray(0, 5).toString('latin1') !== '%PDF-') return Promise.resolve({ error: 'Dit is geen PDF-bestand.' });
   if (runningInspections >= MAX_PARALLEL_INSPECTIONS) return Promise.resolve({ busy: true, error: 'Er worden op dit moment al PDF-bestanden gecontroleerd. Probeer het over een paar tellen opnieuw.' });
