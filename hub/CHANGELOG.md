@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.47.6
+
+- Ontbrekende webshopartikelen: een teruggezet of gekoppeld subartikel krijgt `shop_sync = 1` (de vorige versie zette het op 0, waardoor het uit de eigen webshop verdween). Een volgende run zet de eerder op 0 gezette gekoppelde subartikelen weer aan (Excel: "weer in de webshop gezet").
+- De synchronisatie koppelt een subartikel dat aan een los WordPress-product hangt alleen en schrijft er nooit prijs of voorraad naar terug.
+
 ## 1.47.5
 
 Sorteren zit in `shared/pager.js` naast de paginering: elke `table.grid` met één kopregel krijgt sorteerbare kolomkoppen (klik of Enter/spatie; oplopend, aflopend, uit; `aria-sort`). De rijen worden vóór het pagineren gesorteerd, dus over de hele tabel. Getallen (€, %, eenheden), datums (dd-mm-jjjj, jjjj-mm-dd, "27 nov. 2026") en tekst (Nederlandse volgorde, getallen in de tekst op waarde) worden per kolom herkend, lege cellen staan altijd onderaan en rijen met `sub-item`/`data-pager-join` blijven bij hun hoofdrij. De keuze staat per pagina en tabel in localStorage (`aquatech_sortering:…`), de kolom wordt op kopnaam herkend. Tabellen die zelf sorteren (`th[data-sort]`: plannen, werkorders, offertes, klantdossier), `data-no-sort` en `data-no-pager` (artikellijst, volgt apart) blijven ongemoeid. Geen nieuwe dependency; tests in `test/pager.test.js`.
