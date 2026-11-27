@@ -50,15 +50,25 @@ function createItemDocumentStore(db, { vault }) {
   async function add(tenantId, itemId, raw, { name = '' } = {}) {
     const item = db.prepare('SELECT id FROM stock_items WHERE tenant_id = ? AND id = ?').get(tenantId, String(itemId));
     if (!item) return { error: 'not_found', message: 'Artikel niet gevonden.', status: 404 };
-    const count = Number(db.prepare('SELECT COUNT(*) AS n FROM item_documents WHERE tenant_id = ? AND item_id = ?').get(tenantId, item.id).n);
-    if (count >= MAX_PER_ITEM) return { error: 'too_many', message: `Een artikel heeft hoogstens ${MAX_PER_ITEM} PDF's.`, status: 409 };
+    // De hash is die van het ontvangen bestand: de schone PDF krijgt bij elke controle een nieuw aanmaaktijdstip en zou nooit gelijk zijn.
+    const contentHash = crypto.createHash('sha256').update(raw).digest('hex');
+    /**
+     * Of er nog plek is voor deze PDF bij het artikel en hij er nog niet staat.
+     * @returns {?{ error: string, message: string, status: number }} Een fout, of null als de PDF erbij mag.
+     */
+    const refusal = () => {
+      const count = Number(db.prepare('SELECT COUNT(*) AS n FROM item_documents WHERE tenant_id = ? AND item_id = ?').get(tenantId, item.id).n);
+      if (count >= MAX_PER_ITEM) return { error: 'too_many', message: `Een artikel heeft hoogstens ${MAX_PER_ITEM} PDF's.`, status: 409 };
+      if (db.prepare('SELECT id FROM item_documents WHERE tenant_id = ? AND item_id = ? AND content_hash = ?').get(tenantId, item.id, contentHash)) return { error: 'duplicate', message: 'Deze PDF staat al bij dit artikel.', status: 409 };
+      return null;
+    };
+    // Eerst goedkoop weigeren, vóór de zware controle; na de controle (een await) opnieuw, want een gelijktijdige upload kan intussen zijn bewaard.
+    if (refusal()) return refusal();
     const checked = await inspectSlip(raw, { maxBytes: MAX_DOCUMENT_BYTES, maxPages: MAX_DOCUMENT_PAGES, label: 'De PDF' });
     if (checked.busy) return { error: 'busy', message: checked.error, status: 429 };
     if (checked.error) return { error: 'invalid_pdf', message: checked.error, status: 400 };
-    // De hash is die van het ontvangen bestand: de schone PDF krijgt bij elke controle een nieuw aanmaaktijdstip en zou nooit gelijk zijn.
-    const contentHash = crypto.createHash('sha256').update(raw).digest('hex');
-    const existing = db.prepare('SELECT id FROM item_documents WHERE tenant_id = ? AND item_id = ? AND content_hash = ?').get(tenantId, item.id, contentHash);
-    if (existing) return { error: 'duplicate', message: 'Deze PDF staat al bij dit artikel.', status: 409 };
+    // Vanaf hier tot de INSERT zit geen await meer: controle en opslag zijn één stap.
+    if (refusal()) return refusal();
     const id = crypto.randomUUID();
     const timestamp = new Date().toISOString();
     db.prepare('INSERT INTO item_documents (id, tenant_id, item_id, name, pages, size, content_hash, public, data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)')

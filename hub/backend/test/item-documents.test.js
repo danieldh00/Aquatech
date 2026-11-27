@@ -126,6 +126,20 @@ test('artikel-pdf: alleen echte PDF\'s, geen dubbele, grenzen per PDF en per art
   assert.strictEqual((await upload(world, admin, '00000000-0000-4000-8000-000000000000', pdf)).status, 404);
 });
 
+test('artikel-pdf: gelijktijdige uploads geven geen 500 en blijven binnen het maximum', async () => {
+  const world = await setup();
+  const { admin, db, main } = world;
+  const item = await article(admin, 'DOC-4');
+  const same = await makePdf(1, 'zelfde');
+  const twins = await Promise.all([upload(world, admin, item.id, same), upload(world, admin, item.id, same)]);
+  assert.deepStrictEqual(twins.map((out) => out.status).sort(), [201, 409]);
+  const many = [];
+  for (let index = 0; index < 6; index++) many.push(await makePdf(1, `parallel ${index}`));
+  const outcomes = (await Promise.all(many.map((pdf) => upload(world, admin, item.id, pdf)))).map((out) => out.status);
+  assert.ok(outcomes.every((status) => [201, 409, 429].includes(status)), outcomes.join(','));
+  assert.ok(db.prepare('SELECT COUNT(*) AS n FROM item_documents WHERE tenant_id = ? AND item_id = ?').get(main, item.id).n <= 5);
+});
+
 test('artikel-pdf: rechten, andere organisatie en opruimen bij verwijderen van het artikel', async () => {
   const world = await setup();
   const { admin, klant, vreemd, anonymous, db, main } = world;
