@@ -52,6 +52,7 @@
         <button class="tab" data-tab="related" data-feature="gerelateerde-artikelen" role="tab">Past bij</button>
         <button class="tab" data-tab="import" role="tab">Import &amp; export</button>
         <button class="tab" data-tab="groups" role="tab">Merken &amp; soorten</button>
+        <button class="tab" data-tab="convert" role="tab">Bestaande omzetten</button>
         <button class="tab" data-tab="units" role="tab">Eenheden</button>
       </nav>
 
@@ -295,6 +296,21 @@
           </form>
         </div>
         <label class="chk"><input type="checkbox" id="cg-archived"> Ook gearchiveerd</label>
+      </section>
+
+      <section id="tab-convert" class="tabpane" hidden>
+        <div class="card card-form">
+          <h3>Bestaande artikelen omzetten</h3>
+          <p class="muted small">Elk artikel zonder soort krijgt een voorstel: de soort uit de naam, diameter en draadmaat uit de naam, en daaruit de code (merk . soort . diameter . draadmaat). Pas aan wat niet klopt, vink aan en zet om. De oude code blijft als zoeknaam bestaan, zodat offertes en werkorders het artikel blijven vinden. Een omgezette code verandert daarna nooit meer.</p>
+          <p class="small" id="cv-summary" aria-live="polite"></p>
+          <div class="row actions">
+            <label class="field">Tonen<select id="cv-filter"><option value="alles">Alles</option><option value="klaar">Met geldig voorstel</option><option value="aandacht">Aandacht nodig</option></select></label>
+            <button class="btn" type="button" id="cv-select-ready">Alles met een geldig voorstel aanvinken</button>
+            <button class="btn primary" type="button" id="cv-apply">Aangevinkte omzetten</button>
+            <button class="btn" type="button" id="cv-excel">Lijst als Excel</button>
+          </div>
+          <div class="tablewrap"><table class="grid" id="cv-table"></table></div>
+        </div>
       </section>
 
       <section id="tab-units" class="tabpane" hidden>
@@ -887,6 +903,7 @@
   <script src="merge.js"></script>
   <script src="../shared/article-code.js"></script>
   <script src="code-groups.js"></script>
+  <script src="convert.js"></script>
   <script src="suppliers.js"></script>
   <script src="packagings.js"></script>
   <script src="orders.js"></script>

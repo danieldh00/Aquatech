@@ -320,6 +320,17 @@
       right: 'voorraad',
     },
     {
+      id: 'artikelen-omzetten',
+      navGroup: 'artikelen',
+      partOf: 'voorraad',
+      title: 'Bestaande omzetten',
+      description: 'Bestaande artikelen omzetten naar sprekende codes (merk, soort, diameter, draadmaat).',
+      href: 'artikelen/#convert',
+      icon: 'tag',
+      status: 'actief',
+      right: 'voorraad',
+    },
+    {
       id: 'artikelen-eenheden',
       navGroup: 'artikelen',
       partOf: 'voorraad',

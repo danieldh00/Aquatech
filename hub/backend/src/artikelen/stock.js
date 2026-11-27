@@ -234,7 +234,12 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
    * @param {string} code De artikelcode.
    * @returns {object|undefined} De rij.
    */
-  const findCode = (tenantId, code) => prepare(`SELECT ${ITEM_COLS} FROM stock_items WHERE tenant_id = ? AND code = ?`).get(tenantId, normalizeCode(code));
+  const findCode = (tenantId, code) => {
+    const normalized = normalizeCode(code);
+    return prepare(`SELECT ${ITEM_COLS} FROM stock_items WHERE tenant_id = ? AND code = ?`).get(tenantId, normalized)
+      // Een oude code van een omgezet artikel (zie code-conversion.js) wijst naar het artikel met de nieuwe code.
+      || prepare(`SELECT ${ITEM_COLS} FROM stock_items WHERE tenant_id = ? AND id = (SELECT item_id FROM item_aliases WHERE tenant_id = ? AND kind = 'oud' AND LOWER(alias) = LOWER(?))`).get(tenantId, tenantId, normalized);
+  };
 
   /**
    * Reserveringen met de werkorder erbij (nummer, titel, status, datum).
