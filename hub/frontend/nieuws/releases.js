@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.47.5',
+      date: '2026-11-27',
+      title: 'Sorteren in tabellen',
+      items: [
+        { text: 'Je kunt in de tabellen nu sorteren door op een kolomkop te klikken: eerst oplopend, dan aflopend, dan weer zoals het was. Een pijl laat zien waarop gesorteerd is en je keuze blijft per tabel bewaard. Het sorteren geldt voor de hele lijst, niet alleen voor de pagina die je ziet.' },
+      ],
+    },
+    {
       version: '1.47.4',
       date: '2026-11-27',
       title: 'Specificaties uit de PDF van de leverancier lezen',

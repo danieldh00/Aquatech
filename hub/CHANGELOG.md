@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.47.5
+
+Sorteren zit in `shared/pager.js` naast de paginering: elke `table.grid` met één kopregel krijgt sorteerbare kolomkoppen (klik of Enter/spatie; oplopend, aflopend, uit; `aria-sort`). De rijen worden vóór het pagineren gesorteerd, dus over de hele tabel. Getallen (€, %, eenheden), datums (dd-mm-jjjj, jjjj-mm-dd, "27 nov. 2026") en tekst (Nederlandse volgorde, getallen in de tekst op waarde) worden per kolom herkend, lege cellen staan altijd onderaan en rijen met `sub-item`/`data-pager-join` blijven bij hun hoofdrij. De keuze staat per pagina en tabel in localStorage (`aquatech_sortering:…`), de kolom wordt op kopnaam herkend. Tabellen die zelf sorteren (`th[data-sort]`: plannen, werkorders, offertes, klantdossier), `data-no-sort` en `data-no-pager` (artikellijst, volgt apart) blijven ongemoeid. Geen nieuwe dependency; tests in `test/pager.test.js`.
+
 ## 1.47.4
 
 Vierde deel van de leverancier-PDF per artikel: `POST /api/stock/items/:id/documents/specs` (`artikelen/item-pdf-specs.js`, recht `voorraad`, 20 per uur en 100 per dag per omgeving, audit `voorraad_pdf_specs`). `researchPdfFeatures` (related-research.js) geeft de PDF's als bijlage aan de AI (zonder zoeken op internet); `validatePdfFeatures` (related-compat.js) houdt alleen kenmerken met een aangeleverd bestand als bron, een bronzin en alle getallen uit die zin. Een kenmerk uit de PDF gaat voor een eerder opgezocht kenmerk met dezelfde naam, de overige eerder opgezochte kenmerken blijven bewaard; `drafts.applySpecs` voegt alleen nieuwe namen toe (eigen specificaties nooit overschreven). Verbruik als `kenmerken_pdf`. Het blok PDF's staat nu ook bij een artikelgroep. Geen migratie.
