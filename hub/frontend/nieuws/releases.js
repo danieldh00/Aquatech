@@ -13,6 +13,12 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.47.1',
+      date: '2026-11-27',
+      title: 'PDF\'s bij artikelen bewaren',
+      items: [],
+    },
+    {
       version: '1.47.0',
       date: '2026-11-27',
       title: 'Alle lange tabellen met paginering',

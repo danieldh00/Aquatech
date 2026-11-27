@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.47.1
+
+Eerste deel van de leverancier-PDF per artikel (nog geen scherm): migratie 105 `item_documents` (versleuteld via `vault.sealBytes`, AAD `<omgeving>:artikel-pdf:<id>`), `artikelen/item-documents.js` met `POST|GET /api/stock/items/:id/documents` (PDF als body, kop `X-Bestandsnaam`), `GET|PATCH|DELETE /api/stock/documents/:id` (recht `voorraad`). De PDF wordt in de werkthread van `inspectSlip` gecontroleerd en opnieuw opgebouwd (geen annotaties, acties of metadata); hoogstens 10 MB, 40 pagina's en 5 PDF's per artikel, dezelfde inhoud twee keer wordt geweigerd, 60 uploads per uur per omgeving. `inspectSlip` en de werkthread nemen nu eigen grenzen mee (de pakbon blijft 2 MB en 10 pagina's). `public` bepaalt straks of de PDF op de productpagina te downloaden is. Testdata: een PDF bij de tuinslang.
+
 ## 1.47.0
 
 Gedeelde paginering in `shared/pager.js` + `shared/pager.css`. Elke `table.grid` krijgt vanzelf een balk boven en onder (alleen bij meer dan 25 rijen); rijen buiten de pagina krijgen de klasse `pager-off`. Een rij met klasse `sub-item` of `data-pager-join` blijft op de pagina van de rij erboven; `data-no-pager` zet het uit voor een tabel. Een lijst die zelf in porties tekent gebruikt `AquatechPager.attach` (artikellijst en Past bij, die hun eigen kopie hebben vervangen). De keuze staat onder de bestaande sleutel `aquatech_artikelen_paginagrootte`. Verandert het aantal rijen (ander filter of zoekwoord) dan gaat een tabel terug naar pagina 1, anders blijft de pagina staan; bij afdrukken staan alle rijen. `pager.js` en `pager.css` staan op alle pagina's met lijsten; test: `test/pager.test.js`.
