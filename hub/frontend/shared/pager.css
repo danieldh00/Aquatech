@@ -1,0 +1,8 @@
+/* Paginering (shared/pager.js): balk boven en onder een lange tabel; rijen buiten de pagina zijn verborgen. */
+.pager { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 10px 0; }
+.pager[hidden] { display: none; }
+.pager-size { display: flex; align-items: center; gap: 8px; }
+.pager-nav { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+tr.pager-off { display: none; }
+@media (max-width: 600px) { .pager-nav { margin-left: 0; width: 100%; justify-content: space-between; } }
+@media print { tr.pager-off { display: table-row; } .pager { display: none; } }

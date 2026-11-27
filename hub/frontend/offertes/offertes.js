@@ -266,10 +266,16 @@
        * @param {MouseEvent} event de klik
        */
       all.onclick = (event) => { event.stopPropagation(); };
-      /** Selecteert alle zichtbare offertes of heft de selectie op. */
+      /** Selecteert alle offertes op de huidige pagina of heft de selectie daarvan op (nooit de rijen op andere pagina's). */
       all.onchange = () => {
-        for (const quote of items) { if (all.checked) state.selected.add(quote.id); else state.selected.delete(quote.id); }
+        const shown = new Set(window.AquatechPager.shownIds(table));
+        for (const quote of items) {
+          if (!shown.has(quote.id)) continue;
+          if (all.checked) state.selected.add(quote.id); else state.selected.delete(quote.id);
+        }
         renderList();
+        const header = table.querySelector('input[data-select-all]');
+        if (header) header.checked = all.checked;
       };
     }
     renderBulkBar();

@@ -219,11 +219,6 @@ body.has-nav .tabs[role="tablist"] { display: none; }
 .rl-evidence { margin: 4px 0 0; padding-left: 18px; font-size: 13px; color: var(--at-muted); }
 @media (max-width: 600px) { .rl-list li { flex-direction: column; } }
 
-.pager { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 10px 0; }
-.pager-size { display: flex; align-items: center; gap: 8px; }
-.pager-nav { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-@media (max-width: 600px) { .pager-nav { margin-left: 0; width: 100%; justify-content: space-between; } }
-
 /* Merken & soorten: het resultaat van het codevoorstel. */
 .cp-result { font-weight: 600; margin: 0; }
 .cp-result.bad { color: var(--at-danger); }

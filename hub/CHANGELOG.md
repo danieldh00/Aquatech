@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.47.0
+
+Gedeelde paginering in `shared/pager.js` + `shared/pager.css`. Elke `table.grid` krijgt vanzelf een balk boven en onder (alleen bij meer dan 25 rijen); rijen buiten de pagina krijgen de klasse `pager-off`. Een rij met klasse `sub-item` of `data-pager-join` blijft op de pagina van de rij erboven; `data-no-pager` zet het uit voor een tabel. Een lijst die zelf in porties tekent gebruikt `AquatechPager.attach` (artikellijst en Past bij, die hun eigen kopie hebben vervangen). De keuze staat onder de bestaande sleutel `aquatech_artikelen_paginagrootte`. Verandert het aantal rijen (ander filter of zoekwoord) dan gaat een tabel terug naar pagina 1, anders blijft de pagina staan; bij afdrukken staan alle rijen. `pager.js` en `pager.css` staan op alle pagina's met lijsten; test: `test/pager.test.js`.
+
+## 1.46.9
+
+- `stock.addMissingShop`: een (gearchiveerd) subartikel met dezelfde code als een los webshopproduct wordt teruggezet (`archived = 0`, `archived_by_parent = 0`, artikelgroep mee terug) en gekoppeld (`shop_product_id`) met `shop_sync = 0`, zodat de synchronisatie er nooit naar de webshop schrijft. Een artikel dat al aan een ander bestaand webshopproduct hangt, wordt overgeslagen met een reden. `restoredItems` heeft een veld `kind`.
+
 ## 1.46.8
 
 Oude nummers (`item_aliases`) staan in de zoekindex van de webshop (`storefront-data.js` levert `aliases` aan artikel en subartikel, `search.js` neemt ze mee in de zoektekst) en in `searchArticles` van de MCP-server (`zoek_artikelen`). De keuzelijsten en de voorraadlijst deden dat al; `stock.findCode` valt terug op een oud nummer. Eigen Code128 zonder EAN (`Barcode.forItem`) en de volgorde klein naar groot (`ArticleCode.compareCodes`) bestonden al. Geen migratie.

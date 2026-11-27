@@ -658,6 +658,7 @@ Zusterprojecten: `danieldh00/Hardlooptool` (poort 3200), `danieldh00/Lijstjes`
   krijgen `private, max-age=31536000, immutable` (`staticHeaders`). Startpagina:
   server zet `<meta name="aquatech-start">` op het dashboard (`startPageOf`).
   Links naar een item altijd direct (`?id=`), nooit via een overzicht.
+- **Paginering van lijsten** (geen migratie, `shared/pager.js` + `shared/pager.css`, besluit Daniël 2026-11-27: alle tabellen paginering): elke `table.grid` met meer dan 25 rijen krijgt vanzelf een balk boven en onder (25/50/100/300/Alles, één bewaarde keuze `aquatech_artikelen_paginagrootte`); rijen buiten de pagina krijgen `pager-off` (bij afdrukken staan ze er wel). Een rij met klasse `sub-item` of `data-pager-join` blijft bij de rij erboven; `data-no-pager` zet het uit voor een tabel die zelf in porties tekent en dan `AquatechPager.attach` gebruikt (artikellijst, Past bij). **Een pagina met lijsten laadt `shared/pager.css` en `shared/pager.js` (test bewaakt dat); een nieuwe lijst is een `table.grid` en krijgt het vanzelf. "Alles selecteren" en andere acties op de zichtbare rijen gebruiken `AquatechPager.shownIds(table)`, nooit de hele lijst.**
 - **Queries**: per verzoek één query voor sessie+gebruiker+tenant
   (`store.findSessionWithUser`), tenant per verzoek onthouden
   (`withRequestCache`, AsyncLocalStorage), statische bestanden 30 s zonder

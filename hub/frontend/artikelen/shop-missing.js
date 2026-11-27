@@ -58,7 +58,7 @@
     const restoredItems = state.restoredItems || [];
     list.hidden = !state.added.length && !skippedItems.length && !restoredItems.length;
     const shown = state.added.slice(-SHOWN).reverse();
-    list.innerHTML = `${restoredItems.length ? `<div><strong>Gearchiveerd teruggezet: ${restoredItems.length}</strong> (zie tabblad Teruggezet in de Excel)</div>` : ''}${skippedReasons(skippedItems)}${state.added.length > SHOWN ? `<div class="muted">Laatste ${SHOWN} van ${state.added.length} binnengehaald; alles staat in de Excel.</div>` : ''}${shown.map((item) => `<div><code>${esc(item.code)}</code> ${esc(item.name)}</div>`).join('')}`;
+    list.innerHTML = `${restoredItems.length ? `<div><strong>Teruggezet of gekoppeld: ${restoredItems.length}</strong> (zie tabblad Teruggezet in de Excel)</div>` : ''}${skippedReasons(skippedItems)}${state.added.length > SHOWN ? `<div class="muted">Laatste ${SHOWN} van ${state.added.length} binnengehaald; alles staat in de Excel.</div>` : ''}${shown.map((item) => `<div><code>${esc(item.code)}</code> ${esc(item.name)}</div>`).join('')}`;
     $('#sm-excel').hidden = !state.added.length && !skippedItems.length && !restoredItems.length;
   }
 
@@ -129,7 +129,7 @@
     for (const item of last.added) worksheet.addRow({ code: item.code, name: item.name });
     worksheet.getRow(1).font = { bold: true };
     const restoredSheet = excelWorkbook.addWorksheet('Teruggezet', { views: [{ state: 'frozen', ySplit: 1 }] });
-    restoredSheet.columns = [{ header: 'Artikelcode', key: 'code', width: 28 }, { header: 'Omschrijving', key: 'name', width: 70 }, { header: 'Webshop-id', key: 'productId', width: 12 }];
+    restoredSheet.columns = [{ header: 'Artikelcode', key: 'code', width: 28 }, { header: 'Omschrijving', key: 'name', width: 70 }, { header: 'Webshop-id', key: 'productId', width: 12 }, { header: 'Soort', key: 'kind', width: 36 }];
     for (const item of last.restoredItems || []) restoredSheet.addRow(item);
     restoredSheet.getRow(1).font = { bold: true };
     const skippedSheet = excelWorkbook.addWorksheet('Overgeslagen', { views: [{ state: 'frozen', ySplit: 1 }] });

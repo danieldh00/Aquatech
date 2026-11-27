@@ -1348,8 +1348,11 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       else if (!/^[A-Z0-9][A-Z0-9 ._\-/+]*$/.test(code)) reason = 'code bevat tekens die niet mogen (toegestaan: letters, cijfers, spatie en . _ - / +)';
       else if (itemsByCode.has(code)) {
         const owner = itemsByCode.get(code);
-        // Een gearchiveerd los artikel met deze code is het ontbrekende artikel: terugzetten in plaats van overslaan.
-        if (Number(owner.archived) && !owner.group_id && !Number(owner.is_group) && !product.parentId && product.type !== 'variable') { restoredList.push({ owner, product, code }); itemsByCode.delete(code); seenCodes.set(code, 'komt dubbel voor in de webshop (zelfde sku bij een ander product)'); continue; }
+        const simpleProduct = !product.parentId && product.type !== 'variable';
+        const linkedElsewhere = owner.shop_product_id && String(owner.shop_product_id) !== String(product.id) && productIds.has(String(owner.shop_product_id));
+        // Een gearchiveerd artikel (los of subartikel) of een subartikel zonder koppeling met deze code is het ontbrekende artikel: terugzetten en koppelen in plaats van overslaan.
+        const needsAction = Number(owner.archived) || (owner.group_id && !owner.shop_product_id);
+        if (simpleProduct && needsAction && !Number(owner.is_group) && !linkedElsewhere) { restoredList.push({ owner, product, code, sub: Boolean(owner.group_id) }); itemsByCode.delete(code); seenCodes.set(code, 'komt dubbel voor in de webshop (zelfde sku bij een ander product)'); continue; }
         reason = `code ${existingReason(owner)}`;
       } else if (seenCodes.has(code)) reason = `code ${seenCodes.get(code)}`;
       else if (product.parentId && !productIds.has(String(product.parentId))) reason = 'het hoofdproduct van deze variatie staat niet in de webshoplijst';
@@ -1359,12 +1362,20 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     }
     if (restoredList.length) {
       transaction(db, () => {
-        const restore = prepare('UPDATE stock_items SET archived = 0, shop_product_id = ?, shop_sync = 1, updated_at = ? WHERE tenant_id = ? AND id = ?');
-        for (const entry of restoredList) restore.run(String(entry.product.id), currentTimestamp(), tenantId, entry.owner.id);
+        // Een los artikel gaat mee met de webshop (shop_sync = 1). Een subartikel wordt alleen gekoppeld (shop_sync = 0): zo schrijft de synchronisatie er nooit naar de webshop; de koppeling dient voor de orderhistorie.
+        const restoreLoose = prepare('UPDATE stock_items SET archived = 0, shop_product_id = ?, shop_sync = 1, updated_at = ? WHERE tenant_id = ? AND id = ?');
+        const restoreSub = prepare('UPDATE stock_items SET archived = 0, archived_by_parent = 0, shop_product_id = ?, shop_sync = 0, updated_at = ? WHERE tenant_id = ? AND id = ?');
+        const reopenGroup = prepare('UPDATE stock_items SET archived = 0, updated_at = ? WHERE tenant_id = ? AND id = ? AND archived = 1');
+        for (const entry of restoredList) {
+          const timestamp = currentTimestamp();
+          if (!entry.sub) { restoreLoose.run(String(entry.product.id), timestamp, tenantId, entry.owner.id); continue; }
+          restoreSub.run(String(entry.product.id), timestamp, tenantId, entry.owner.id);
+          reopenGroup.run(timestamp, tenantId, entry.owner.group_id);
+        }
         resyncOpen(tenantId, restoredList.map((entry) => entry.code), { nested: true });
       });
     }
-    const restoredItems = restoredList.map((entry) => ({ code: entry.code, name: cleanText(entry.product.name, 200) || entry.code, productId: String(entry.product.id) }));
+    const restoredItems = restoredList.map((entry) => ({ code: entry.code, name: cleanText(entry.product.name, 200) || entry.code, productId: String(entry.product.id), kind: `${entry.sub ? 'subartikel' : 'los artikel'}${Number(entry.owner.archived) ? ', teruggezet uit archief' : ', gekoppeld'}` }));
     if (onProgress) onProgress({ step: 'overgeslagen', items: skippedList, restored: restoredItems });
     // Hoofdproducten eerst, dan de variaties; in porties van 50 (elk in een eigen transactie), zodat de voortgang zichtbaar is.
     const ordered = [...fresh.filter((entry) => !entry.product.parentId), ...fresh.filter((entry) => entry.product.parentId)];
