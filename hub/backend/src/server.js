@@ -91,6 +91,7 @@ const { createSeasonReminderStore, createSeasonReminderRunner } = require('./uit
 const { createQuoteFollowUpRunner } = require('./verkoop/quote-follow-up');
 const { createStockStore, registerStockRoutes } = require('./artikelen/stock');
 const { createItemImageStore, registerItemImageRoutes } = require('./artikelen/item-images');
+const { createItemDocumentStore, registerItemDocumentRoutes } = require('./artikelen/item-documents');
 const { registerLabelRoutes } = require('./artikelen/labels');
 const { sanitizeCategoryDiscounts, registerCategoryDiscountRoutes, flatten: flattenCategories } = require('./webshop/category-discounts');
 const { registerDeliveryPreviewRoutes } = require('./webshop/delivery-preview');
@@ -2188,6 +2189,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
     afterImport: (tenantId) => asSystem(() => { if (ModuleTools.isOn(moduleFlagsOf(tenantId), 'gerelateerde-artikelen')) relatedStore.refreshTogether(tenantId); }),
   });
   const itemImageStore = createItemImageStore(database, { vault, fetchImpl: imageFetch });
+  const itemDocumentStore = createItemDocumentStore(database, { vault });
   const supplierStore = createSupplierStore(database);
   const codeGroupStore = createCodeGroupStore(database);
   const packagingStore = createPackagingStore(database);
@@ -2735,6 +2737,9 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
   // Afbeeldingen bij artikelen: uploaden, verwijderen en overnemen uit de oude webshop (zie item-images.js).
   registerItemImageRoutes(app, { images: itemImageStore, requireRight, requireJson, audit,
     importLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 300, keyFn: (req) => req.tenantId || tenant.id }) });
+  // PDF's bij artikelen (productinformatie van de leverancier, zie item-documents.js).
+  registerItemDocumentRoutes(app, { documents: itemDocumentStore, requireRight, requireJson, audit,
+    uploadLimiter: createRateLimiter({ windowMs: 60 * 60 * 1000, max: 60, keyFn: (req) => req.tenantId || tenant.id }) });
 
   // ---------- Facturen en export naar de boekhouding (zie invoices.js) ----------
   const invoiceRoutes = registerInvoiceRoutes(app, {
@@ -3139,7 +3144,7 @@ function createApp({ accessCode = '', secret, anthropicApiKey = '', aiDailyLimit
 
   registerPlatformRoutes(app, {
     store, tenant, settings, settingsFor, settingsCache, dailyCounts, requirePlatformAdmin, requireJson, wrap, audit,
-    inScope, inScopeOnly, multitenancyOn, itemImageStore, shopContentStore, database, quoteStore, quoteOrders,
+    inScope, inScopeOnly, multitenancyOn, itemImageStore, itemDocumentStore, shopContentStore, database, quoteStore, quoteOrders,
     workOrderStore, shopStore, photoStore, workLogStore, outsourcingStore, newsStore, aiUsage, recognitions,
     stockStore, stockCounts, supplierStore, codeGroupStore, packagingStore, purchaseOrderStore, serviceRequestStore, invoiceStore, sprinklerStore,
     seasonReminderStore, paymentReminderStore, relatedStore, impersonation, withMustChange, auditUserChange, deleteUser,

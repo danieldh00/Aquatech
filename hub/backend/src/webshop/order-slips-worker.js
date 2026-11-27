@@ -4,10 +4,9 @@ const { parentPort, workerData } = require('worker_threads');
 const zlib = require('zlib');
 const { PDFDocument, PDFName } = require('pdf-lib');
 
-/** Hoogstens zoveel bytes voor een geüploade pakbon. */
-const MAX_SLIP_BYTES = 2 * 1024 * 1024;
-/** Hoogstens zoveel pagina's in een geüploade pakbon. */
-const MAX_SLIP_PAGES = 10;
+/** Standaard hoogstens zoveel bytes en pagina's voor een geüploade PDF (de aanroeper kan andere grenzen meegeven in workerData). */
+const DEFAULT_MAX_BYTES = 2 * 1024 * 1024;
+const DEFAULT_MAX_PAGES = 10;
 /** Een pagina is minstens zo groot en hoogstens zo groot (in punten, 72 per inch): een A0-vel is 2384 × 3370. */
 const MIN_PAGE_POINTS = 100;
 const MAX_PAGE_POINTS = 3400;
@@ -124,12 +123,13 @@ function streamsWithinLimits(buffer) {
 }
 
 /**
- * Controleert een geüploade pakbon en bouwt hem opnieuw op uit de pagina's (zonder annotaties, paginaacties en metadata).
+ * Controleert een geüploade PDF en bouwt hem opnieuw op uit de pagina's (zonder annotaties, paginaacties en metadata).
  * @param {Buffer} buffer De ontvangen bytes.
+ * @param {{ maxBytes: number, maxPages: number, label: string }} limits De grenzen en de naam van het document in meldingen.
  * @returns {Promise<{ bytes?: Buffer, pages?: number, error?: string }>} De schone PDF en het aantal pagina's, of een melding in gewone taal.
  */
-async function checkSlip(buffer) {
-  if (usesUnsupportedFilter(buffer)) return { error: 'Deze PDF gebruikt een compressie die niet wordt ondersteund. Sla de pakbon opnieuw op als gewone PDF.' };
+async function checkSlip(buffer, { maxBytes, maxPages, label }) {
+  if (usesUnsupportedFilter(buffer)) return { error: 'Deze PDF gebruikt een compressie die niet wordt ondersteund. Sla het bestand opnieuw op als gewone PDF.' };
   if (!streamsWithinLimits(buffer)) return { error: 'Deze PDF wordt te groot als hij wordt uitgepakt en is daarom niet toegestaan.' };
   let source;
   let count;
@@ -140,7 +140,7 @@ async function checkSlip(buffer) {
     return { error: 'Deze PDF kan niet worden gelezen. Beveiligde (met wachtwoord) en beschadigde PDF\'s worden niet geaccepteerd.' };
   }
   if (count < 1) return { error: 'De PDF heeft geen pagina\'s.' };
-  if (count > MAX_SLIP_PAGES) return { error: `De pakbon heeft te veel pagina's (hoogstens ${MAX_SLIP_PAGES}).` };
+  if (count > maxPages) return { error: `${label} heeft te veel pagina's (hoogstens ${maxPages}).` };
   for (const page of source.getPages()) {
     const { width, height } = page.getSize();
     if (!(width >= MIN_PAGE_POINTS && height >= MIN_PAGE_POINTS && width <= MAX_PAGE_POINTS && height <= MAX_PAGE_POINTS)) return { error: 'De paginagrootte van de PDF is niet bruikbaar.' };
@@ -154,11 +154,12 @@ async function checkSlip(buffer) {
       clean.addPage(page);
     }
     const bytes = Buffer.from(await clean.save());
-    if (bytes.length > MAX_SLIP_BYTES) return { error: `De pakbon is te groot (hoogstens ${MAX_SLIP_BYTES / 1024 / 1024} MB).` };
+    if (bytes.length > maxBytes) return { error: `${label} is te groot (hoogstens ${maxBytes / 1024 / 1024} MB).` };
     return { bytes, pages: count };
   } catch {
     return { error: 'Deze PDF kan niet worden verwerkt.' };
   }
 }
 
-checkSlip(Buffer.from(workerData)).then((result) => parentPort.postMessage(result)).catch(() => parentPort.postMessage({ error: 'Deze PDF kan niet worden verwerkt.' }));
+const limits = { maxBytes: workerData.maxBytes || DEFAULT_MAX_BYTES, maxPages: workerData.maxPages || DEFAULT_MAX_PAGES, label: workerData.label || 'De pakbon' };
+checkSlip(Buffer.from(workerData.data), limits).then((result) => parentPort.postMessage(result)).catch(() => parentPort.postMessage({ error: 'Deze PDF kan niet worden verwerkt.' }));

@@ -13,6 +13,7 @@ const zlib = require('zlib');
 const Core = require(path.join(FRONTEND_DIR, 'offertes', 'quote-core.js'));
 const WoCore = require(path.join(FRONTEND_DIR, 'werkorders', 'workorder-core.js'));
 const { fromOrder } = require('../webshop/shop-orders');
+const { createPdf } = require('../verkoop/pdf');
 const InvCore = require(path.join(FRONTEND_DIR, 'facturen', 'invoice-core.js'));
 const { loadArticles } = require('../webshop/shop');
 
@@ -598,14 +599,14 @@ function sitePhotoPng(kind = 'oplevering', seed = 1, imageWidth = 480, imageHeig
  * precies zo is als wanneer iemand het in de app doet): klantlinks, reacties
  * van klanten, werkorders, uren, foto's, meldingen, voorraad, facturen en de
  * webshop. Draait na store.seedEnvironment.
- * @param {object} stores { db, quotes, quoteOrders (offerte omzetten naar bestelling), workorders, shop, settings (van de testomgeving), photos, worklog, outsourcing, news, aiUsage, recognitions, stock, suppliers, packagings, purchaseOrders, itemImages, requests, invoices, sprinklers }.
+ * @param {object} stores { db, quotes, quoteOrders (offerte omzetten naar bestelling), workorders, shop, settings (van de testomgeving), photos, worklog, outsourcing, news, aiUsage, recognitions, stock, suppliers, packagings, purchaseOrders, itemImages, itemDocuments, requests, invoices, sprinklers }.
  * @param {object} testSet Uitkomst van buildTestData.
  * @param {{ users: object, quoteIds: string[], tenantId: string }} seeded Uit seedEnvironment.
  * @param {{ shareBase?: string|null }} [options] Adres van openbaar/offerte.html (uit de browser); zonder komen er geen klantlinks.
  * @returns {object} Aantallen per soort aangemaakte gegevens.
  */
 function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
-  const { db, quotes, quoteOrders, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, stockCounts, suppliers, codeGroups, packagings, purchaseOrders, itemImages, requests, invoices, sprinklers, seasonReminders, paymentReminders, related } = stores;
+  const { db, quotes, quoteOrders, workorders, shop, settings, photos, worklog, outsourcing, news, aiUsage, recognitions, stock, stockCounts, suppliers, codeGroups, packagings, purchaseOrders, itemImages, itemDocuments, requests, invoices, sprinklers, seasonReminders, paymentReminders, related } = stores;
   /**
    * Bereidt een SQL-opdracht voor.
    * @param {string} sql De SQL.
@@ -938,6 +939,12 @@ function seedFeatures(stores, testSet, seeded, { shareBase = null } = {}) {
     }, { resync: false });
     if (hose.error) throw new Error(`Testdata: artikelgroep mislukt (${hose.error})`);
     if (itemImages) itemImages.setForItem(tenantId, hose.item.id, { name: 'tuinslang.png', data: sitePhotoPng('voor', 7).toString('base64') });
+    if (itemDocuments) {
+      const datasheet = createPdf({ title: 'Productinformatie tuinslang' });
+      datasheet.addPage();
+      datasheet.text('Tuinslang 1/2 inch, werkdruk 10 bar', 50, 60);
+      itemDocuments.seed(tenantId, hose.item.id, datasheet.toBuffer(), { name: 'Productinformatie tuinslang.pdf', pages: 1 });
+    }
     const hoseSubItems = stock.setSubItems(tenantId, hose.item.id, [{ name: 'Lengte', values: ['15 m', '25 m', '50 m'] }]);
     if (hoseSubItems.error) throw new Error(`Testdata: subartikelen mislukt (${hoseSubItems.error})`);
     hoseSubItems.item.subItems.forEach((subItem, subItemIndex) => {
