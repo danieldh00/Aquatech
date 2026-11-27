@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.46.8
+
+Oude nummers (`item_aliases`) staan in de zoekindex van de webshop (`storefront-data.js` levert `aliases` aan artikel en subartikel, `search.js` neemt ze mee in de zoektekst) en in `searchArticles` van de MCP-server (`zoek_artikelen`). De keuzelijsten en de voorraadlijst deden dat al; `stock.findCode` valt terug op een oud nummer. Eigen Code128 zonder EAN (`Barcode.forItem`) en de volgorde klein naar groot (`ArticleCode.compareCodes`) bestonden al. Geen migratie.
+
 ## 1.46.7
 
 - `artikelen/code-conversion.js`: `GET /api/stock/code-conversion` (voorstel per artikel zonder soort: soort uit woorden in de naam, diameter en draadmaat uit naam en subartikelwaarden, controle op bezette en dubbele codes) en `POST /api/stock/code-conversion/apply` (hoogstens 1000 regels; wat klopt gaat in één transactie, de rest komt terug met de reden; de oude code wordt een oud nummer). Recht `voorraad`, audit `artikelcodes_omgezet`.

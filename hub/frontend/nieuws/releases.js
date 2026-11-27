@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.46.8',
+      date: '2026-11-27',
+      title: 'Oude artikelnummers vindbaar in de shop en de AI-koppeling',
+      items: [
+        { text: 'Een artikel dat een nieuwe sprekende code kreeg, is in de webshop en via de AI-koppeling ook nog te vinden op zijn oude nummer.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.46.7',
       date: '2026-11-27',
       title: 'Bestaande artikelen omzetten naar sprekende codes',
