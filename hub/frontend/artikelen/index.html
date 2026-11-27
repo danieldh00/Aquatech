@@ -246,6 +246,22 @@
             <p class="muted small">Losse artikelen die eigenlijk maten of kleuren van één product zijn, in één artikelgroep zetten.</p>
             <div class="form-actions"><button class="btn" id="b-merge" title="Losse artikelen die eigenlijk maten of kleuren van één product zijn onder één artikelgroep zetten">Artikelen groeperen (subartikelen)</button></div></div>
         </div>
+        <section id="rl-wp" class="card" aria-labelledby="rl-wp-title">
+          <h2 id="rl-wp-title">Orderhistorie uit WordPress <span class="pill">tijdelijk</span></h2>
+          <p class="muted small">Haalt de bestellingen van de oude webshop op (alleen lezen, er gaat niets terug naar WordPress) zodat Vaak samen besteld meteen gevuld is. Het zijn geen echte bestellingen in AquaTech Hub: ze maken geen voorraadmutatie, factuur of mail en tellen niet mee in omzet of marge. Wel worden de klanten uit de orders aangemaakt (op e-mailadres, zonder inlog; bestaande klanten blijven zoals ze zijn). Regels worden aan artikelen gekoppeld, ook als die inmiddels een variabel product zijn. Na de eerste keer werkt AquaTech Hub dit elk uur zelf bij.</p>
+          <div id="rl-wp-status" class="notice" role="status"></div>
+          <div class="form-actions">
+            <label class="inline">Maanden terug <input id="rl-wp-months" type="number" min="1" max="60" value="24" style="width:5em"></label>
+            <button class="btn primary" id="rl-wp-start" type="button">Orders ophalen</button>
+            <button class="btn" id="rl-wp-stop" type="button">Uurlijks bijwerken uitzetten</button>
+          </div>
+          <h3>Producten zonder artikel</h3>
+          <p class="muted small">Producten uit de oude orders die niet automatisch aan een artikel zijn gekoppeld (op variatie, product-id, SKU of naam). Kies het artikel om ze te koppelen.</p>
+          <div class="tablewrap"><table class="grid" id="rl-wp-table"></table></div>
+          <label class="field" id="rl-wp-pick" hidden>Koppel <b id="rl-wp-pick-name"></b> aan
+            <input id="rl-wp-search" type="search" placeholder="Zoek op code of naam" autocomplete="off"></label>
+          <ul id="rl-wp-results" class="rl-list"></ul>
+        </section>
       </section>
 
       <section id="tab-groups" class="tabpane" hidden>
@@ -597,22 +613,6 @@
           <ul id="rl-add-results" class="rl-list"></ul>
           <h3>Vaak samen besteld</h3>
           <ul id="rl-together" class="rl-list"></ul>
-        </section>
-        <section id="rl-wp" class="card" aria-labelledby="rl-wp-title">
-          <h2 id="rl-wp-title">Orderhistorie uit WordPress</h2>
-          <p class="muted small">Haalt de bestellingen van de oude webshop op (alleen lezen, er gaat niets terug naar WordPress) zodat Vaak samen besteld meteen gevuld is. Het zijn geen echte bestellingen in AquaTech Hub: ze maken geen voorraadmutatie, factuur of mail en tellen niet mee in omzet of marge. Wel worden de klanten uit de orders aangemaakt (op e-mailadres, zonder inlog; bestaande klanten blijven zoals ze zijn). Regels worden aan artikelen gekoppeld, ook als die inmiddels een variabel product zijn. Na de eerste keer werkt AquaTech Hub dit elk uur zelf bij.</p>
-          <div id="rl-wp-status" class="notice" role="status"></div>
-          <div class="form-actions">
-            <label class="inline">Maanden terug <input id="rl-wp-months" type="number" min="1" max="60" value="24" style="width:5em"></label>
-            <button class="btn primary" id="rl-wp-start" type="button">Orders ophalen</button>
-            <button class="btn" id="rl-wp-stop" type="button">Uurlijks bijwerken uitzetten</button>
-          </div>
-          <h3>Producten zonder artikel</h3>
-          <p class="muted small">Producten uit de oude orders die niet automatisch aan een artikel zijn gekoppeld (op variatie, product-id, SKU of naam). Kies het artikel om ze te koppelen.</p>
-          <div class="tablewrap"><table class="grid" id="rl-wp-table"></table></div>
-          <label class="field" id="rl-wp-pick" hidden>Koppel <b id="rl-wp-pick-name"></b> aan
-            <input id="rl-wp-search" type="search" placeholder="Zoek op code of naam" autocomplete="off"></label>
-          <ul id="rl-wp-results" class="rl-list"></ul>
         </section>
       </section>
 

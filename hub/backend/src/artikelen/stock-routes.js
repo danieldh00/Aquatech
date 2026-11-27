@@ -168,7 +168,13 @@ function registerStockRoutes(app, ctx) {
     if (!missingJob) return res.status(409).json({ error: 'not_configured', message: 'Er is geen webshop gekoppeld (Beheer → Integraties → Webshop).' });
     const tenantId = tenantOf(req);
     const started = missingJob.start(tenantId, req.user, {
-      onDone: (state) => audit(req, 'voorraad_webshop_ontbrekende_toegevoegd', { created: state.created, skipped: state.skipped, failed: Boolean(state.error) }),
+      onDone: (state) => {
+        audit(req, 'voorraad_webshop_ontbrekende_toegevoegd', { created: state.created, skipped: state.skipped, failed: Boolean(state.error) });
+        // Nieuwe of teruggezette artikelen: de regels uit de WordPress-orderhistorie zonder artikel meteen opnieuw koppelen.
+        if (!state.error && ctx.rematchWpOrders) {
+          try { ctx.rematchWpOrders(tenantId); } catch (error) { console.warn(`Orderregels opnieuw koppelen mislukt: ${error.message}`); }
+        }
+      },
     });
     res.status(202).json({ started, ...missingJob.get(tenantId) });
   });

@@ -539,6 +539,7 @@
     if (name === 'pricefactor') window.ArtikelenPriceFactor.load().catch((error) => toast(error.message, true));
     if (name === 'counts') window.ArtikelenCounts.load().catch((error) => toast(error.message, true));
     if (name === 'texts') window.ArtikelenTexts.load().catch((error) => toast(error.message, true));
+    if (name === 'import') window.ArtikelenRelated.loadWp().catch((error) => toast(error.message, true));
     if (name === 'related') window.ArtikelenRelated.load().catch((error) => toast(error.message, true));
     if (name === 'media') window.ArtikelenMedia.loadMedia().catch((error) => toast(error.message, true));
     try { history.replaceState(null, '', `./#${name}`); } catch { /* file:// */ }
