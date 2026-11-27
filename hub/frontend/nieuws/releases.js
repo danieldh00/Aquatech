@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.47.6',
+      date: '2026-11-28',
+      title: 'Teruggezette subartikelen weer zichtbaar in de eigen webshop',
+      items: [
+        { text: 'Subartikelen die uit het archief zijn teruggezet of aan een webshopproduct zijn gekoppeld, staan nu ook in de eigen webshop en zijn bestelbaar.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.47.5',
       date: '2026-11-27',
       title: 'Sorteren in tabellen',
