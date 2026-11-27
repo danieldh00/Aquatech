@@ -843,6 +843,15 @@
         </div>
         <div class="err" role="alert"></div>
       </section>
+      <section class="card-form" id="d-documents" hidden>
+        <h3>PDF's van de leverancier</h3>
+        <p class="muted small">Productinformatie als PDF (hoogstens 5 per artikel, 10 MB per bestand). Een PDF met "Downloaden" aan staat als download op de productpagina in de webshop.</p>
+        <div class="tablewrap"><table class="grid" id="d-doc-table"></table></div>
+        <div class="row actions" id="d-doc-add">
+          <label>PDF toevoegen<input type="file" id="d-doc-file" accept="application/pdf"></label>
+        </div>
+        <div class="err" role="alert"></div>
+      </section>
       <section class="card-form" id="d-image">
         <h3>Afbeelding</h3>
         <div class="row image-row">
@@ -910,6 +919,7 @@
   <script src="convert.js"></script>
   <script src="suppliers.js"></script>
   <script src="packagings.js"></script>
+  <script src="documents.js"></script>
   <script src="orders.js"></script>
   <script src="proposals-core.js"></script>
   <script src="proposals.js"></script>
