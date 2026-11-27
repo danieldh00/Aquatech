@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.46.0
+
+Migratie 104: tabellen `main_groups` (merken) en `sub_groups` (soorten, met of zonder merk), `stock_items.main_group_id`/`sub_group_id` en `item_aliases` (oude nummers en EAN als zoeknaam, uniek per omgeving). Nieuw `frontend/shared/article-code.js` (UMD: `buildCode`, `parseCode`, `threadCode` voor BSP-duimen als cijfers (½" = 12, ¾" = 34, 1¼" = 114), `compareCodes` voor de volgorde klein naar groot) en `backend/src/artikelen/code-groups.js` met routes `GET /api/stock/code-groups`, `POST|PATCH|DELETE /api/stock/main-groups|sub-groups`, `GET /api/stock/code-proposal` (voorstel + uniciteitscontrole; een artikelgroep krijgt MERK.SOORT, daarna een volgnummer) en `GET|PUT /api/stock/items/:id/aliases`. Een merk of soort waar artikelen aan hangen houdt zijn code en wordt gearchiveerd i.p.v. verwijderd. Nieuw tabblad Merken & soorten in Artikelen (zijbalk, Beheer) en testdata.
+
 ## 1.45.6
 
 Hernoeming zonder gedrag te wijzigen: `variant`/`parent`/`has_variants` wordt `subartikel`/`group_id`/`is_group` in code, database (migratie 103: kolommen, index en constraints van `stock_items` en `stock_merges`), API (`PUT /api/stock/items/:id/sub-items`), frontend en tests. Back-ups van vóór schema 103 blijven terug te zetten (`RENAMED_COLUMNS`). WooCommerce-termen, tenants `parent_id`, categorie-`parentSlug` en GA4 `item_variant` blijven.

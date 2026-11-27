@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.46.0',
+      date: '2026-11-27',
+      title: 'Merken en soorten voor sprekende artikelcodes',
+      items: [
+        { text: 'Nieuw onderdeel Artikelen > Merken & soorten: leg merken (bijvoorbeeld UD) en soorten (bijvoorbeeld KBI) vast waaruit de artikelcodes worden opgebouwd, met of zonder merk (UD.KBI.20.12 of KBI.20.12). Je kunt er een codevoorstel proberen met diameter en draadmaat in duimen. Het artikelformulier zelf volgt in de volgende stap.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.45.6',
       date: '2026-11-26',
       title: 'Artikelgroepen en subartikelen overal dezelfde naam',
