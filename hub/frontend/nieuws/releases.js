@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.45.6',
+      date: '2026-11-26',
+      title: 'Artikelgroepen en subartikelen overal dezelfde naam',
+      items: [
+        { text: 'Een artikel met maten heet overal een artikelgroep, en de maten eronder heten subartikelen. Er verandert niets aan hoe je werkt.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.45.5',
       date: '2026-11-26',
       title: 'Specificaties in één keer vullen in plaats van AI-teksten',
