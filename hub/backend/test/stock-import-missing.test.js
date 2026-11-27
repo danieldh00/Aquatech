@@ -63,7 +63,7 @@ test('taak: voortgang per fase en een lijst van wat is binnengehaald, een tweede
       options.onProgress({ step: 'variations', done: 2, total: 5 });
       options.onProgress({ step: 'toevoegen', total: 3, created: 2, skipped: 0, added: [{ code: 'A', name: 'Een' }, { code: 'B', name: 'Twee' }] });
       await gate;
-      return { created: 3, skippedProducts: 1, linked: 0 };
+      return { created: 3, skippedProducts: 1, skippedList: [{ productId: '9', sku: 'X', code: 'X', name: 'Een', reason: 'code bestaat al', url: '' }], linked: 0 };
     },
   });
   assert.strictEqual(job.start('t1', null), true);
@@ -76,6 +76,8 @@ test('taak: voortgang per fase en een lijst van wat is binnengehaald, een tweede
   release();
   await new Promise((resolve) => { setTimeout(resolve, 20); });
   const done = job.get('t1');
+  assert.strictEqual(done.skippedItems.length, 1, 'de overgeslagen artikelen staan met reden in de stand');
+  assert.strictEqual(done.skippedItems[0].reason, 'code bestaat al');
   assert.strictEqual(done.running, false);
   assert.strictEqual(done.phase, 'klaar');
   assert.strictEqual(done.created, 3);

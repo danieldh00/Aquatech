@@ -13,6 +13,23 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.46.2',
+      date: '2026-11-27',
+      title: 'Reden per overgeslagen webshopartikel',
+      items: [
+        { text: '*Ontbrekende uit webshop toevoegen* toont nu per overgeslagen artikel waarom het niet is toegevoegd (code bestaat al, ongeldige of te lange code, hoofdproduct ontbreekt). Het venster telt de redenen en de Excel heeft een tabblad *Overgeslagen* met sku, voorgestelde code, omschrijving, reden en webshopadres.', for: ['voorraad'] },
+      ],
+    },
+    {
+      version: '1.46.1',
+      date: '2026-11-27',
+      title: 'Artikelen: code laten voorstellen en oude nummers zoeken',
+      items: [
+        { text: 'Bij een nieuw artikel kies je een soort, diameter en draadmaat en het formulier stelt de code voor (bijvoorbeeld UD.KBI.20.34). Een uitgegeven code verandert niet meer.', for: ['voorraad'] },
+        { text: 'In de artikellijst zoek je ook op oude nummers.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.46.0',
       date: '2026-11-27',
       title: 'Merken en soorten voor sprekende artikelcodes',
