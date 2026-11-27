@@ -345,6 +345,22 @@ test('webshop: een overgeslagen product krijgt de reden, ook als de code al bij 
   assert.ok(events.some((event) => event.step === 'overgeslagen' && event.items.length === 3), 'de lijst komt ook als voortgangsmelding');
 });
 
+test('webshop: een gearchiveerd los artikel met de code van een webshopproduct wordt teruggezet en gekoppeld', () => {
+  const { tid, stock, db } = setup(new Map(), { url: 'http://shop.test', mode: 'rest', mirror: false });
+  const user = { id: null, display_name: 'Test' };
+  const archived = stock.create(tid, user, { code: '110-12', name: 'Bronkop 110', salePrice: 5 }).item;
+  db.prepare('UPDATE stock_items SET archived = 1 WHERE tenant_id = ? AND id = ?').run(tid, archived.id);
+  const product = { id: '6845', type: 'simple', sku: '110-12', code: '', name: 'Bronkop 110 mm', price: 6, attributes: [], parentId: null };
+  const out = stock.addMissingShop(tid, [product], () => null, { vatRate: 21, priceOf: (item) => item.price });
+  assert.strictEqual(out.created, 0);
+  assert.strictEqual(out.restored, 1);
+  assert.strictEqual(out.skippedProducts, 0);
+  const row = db.prepare('SELECT archived, shop_product_id, sale_price FROM stock_items WHERE tenant_id = ? AND id = ?').get(tid, archived.id);
+  assert.strictEqual(Number(row.archived), 0);
+  assert.strictEqual(String(row.shop_product_id), '6845');
+  assert.strictEqual(Number(row.sale_price), 5, 'de prijs blijft zoals hij was');
+});
+
 test('webshop: een nieuwe variatie bij een bestaand variabel artikel krijgt de naam hoofdnaam + waarde', () => {
   const { tid, stock, db } = setup(new Map(), { url: 'http://shop.test', mode: 'rest', mirror: false });
   const user = { id: null, display_name: 'Test' };

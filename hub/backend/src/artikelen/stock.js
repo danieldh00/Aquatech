@@ -1284,19 +1284,20 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
 
   /**
    * TIJDELIJK (alleen zolang WooCommerce nog draait): maakt een artikel voor elk webshopproduct dat er nog geen heeft.
-   * Raakt bestaande artikelen niet aan: niets wordt gearchiveerd, teruggezet of aangepast. Een product telt als
+   * Raakt bestaande artikelen niet aan, behalve dat een gearchiveerd los artikel met dezelfde code als een webshopproduct wordt teruggezet en aan dat product gekoppeld. Een product telt als
    * aanwezig als een artikel eraan gekoppeld is of dezelfde code of sku heeft (zie `matchProduct`).
    * @param {string} tenantId Id van de omgeving.
    * @param {object[]} products Alle producten uit de webshop (met variaties).
    * @param {Function} matchProduct Functie item ({ code }) → webshopproduct of null.
    * @param {{ vatRate?: number, priceOf?: Function, onProgress?: Function }} [options] Btw-tarief van nieuwe artikelen, product → verkoopprijs excl. btw en onProgress (krijgt { step: 'toevoegen', total, created, skipped, added: [{ code, name }] } na elke portie van 50).
-   * @returns {{ created: number, skippedProducts: number, skippedList: object[] }} Aantallen en per overgeslagen product { productId, sku, code, name, reason, url }.
+   * @returns {{ created: number, restored: number, restoredItems: object[], skippedProducts: number, skippedList: object[] }} Aantallen, de teruggezette gearchiveerde artikelen { code, name, productId } en per overgeslagen product { productId, sku, code, name, reason, url }.
    */
   function addMissingShop(tenantId, products, matchProduct, { vatRate = 21, priceOf = (product) => product.price, onProgress = null } = {}) {
-    const items = prepare('SELECT id, code, name, shop_product_id, group_id, is_group, attributes FROM stock_items WHERE tenant_id = ?').all(tenantId);
+    const items = prepare('SELECT id, code, name, shop_product_id, group_id, is_group, attributes, archived FROM stock_items WHERE tenant_id = ?').all(tenantId);
     const matchedProducts = new Set();
     const groupItems = new Map();
-    const seenCodes = new Map(items.map((item) => [item.code, `bestaat al als artikel «${item.name}»`]));
+    const itemsByCode = new Map(items.map((item) => [item.code, item]));
+    const seenCodes = new Map();
     for (const item of items) {
       const product = matchProduct(item);
       if (!product) continue;
@@ -1306,6 +1307,16 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
     const productIds = new Set(products.map((product) => String(product.id)));
     const fresh = [];
     const skippedList = [];
+    const restoredList = [];
+    /**
+     * Beschrijft een bestaand artikel dat de code al heeft, voor de reden bij een overgeslagen product.
+     * @param {object} item Het bestaande artikel.
+     * @returns {string} De reden in gewone taal.
+     */
+    const existingReason = (item) => {
+      if (item.group_id) return `bestaat al als ${item.archived ? 'gearchiveerd ' : ''}subartikel «${item.name}» van een artikelgroep (niet aan dit webshopproduct gekoppeld)`;
+      return `bestaat al als ${item.archived ? 'gearchiveerd ' : ''}artikel «${item.name}»`;
+    };
     /**
      * Zet een overgeslagen webshopproduct met de reden in de lijst.
      * @param {object} product Het webshopproduct.
@@ -1321,13 +1332,26 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       if (!code) reason = 'geen code of sku';
       else if (code.length > 40) reason = `code langer dan 40 tekens (${code.length})`;
       else if (!/^[A-Z0-9][A-Z0-9 ._\-/+]*$/.test(code)) reason = 'code bevat tekens die niet mogen (toegestaan: letters, cijfers, spatie en . _ - / +)';
-      else if (seenCodes.has(code)) reason = `code ${seenCodes.get(code)}`;
+      else if (itemsByCode.has(code)) {
+        const owner = itemsByCode.get(code);
+        // Een gearchiveerd los artikel met deze code is het ontbrekende artikel: terugzetten in plaats van overslaan.
+        if (Number(owner.archived) && !owner.group_id && !Number(owner.is_group) && !product.parentId && product.type !== 'variable') { restoredList.push({ owner, product, code }); itemsByCode.delete(code); seenCodes.set(code, 'komt dubbel voor in de webshop (zelfde sku bij een ander product)'); continue; }
+        reason = `code ${existingReason(owner)}`;
+      } else if (seenCodes.has(code)) reason = `code ${seenCodes.get(code)}`;
       else if (product.parentId && !productIds.has(String(product.parentId))) reason = 'het hoofdproduct van deze variatie staat niet in de webshoplijst';
       if (reason) { skip(product, code, reason); continue; }
       seenCodes.set(code, 'komt dubbel voor in de webshop (zelfde sku bij een ander product)');
       fresh.push({ product, code });
     }
-    if (onProgress) onProgress({ step: 'overgeslagen', items: skippedList });
+    if (restoredList.length) {
+      transaction(db, () => {
+        const restore = prepare('UPDATE stock_items SET archived = 0, shop_product_id = ?, shop_sync = 1, updated_at = ? WHERE tenant_id = ? AND id = ?');
+        for (const entry of restoredList) restore.run(String(entry.product.id), currentTimestamp(), tenantId, entry.owner.id);
+        resyncOpen(tenantId, restoredList.map((entry) => entry.code), { nested: true });
+      });
+    }
+    const restoredItems = restoredList.map((entry) => ({ code: entry.code, name: cleanText(entry.product.name, 200) || entry.code, productId: String(entry.product.id) }));
+    if (onProgress) onProgress({ step: 'overgeslagen', items: skippedList, restored: restoredItems });
     // Hoofdproducten eerst, dan de variaties; in porties van 50 (elk in een eigen transactie), zodat de voortgang zichtbaar is.
     const ordered = [...fresh.filter((entry) => !entry.product.parentId), ...fresh.filter((entry) => entry.product.parentId)];
     let created = 0;
@@ -1345,7 +1369,7 @@ function createStockStore(db, { articles = loadArticles, onDirty = null } = {}) 
       });
     }
     if (onProgress && !ordered.length) onProgress({ step: 'toevoegen', total: 0, created: 0, skipped: skippedList.length, added: [] });
-    return { created, skippedProducts: skippedList.length, skippedList };
+    return { created, restored: restoredItems.length, restoredItems, skippedProducts: skippedList.length, skippedList };
   }
 
   /**
