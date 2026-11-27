@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.47.0',
+      date: '2026-11-27',
+      title: 'Alle lange tabellen met paginering',
+      items: [
+        { text: 'Alle lange lijsten tonen nu 25, 50, 100 of 300 regels per pagina met Vorige en Volgende, of alles tegelijk. Je keuze geldt voor alle lijsten en wordt onthouden.' },
+      ],
+    },
+    {
       version: '1.46.9',
       date: '2026-11-27',
       title: 'Ontbrekende webshopartikelen: subartikelen terugzetten en koppelen',
