@@ -178,7 +178,7 @@
   };
   const KINDS = { ontvangst: 'Ontvangst', afboeking: 'Afboeking', retour: 'Retour', correctie: 'Correctie', telling: 'Telling' };
 
-  const state = { items: [], reservations: [], moves: null, tab: 'stock', item: null, units: [], open: new Set(), newImage: null, media: null };
+  const state = { items: [], reservations: [], moves: null, tab: 'stock', item: null, units: [], open: new Set(), newImage: null, media: null, sort: null };
 
   /**
    * Toont kort een melding onderin het scherm.
@@ -247,6 +247,32 @@
     return state.items.filter((item) => (!low || item.low) && (!conceptOnly || !item.shopSync) && (!term || `${item.code} ${item.name} ${item.location} ${(item.aliases || []).join(' ')}`.toLowerCase().includes(term)));
   }
 
+  /** De sorteerbare kolommen van de artikellijst: kopnaam en de waarde per artikel (tekst of getal). */
+  const STOCK_COLUMNS = [
+    { label: 'Artikel', value: (item) => item.code },
+    { label: 'Locatie', value: (item) => item.location },
+    { label: 'Op voorraad', value: (item) => (item.isGroup ? null : item.onHand) },
+    { label: 'Gereserveerd', value: (item) => (item.isGroup ? null : item.reserved) },
+    { label: 'Beschikbaar', value: (item) => (item.isGroup ? null : item.available) },
+    { label: 'Minimum', value: (item) => (item.isGroup || !item.minQty ? null : item.minQty) },
+    { label: 'Verkoopprijs', value: (item) => (item.isGroup ? null : item.salePrice) },
+    { label: 'Marge', value: (item) => (item.isGroup ? null : item.margin) },
+    { label: 'Webshop', value: (item) => (!item.shopSync ? 'Concept' : item.shop.error ? 'Fout' : !item.shop.productId ? 'Niet gekoppeld' : item.shop.pending ? 'Wordt bijgewerkt' : 'Gekoppeld') },
+    { label: 'Waarde', value: (item) => (item.isGroup ? null : item.value) },
+  ];
+
+  /**
+   * Sorteert artikelen op de gekozen kolom met dezelfde regels als de andere tabellen (getallen op waarde, tekst Nederlands, leeg laatst).
+   * @param {object[]} items De artikelen.
+   * @returns {object[]} De artikelen in de nieuwe volgorde; zonder sortering dezelfde lijst.
+   */
+  function sortItems(items) {
+    const column = state.sort ? STOCK_COLUMNS.find((candidate) => candidate.label === state.sort.label) : null;
+    if (!column || items.length < 2) return items;
+    const texts = items.map((item) => { const value = column.value(item); return value === null || value === undefined ? '' : String(value).replace('.', ','); });
+    return window.AquatechPager.sortOrder(texts, state.sort.direction).map((index) => items[index]);
+  }
+
   /**
    * De regels van de voorraadtabel: gewone artikelen en artikelgroepen, met
    * de subartikelen eronder als de artikelgroep open is (of als de zoekterm of
@@ -273,19 +299,19 @@
     // Subartikelen van klein naar groot, gelezen uit de code (diameter, dan draadmaat).
     for (const subItems of subItemsOf.values()) subItems.sort((left, right) => ArticleCode.compareCodes(left.code, right.code));
     const rows = [];
-    for (const item of state.items) {
+    for (const item of sortItems(state.items)) {
       if (item.groupId && groupIds.has(item.groupId)) continue;
       if (!item.isGroup) {
         if (matches(item)) rows.push({ item });
         continue;
       }
       const subItems = subItemsOf.get(item.id) || [];
-      const found = subItems.filter(matches);
+      const found = sortItems(subItems.filter(matches));
       const filtered = Boolean(term || low || conceptOnly);
       if (!matches(item) && !found.length) continue;
       const open = state.open.has(item.id) || (filtered && found.length > 0);
       rows.push({ item, open, count: subItems.filter((subItem) => !subItem.archived).length });
-      if (open) rows.push(...(filtered && found.length ? found : subItems).map((subItem) => ({ item: subItem, subItem: true })));
+      if (open) rows.push(...(filtered && found.length ? found : sortItems(subItems)).map((subItem) => ({ item: subItem, subItem: true })));
     }
     return rows;
   }
@@ -314,6 +340,7 @@
 
   /** De gedeelde paginering van de artikellijst (balken boven en onder de tabel). */
   const pager = window.AquatechPager.attach({ bars: [$('#s-pager-top'), $('#s-pager-bottom')], noun: 'artikelen', onChange: () => renderStock() });
+  state.sort = window.AquatechPager.storedSort($('#s-table'));
 
   /**
    * Knipt de regels in pagina's. Een artikelgroep blijft samen met zijn open subartikelen op één pagina.
@@ -336,7 +363,7 @@
       return;
     }
     const rows = paginate(stockRows());
-    table.innerHTML = `<thead><tr>${window.StockBulk.headerCell(rows)}<th>Artikel</th><th>Locatie</th><th class="num">Op voorraad</th><th class="num">Gereserveerd</th><th class="num">Beschikbaar</th><th class="num">Minimum</th><th class="num">Verkoopprijs</th><th class="num">Marge</th><th>Webshop</th><th class="num">Waarde</th></tr></thead>
+    table.innerHTML = `<thead><tr>${window.StockBulk.headerCell(rows)}${STOCK_COLUMNS.map((column) => `<th class="${['Artikel', 'Locatie', 'Webshop'].includes(column.label) ? '' : 'num'} sort-th${state.sort && state.sort.label === column.label ? (state.sort.direction === 1 ? ' sort-asc' : ' sort-desc') : ''}" data-stock-sort="${esc(column.label)}" tabindex="0" aria-sort="${state.sort && state.sort.label === column.label ? (state.sort.direction === 1 ? 'ascending' : 'descending') : 'none'}" title="Klik om te sorteren">${esc(column.label)}</th>`).join('')}</tr></thead>
       <tbody>${rows.map(({ item, subItem, open, count }) => `<tr data-id="${esc(item.id)}" class="${item.low ? 'low' : ''}${item.archived ? ' arch' : ''}${subItem ? ' sub-item' : ''}${item.isGroup ? ' articleGroup' : ''}${window.StockBulk.selected.has(item.id) ? ' picked' : ''}">
         ${window.StockBulk.cell(item)}
         <td class="wrap">${item.isGroup ? `<button class="toggle" data-toggle="${esc(item.id)}" aria-expanded="${open ? 'true' : 'false'}" title="${open ? 'Subartikelen verbergen' : 'Subartikelen tonen'}">${open ? '▾' : '▸'}</button>` : ''}<b class="code">${esc(item.code)}</b>${item.isGroup ? ` <span class="pill">${count} subItem${count === 1 ? '' : 'en'}</span>` : ''}${item.archived ? ' <span class="pill">Gearchiveerd</span>' : ''}<span class="sub">${esc(subItem && valuesText(item) ? valuesText(item) : item.name)}</span></td>
@@ -363,6 +390,19 @@
         renderStock();
         return undefined;
       };
+    });
+    table.querySelectorAll('th[data-stock-sort]').forEach((header) => {
+      /** Zet de sortering op deze kolom: oplopend, aflopend, uit. */
+      const toggleSort = () => {
+        const label = header.dataset.stockSort;
+        const direction = state.sort && state.sort.label === label ? state.sort.direction : 0;
+        state.sort = direction === 0 ? { label, direction: 1 } : (direction === 1 ? { label, direction: -1 } : null);
+        window.AquatechPager.storeSort(table, state.sort);
+        pager.reset();
+        renderStock();
+      };
+      header.onclick = toggleSort;
+      header.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleSort(); } });
     });
     window.StockBulk.bind(table, rows);
   }
