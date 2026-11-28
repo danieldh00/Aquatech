@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.47.8
+
+De artikellijst (`data-no-pager`, eigen paginering) sorteert in `artikelen.js` (`STOCK_COLUMNS`, `sortItems`) vóór het pagineren, met `AquatechPager.sortOrder` (getallen op waarde, tekst in Nederlandse volgorde, leeg laatst) en de bewaarde keuze via `storedSort`/`storeSort` uit `shared/pager.js`. Artikelgroepen worden onderling gesorteerd en houden hun subartikelen eronder (ook onderling op dezelfde kolom); de standaardvolgorde blijft de bestaande. `storedSort` en `storeSort` zijn nieuw geëxporteerd.
+
 ## 1.47.7
 
 Het vinkje *Naar de webshop* (`stock_items.shop_sync`) is in het scherm vervangen door het omgekeerde vinkje *Concept* (geen migratie, de API-veld `shopSync` blijft). Het nieuwe-artikelformulier staat standaard op Concept. Artikellijst: label Concept in de kolom Webshop, filter *Alleen concepten* (ook voor subartikelen) en de Excel-kolom toont `concept`. Bestaande artikelen houden hun zichtbaarheid.

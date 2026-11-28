@@ -13,6 +13,14 @@
 (function (root) {
   const RELEASES = [
     {
+      version: '1.47.8',
+      date: '2026-11-28',
+      title: 'Sorteren in de artikellijst',
+      items: [
+        { text: 'In de artikellijst kun je nu op elke kolom sorteren door op de kop te klikken: oplopend, aflopend of weer zoals het was. Een artikelgroep blijft bij zijn subartikelen en je keuze wordt onthouden.', for: ['voorraad'] },
+      ],
+    },
+    {
       version: '1.47.7',
       date: '2026-11-28',
       title: 'Artikelen als concept',
